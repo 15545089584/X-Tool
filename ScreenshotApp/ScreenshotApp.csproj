@@ -22,6 +22,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.22.1" />
+    <PackageReference Include="OpenCvSharp4.Windows" Version="4.11.0.20250507" />
     <PackageReference Include="Vortice.Direct3D11" Version="2.4.2" />
   </ItemGroup>
 
@@ -33,6 +35,14 @@
 
   <ItemGroup>
     <Resource Include="Assets\JieYing.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 默认 OCR 模型固定版本随程序发布，不在用户电脑现场转换。 -->
+    <Content Include="Models\Ocr\default\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>models\ocr\default\%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
+    </Content>
   </ItemGroup>
 
 </Project>

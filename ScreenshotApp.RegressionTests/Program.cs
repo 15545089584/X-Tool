@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Media.Imaging;
 using ScreenshotApp;
 using ScreenshotApp.Capture;
+using ScreenshotApp.Ocr;
 
 const int Width = 720;
 const int FrameHeight = 520;
@@ -77,6 +78,8 @@ RunFixedChromeStitchCase();
 RunPreviewGrowthCase();
 RunAnnotationRenderCase();
 RunScreenColorSamplerCase();
+RunOcrTextLayoutCase();
+await RunOcrSmokeCase();
 RunSingleInstanceCase();
 RunNativeWindowAnimationStyleCase();
 
@@ -501,6 +504,53 @@ void RunScreenColorSamplerCase()
     if (repeatedEdge.Hex != "#112233")
     {
         failures.Add("像素放大镜在屏幕边缘未正确重复最近像素。 ");
+    }
+}
+
+void RunOcrTextLayoutCase()
+{
+    var blocks = new[]
+    {
+        new OcrTextBlock("截影", 0.98f, 10, 10, 60, 24),
+        new OcrTextBlock("OCR", 0.97f, 82, 11, 52, 23),
+        new OcrTextBlock("第二行", 0.96f, 10, 48, 72, 24)
+    };
+    var composed = OcrTextLayout.Compose(blocks);
+    Console.WriteLine($"OCR 阅读顺序 | {composed.Replace(Environment.NewLine, " / ")}");
+    if (composed != $"截影 OCR{Environment.NewLine}第二行")
+    {
+        failures.Add("OCR 文本框未按从上到下、从左到右的阅读顺序拼接。 ");
+    }
+}
+
+async Task RunOcrSmokeCase()
+{
+    using var bitmap = new Bitmap(860, 230, PixelFormat.Format32bppArgb);
+    using var graphics = Graphics.FromImage(bitmap);
+    graphics.Clear(Color.White);
+    graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+    using var titleFont = new Font("Microsoft YaHei UI", 38f, System.Drawing.FontStyle.Bold, GraphicsUnit.Pixel);
+    using var bodyFont = new Font("Microsoft YaHei UI", 28f, System.Drawing.FontStyle.Regular, GraphicsUnit.Pixel);
+    using var bodyBrush = new SolidBrush(Color.FromArgb(45, 65, 90));
+    using var accentBrush = new SolidBrush(Color.FromArgb(30, 95, 180));
+    graphics.DrawString("截影 OCR 本地文字提取", titleFont, Brushes.Black, 28, 28);
+    graphics.DrawString("Windows 11 · CPU · 2026", bodyFont, bodyBrush, 30, 110);
+    graphics.DrawString("中文 English 123", bodyFont, accentBrush, 30, 162);
+    var source = ToBitmapSource(bitmap);
+
+    using var engine = new PaddleOnnxOcrEngine(OcrModelPaths.CreateDefault());
+    var result = await engine.RecognizeAsync(
+        OcrImage.FromBitmapSource(source),
+        new OcrOptions { ConfidenceThreshold = 0.45f },
+        CancellationToken.None);
+    var compact = result.Text.Replace(Environment.NewLine, " / ");
+    Console.WriteLine(
+        $"OCR 模型冒烟 | {result.Blocks.Count} 区域 | {result.Elapsed.TotalMilliseconds:F0} ms | {compact}");
+    if (result.Blocks.Count == 0 ||
+        !result.Text.Contains("OCR", StringComparison.OrdinalIgnoreCase) ||
+        !result.Text.Contains("2026", StringComparison.Ordinal))
+    {
+        failures.Add($"PP-OCRv5 未识别出预期的英文或数字文本，结果：{compact}");
     }
 }
 

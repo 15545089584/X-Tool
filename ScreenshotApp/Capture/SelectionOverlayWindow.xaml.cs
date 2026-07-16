@@ -5,6 +5,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using ScreenshotApp.Ocr;
 
 namespace ScreenshotApp.Capture;
 
@@ -26,6 +27,7 @@ public partial class SelectionOverlayWindow : Window
     private Polyline? _workingPolyline;
     private Rectangle? _workingRectangle;
     private List<Point>? _workingPoints;
+    private bool _ocrInProgress;
 
     public SelectionOverlayWindow(CaptureFrame frame, SelectionPurpose purpose = SelectionPurpose.Screenshot)
     {
@@ -210,6 +212,54 @@ public partial class SelectionOverlayWindow : Window
             _activeAnnotationTool == ScreenshotAnnotationTool.ColorPicker
                 ? ScreenshotAnnotationTool.None
                 : ScreenshotAnnotationTool.ColorPicker);
+    }
+
+    private async void OcrToolButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_ocrInProgress || _selection.IsEmpty)
+        {
+            return;
+        }
+
+        _ocrInProgress = true;
+        OcrToolButton.IsEnabled = false;
+        OcrToolButtonText.Text = "识别中…";
+        var previousHint = HintText.Text;
+        HintText.Text = "正在本机识别文字，首次使用需要加载模型…";
+        SetActiveAnnotationTool(ScreenshotAnnotationTool.None);
+        try
+        {
+            var bitmap = CreateSelectionBitmap(includeAnnotations: false);
+            var image = OcrImage.FromBitmapSource(bitmap);
+            var result = await OcrEngineProvider.Default.RecognizeAsync(
+                image,
+                new OcrOptions
+                {
+                    Language = "zh-en",
+                    ExecutionProvider = OcrExecutionProvider.Cpu,
+                    UseOrientationClassification = false,
+                    ConfidenceThreshold = 0.5f
+                },
+                CancellationToken.None);
+            var resultWindow = new OcrResultWindow(result) { Owner = this };
+            resultWindow.ShowDialog();
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(
+                this,
+                $"文字识别失败：{exception.Message}",
+                "文字提取",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+        finally
+        {
+            HintText.Text = previousHint;
+            OcrToolButtonText.Text = "提取文字";
+            OcrToolButton.IsEnabled = true;
+            _ocrInProgress = false;
+        }
     }
 
     private void ColorButton_Click(object sender, RoutedEventArgs e)
@@ -446,34 +496,49 @@ public partial class SelectionOverlayWindow : Window
             return;
         }
 
-        var scaleX = _frame.Bitmap.PixelWidth / CaptureSurface.ActualWidth;
-        var scaleY = _frame.Bitmap.PixelHeight / CaptureSurface.ActualHeight;
-
-        var x = Math.Clamp((int)Math.Round(_selection.X * scaleX), 0, _frame.Bitmap.PixelWidth - 1);
-        var y = Math.Clamp((int)Math.Round(_selection.Y * scaleY), 0, _frame.Bitmap.PixelHeight - 1);
-        var right = Math.Clamp((int)Math.Round(_selection.Right * scaleX), x + 1, _frame.Bitmap.PixelWidth);
-        var bottom = Math.Clamp((int)Math.Round(_selection.Bottom * scaleY), y + 1, _frame.Bitmap.PixelHeight);
-
-        var cropped = new CroppedBitmap(_frame.Bitmap, new Int32Rect(x, y, right - x, bottom - y));
         if (_purpose == SelectionPurpose.Screenshot)
         {
-            cropped.Freeze();
-            SelectedBitmap = ScreenshotAnnotationRenderer.Render(
-                cropped,
-                _annotations,
-                new Size(_selection.Width, _selection.Height));
+            SelectedBitmap = CreateSelectionBitmap(includeAnnotations: true);
         }
         else
         {
+            var pixelBounds = GetSelectionPixelBounds();
             SelectedScreenBounds = new Int32Rect(
-                _frame.ScreenBounds.X + x,
-                _frame.ScreenBounds.Y + y,
-                right - x,
-                bottom - y);
+                _frame.ScreenBounds.X + pixelBounds.X,
+                _frame.ScreenBounds.Y + pixelBounds.Y,
+                pixelBounds.Width,
+                pixelBounds.Height);
         }
 
         DialogResult = true;
         Close();
+    }
+
+    private BitmapSource CreateSelectionBitmap(bool includeAnnotations)
+    {
+        var bounds = GetSelectionPixelBounds();
+        var cropped = new CroppedBitmap(_frame.Bitmap, bounds);
+        cropped.Freeze();
+        if (!includeAnnotations || _annotations.Count == 0)
+        {
+            return cropped;
+        }
+
+        return ScreenshotAnnotationRenderer.Render(
+            cropped,
+            _annotations,
+            new Size(_selection.Width, _selection.Height));
+    }
+
+    private Int32Rect GetSelectionPixelBounds()
+    {
+        var scaleX = _frame.Bitmap.PixelWidth / CaptureSurface.ActualWidth;
+        var scaleY = _frame.Bitmap.PixelHeight / CaptureSurface.ActualHeight;
+        var x = Math.Clamp((int)Math.Round(_selection.X * scaleX), 0, _frame.Bitmap.PixelWidth - 1);
+        var y = Math.Clamp((int)Math.Round(_selection.Y * scaleY), 0, _frame.Bitmap.PixelHeight - 1);
+        var right = Math.Clamp((int)Math.Round(_selection.Right * scaleX), x + 1, _frame.Bitmap.PixelWidth);
+        var bottom = Math.Clamp((int)Math.Round(_selection.Bottom * scaleY), y + 1, _frame.Bitmap.PixelHeight);
+        return new Int32Rect(x, y, right - x, bottom - y);
     }
 
     private void CancelSelection()
