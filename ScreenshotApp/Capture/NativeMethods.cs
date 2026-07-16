@@ -1,0 +1,310 @@
+using System.Runtime.InteropServices;
+
+namespace ScreenshotApp.Capture;
+
+internal static class NativeMethods
+{
+    internal const int HotKeyId = 0x4A59;
+    internal const int LongCaptureHotKeyId = 0x4A5A;
+    internal const int WmHotKey = 0x0312;
+    internal const uint ModControl = 0x0002;
+    internal const uint ModShift = 0x0004;
+    internal const uint SwpNoActivate = 0x0010;
+    internal const int HwndTopmost = -1;
+    internal const uint MonitorDefaultToNearest = 0x00000002;
+    internal const uint DibRgbColors = 0;
+    internal const uint BiRgb = 0;
+    internal const uint Srccopy = 0x00CC0020;
+    internal const uint CaptureBlt = 0x40000000;
+    internal const int WheelDelta = 120;
+    internal const int GwlExStyle = -20;
+    internal const long WsExTransparent = 0x00000020L;
+    internal const long WsExToolWindow = 0x00000080L;
+    internal const long WsExNoActivate = 0x08000000L;
+    internal const uint WdaExcludeFromCapture = 0x00000011;
+    private const int VirtualKeyEscape = 0x1B;
+    private const uint InputMouse = 0;
+    private const uint MouseEventWheel = 0x0800;
+    private const uint GetAncestorRoot = 2;
+    private const int RgnDiff = 4;
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct Point
+    {
+        internal int X;
+        internal int Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct Rect
+    {
+        internal int Left;
+        internal int Top;
+        internal int Right;
+        internal int Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+    internal struct MonitorInfo
+    {
+        internal int Size;
+        internal Rect Monitor;
+        internal Rect WorkArea;
+        internal uint Flags;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct BitmapInfoHeader
+    {
+        internal uint Size;
+        internal int Width;
+        internal int Height;
+        internal ushort Planes;
+        internal ushort BitCount;
+        internal uint Compression;
+        internal uint SizeImage;
+        internal int XPelsPerMeter;
+        internal int YPelsPerMeter;
+        internal uint ColorsUsed;
+        internal uint ColorsImportant;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct BitmapInfo
+    {
+        internal BitmapInfoHeader Header;
+        internal uint Colors;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Input
+    {
+        internal uint Type;
+        internal InputUnion Data;
+    }
+
+    [StructLayout(LayoutKind.Explicit)]
+    private struct InputUnion
+    {
+        [FieldOffset(0)]
+        internal MouseInput Mouse;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MouseInput
+    {
+        internal int X;
+        internal int Y;
+        internal uint MouseData;
+        internal uint Flags;
+        internal uint Time;
+        internal IntPtr ExtraInfo;
+    }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool GetCursorPos(out Point point);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool SetCursorPos(int x, int y);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr WindowFromPoint(Point point);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetAncestor(IntPtr windowHandle, uint flags);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetForegroundWindow(IntPtr windowHandle);
+
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int virtualKey);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern uint SendInput(uint inputCount, Input[] inputs, int inputSize);
+
+    [DllImport("user32.dll")]
+    internal static extern IntPtr MonitorFromPoint(Point point, uint flags);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool GetMonitorInfo(IntPtr monitorHandle, ref MonitorInfo monitorInfo);
+
+    [DllImport("user32.dll")]
+    internal static extern IntPtr GetDC(IntPtr windowHandle);
+
+    [DllImport("user32.dll")]
+    internal static extern int ReleaseDC(IntPtr windowHandle, IntPtr deviceContext);
+
+    [DllImport("gdi32.dll")]
+    internal static extern IntPtr CreateCompatibleDC(IntPtr deviceContext);
+
+    [DllImport("gdi32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool DeleteDC(IntPtr deviceContext);
+
+    [DllImport("gdi32.dll")]
+    internal static extern IntPtr SelectObject(IntPtr deviceContext, IntPtr graphicsObject);
+
+    [DllImport("gdi32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool DeleteObject(IntPtr graphicsObject);
+
+    [DllImport("gdi32.dll")]
+    internal static extern IntPtr CreateDIBSection(
+        IntPtr deviceContext,
+        ref BitmapInfo bitmapInfo,
+        uint usage,
+        out IntPtr bits,
+        IntPtr section,
+        uint offset);
+
+    [DllImport("gdi32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool BitBlt(
+        IntPtr destination,
+        int destinationX,
+        int destinationY,
+        int width,
+        int height,
+        IntPtr source,
+        int sourceX,
+        int sourceY,
+        uint rasterOperation);
+
+    [DllImport("dwmapi.dll")]
+    internal static extern int DwmFlush();
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool RegisterHotKey(IntPtr windowHandle, int id, uint modifiers, uint virtualKey);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool UnregisterHotKey(IntPtr windowHandle, int id);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool SetWindowPos(
+        IntPtr windowHandle,
+        IntPtr insertAfter,
+        int x,
+        int y,
+        int width,
+        int height,
+        uint flags);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
+    private static extern IntPtr GetWindowLongPtr64(IntPtr windowHandle, int index);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongW", SetLastError = true)]
+    private static extern int GetWindowLong32(IntPtr windowHandle, int index);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
+    private static extern IntPtr SetWindowLongPtr64(IntPtr windowHandle, int index, IntPtr newValue);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongW", SetLastError = true)]
+    private static extern int SetWindowLong32(IntPtr windowHandle, int index, int newValue);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool SetWindowDisplayAffinity(IntPtr windowHandle, uint affinity);
+
+    [DllImport("gdi32.dll")]
+    private static extern IntPtr CreateRectRgn(int left, int top, int right, int bottom);
+
+    [DllImport("gdi32.dll")]
+    private static extern int CombineRgn(IntPtr destination, IntPtr source1, IntPtr source2, int mode);
+
+    [DllImport("user32.dll")]
+    private static extern int SetWindowRgn(IntPtr windowHandle, IntPtr region, bool redraw);
+
+    internal static bool IsEscapePressed()
+    {
+        return (GetAsyncKeyState(VirtualKeyEscape) & 0x8000) != 0;
+    }
+
+    internal static bool ActivateWindowAtPoint(int x, int y)
+    {
+        var windowHandle = WindowFromPoint(new Point { X = x, Y = y });
+        if (windowHandle == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        var rootWindow = GetAncestor(windowHandle, GetAncestorRoot);
+        return rootWindow != IntPtr.Zero && SetForegroundWindow(rootWindow);
+    }
+
+    internal static bool SendMouseWheel(int wheelDelta)
+    {
+        var inputs = new[]
+        {
+            new Input
+            {
+                Type = InputMouse,
+                Data = new InputUnion
+                {
+                    Mouse = new MouseInput
+                    {
+                        MouseData = unchecked((uint)wheelDelta),
+                        Flags = MouseEventWheel
+                    }
+                }
+            }
+        };
+
+        return SendInput(1, inputs, Marshal.SizeOf<Input>()) == 1;
+    }
+
+    internal static void MakeWindowMouseTransparent(IntPtr windowHandle)
+    {
+        var currentStyle = IntPtr.Size == 8
+            ? GetWindowLongPtr64(windowHandle, GwlExStyle).ToInt64()
+            : GetWindowLong32(windowHandle, GwlExStyle);
+        var newStyle = currentStyle | WsExTransparent | WsExToolWindow | WsExNoActivate;
+
+        if (IntPtr.Size == 8)
+        {
+            _ = SetWindowLongPtr64(windowHandle, GwlExStyle, new IntPtr(newStyle));
+        }
+        else
+        {
+            _ = SetWindowLong32(windowHandle, GwlExStyle, unchecked((int)newStyle));
+        }
+    }
+
+    internal static void MakeWindowFrameOnly(IntPtr windowHandle, int width, int height, int borderSize)
+    {
+        var outerRegion = CreateRectRgn(0, 0, width, height);
+        var innerRegion = CreateRectRgn(
+            borderSize,
+            borderSize,
+            Math.Max(borderSize, width - borderSize),
+            Math.Max(borderSize, height - borderSize));
+        if (outerRegion == IntPtr.Zero || innerRegion == IntPtr.Zero)
+        {
+            if (outerRegion != IntPtr.Zero)
+            {
+                DeleteObject(outerRegion);
+            }
+
+            if (innerRegion != IntPtr.Zero)
+            {
+                DeleteObject(innerRegion);
+            }
+
+            return;
+        }
+
+        _ = CombineRgn(outerRegion, outerRegion, innerRegion, RgnDiff);
+        DeleteObject(innerRegion);
+        if (SetWindowRgn(windowHandle, outerRegion, true) == 0)
+        {
+            // SetWindowRgn 成功后由系统接管 region；失败时由当前进程释放。
+            DeleteObject(outerRegion);
+        }
+    }
+}

@@ -1,0 +1,15 @@
+# Visual Studio / .NET 构建缓存
+.vs/
+**/bin/
+**/obj/
+**/bin-scroll-test/
+**/obj-scroll-test/
+
+# 截图与长截图算法调试产物
+ScreenshotApp/artifacts/
+
+# 常见本地临时文件
+*.user
+*.suo
+*.tmp
+*.log

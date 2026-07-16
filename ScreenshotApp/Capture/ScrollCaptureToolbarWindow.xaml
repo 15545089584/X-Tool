@@ -1,0 +1,129 @@
+<Window x:Class="ScreenshotApp.Capture.ScrollCaptureToolbarWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="长截图控制"
+        Width="540" Height="98"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        WindowStartupLocation="Manual"
+        ShowInTaskbar="False"
+        Topmost="True"
+        Background="Transparent"
+        AllowsTransparency="True"
+        UseLayoutRounding="True"
+        SourceInitialized="Window_SourceInitialized"
+        PreviewKeyDown="Window_PreviewKeyDown">
+    <Window.Resources>
+        <Style x:Key="ToolbarButtonStyle" TargetType="Button">
+            <Setter Property="Height" Value="38" />
+            <Setter Property="Padding" Value="17,0" />
+            <Setter Property="Background" Value="#DDF4F7FC" />
+            <Setter Property="BorderBrush" Value="#B8FFFFFF" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="#3F4752" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="11">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#F7FFFFFF" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Opacity" Value="0.78" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ToolbarPrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource ToolbarButtonStyle}">
+            <Setter Property="Background" Value="#317CF5" />
+            <Setter Property="BorderBrush" Value="#4F8FFF" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="11">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#4389F7" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Opacity" Value="0.78" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Border Background="#F1F7FAFF"
+            BorderBrush="#C8FFFFFF"
+            BorderThickness="1"
+            CornerRadius="16"
+            Padding="15,13">
+        <Border.Effect>
+            <DropShadowEffect Color="#41536E" BlurRadius="26" ShadowDepth="6" Opacity="0.28" />
+        </Border.Effect>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="38" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Border x:Name="StatusIconBackground"
+                    Width="32" Height="32" VerticalAlignment="Top"
+                    Background="#E7F0FF" CornerRadius="10">
+                <TextBlock x:Name="StatusIcon"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           FontFamily="Segoe Fluent Icons" FontSize="15"
+                           Foreground="#317CF5" Text="&#xE74A;" />
+            </Border>
+
+            <StackPanel Grid.Column="1" Margin="8,0,16,0" VerticalAlignment="Center">
+                <TextBlock x:Name="StatusText"
+                           Foreground="#202630"
+                           FontSize="13"
+                           FontWeight="SemiBold"
+                           Text="手动滚动中 · 随时点击完成" />
+                <TextBlock x:Name="DetailText"
+                           Margin="0,5,0,0"
+                           MaxWidth="295"
+                           Foreground="#717A87"
+                           FontSize="11"
+                           LineHeight="15"
+                           TextWrapping="Wrap"
+                           TextTrimming="CharacterEllipsis"
+                           Text="可向上回滚，已截内容不会重复拼接" />
+            </StackPanel>
+
+            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button Width="68" Margin="0,0,8,0"
+                        Style="{StaticResource ToolbarButtonStyle}"
+                        Content="取消" Click="CancelButton_Click" />
+                <Button Width="78"
+                        Style="{StaticResource ToolbarPrimaryButtonStyle}"
+                        Content="完成" Click="FinishButton_Click" />
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

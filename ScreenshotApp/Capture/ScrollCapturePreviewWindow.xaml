@@ -1,0 +1,80 @@
+<Window x:Class="ScreenshotApp.Capture.ScrollCapturePreviewWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="长截图实时预览"
+        Width="148" Height="160"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        WindowStartupLocation="Manual"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Topmost="True"
+        Focusable="False"
+        IsHitTestVisible="False"
+        Background="Transparent"
+        AllowsTransparency="True"
+        UseLayoutRounding="True"
+        SourceInitialized="Window_SourceInitialized">
+    <Border Background="#EFF7FAFF"
+            BorderBrush="#CFFFFFFF"
+            BorderThickness="1"
+            CornerRadius="15"
+            Padding="11,10,11,11">
+        <Border.Effect>
+            <DropShadowEffect Color="#344A68" BlurRadius="24" ShadowDepth="5" Opacity="0.27" />
+        </Border.Effect>
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="24" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Border Width="22" Height="22"
+                        HorizontalAlignment="Left"
+                        Background="#E6F0FF"
+                        CornerRadius="7">
+                    <TextBlock HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               FontFamily="Segoe Fluent Icons"
+                               FontSize="11"
+                               Foreground="#317CF5"
+                               Text="&#xE91B;" />
+                </Border>
+                <TextBlock Grid.Column="1"
+                           Margin="6,0,0,0"
+                           VerticalAlignment="Center"
+                           Foreground="#202630"
+                           FontSize="12"
+                           FontWeight="SemiBold"
+                           Text="长截图预览" />
+            </Grid>
+
+            <TextBlock x:Name="HeightText"
+                       Grid.Row="1"
+                       Margin="0,7,0,8"
+                       Foreground="#77818E"
+                       FontSize="10"
+                       Text="已采集 0 像素" />
+
+            <Border Grid.Row="2"
+                    Background="#ECF2F7"
+                    BorderBrush="#AFFFFFFF"
+                    BorderThickness="1"
+                    CornerRadius="9"
+                    ClipToBounds="True">
+                <Image x:Name="PreviewImage"
+                       Width="112"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Top"
+                       Stretch="Fill"
+                       RenderOptions.BitmapScalingMode="HighQuality" />
+            </Border>
+        </Grid>
+    </Border>
+</Window>

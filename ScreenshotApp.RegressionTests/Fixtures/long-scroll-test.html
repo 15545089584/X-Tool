@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>截影长截图回归页</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif;
+      background: #eef3fa;
+      color: #162033;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 10% 0%, rgba(59, 130, 246, .16), transparent 28rem),
+        #eef3fa;
+    }
+
+    .sticky-header {
+      position: sticky;
+      z-index: 10;
+      top: 0;
+      height: 72px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 40px;
+      color: white;
+      background: rgba(18, 31, 55, .92);
+      border-bottom: 1px solid rgba(255, 255, 255, .22);
+      backdrop-filter: blur(14px);
+    }
+
+    .sticky-header strong { font-size: 20px; }
+    .sticky-header span { color: #b9c7dc; font-size: 13px; }
+
+    .pulse {
+      width: 12px;
+      height: 12px;
+      margin-left: 14px;
+      display: inline-block;
+      border-radius: 50%;
+      background: #54d6c3;
+      box-shadow: 0 0 0 0 rgba(84, 214, 195, .55);
+      animation: pulse 1.2s infinite;
+    }
+
+    @keyframes pulse {
+      70% { box-shadow: 0 0 0 12px rgba(84, 214, 195, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(84, 214, 195, 0); }
+    }
+
+    main {
+      width: min(1120px, calc(100% - 64px));
+      margin: 32px auto 64px;
+    }
+
+    .hero, .block, .table-card {
+      border: 1px solid rgba(128, 149, 181, .22);
+      border-radius: 20px;
+      background: rgba(255, 255, 255, .88);
+      box-shadow: 0 12px 32px rgba(38, 60, 94, .08);
+    }
+
+    .hero {
+      padding: 34px 38px;
+      margin-bottom: 24px;
+    }
+
+    .hero h1 { margin: 0 0 12px; font-size: 34px; }
+    .hero p { margin: 0; color: #607089; }
+
+    .block {
+      min-height: 156px;
+      margin: 18px 0;
+      padding: 24px 28px;
+      border-left: 7px solid #3b82f6;
+    }
+
+    .block:nth-child(3n) { border-left-color: #14b8a6; }
+    .block:nth-child(3n + 1) { border-left-color: #8b5cf6; }
+
+    .marker {
+      display: inline-block;
+      min-width: 112px;
+      padding: 6px 10px;
+      border-radius: 10px;
+      color: #1d4ed8;
+      background: #dbeafe;
+      font: 700 15px/1.2 Consolas, monospace;
+    }
+
+    .block h2 { margin: 18px 0 8px; font-size: 22px; }
+    .block p { margin: 0; color: #66758d; line-height: 1.7; }
+
+    .table-card {
+      overflow: hidden;
+      margin-top: 28px;
+    }
+
+    .table-title {
+      padding: 24px 28px;
+      font-size: 22px;
+      font-weight: 700;
+      border-bottom: 1px solid #dce4ef;
+    }
+
+    table { width: 100%; border-collapse: collapse; }
+    thead { position: sticky; top: 72px; z-index: 5; background: #e8f0fb; }
+    th, td { height: 42px; padding: 0 20px; border-bottom: 1px solid #e4eaf2; text-align: left; }
+    tbody tr:nth-child(even) { background: #f7f9fc; }
+    td:first-child { width: 140px; color: #475569; font-family: Consolas, monospace; }
+    td:nth-child(3) { color: #059669; }
+  </style>
+</head>
+<body>
+  <header class="sticky-header">
+    <strong>截影 · 网页长截图回归</strong>
+    <span>固定顶栏 + 动态状态点 <i class="pulse"></i></span>
+  </header>
+  <main>
+    <section class="hero">
+      <h1>连续性验证页</h1>
+      <p>每一个编号都必须在输出中严格递增，回滚后也不能重复拼接。</p>
+    </section>
+    <div id="blocks"></div>
+    <section class="table-card">
+      <div class="table-title">重复表格行验证</div>
+      <table>
+        <thead><tr><th>编号</th><th>项目</th><th>状态</th><th>校验值</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </section>
+  </main>
+  <script>
+    const blocks = document.querySelector('#blocks');
+    for (let index = 1; index <= 30; index += 1) {
+      const section = document.createElement('section');
+      section.className = 'block';
+      section.innerHTML = `
+        <span class="marker">BLOCK-${String(index).padStart(3, '0')}</span>
+        <h2>网页内容区块 ${index}</h2>
+        <p>这是用于验证固定顶栏、留白、卡片边界与亚像素文字滚动的唯一内容。编号必须连续且只出现一次。</p>`;
+      blocks.appendChild(section);
+    }
+
+    const rows = document.querySelector('#rows');
+    for (let index = 1; index <= 120; index += 1) {
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>ROW-${String(index).padStart(3, '0')}</td>
+        <td>重复布局项目 ${index}</td>
+        <td>正常</td>
+        <td>${String(index * 7919).padStart(7, '0')}</td>`;
+      rows.appendChild(row);
+    }
+  </script>
+</body>
+</html>

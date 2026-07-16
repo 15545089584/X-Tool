@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net6.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>JieYing</AssemblyName>
+    <RootNamespace>ScreenshotApp</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\JieYing.ico</ApplicationIcon>
+    <!-- WPF 仍通过 manifest 配置 PerMonitorV2；WinForms 只承载托盘图标。 -->
+    <NoWarn>$(NoWarn);WFAC010</NoWarn>
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj-scroll-test\**;bin-scroll-test\**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(ScrollCaptureTestMode)' == 'true'">
+    <!-- 专用回归构建：启动后直接进入长截图，不影响 Debug/Release 正式行为。 -->
+    <DefineConstants>$(DefineConstants);SCROLL_CAPTURE_TEST</DefineConstants>
+    <OutputPath>bin-scroll-test\$(Configuration)\</OutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Vortice.Direct3D11" Version="2.4.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- WinForms 仅用于系统托盘；避免其全局 using 与 WPF 类型重名。 -->
+    <Using Remove="System.Drawing" />
+    <Using Remove="System.Windows.Forms" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\JieYing.ico" />
+  </ItemGroup>
+
+</Project>
