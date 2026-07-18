@@ -69,35 +69,35 @@
                                             </Border>
                                         </Grid>
                                         <ControlTemplate.Triggers>
-                                            <DataTrigger Binding="{Binding KindText}" Value="外部复制">
+                                            <DataTrigger Binding="{Binding PaletteKind}" Value="External">
                                                 <Setter TargetName="Root" Property="Background" Value="#FFF1E5" />
                                                 <Setter TargetName="Root" Property="BorderBrush" Value="#F3D1AF" />
                                                 <Setter TargetName="GlowAura" Property="BorderBrush" Value="#EE9A51" />
                                                 <Setter TargetName="GlowFrame" Property="Stroke" Value="#EE9A51" />
                                             </DataTrigger>
-                                            <DataTrigger Binding="{Binding KindText}" Value="翻译">
+                                            <DataTrigger Binding="{Binding PaletteKind}" Value="Translation">
                                                 <Setter TargetName="Root" Property="Background" Value="#F0EAFF" />
                                                 <Setter TargetName="Root" Property="BorderBrush" Value="#D6C3FF" />
                                                 <Setter TargetName="GlowAura" Property="BorderBrush" Value="#9667DC" />
                                                 <Setter TargetName="GlowFrame" Property="Stroke" Value="#9667DC" />
                                             </DataTrigger>
-                                            <DataTrigger Binding="{Binding KindText}" Value="文字提取">
+                                            <DataTrigger Binding="{Binding PaletteKind}" Value="TextExtraction">
                                                 <Setter TargetName="Root" Property="Background" Value="#E9F8ED" />
                                                 <Setter TargetName="Root" Property="BorderBrush" Value="#BAE6C5" />
                                                 <Setter TargetName="GlowAura" Property="BorderBrush" Value="#55BD7B" />
                                                 <Setter TargetName="GlowFrame" Property="Stroke" Value="#55BD7B" />
                                             </DataTrigger>
-                                            <DataTrigger Binding="{Binding KindText}" Value="普通截图">
+                                            <DataTrigger Binding="{Binding PaletteKind}" Value="Image">
                                                 <Setter TargetName="Root" Property="Background" Value="#E8ECFF" />
                                                 <Setter TargetName="Root" Property="BorderBrush" Value="#AEBBF4" />
                                                 <Setter TargetName="GlowAura" Property="BorderBrush" Value="#6F91EC" />
                                                 <Setter TargetName="GlowFrame" Property="Stroke" Value="#6F91EC" />
                                             </DataTrigger>
-                                            <DataTrigger Binding="{Binding KindText}" Value="长截图">
-                                                <Setter TargetName="Root" Property="Background" Value="#E8ECFF" />
-                                                <Setter TargetName="Root" Property="BorderBrush" Value="#AEBBF4" />
-                                                <Setter TargetName="GlowAura" Property="BorderBrush" Value="#6F91EC" />
-                                                <Setter TargetName="GlowFrame" Property="Stroke" Value="#6F91EC" />
+                                            <DataTrigger Binding="{Binding PaletteKind}" Value="Text">
+                                                <Setter TargetName="Root" Property="Background" Value="#FBEAF3" />
+                                                <Setter TargetName="Root" Property="BorderBrush" Value="#F1BED8" />
+                                                <Setter TargetName="GlowAura" Property="BorderBrush" Value="#D85E9A" />
+                                                <Setter TargetName="GlowFrame" Property="Stroke" Value="#D85E9A" />
                                             </DataTrigger>
                                             <Trigger Property="IsMouseOver" Value="True">
                                                 <Setter TargetName="GlowAura" Property="Visibility" Value="Visible" />

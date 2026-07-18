@@ -79,14 +79,45 @@ public partial class ClipboardPickerWindow : Window
             "External" => _items.Where(item => item.Kind == HistoryEntryKind.ExternalClipboard),
             _ => _items
         };
-        ClipboardItemsPanel.ItemsSource = items.Take(18).ToArray();
+        ClipboardItemsPanel.ItemsSource = items
+            .Take(18)
+            .Select(item => new ClipboardPickerItem(item, GetPaletteKind(item, filter)))
+            .ToArray();
     }
 
     private void ClipboardItem_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement { DataContext: ScreenshotHistoryItem item })
+        if (sender is FrameworkElement { DataContext: ClipboardPickerItem pickerItem })
         {
-            ItemSelected?.Invoke(this, item);
+            ItemSelected?.Invoke(this, pickerItem.Item);
         }
     }
+
+    /// <summary>筛选页按当前语义配色；全部页则优先使用实际内容类型。</summary>
+    private static string GetPaletteKind(ScreenshotHistoryItem item, string filter)
+    {
+        if (filter != "All")
+        {
+            return filter;
+        }
+
+        return item.Kind switch
+        {
+            HistoryEntryKind.Translation => "Translation",
+            HistoryEntryKind.TextExtraction => "TextExtraction",
+            _ when item.HasThumbnail => "Image",
+            _ when item.IsTextRecord => "Text",
+            _ => "External"
+        };
+    }
+}
+
+/// <summary>剪贴板浮窗使用的展示模型，保留原始记录并独立决定当前分类的视觉样式。</summary>
+internal sealed record ClipboardPickerItem(ScreenshotHistoryItem Item, string PaletteKind)
+{
+    public string PreviewText => Item.PreviewText;
+
+    public System.Windows.Media.Imaging.BitmapSource? Thumbnail => Item.Thumbnail;
+
+    public bool HasThumbnail => Item.HasThumbnail;
 }
