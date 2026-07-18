@@ -763,8 +763,22 @@ public partial class SelectionOverlayWindow : Window
         var x = Math.Clamp(_selection.Right - toolbarWidth, 8, Math.Max(8, CaptureSurface.ActualWidth - toolbarWidth - 8));
         var preferredBelow = _selection.Bottom + 10;
         var preferredAbove = _selection.Top - toolbarHeight - 10;
-        var canPlaceBelow = preferredBelow + toolbarHeight <= CaptureSurface.ActualHeight - 8;
-        var canPlaceAbove = preferredAbove >= 8;
+        var surfaceHeight = CaptureSurface.ActualHeight;
+
+        // 常规情况下与选区保留 10 像素间距；向下扩展选区后，
+        // 若下方空间不足，允许紧贴上边放置，绝不能再把工具栏夹回选区内部。
+        var belowY = preferredBelow + toolbarHeight <= surfaceHeight - 8
+            ? preferredBelow
+            : _selection.Bottom + toolbarHeight <= surfaceHeight
+                ? _selection.Bottom
+                : double.NaN;
+        var aboveY = preferredAbove >= 8
+            ? preferredAbove
+            : _selection.Top >= toolbarHeight
+                ? _selection.Top - toolbarHeight
+                : double.NaN;
+        var canPlaceBelow = !double.IsNaN(belowY);
+        var canPlaceAbove = !double.IsNaN(aboveY);
 
         // 首次确定位置后保持在同一侧，避免拖动选区经过临界点时反复跳动。
         _toolbarBelowSelection ??= canPlaceBelow || !canPlaceAbove;
@@ -777,9 +791,27 @@ public partial class SelectionOverlayWindow : Window
             _toolbarBelowSelection = true;
         }
 
-        var y = _toolbarBelowSelection == true
-            ? Math.Min(preferredBelow, Math.Max(8, CaptureSurface.ActualHeight - toolbarHeight - 8))
-            : Math.Max(8, preferredAbove);
+        double y;
+        if (_toolbarBelowSelection == true && canPlaceBelow)
+        {
+            y = belowY;
+        }
+        else if (_toolbarBelowSelection == false && canPlaceAbove)
+        {
+            y = aboveY;
+        }
+        else
+        {
+            // 选区占满几乎整个屏幕时上下两侧都无法完整容纳工具栏，
+            // 选择与选区交叠面积更小的一侧作为最后兜底。
+            var maximumY = Math.Max(0, surfaceHeight - toolbarHeight);
+            var fallbackBelow = Math.Clamp(_selection.Bottom, 0, maximumY);
+            var fallbackAbove = Math.Clamp(_selection.Top - toolbarHeight, 0, maximumY);
+            y = GetToolbarSelectionIntersectionArea(x, fallbackBelow, toolbarWidth, toolbarHeight)
+                <= GetToolbarSelectionIntersectionArea(x, fallbackAbove, toolbarWidth, toolbarHeight)
+                ? fallbackBelow
+                : fallbackAbove;
+        }
 
         ActionToolbar.Margin = new Thickness(x, y, 0, 0);
         _toolbarPositioned = true;
@@ -795,6 +827,12 @@ public partial class SelectionOverlayWindow : Window
         var protectedSelection = _selection;
         protectedSelection.Inflate(4, 4);
         return toolbarBounds.IntersectsWith(protectedSelection);
+    }
+
+    private double GetToolbarSelectionIntersectionArea(double x, double y, double width, double height)
+    {
+        var intersection = Rect.Intersect(new Rect(x, y, width, height), _selection);
+        return intersection.IsEmpty ? 0 : intersection.Width * intersection.Height;
     }
 
     private Point ClampToSurface(Point point)
