@@ -1,5 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Interop;
+using ScreenshotApp.Capture;
 using ScreenshotApp.History;
 
 namespace ScreenshotApp.ClipboardUi;
@@ -7,13 +9,18 @@ namespace ScreenshotApp.ClipboardUi;
 /// <summary>用于快速选择最近剪贴板内容的小型浮窗。</summary>
 public partial class ClipboardPickerWindow : Window
 {
+    private const int WmMouseActivate = 0x0021;
+    private const int MaNoActivate = 3;
     private readonly IReadOnlyList<ScreenshotHistoryItem> _items;
+    private HwndSource? _windowSource;
 
     public ClipboardPickerWindow(IEnumerable<ScreenshotHistoryItem> items)
     {
         InitializeComponent();
         _items = items.ToArray();
         ApplyFilter("All");
+        SourceInitialized += OnSourceInitialized;
+        Closed += (_, _) => _windowSource?.RemoveHook(WindowMessageHook);
         PreviewKeyDown += (_, eventArgs) =>
         {
             if (eventArgs.Key == System.Windows.Input.Key.Escape)
@@ -24,6 +31,26 @@ public partial class ClipboardPickerWindow : Window
     }
 
     public event EventHandler<ScreenshotHistoryItem>? ItemSelected;
+
+    private void OnSourceInitialized(object? sender, EventArgs e)
+    {
+        var handle = new WindowInteropHelper(this).Handle;
+        NativeMethods.MakeWindowNonActivating(handle);
+        _windowSource = HwndSource.FromHwnd(handle);
+        _windowSource?.AddHook(WindowMessageHook);
+    }
+
+    private IntPtr WindowMessageHook(IntPtr handle, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (message == WmMouseActivate)
+        {
+            // 允许继续接收鼠标点击，但不让浮窗成为前台窗口，保留原输入框的插入光标。
+            handled = true;
+            return new IntPtr(MaNoActivate);
+        }
+
+        return IntPtr.Zero;
+    }
 
     private void Header_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {

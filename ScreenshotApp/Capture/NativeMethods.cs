@@ -328,6 +328,34 @@ internal static class NativeMethods
         }
     }
 
+    internal static bool IsWindowForeground(IntPtr windowHandle)
+    {
+        if (windowHandle == IntPtr.Zero || !IsWindow(windowHandle))
+        {
+            return false;
+        }
+
+        var rootWindow = GetAncestor(windowHandle, GetAncestorRoot);
+        return GetForegroundWindow() == (rootWindow == IntPtr.Zero ? windowHandle : rootWindow);
+    }
+
+    internal static void MakeWindowNonActivating(IntPtr windowHandle)
+    {
+        var currentStyle = IntPtr.Size == 8
+            ? GetWindowLongPtr64(windowHandle, GwlExStyle).ToInt64()
+            : GetWindowLong32(windowHandle, GwlExStyle);
+        var newStyle = currentStyle | WsExToolWindow | WsExNoActivate;
+
+        if (IntPtr.Size == 8)
+        {
+            _ = SetWindowLongPtr64(windowHandle, GwlExStyle, new IntPtr(newStyle));
+        }
+        else
+        {
+            _ = SetWindowLong32(windowHandle, GwlExStyle, unchecked((int)newStyle));
+        }
+    }
+
     internal static bool SendMouseWheel(int wheelDelta)
     {
         var inputs = new[]

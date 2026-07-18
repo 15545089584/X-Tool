@@ -859,7 +859,7 @@ public partial class MainWindow : Window
     {
         if (_clipboardPicker is not null)
         {
-            _clipboardPicker.Activate();
+            _clipboardPicker.Close();
             return Task.CompletedTask;
         }
 
@@ -924,7 +924,8 @@ public partial class MainWindow : Window
             await Task.Delay(80);
             if (_clipboardPasteTarget != IntPtr.Zero)
             {
-                var activated = false;
+                // 剪贴板浮窗为非激活窗口时，外部输入框会持续保持焦点，直接发送粘贴即可。
+                var activated = NativeMethods.IsWindowForeground(_clipboardPasteTarget);
                 for (var attempt = 0; attempt < 3 && !activated; attempt++)
                 {
                     activated = NativeMethods.RestoreAndActivateWindow(_clipboardPasteTarget);
