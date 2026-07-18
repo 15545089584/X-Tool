@@ -9,9 +9,6 @@ public partial class OcrResultWindow : Window
     {
         InitializeComponent();
         ResultTextBox.Text = result.Text;
-        SummaryText.Text = result.Blocks.Count == 0
-            ? $"没有识别到文字 · 用时 {result.Elapsed.TotalMilliseconds:F0} ms"
-            : $"识别到 {result.Blocks.Count} 个文本区域 · 平均置信度 {result.AverageConfidence:P0} · {result.Elapsed.TotalMilliseconds:F0} ms";
         Loaded += (_, _) =>
         {
             ResultTextBox.Focus();
