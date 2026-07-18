@@ -132,13 +132,18 @@ public partial class MainWindow : Window
             return;
         }
 
-        var page = radioButton.Tag?.ToString() ?? "Home";
+        NavigateToPage(radioButton.Tag?.ToString() ?? "Home");
+    }
+
+    private void NavigateToPage(string page)
+    {
         HomeView.Visibility = page == "Home" ? Visibility.Visible : Visibility.Collapsed;
+        ScreenWorkbenchView.Visibility = page == "ScreenWorkbench" ? Visibility.Visible : Visibility.Collapsed;
         HistoryView.Visibility = page == "History" ? Visibility.Visible : Visibility.Collapsed;
         ShortcutsView.Visibility = page == "Shortcuts" ? Visibility.Visible : Visibility.Collapsed;
         SettingsView.Visibility = page == "Settings" ? Visibility.Visible : Visibility.Collapsed;
 
-        if (page == "History")
+        if (page is "History" or "ScreenWorkbench")
         {
             _ = RefreshHistoryAsync();
         }
@@ -150,6 +155,12 @@ public partial class MainWindow : Window
         if (action is "截图" or "普通截图" or "区域截图")
         {
             await StartRegionCaptureAsync();
+            return;
+        }
+
+        if (action == "长截图")
+        {
+            await StartScrollCaptureAsync();
             return;
         }
 
@@ -735,34 +746,18 @@ public partial class MainWindow : Window
 
     private void ShowHistory_Click(object sender, RoutedEventArgs e)
     {
-        var historyNav = FindHistoryNavigationButton();
-        if (historyNav is not null)
-        {
-            historyNav.IsChecked = true;
-        }
+        NavigateToPage("History");
     }
 
-    private RadioButton? FindHistoryNavigationButton()
+    private void NavigateToWorkbench_Click(object sender, RoutedEventArgs e)
     {
-        return FindVisualChildren<RadioButton>(this)
-            .FirstOrDefault(button => button.Tag?.ToString() == "History");
+        ScreenWorkbenchNav.IsChecked = true;
+        NavigateToPage("ScreenWorkbench");
     }
 
-    private static IEnumerable<T> FindVisualChildren<T>(DependencyObject root) where T : DependencyObject
+    private void FutureTools_Click(object sender, RoutedEventArgs e)
     {
-        for (var index = 0; index < System.Windows.Media.VisualTreeHelper.GetChildrenCount(root); index++)
-        {
-            var child = System.Windows.Media.VisualTreeHelper.GetChild(root, index);
-            if (child is T match)
-            {
-                yield return match;
-            }
-
-            foreach (var descendant in FindVisualChildren<T>(child))
-            {
-                yield return descendant;
-            }
-        }
+        ShowToast("更多 X-Tool 子工具正在准备中");
     }
 
     private void ShortcutButton_Click(object sender, RoutedEventArgs e)
