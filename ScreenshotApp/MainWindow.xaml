@@ -564,40 +564,59 @@
                                         <Border Grid.Column="2" Padding="24" Background="#72FFFFFF" BorderBrush="#9AFFFFFF" BorderThickness="1" CornerRadius="20">
                                             <Border.Effect><DropShadowEffect BlurRadius="18" ShadowDepth="4" Direction="270" Opacity="0.10" Color="#4D6D90" /></Border.Effect>
                                             <Grid>
-                                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="18" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="16" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                                                 <Grid>
                                                     <StackPanel Orientation="Horizontal">
                                                         <Border Width="42" Height="42" Background="#D9E8FF" CornerRadius="13"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="21" Foreground="#4D7CFE" Text="&#xEB9F;" /></Border>
-                                                        <StackPanel Margin="12,0,0,0" VerticalAlignment="Center"><TextBlock FontSize="18" FontWeight="SemiBold" Text="图片处理" /><TextBlock Margin="0,4,0,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="转换格式、压缩体积或调整图片尺寸" /></StackPanel>
+                                                        <StackPanel Margin="12,0,0,0" VerticalAlignment="Center"><TextBlock FontSize="18" FontWeight="SemiBold" Text="图片处理" /><TextBlock Margin="0,4,0,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="批量转换、压缩与尺寸调整，一站式完成" /></StackPanel>
                                                     </StackPanel>
-                                                    <Border HorizontalAlignment="Right" VerticalAlignment="Center" Padding="11,6" Background="#72E6F2FF" BorderBrush="#9ECBE4FF" BorderThickness="1" CornerRadius="10"><TextBlock FontSize="11" Foreground="#55718C" Text="原始文件保持不变" /></Border>
+                                                    <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal">
+                                                        <Border Margin="0,0,7,0" Padding="10,6" Background="#70EAF2FF" BorderBrush="#A0C8E0FA" BorderThickness="1" CornerRadius="10"><TextBlock FontSize="11" Foreground="#54708C" Text="格式转换" /></Border>
+                                                        <Border Margin="0,0,7,0" Padding="10,6" Background="#70EAF2FF" BorderBrush="#A0C8E0FA" BorderThickness="1" CornerRadius="10"><TextBlock FontSize="11" Foreground="#54708C" Text="压缩优化" /></Border>
+                                                        <Border Padding="10,6" Background="#70EAF2FF" BorderBrush="#A0C8E0FA" BorderThickness="1" CornerRadius="10"><TextBlock FontSize="11" Foreground="#54708C" Text="尺寸调整" /></Border>
+                                                    </StackPanel>
                                                 </Grid>
                                                 <Grid Grid.Row="2">
-                                                    <Grid.ColumnDefinitions><ColumnDefinition Width="1.15*" /><ColumnDefinition Width="22" /><ColumnDefinition Width="0.85*" /></Grid.ColumnDefinitions>
+                                                    <Grid.ColumnDefinitions><ColumnDefinition Width="1.05*" /><ColumnDefinition Width="22" /><ColumnDefinition Width="0.95*" /></Grid.ColumnDefinitions>
                                                     <Grid>
-                                                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /><RowDefinition Height="20" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                                                        <Grid.RowDefinitions><RowDefinition Height="154" /><RowDefinition Height="16" /><RowDefinition Height="*" /><RowDefinition Height="18" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                                                         <Grid>
-                                                            <StackPanel><TextBlock FontSize="16" FontWeight="SemiBold" Text="添加图片" /><TextBlock x:Name="ImageFilesSummaryText" Margin="0,6,0,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="支持 PNG、JPEG、BMP、TIFF，可一次选择多张" /></StackPanel>
-                                                            <Button HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource ConverterSecondaryButtonStyle}" Content="选择文件" Click="SelectImageFiles_Click" />
+                                                            <Border Padding="18" Background="#4CEBF4FF" BorderBrush="#8DB9F5" BorderThickness="1" CornerRadius="16">
+                                                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                                    <Border Width="40" Height="40" HorizontalAlignment="Center" Background="#D6E6FF" CornerRadius="12"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="21" Foreground="#4D7CFE" Text="&#xE898;" /></Border>
+                                                                    <TextBlock Margin="0,9,0,0" HorizontalAlignment="Center" FontSize="14" FontWeight="SemiBold" Text="添加需要处理的图片" />
+                                                                    <TextBlock x:Name="ImageFilesSummaryText" Margin="0,4,0,0" HorizontalAlignment="Center" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}" Text="支持 PNG、JPEG、BMP、TIFF，可一次选择多张" />
+                                                                    <Button Margin="0,11,0,0" HorizontalAlignment="Center" Style="{StaticResource ConverterSecondaryButtonStyle}" Content="选择文件" Click="SelectImageFiles_Click" />
+                                                                </StackPanel>
+                                                            </Border>
                                                         </Grid>
-                                                        <Border Grid.Row="2" Padding="14" Background="#48EAF3FF" BorderBrush="#91C9E0F5" BorderThickness="1" CornerRadius="14">
-                                                            <ListBox x:Name="ImageFileList" Background="Transparent" BorderThickness="0" IsHitTestVisible="False" FontSize="12" Foreground="#4B6680" />
+                                                        <Border Grid.Row="2" Padding="14" Background="#3DF7FAFF" BorderBrush="#8FC9E0F5" BorderThickness="1" CornerRadius="15">
+                                                            <Grid>
+                                                                <TextBlock Margin="1,0,0,10" VerticalAlignment="Top" FontSize="13" FontWeight="SemiBold" Text="已选文件" />
+                                                                <ListBox x:Name="ImageFileList" Margin="0,28,0,0" Background="Transparent" BorderThickness="0" IsHitTestVisible="False" FontSize="12" Foreground="#4B6680" />
+                                                            </Grid>
                                                         </Border>
-                                                        <Border Grid.Row="4" Padding="0,16,0,0" BorderBrush="#7FC8D6E6" BorderThickness="0,1,0,0">
-                                                            <Grid><StackPanel><TextBlock FontSize="15" FontWeight="SemiBold" Text="输出位置" /><TextBlock x:Name="ConverterOutputFolderText" Margin="0,7,0,0" FontSize="12" TextTrimming="CharacterEllipsis" Foreground="#52708C" /></StackPanel><Button HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource ConverterSecondaryButtonStyle}" Content="选择文件夹" Click="SelectConverterOutputFolder_Click" /></Grid>
+                                                        <Border Grid.Row="4" Padding="14,12" Background="#5BFFFFFF" BorderBrush="#9ECFE2F1" BorderThickness="1" CornerRadius="14">
+                                                            <Grid><StackPanel><TextBlock FontSize="13" FontWeight="SemiBold" Text="输出位置" /><TextBlock x:Name="ConverterOutputFolderText" Margin="0,6,0,0" FontSize="11" TextTrimming="CharacterEllipsis" Foreground="#52708C" /></StackPanel><Button HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource ConverterSecondaryButtonStyle}" Content="选择文件夹" Click="SelectConverterOutputFolder_Click" /></Grid>
                                                         </Border>
                                                     </Grid>
-                                                    <Border Grid.Column="2" Padding="20" Background="#4FEAF3FF" BorderBrush="#9DC8E1F7" BorderThickness="1" CornerRadius="16">
+                                                    <Border Grid.Column="2" Padding="22" Background="#54EAF3FF" BorderBrush="#9DC8E1F7" BorderThickness="1" CornerRadius="18">
                                                         <StackPanel>
-                                                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="处理参数" />
-                                                            <TextBlock Margin="0,18,0,7" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="输出格式" />
+                                                            <Grid><TextBlock FontSize="17" FontWeight="SemiBold" Text="处理设置" /><TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" Foreground="#5A7EA8" Text="实时生效" /></Grid>
+                                                            <TextBlock Margin="0,20,0,7" FontSize="12" FontWeight="SemiBold" Foreground="#526F8B" Text="输出格式" />
                                                             <ComboBox x:Name="ImageFormatComboBox" Style="{StaticResource ConverterComboBoxStyle}" SelectedIndex="0" SelectionChanged="ImageFormatComboBox_SelectionChanged"><ComboBoxItem Tag="Png">PNG · 无损</ComboBoxItem><ComboBoxItem Tag="Jpeg">JPEG · 体积更小</ComboBoxItem><ComboBoxItem Tag="Bmp">BMP · 位图</ComboBoxItem><ComboBoxItem Tag="Tiff">TIFF · 高保真</ComboBoxItem></ComboBox>
-                                                            <Grid Margin="0,20,0,0"><TextBlock FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="JPEG 质量" /><TextBlock x:Name="ImageQualityValueText" HorizontalAlignment="Right" FontSize="12" FontWeight="SemiBold" Foreground="#507AB3" /></Grid>
+                                                            <Border Margin="0,16,0,0" Padding="13,11" Background="#62FFFFFF" BorderBrush="#91C9E0F5" BorderThickness="1" CornerRadius="12">
+                                                                <StackPanel><Grid><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#526F8B" Text="JPEG 质量" /><TextBlock x:Name="ImageQualityValueText" HorizontalAlignment="Right" FontSize="12" FontWeight="SemiBold" Foreground="#507AB3" /></Grid>
                                                             <Slider x:Name="ImageQualitySlider" Style="{StaticResource ConverterSliderStyle}" Minimum="20" Maximum="100" Value="88" TickFrequency="10" IsSnapToTickEnabled="False" ValueChanged="ImageQualitySlider_ValueChanged" />
-                                                            <Grid Margin="0,16,0,0"><TextBlock FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="输出尺寸" /><TextBlock x:Name="ImageScaleValueText" HorizontalAlignment="Right" FontSize="12" FontWeight="SemiBold" Foreground="#507AB3" /></Grid>
+                                                                <Grid><TextBlock FontSize="10" Foreground="#8A9AAC" Text="更小文件" /><TextBlock HorizontalAlignment="Right" FontSize="10" Foreground="#8A9AAC" Text="更高质量" /></Grid></StackPanel>
+                                                            </Border>
+                                                            <Border Margin="0,12,0,0" Padding="13,11" Background="#62FFFFFF" BorderBrush="#91C9E0F5" BorderThickness="1" CornerRadius="12">
+                                                                <StackPanel><Grid><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#526F8B" Text="输出尺寸" /><TextBlock x:Name="ImageScaleValueText" HorizontalAlignment="Right" FontSize="12" FontWeight="SemiBold" Foreground="#507AB3" /></Grid>
                                                             <Slider x:Name="ImageScaleSlider" Style="{StaticResource ConverterSliderStyle}" Minimum="10" Maximum="200" Value="100" TickFrequency="10" IsSnapToTickEnabled="False" ValueChanged="ImageScaleSlider_ValueChanged" />
-                                                            <TextBlock Margin="0,22,0,0" FontSize="11" LineHeight="18" Foreground="#72869B" Text="JPEG 会以白色填充透明区域；其他格式保留透明通道。" TextWrapping="Wrap" />
-                                                            <Button x:Name="StartImageConversionButton" Margin="0,20,0,0" Style="{StaticResource ConverterActionButtonStyle}" Content="开始处理" Click="StartImageConversion_Click" />
+                                                                <TextBlock FontSize="10" Foreground="#8A9AAC" Text="按比例缩放，保留原图比例" /></StackPanel>
+                                                            </Border>
+                                                            <TextBlock Margin="0,16,0,0" FontSize="11" LineHeight="17" Foreground="#72869B" Text="JPEG 会以白色填充透明区域；其他格式保留透明通道。" TextWrapping="Wrap" />
+                                                            <Button x:Name="StartImageConversionButton" Margin="0,18,0,0" Height="42" Style="{StaticResource ConverterActionButtonStyle}" Content="开始处理" Click="StartImageConversion_Click" />
                                                             <TextBlock x:Name="ImageConversionStatusText" Margin="0,12,0,0" FontSize="12" Foreground="#5C7894" TextWrapping="Wrap" />
                                                         </StackPanel>
                                                     </Border>
