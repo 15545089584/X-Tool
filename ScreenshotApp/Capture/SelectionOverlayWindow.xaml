@@ -325,6 +325,15 @@
                         <TextBlock VerticalAlignment="Center" Text="录像" />
                     </StackPanel>
                 </Button>
+                <Button x:Name="StickerToolButton"
+                        Style="{StaticResource AnnotationToolButtonStyle}"
+                        Click="StickerToolButton_Click"
+                        ToolTip="将当前框选区域作为可拖动贴图留在桌面上">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Margin="0,0,5,0" FontFamily="Segoe Fluent Icons" FontSize="14" Text="&#xE8A5;" />
+                        <TextBlock VerticalAlignment="Center" Text="贴图" />
+                    </StackPanel>
+                </Button>
 
                 <Border Width="1" Height="20" Margin="4,0,7,0"
                         VerticalAlignment="Center" Background="#CCD5E0" />

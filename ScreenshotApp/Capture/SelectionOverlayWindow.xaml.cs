@@ -9,6 +9,7 @@ using System.Windows.Shapes;
 using ScreenshotApp.Ocr;
 using ScreenshotApp.Translation;
 using ScreenshotApp.History;
+using ScreenshotApp.Sticker;
 
 namespace ScreenshotApp.Capture;
 
@@ -251,6 +252,27 @@ public partial class SelectionOverlayWindow : Window
         UpdateRecordingOptionStates();
         RecordingOptionsPanel.Visibility = Visibility.Visible;
         PositionRecordingOptionsPanel();
+    }
+
+    private void StickerToolButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selection.IsEmpty)
+        {
+            return;
+        }
+
+        // 先冻结选区及标注，再关闭遮罩，避免贴图重新截取屏幕时把自身或遮罩带入图片。
+        var bitmap = CreateSelectionBitmap(includeAnnotations: true);
+        var pixelBounds = GetSelectionPixelBounds();
+        var screenBounds = new Int32Rect(
+            _frame.ScreenBounds.X + pixelBounds.X,
+            _frame.ScreenBounds.Y + pixelBounds.Y,
+            pixelBounds.Width,
+            pixelBounds.Height);
+        var sticker = new StickerWindow(bitmap, screenBounds);
+
+        Close();
+        Dispatcher.BeginInvoke(new Action(sticker.Show));
     }
 
     private void SystemAudioOptionButton_Click(object sender, RoutedEventArgs e)
