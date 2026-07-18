@@ -10,7 +10,7 @@
         MaxHeight="680"
         WindowStyle="None"
         ResizeMode="CanResizeWithGrip"
-        WindowStartupLocation="CenterOwner"
+        WindowStartupLocation="Manual"
         ShowInTaskbar="False"
         Topmost="True"
         AllowsTransparency="True"

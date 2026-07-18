@@ -241,7 +241,12 @@ public partial class SelectionOverlayWindow : Window
                     ConfidenceThreshold = 0.5f
                 },
                 CancellationToken.None);
-            var resultWindow = new OcrResultWindow(result) { Owner = this };
+            var selectionScreenBounds = new Rect(
+                Left + _selection.Left,
+                Top + _selection.Top,
+                _selection.Width,
+                _selection.Height);
+            var resultWindow = new OcrResultWindow(result, selectionScreenBounds) { Owner = this };
             resultWindow.ShowDialog();
         }
         catch (Exception exception)
