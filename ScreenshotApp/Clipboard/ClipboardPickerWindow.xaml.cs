@@ -70,7 +70,6 @@ public partial class ClipboardPickerWindow : Window
 
     private void ApplyFilter(string filter)
     {
-        ClipboardItemsList.SelectedItem = null;
         var items = filter switch
         {
             "Image" => _items.Where(item => item.HasThumbnail),
@@ -80,7 +79,7 @@ public partial class ClipboardPickerWindow : Window
             "External" => _items.Where(item => item.Kind == HistoryEntryKind.ExternalClipboard),
             _ => _items
         };
-        ClipboardItemsList.ItemsSource = items.Take(18).ToArray();
+        ClipboardItemsPanel.ItemsSource = items.Take(18).ToArray();
     }
 
     private void ClipboardItem_Click(object sender, RoutedEventArgs e)
