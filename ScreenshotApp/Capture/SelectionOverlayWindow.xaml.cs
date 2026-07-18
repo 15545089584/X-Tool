@@ -42,6 +42,7 @@ public partial class SelectionOverlayWindow : Window
     private bool _toolbarPositioned;
     private bool _recordSystemAudio;
     private bool _recordMicrophone;
+    private bool _isSynchronizingAnnotationThickness;
 
     private const double MinimumSelectionSize = 16;
     private const double ResizeHandleSize = 14;
@@ -334,9 +335,7 @@ public partial class SelectionOverlayWindow : Window
         }
 
         _selectedShape = shape;
-        ShapeOptionsPanel.Visibility = Visibility.Collapsed;
         SetActiveAnnotationTool(ScreenshotAnnotationTool.Shape);
-        ToggleToolPanel(PenOptionsPanel, ShapeToolButton);
     }
 
     private async void OcrToolButton_Click(object sender, RoutedEventArgs e)
@@ -528,16 +527,22 @@ public partial class SelectionOverlayWindow : Window
 
     private void ThicknessSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        if (ThicknessSlider is null)
+        if (ThicknessSlider is null || _isSynchronizingAnnotationThickness)
         {
             return;
         }
 
-        _annotationThickness = ThicknessSlider.Value;
-        if (StrokePreviewPath is not null)
+        SetAnnotationThickness(ThicknessSlider.Value);
+    }
+
+    private void ShapeThicknessSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (ShapeThicknessSlider is null || _isSynchronizingAnnotationThickness)
         {
-            StrokePreviewPath.StrokeThickness = _annotationThickness;
+            return;
         }
+
+        SetAnnotationThickness(ShapeThicknessSlider.Value);
     }
 
     private void ToggleToolPanel(Border panel, FrameworkElement anchor)
@@ -1340,6 +1345,18 @@ public partial class SelectionOverlayWindow : Window
         {
             StrokePreviewPath.Stroke = new SolidColorBrush(_annotationColor);
         }
+        if (ShapeStrokePreviewPath is not null)
+        {
+            ShapeStrokePreviewPath.Stroke = new SolidColorBrush(_annotationColor);
+        }
+    }
+
+    private void SetAnnotationThickness(double thickness)
+    {
+        _annotationThickness = thickness;
+        _isSynchronizingAnnotationThickness = true;
+        UpdateThicknessStates();
+        _isSynchronizingAnnotationThickness = false;
     }
 
     private void UpdateThicknessStates()
@@ -1348,9 +1365,17 @@ public partial class SelectionOverlayWindow : Window
         {
             ThicknessSlider.Value = _annotationThickness;
         }
+        if (ShapeThicknessSlider is not null && Math.Abs(ShapeThicknessSlider.Value - _annotationThickness) > 0.01)
+        {
+            ShapeThicknessSlider.Value = _annotationThickness;
+        }
         if (StrokePreviewPath is not null)
         {
             StrokePreviewPath.StrokeThickness = _annotationThickness;
+        }
+        if (ShapeStrokePreviewPath is not null)
+        {
+            ShapeStrokePreviewPath.StrokeThickness = _annotationThickness;
         }
     }
 
