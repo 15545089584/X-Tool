@@ -32,6 +32,7 @@ public partial class SelectionOverlayWindow : Window
     private ResizeHandle? _activeResizeHandle;
     private Rect _resizeStartSelection;
     private Point _resizeStartPoint;
+    private bool? _toolbarBelowSelection;
 
     private const double MinimumSelectionSize = 16;
     private const double ResizeHandleSize = 14;
@@ -110,6 +111,7 @@ public partial class SelectionOverlayWindow : Window
         _dragStart = position;
         _selection = new Rect(position, position);
         _isDragging = true;
+        _toolbarBelowSelection = null;
         ResetAnnotations();
         ActionToolbar.Visibility = Visibility.Collapsed;
         CaptureSurface.CaptureMouse();
@@ -159,7 +161,6 @@ public partial class SelectionOverlayWindow : Window
         AnnotationCanvas.Clip = new RectangleGeometry(_selection);
         HintText.Text = "选择标注工具进行涂鸦或描框  ·  Enter 完成  ·  Esc / 右键取消";
         UpdateSelectionVisuals(_selection);
-        PositionToolbar();
         e.Handled = true;
     }
 
@@ -641,6 +642,7 @@ public partial class SelectionOverlayWindow : Window
             SizeBadge.Visibility = Visibility.Collapsed;
             ActionToolbar.Visibility = Visibility.Collapsed;
             AnnotationCanvas.Visibility = Visibility.Collapsed;
+            _toolbarBelowSelection = null;
             return;
         }
 
@@ -751,9 +753,24 @@ public partial class SelectionOverlayWindow : Window
         var toolbarHeight = ActionToolbar.DesiredSize.Height;
         var x = Math.Clamp(_selection.Right - toolbarWidth, 8, Math.Max(8, CaptureSurface.ActualWidth - toolbarWidth - 8));
         var preferredBelow = _selection.Bottom + 10;
-        var y = preferredBelow + toolbarHeight <= CaptureSurface.ActualHeight - 8
-            ? preferredBelow
-            : Math.Max(8, _selection.Top - toolbarHeight - 10);
+        var preferredAbove = _selection.Top - toolbarHeight - 10;
+        var canPlaceBelow = preferredBelow + toolbarHeight <= CaptureSurface.ActualHeight - 8;
+        var canPlaceAbove = preferredAbove >= 8;
+
+        // 首次确定位置后保持在同一侧，避免拖动选区经过临界点时反复跳动。
+        _toolbarBelowSelection ??= canPlaceBelow || !canPlaceAbove;
+        if (_toolbarBelowSelection == true && !canPlaceBelow && canPlaceAbove)
+        {
+            _toolbarBelowSelection = false;
+        }
+        else if (_toolbarBelowSelection == false && !canPlaceAbove && canPlaceBelow)
+        {
+            _toolbarBelowSelection = true;
+        }
+
+        var y = _toolbarBelowSelection == true
+            ? Math.Min(preferredBelow, Math.Max(8, CaptureSurface.ActualHeight - toolbarHeight - 8))
+            : Math.Max(8, preferredAbove);
 
         ActionToolbar.Margin = new Thickness(x, y, 0, 0);
     }
