@@ -128,9 +128,6 @@ public partial class MainWindow : Window
         ShortcutsView.Visibility = page == "Shortcuts" ? Visibility.Visible : Visibility.Collapsed;
         SettingsView.Visibility = page == "Settings" ? Visibility.Visible : Visibility.Collapsed;
 
-        // 中间栏始终保留高频截图入口，页面标题由右侧内容区承担。
-        ContextTitle.Text = "截图";
-
         if (page == "History")
         {
             _ = RefreshHistoryAsync();

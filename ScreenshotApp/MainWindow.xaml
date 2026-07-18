@@ -101,6 +101,16 @@
                 <Border Grid.Row="1" Height="1" Margin="0,18,12,0" Background="{StaticResource GlassDividerBrush}" />
 
                 <StackPanel Grid.Row="2" Margin="0,12,0,0">
+                    <!-- 截图是全局动作，直接放在一级导航，避免再维护一层固定的二级栏。 -->
+                    <Button Height="48" Margin="0,0,12,10" Style="{StaticResource PrimaryButtonStyle}"
+                            Tag="截图" Click="CaptureAction_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Width="30" Height="30" Background="#CFE4FF" CornerRadius="9">
+                                <TextBlock Style="{StaticResource IconTextStyle}" FontSize="16" Foreground="#2D7DFF" Text="&#xE722;" />
+                            </Border>
+                            <TextBlock Margin="12,0,0,0" VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" Text="截图" />
+                        </StackPanel>
+                    </Button>
                     <RadioButton x:Name="HomeNav" GroupName="Navigation" IsChecked="True"
                                  Style="{StaticResource NavItemStyle}" Tag="Home" Checked="NavButton_Checked">
                         <StackPanel Orientation="Horizontal">
@@ -148,66 +158,8 @@
                     <StaticResource ResourceKey="GlassShadowEffect" />
                 </Border.Effect>
                 <Grid ClipToBounds="True">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="302" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-
-                    <!-- 中间上下文栏 -->
-                    <Border Grid.Column="0" Background="{StaticResource GlassPanelBrush}"
-                            BorderBrush="{StaticResource GlassDividerBrush}" BorderThickness="0,0,1,0" CornerRadius="17,0,0,17">
-                        <Grid Margin="30,30,30,28">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="18" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="12" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="24" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="*" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-
-                            <TextBlock x:Name="ContextTitle" FontSize="22" FontWeight="SemiBold" Text="截图" />
-
-                            <Button Grid.Row="2" Style="{StaticResource PrimaryButtonStyle}"
-                                    Tag="截图" Click="CaptureAction_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock FontFamily="Segoe Fluent Icons" FontSize="17" Text="&#xE722;" />
-                                    <TextBlock Margin="10,0,0,0" FontSize="15" Foreground="{StaticResource PrimaryBrush}" Text="截图" />
-                                </StackPanel>
-                            </Button>
-
-                            <StackPanel Grid.Row="6">
-                                <Border Height="1" Background="{StaticResource GlassDividerBrush}" />
-                                <TextBlock Margin="0,22,0,12" FontSize="12" Foreground="#999FA8" Text="最近使用" />
-                                <Button Height="48" Background="Transparent" BorderThickness="0" Cursor="Hand"
-                                        HorizontalContentAlignment="Stretch" Tag="截图" Click="CaptureAction_Click">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="32" />
-                                            <ColumnDefinition Width="*" />
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="#747B84"
-                                                   VerticalAlignment="Center" Text="&#xE8B7;" />
-                                        <TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="14" Text="截图" />
-                                    </Grid>
-                                </Button>
-                            </StackPanel>
-
-                            <Border Grid.Row="8" Padding="14,12" Background="#79FFFFFF"
-                                    BorderBrush="#AFFFFFFF" BorderThickness="1" CornerRadius="11">
-                                <StackPanel>
-                                    <TextBlock FontSize="12" Foreground="#8A9099" Text="默认行为" />
-                                    <TextBlock Margin="0,5,0,0" FontSize="13" Text="完成后复制到剪贴板" />
-                                </StackPanel>
-                            </Border>
-                        </Grid>
-                    </Border>
-
                     <!-- 主内容区 -->
-                    <Grid Grid.Column="1" Background="Transparent">
+                    <Grid Background="Transparent">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="58" />
                             <RowDefinition Height="*" />
