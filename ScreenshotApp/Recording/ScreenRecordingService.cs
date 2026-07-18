@@ -185,12 +185,19 @@ public sealed class ScreenRecordingService
     private static void WriteVideoSample(IMFSinkWriter writer, int streamIndex, BitmapSource bitmap, long timestamp, long duration)
     {
         var pixels = new byte[bitmap.PixelWidth * bitmap.PixelHeight * 4];
-        bitmap.CopyPixels(pixels, bitmap.PixelWidth * 4, 0);
+        var stride = bitmap.PixelWidth * 4;
+        bitmap.CopyPixels(pixels, stride, 0);
         using var buffer = MediaFactory.MFCreateMemoryBuffer(pixels.Length);
         buffer.Lock(out var pointer, out _, out _);
         try
         {
-            Marshal.Copy(pixels, 0, pointer, pixels.Length);
+            // WPF CopyPixels 是自顶向下，Media Foundation 的 RGB32 输入按 DIB 约定读取为自底向上。
+            // 不翻转行序会使最终 H.264 画面倒置。
+            for (var row = 0; row < bitmap.PixelHeight; row++)
+            {
+                var sourceOffset = (bitmap.PixelHeight - 1 - row) * stride;
+                Marshal.Copy(pixels, sourceOffset, IntPtr.Add(pointer, row * stride), stride);
+            }
             buffer.CurrentLength = pixels.Length;
         }
         finally

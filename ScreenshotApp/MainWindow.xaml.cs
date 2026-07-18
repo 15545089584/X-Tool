@@ -406,27 +406,55 @@ public partial class MainWindow : Window
 
     private async Task CaptureScreenRecordingAsync(Int32Rect screenRegion, bool recordSystemAudio, bool recordMicrophone)
     {
-        var controlWindow = new ScreenRecordingControlWindow(screenRegion);
-        controlWindow.Show();
+        var regionWindow = new ScreenRecordingRegionWindow(screenRegion);
+        regionWindow.Show();
         try
         {
-            var result = await _screenRecordingService.RecordAsync(
-                new ScreenRecordingOptions(screenRegion, recordSystemAudio, recordMicrophone),
-                () => controlWindow.IsStopRequested || NativeMethods.IsEscapePressed(),
-                controlWindow.SetElapsed);
-            var audioDescription = result.IncludesSystemAudio && result.IncludesMicrophone
-                ? "电脑声音 + 麦克风"
-                : result.IncludesSystemAudio
-                    ? "电脑声音"
-                    : result.IncludesMicrophone
-                        ? "麦克风"
-                        : "静音";
-            ShowToast($"录像已保存（{audioDescription}）");
-            await RefreshHistoryAsync();
+            await ShowRecordingCountdownAsync(screenRegion);
+            var controlWindow = new ScreenRecordingControlWindow(screenRegion);
+            controlWindow.Show();
+            try
+            {
+                var result = await _screenRecordingService.RecordAsync(
+                    new ScreenRecordingOptions(screenRegion, recordSystemAudio, recordMicrophone),
+                    () => controlWindow.IsStopRequested || NativeMethods.IsEscapePressed(),
+                    controlWindow.SetElapsed);
+                var audioDescription = result.IncludesSystemAudio && result.IncludesMicrophone
+                    ? "电脑声音 + 麦克风"
+                    : result.IncludesSystemAudio
+                        ? "电脑声音"
+                        : result.IncludesMicrophone
+                            ? "麦克风"
+                            : "静音";
+                ShowToast($"录像已保存（{audioDescription}）");
+                await RefreshHistoryAsync();
+            }
+            finally
+            {
+                controlWindow.Close();
+            }
         }
         finally
         {
-            controlWindow.Close();
+            regionWindow.Close();
+        }
+    }
+
+    private static async Task ShowRecordingCountdownAsync(Int32Rect screenRegion)
+    {
+        var countdownWindow = new ScreenRecordingCountdownWindow(screenRegion);
+        countdownWindow.Show();
+        try
+        {
+            for (var remainingSeconds = 3; remainingSeconds >= 1; remainingSeconds--)
+            {
+                countdownWindow.SetRemainingSeconds(remainingSeconds);
+                await Task.Delay(1000);
+            }
+        }
+        finally
+        {
+            countdownWindow.Close();
         }
     }
 
