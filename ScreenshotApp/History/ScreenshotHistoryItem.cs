@@ -29,6 +29,8 @@ public sealed record ScreenshotHistoryItem(
     BitmapSource? Thumbnail)
 {
     public bool HasThumbnail => Thumbnail is not null;
+
+    public bool IsTextRecord => Kind is HistoryEntryKind.TextExtraction or HistoryEntryKind.Translation;
 }
 
 /// <summary>

@@ -328,6 +328,8 @@
                                         <ScrollViewer x:Name="HistoryScrollViewer" Visibility="Collapsed"
                                                       Margin="8" VerticalScrollBarVisibility="Auto"
                                                       HorizontalScrollBarVisibility="Disabled">
+                                            <StackPanel>
+                                            <!-- 图片与录像继续使用缩略图网格。 -->
                                             <ItemsControl x:Name="HistoryItemsControl">
                                                 <ItemsControl.ItemsPanel>
                                                     <ItemsPanelTemplate>
@@ -339,6 +341,16 @@
                                                         <Button Width="232" Height="198" Margin="7"
                                                                 Padding="0" Background="Transparent" BorderThickness="0"
                                                                 Cursor="Hand" Tag="{Binding FilePath}" Click="OpenHistoryItem_Click">
+                                                            <Button.Style>
+                                                                <Style TargetType="Button">
+                                                                    <Setter Property="Visibility" Value="Visible" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsTextRecord}" Value="True">
+                                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Button.Style>
                                                             <Border Background="#A8FFFFFF" BorderBrush="#C8FFFFFF"
                                                                     BorderThickness="1" CornerRadius="13" Padding="10">
                                                                 <Grid>
@@ -395,6 +407,57 @@
                                                     </DataTemplate>
                                                 </ItemsControl.ItemTemplate>
                                             </ItemsControl>
+                                            <!-- 文字提取与翻译以满宽横条显示，便于直接扫读内容摘要。 -->
+                                            <ItemsControl x:Name="TextHistoryItemsControl" Margin="7,3,7,7">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <StackPanel />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Button Height="104" Margin="0,0,0,10" Padding="0"
+                                                                HorizontalContentAlignment="Stretch"
+                                                                Background="Transparent" BorderThickness="0"
+                                                                Cursor="Hand" Tag="{Binding FilePath}" Click="OpenHistoryItem_Click">
+                                                            <Button.Style>
+                                                                <Style TargetType="Button">
+                                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsTextRecord}" Value="True">
+                                                                            <Setter Property="Visibility" Value="Visible" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Button.Style>
+                                                            <Border Background="#92FFFFFF" BorderBrush="#BFFFFFFF" BorderThickness="1" CornerRadius="14" Padding="18,14">
+                                                                <Border.Effect>
+                                                                    <DropShadowEffect BlurRadius="14" ShadowDepth="3" Direction="270" Opacity="0.08" Color="#486177" />
+                                                                </Border.Effect>
+                                                                <Grid>
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="54" />
+                                                                        <ColumnDefinition Width="*" />
+                                                                        <ColumnDefinition Width="185" />
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <Border Width="42" Height="42" VerticalAlignment="Top" Background="#E5F0FF" CornerRadius="12">
+                                                                        <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="20" Foreground="#3D82E8" Text="&#xE8A5;" />
+                                                                    </Border>
+                                                                    <StackPanel Grid.Column="1" Margin="4,0,16,0">
+                                                                        <TextBlock FontSize="15" FontWeight="SemiBold" Text="{Binding KindText}" />
+                                                                        <TextBlock Margin="0,7,0,0" FontSize="13" Foreground="#6F7D8E" Text="{Binding PreviewText}" TextTrimming="CharacterEllipsis" />
+                                                                    </StackPanel>
+                                                                    <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                                                        <TextBlock HorizontalAlignment="Right" FontSize="12" Foreground="#7F8B99" Text="{Binding CapturedAtText}" />
+                                                                        <TextBlock Margin="0,7,0,0" HorizontalAlignment="Right" FontSize="12" Foreground="#3D82E8" Text="{Binding SizeText}" />
+                                                                    </StackPanel>
+                                                                </Grid>
+                                                            </Border>
+                                                        </Button>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                            </StackPanel>
                                         </ScrollViewer>
                                     </Grid>
                                 </Border>

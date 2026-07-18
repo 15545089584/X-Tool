@@ -26,6 +26,7 @@ public partial class MainWindow : Window
     private readonly ScreenRecordingService _screenRecordingService;
     private readonly ScreenshotHistoryStore _historyStore = new();
     private readonly ObservableCollection<ScreenshotHistoryItem> _historyItems = new();
+    private readonly ObservableCollection<ScreenshotHistoryItem> _textHistoryItems = new();
     private IReadOnlyList<ScreenshotHistoryItem> _allHistoryItems = Array.Empty<ScreenshotHistoryItem>();
     private HistoryEntryKind? _historyFilter;
     private HwndSource? _windowSource;
@@ -45,6 +46,7 @@ public partial class MainWindow : Window
         _scrollCaptureService = new ScrollCaptureService(_scrollCaptureBackend);
         _screenRecordingService = new ScreenRecordingService(_scrollCaptureBackend);
         HistoryItemsControl.ItemsSource = _historyItems;
+        TextHistoryItemsControl.ItemsSource = _textHistoryItems;
 
         _toastTimer = new DispatcherTimer
         {
@@ -544,12 +546,20 @@ public partial class MainWindow : Window
             ? _allHistoryItems
             : _allHistoryItems.Where(item => item.Kind == _historyFilter.Value).ToArray();
         _historyItems.Clear();
+        _textHistoryItems.Clear();
         foreach (var item in filteredItems)
         {
-            _historyItems.Add(item);
+            if (item.IsTextRecord)
+            {
+                _textHistoryItems.Add(item);
+            }
+            else
+            {
+                _historyItems.Add(item);
+            }
         }
 
-        var hasItems = _historyItems.Count > 0;
+        var hasItems = _historyItems.Count + _textHistoryItems.Count > 0;
         HistoryEmptyPanel.Visibility = hasItems ? Visibility.Collapsed : Visibility.Visible;
         HistoryScrollViewer.Visibility = hasItems ? Visibility.Visible : Visibility.Collapsed;
         UpdateHistoryFilterStates();
