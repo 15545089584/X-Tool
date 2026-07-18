@@ -7,7 +7,7 @@
         xmlns:primitives="clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework"
         mc:Ignorable="d"
         Title="X-Tool"
-        Icon="Assets/JieYing.ico"
+        Icon="Assets/XTool.ico"
         Width="1480" Height="900"
         MinWidth="1120" MinHeight="720"
         WindowStartupLocation="CenterScreen"
@@ -511,12 +511,8 @@
                                         <TextBlock FontSize="30" FontWeight="SemiBold" Text="转换器工作台" />
                                         <TextBlock Margin="0,9,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}" Text="将常用内容处理成适合保存、分享和继续使用的格式" />
                                     </StackPanel>
-                                    <Border HorizontalAlignment="Right" VerticalAlignment="Center" Padding="12,7" Background="#8CEAF1FF" BorderBrush="#C3D9EFFF" BorderThickness="1" CornerRadius="10">
-                                        <StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="14" Foreground="#4D7CFE" Text="&#xE8C8;" /><TextBlock Margin="7,0,0,0" FontSize="12" Foreground="#54708F" Text="本地处理，不上传文件" /></StackPanel>
-                                    </Border>
                                 </Grid>
                                 <Grid Grid.Row="2">
-                                    <Grid.ColumnDefinitions><ColumnDefinition Width="1.55*" /><ColumnDefinition Width="22" /><ColumnDefinition Width="1*" /></Grid.ColumnDefinitions>
                                     <Border Background="#70FFFFFF" BorderBrush="#90FFFFFF" BorderThickness="1" CornerRadius="18">
                                         <Border.Effect><DropShadowEffect BlurRadius="18" ShadowDepth="4" Direction="270" Opacity="0.08" Color="#496785" /></Border.Effect>
                                         <Grid Margin="26">
@@ -561,16 +557,6 @@
                                                 </Grid>
                                             </Grid>
                                         </Grid>
-                                    </Border>
-                                    <Border Grid.Column="2" Padding="24" Background="#58EEF7F7" BorderBrush="#86D8EAEB" BorderThickness="1" CornerRadius="18">
-                                        <StackPanel>
-                                            <Border Width="42" Height="42" Background="#DDF4EF" CornerRadius="13"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="20" Foreground="#4BA278" Text="&#xE73E;" /></Border>
-                                            <TextBlock Margin="0,17,0,0" FontSize="17" FontWeight="SemiBold" Text="处理原则" />
-                                            <TextBlock Margin="0,8,0,0" FontSize="12" LineHeight="20" Foreground="#617B87" Text="转换结果会保存为新文件，原始文件不会被覆盖。" />
-                                            <Border Height="1" Margin="0,20,0,16" Background="#76CDE0E0" />
-                                            <TextBlock FontSize="14" FontWeight="SemiBold" Text="下一步" />
-                                            <TextBlock Margin="0,7,0,0" FontSize="12" LineHeight="19" Foreground="#617B87" Text="后续可在此接入文本、数据、PDF 与音视频等转换能力。" />
-                                        </StackPanel>
                                     </Border>
                                 </Grid>
                             </Grid>

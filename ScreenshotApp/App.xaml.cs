@@ -78,7 +78,7 @@ public partial class App : System.Windows.Application
         }
 
         _trayHintShown = true;
-        _trayIcon.BalloonTipTitle = "截影仍在后台运行";
+        _trayIcon.BalloonTipTitle = "X-Tool 仍在后台运行";
         _trayIcon.BalloonTipText = "可使用快捷键截图，或双击托盘图标打开主界面。";
         _trayIcon.ShowBalloonTip(2200);
     }
@@ -112,7 +112,7 @@ public partial class App : System.Windows.Application
 
     private void CreateTrayIcon(MainWindow mainWindow)
     {
-        var iconResource = GetResourceStream(new Uri("pack://application:,,,/Assets/JieYing.ico"));
+        var iconResource = GetResourceStream(new Uri("pack://application:,,,/Assets/XTool.ico"));
         if (iconResource?.Stream is not null)
         {
             using var iconStream = iconResource.Stream;
@@ -125,11 +125,11 @@ public partial class App : System.Windows.Application
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("截图", null, (_, _) => Dispatcher.Invoke(mainWindow.BeginRegionCapture));
         menu.Items.Add(new Forms.ToolStripSeparator());
-        menu.Items.Add("退出截影", null, (_, _) => Dispatcher.Invoke(ExitApplication));
+        menu.Items.Add("退出 X-Tool", null, (_, _) => Dispatcher.Invoke(ExitApplication));
 
         _trayIcon = new Forms.NotifyIcon
         {
-            Text = "截影 · Screenshot",
+            Text = "X-Tool · 桌面工具箱",
             Icon = _trayDrawingIcon ?? SystemIcons.Application,
             ContextMenuStrip = menu,
             Visible = true

@@ -6,10 +6,10 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <AssemblyName>JieYing</AssemblyName>
+    <AssemblyName>XTool</AssemblyName>
     <RootNamespace>ScreenshotApp</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <ApplicationIcon>Assets\JieYing.ico</ApplicationIcon>
+    <ApplicationIcon>Assets\XTool.ico</ApplicationIcon>
     <!-- WPF 仍通过 manifest 配置 PerMonitorV2；WinForms 只承载托盘图标。 -->
     <NoWarn>$(NoWarn);WFAC010</NoWarn>
     <DefaultItemExcludes>$(DefaultItemExcludes);obj-scroll-test\**;bin-scroll-test\**</DefaultItemExcludes>
@@ -37,7 +37,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Resource Include="Assets\JieYing.ico" />
+    <Resource Include="Assets\XTool.ico" />
+    <Resource Include="Assets\XTool.png" />
   </ItemGroup>
 
   <ItemGroup>
