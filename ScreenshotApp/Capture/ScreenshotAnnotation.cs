@@ -8,8 +8,16 @@ internal enum ScreenshotAnnotationTool
 {
     None,
     Pen,
-    Rectangle,
+    Shape,
     ColorPicker
+}
+
+internal enum AnnotationShape
+{
+    Rectangle,
+    Ellipse,
+    Diamond,
+    Triangle
 }
 
 internal abstract record ScreenshotAnnotation(Color Color, double Thickness);
@@ -19,7 +27,8 @@ internal sealed record PenScreenshotAnnotation(
     Color Color,
     double Thickness) : ScreenshotAnnotation(Color, Thickness);
 
-internal sealed record RectangleScreenshotAnnotation(
+internal sealed record ShapeScreenshotAnnotation(
+    AnnotationShape Shape,
     Rect Bounds,
     Color Color,
     double Thickness) : ScreenshotAnnotation(Color, Thickness);
@@ -71,17 +80,8 @@ internal static class ScreenshotAnnotationRenderer
                     case PenScreenshotAnnotation freehand when freehand.Points.Count >= 2:
                         DrawFreehand(drawing, freehand.Points, pen, scaleX, scaleY);
                         break;
-                    case RectangleScreenshotAnnotation rectangle:
-                        drawing.DrawRoundedRectangle(
-                            null,
-                            pen,
-                            new Rect(
-                                rectangle.Bounds.X * scaleX,
-                                rectangle.Bounds.Y * scaleY,
-                                rectangle.Bounds.Width * scaleX,
-                                rectangle.Bounds.Height * scaleY),
-                            2 * scaleX,
-                            2 * scaleY);
+                    case ShapeScreenshotAnnotation shape:
+                        DrawShape(drawing, shape, pen, scaleX, scaleY);
                         break;
                 }
             }
@@ -114,6 +114,59 @@ internal static class ScreenshotAnnotationRenderer
                 .Select(point => Scale(point, scaleX, scaleY))
                 .ToArray();
             context.PolyLineTo(scaledPoints, true, false);
+        }
+
+        geometry.Freeze();
+        drawing.DrawGeometry(null, pen, geometry);
+    }
+
+    private static void DrawShape(
+        DrawingContext drawing,
+        ShapeScreenshotAnnotation shape,
+        Pen pen,
+        double scaleX,
+        double scaleY)
+    {
+        var bounds = new Rect(
+            shape.Bounds.X * scaleX,
+            shape.Bounds.Y * scaleY,
+            shape.Bounds.Width * scaleX,
+            shape.Bounds.Height * scaleY);
+        switch (shape.Shape)
+        {
+            case AnnotationShape.Rectangle:
+                drawing.DrawRoundedRectangle(null, pen, bounds, 2 * scaleX, 2 * scaleY);
+                break;
+            case AnnotationShape.Ellipse:
+                drawing.DrawEllipse(null, pen, new Point(bounds.Left + bounds.Width / 2, bounds.Top + bounds.Height / 2), bounds.Width / 2, bounds.Height / 2);
+                break;
+            case AnnotationShape.Diamond:
+                DrawPolygon(drawing, pen, new[]
+                {
+                    new Point(bounds.Left + bounds.Width / 2, bounds.Top),
+                    new Point(bounds.Right, bounds.Top + bounds.Height / 2),
+                    new Point(bounds.Left + bounds.Width / 2, bounds.Bottom),
+                    new Point(bounds.Left, bounds.Top + bounds.Height / 2)
+                });
+                break;
+            case AnnotationShape.Triangle:
+                DrawPolygon(drawing, pen, new[]
+                {
+                    new Point(bounds.Left + bounds.Width / 2, bounds.Top),
+                    new Point(bounds.Right, bounds.Bottom),
+                    new Point(bounds.Left, bounds.Bottom)
+                });
+                break;
+        }
+    }
+
+    private static void DrawPolygon(DrawingContext drawing, Pen pen, IReadOnlyList<Point> points)
+    {
+        var geometry = new StreamGeometry();
+        using (var context = geometry.Open())
+        {
+            context.BeginFigure(points[0], false, true);
+            context.PolyLineTo(points.Skip(1).ToArray(), true, true);
         }
 
         geometry.Freeze();

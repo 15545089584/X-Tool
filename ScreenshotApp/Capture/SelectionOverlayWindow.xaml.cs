@@ -29,7 +29,8 @@ public partial class SelectionOverlayWindow : Window
     private bool _isDrawingAnnotation;
     private Point _annotationStart;
     private Polyline? _workingPolyline;
-    private Rectangle? _workingRectangle;
+    private Shape? _workingShape;
+    private AnnotationShape _selectedShape = AnnotationShape.Rectangle;
     private List<Point>? _workingPoints;
     private bool _ocrInProgress;
     private bool _translationInProgress;
@@ -319,20 +320,42 @@ public partial class SelectionOverlayWindow : Window
                 : ScreenshotAnnotationTool.Pen);
     }
 
-    private void RectangleToolButton_Click(object sender, RoutedEventArgs e)
+    private void ShapeToolButton_Click(object sender, RoutedEventArgs e)
     {
-        SetActiveAnnotationTool(
-            _activeAnnotationTool == ScreenshotAnnotationTool.Rectangle
-                ? ScreenshotAnnotationTool.None
-                : ScreenshotAnnotationTool.Rectangle);
+        ToggleToolPanel(ShapeOptionsPanel, ShapeToolButton);
     }
 
-    private void ColorPickerToolButton_Click(object sender, RoutedEventArgs e)
+    private void ColorMenuButton_Click(object sender, RoutedEventArgs e)
     {
-        SetActiveAnnotationTool(
-            _activeAnnotationTool == ScreenshotAnnotationTool.ColorPicker
-                ? ScreenshotAnnotationTool.None
-                : ScreenshotAnnotationTool.ColorPicker);
+        ToggleToolPanel(ColorOptionsPanel, ColorMenuButton);
+    }
+
+    private void ThicknessMenuButton_Click(object sender, RoutedEventArgs e) => ToggleToolPanel(ThicknessOptionsPanel, ThicknessMenuButton);
+
+    private void ShapeOptionButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: string shapeText } || !Enum.TryParse<AnnotationShape>(shapeText, out var shape))
+        {
+            return;
+        }
+
+        _selectedShape = shape;
+        ShapeOptionsPanel.Visibility = Visibility.Collapsed;
+        SetActiveAnnotationTool(ScreenshotAnnotationTool.Shape);
+    }
+
+    private void CustomColorButton_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new System.Windows.Forms.ColorDialog
+        {
+            FullOpen = true,
+            Color = System.Drawing.Color.FromArgb(_annotationColor.A, _annotationColor.R, _annotationColor.G, _annotationColor.B)
+        };
+        if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+        {
+            _annotationColor = Color.FromArgb(dialog.Color.A, dialog.Color.R, dialog.Color.G, dialog.Color.B);
+            UpdateColorStates();
+        }
     }
 
     private async void OcrToolButton_Click(object sender, RoutedEventArgs e)
@@ -508,6 +531,7 @@ public partial class SelectionOverlayWindow : Window
         }
 
         UpdateColorStates();
+        ColorOptionsPanel.Visibility = Visibility.Collapsed;
     }
 
     private void ThicknessButton_Click(object sender, RoutedEventArgs e)
@@ -520,6 +544,68 @@ public partial class SelectionOverlayWindow : Window
 
         _annotationThickness = thickness;
         UpdateThicknessStates();
+        ThicknessOptionsPanel.Visibility = Visibility.Collapsed;
+    }
+
+    private void ToggleToolPanel(Border panel, FrameworkElement anchor)
+    {
+        var shouldShow = panel.Visibility != Visibility.Visible;
+        ShapeOptionsPanel.Visibility = Visibility.Collapsed;
+        ColorOptionsPanel.Visibility = Visibility.Collapsed;
+        ThicknessOptionsPanel.Visibility = Visibility.Collapsed;
+        if (!shouldShow)
+        {
+            return;
+        }
+
+        panel.Visibility = Visibility.Visible;
+        panel.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var point = anchor.TransformToAncestor(CaptureSurface).Transform(new Point(0, 0));
+        var x = Math.Clamp(point.X, 8, Math.Max(8, CaptureSurface.ActualWidth - panel.DesiredSize.Width - 8));
+        var y = point.Y + anchor.ActualHeight + 8;
+        if (y + panel.DesiredSize.Height > CaptureSurface.ActualHeight - 8)
+        {
+            y = Math.Max(8, point.Y - panel.DesiredSize.Height - 8);
+        }
+
+        panel.Margin = new Thickness(x, y, 0, 0);
+    }
+
+    private Shape CreateWorkingShape(Brush stroke)
+    {
+        Shape shape = _selectedShape switch
+        {
+            AnnotationShape.Ellipse => new Ellipse(),
+            AnnotationShape.Diamond => new Polygon(),
+            AnnotationShape.Triangle => new Polygon(),
+            _ => new Rectangle { RadiusX = 2, RadiusY = 2 }
+        };
+        shape.Stroke = stroke;
+        shape.StrokeThickness = _annotationThickness;
+        shape.StrokeLineJoin = PenLineJoin.Round;
+        shape.IsHitTestVisible = false;
+        return shape;
+    }
+
+    private void UpdateWorkingShapeBounds(Shape shape, Rect bounds)
+    {
+        shape.Width = bounds.Width;
+        shape.Height = bounds.Height;
+        if (shape is not Polygon polygon)
+        {
+            return;
+        }
+
+        polygon.Points = _selectedShape == AnnotationShape.Diamond
+            ? new PointCollection
+            {
+                new Point(bounds.Width / 2, 0), new Point(bounds.Width, bounds.Height / 2),
+                new Point(bounds.Width / 2, bounds.Height), new Point(0, bounds.Height / 2)
+            }
+            : new PointCollection
+            {
+                new Point(bounds.Width / 2, 0), new Point(bounds.Width, bounds.Height), new Point(0, bounds.Height)
+            };
     }
 
     private void UndoButton_Click(object sender, RoutedEventArgs e)
@@ -591,17 +677,10 @@ public partial class SelectionOverlayWindow : Window
         }
         else
         {
-            _workingRectangle = new Rectangle
-            {
-                Stroke = stroke,
-                StrokeThickness = _annotationThickness,
-                RadiusX = 2,
-                RadiusY = 2,
-                IsHitTestVisible = false
-            };
-            Canvas.SetLeft(_workingRectangle, surfacePoint.X);
-            Canvas.SetTop(_workingRectangle, surfacePoint.Y);
-            AnnotationCanvas.Children.Add(_workingRectangle);
+            _workingShape = CreateWorkingShape(stroke);
+            Canvas.SetLeft(_workingShape, surfacePoint.X);
+            Canvas.SetTop(_workingShape, surfacePoint.Y);
+            AnnotationCanvas.Children.Add(_workingShape);
         }
 
         AnnotationCanvas.CaptureMouse();
@@ -709,13 +788,12 @@ public partial class SelectionOverlayWindow : Window
                 _workingPolyline.Points.Add(localPoint);
             }
         }
-        else if (_workingRectangle is not null)
+        else if (_workingShape is not null)
         {
             var bounds = Normalize(_annotationStart, localPoint);
-            Canvas.SetLeft(_workingRectangle, _selection.Left + bounds.Left);
-            Canvas.SetTop(_workingRectangle, _selection.Top + bounds.Top);
-            _workingRectangle.Width = bounds.Width;
-            _workingRectangle.Height = bounds.Height;
+            Canvas.SetLeft(_workingShape, _selection.Left + bounds.Left);
+            Canvas.SetTop(_workingShape, _selection.Top + bounds.Top);
+            UpdateWorkingShapeBounds(_workingShape, bounds);
         }
 
         e.Handled = true;
@@ -738,20 +816,21 @@ public partial class SelectionOverlayWindow : Window
                 _annotationThickness));
             _annotationVisuals.Add(_workingPolyline);
         }
-        else if (_workingRectangle is not null &&
-                 _workingRectangle.Width >= 2 &&
-                 _workingRectangle.Height >= 2)
+        else if (_workingShape is not null &&
+                 _workingShape.Width >= 2 &&
+                 _workingShape.Height >= 2)
         {
             var bounds = new Rect(
-                Canvas.GetLeft(_workingRectangle) - _selection.Left,
-                Canvas.GetTop(_workingRectangle) - _selection.Top,
-                _workingRectangle.Width,
-                _workingRectangle.Height);
-            _annotations.Add(new RectangleScreenshotAnnotation(
+                Canvas.GetLeft(_workingShape) - _selection.Left,
+                Canvas.GetTop(_workingShape) - _selection.Top,
+                _workingShape.Width,
+                _workingShape.Height);
+            _annotations.Add(new ShapeScreenshotAnnotation(
+                _selectedShape,
                 bounds,
                 _annotationColor,
                 _annotationThickness));
-            _annotationVisuals.Add(_workingRectangle);
+            _annotationVisuals.Add(_workingShape);
         }
         else
         {
@@ -760,14 +839,14 @@ public partial class SelectionOverlayWindow : Window
                 AnnotationCanvas.Children.Remove(_workingPolyline);
             }
 
-            if (_workingRectangle is not null)
+            if (_workingShape is not null)
             {
-                AnnotationCanvas.Children.Remove(_workingRectangle);
+                AnnotationCanvas.Children.Remove(_workingShape);
             }
         }
 
         _workingPolyline = null;
-        _workingRectangle = null;
+        _workingShape = null;
         _workingPoints = null;
         UndoButton.IsEnabled = _annotations.Count > 0;
         e.Handled = true;
@@ -947,13 +1026,13 @@ public partial class SelectionOverlayWindow : Window
                 {
                     Points = pen.Points.Select(point => new Point(point.X + offsetX, point.Y + offsetY)).ToArray()
                 },
-                RectangleScreenshotAnnotation rectangle => rectangle with
+                ShapeScreenshotAnnotation shape => shape with
                 {
                     Bounds = new Rect(
-                        rectangle.Bounds.X + offsetX,
-                        rectangle.Bounds.Y + offsetY,
-                        rectangle.Bounds.Width,
-                        rectangle.Bounds.Height)
+                        shape.Bounds.X + offsetX,
+                        shape.Bounds.Y + offsetY,
+                        shape.Bounds.Width,
+                        shape.Bounds.Height)
                 },
                 var annotation => annotation
             };
@@ -1140,8 +1219,7 @@ public partial class SelectionOverlayWindow : Window
     private void UpdateAnnotationToolStates()
     {
         SetButtonSelected(PenToolButton, _activeAnnotationTool == ScreenshotAnnotationTool.Pen);
-        SetButtonSelected(RectangleToolButton, _activeAnnotationTool == ScreenshotAnnotationTool.Rectangle);
-        SetButtonSelected(ColorPickerToolButton, _activeAnnotationTool == ScreenshotAnnotationTool.ColorPicker);
+        SetButtonSelected(ShapeToolButton, _activeAnnotationTool == ScreenshotAnnotationTool.Shape);
     }
 
     private ScreenColorSampler.ColorSample UpdateColorPicker(Point surfacePoint)
@@ -1178,17 +1256,11 @@ public partial class SelectionOverlayWindow : Window
 
     private void UpdateColorStates()
     {
-        SetColorSelected(RedColorButton, _annotationColor == Color.FromRgb(255, 77, 94));
-        SetColorSelected(BlueColorButton, _annotationColor == Color.FromRgb(62, 139, 255));
-        SetColorSelected(YellowColorButton, _annotationColor == Color.FromRgb(255, 200, 71));
-        SetColorSelected(WhiteColorButton, _annotationColor == Colors.White);
+        AnnotationColorPreview.Fill = new SolidColorBrush(_annotationColor);
     }
 
     private void UpdateThicknessStates()
     {
-        SetButtonSelected(ThinButton, Math.Abs(_annotationThickness - 2) < 0.1);
-        SetButtonSelected(MediumButton, Math.Abs(_annotationThickness - 4) < 0.1);
-        SetButtonSelected(ThickButton, Math.Abs(_annotationThickness - 8) < 0.1);
     }
 
     private void ResetAnnotations()
@@ -1199,7 +1271,7 @@ public partial class SelectionOverlayWindow : Window
         AnnotationCanvas.Clip = null;
         AnnotationCanvas.Visibility = Visibility.Collapsed;
         _workingPolyline = null;
-        _workingRectangle = null;
+        _workingShape = null;
         _workingPoints = null;
         _isDrawingAnnotation = false;
         UndoButton.IsEnabled = false;
