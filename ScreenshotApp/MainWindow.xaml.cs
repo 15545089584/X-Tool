@@ -876,6 +876,12 @@ public partial class MainWindow : Window
         }
 
         var picker = new ClipboardPickerWindow(choices);
+        if (NativeMethods.GetCursorPos(out var cursor))
+        {
+            var workArea = SystemParameters.WorkArea;
+            picker.Left = Math.Clamp(cursor.X - picker.Width / 2, workArea.Left + 8, workArea.Right - picker.Width - 8);
+            picker.Top = Math.Clamp(cursor.Y - 72, workArea.Top + 8, workArea.Bottom - picker.Height - 8);
+        }
         _clipboardPicker = picker;
         picker.ItemSelected += ClipboardPicker_ItemSelected;
         picker.Closed += (_, _) =>
@@ -918,8 +924,8 @@ public partial class MainWindow : Window
             await Task.Delay(90);
             if (_clipboardPasteTarget != IntPtr.Zero)
             {
-                _ = NativeMethods.SetForegroundWindow(_clipboardPasteTarget);
-                await Task.Delay(90);
+                _ = NativeMethods.RestoreAndActivateWindow(_clipboardPasteTarget);
+                await Task.Delay(140);
                 _ = NativeMethods.SendPasteShortcut();
             }
         }

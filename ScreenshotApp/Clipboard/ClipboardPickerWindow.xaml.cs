@@ -25,6 +25,14 @@ public partial class ClipboardPickerWindow : Window
 
     public event EventHandler<ScreenshotHistoryItem>? ItemSelected;
 
+    private void Header_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (e.LeftButton == System.Windows.Input.MouseButtonState.Pressed)
+        {
+            DragMove();
+        }
+    }
+
     private void FilterButton_Click(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement { Tag: string filter })

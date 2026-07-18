@@ -134,6 +134,23 @@ internal static class NativeMethods
     internal static extern IntPtr GetForegroundWindow();
 
     [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr windowHandle, IntPtr processId);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool AttachThreadInput(uint attachThreadId, uint attachToThreadId, [MarshalAs(UnmanagedType.Bool)] bool attach);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool BringWindowToTop(IntPtr windowHandle);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SetFocus(IntPtr windowHandle);
+
+    [DllImport("user32.dll")]
     private static extern IntPtr GetAncestor(IntPtr windowHandle, uint flags);
 
     [DllImport("user32.dll")]
@@ -265,6 +282,32 @@ internal static class NativeMethods
 
         var rootWindow = GetAncestor(windowHandle, GetAncestorRoot);
         return rootWindow != IntPtr.Zero && SetForegroundWindow(rootWindow);
+    }
+
+    internal static bool RestoreAndActivateWindow(IntPtr windowHandle)
+    {
+        if (windowHandle == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        var currentThread = GetCurrentThreadId();
+        var targetThread = GetWindowThreadProcessId(windowHandle, IntPtr.Zero);
+        var attached = targetThread != 0 && targetThread != currentThread && AttachThreadInput(currentThread, targetThread, true);
+        try
+        {
+            _ = BringWindowToTop(windowHandle);
+            var activated = SetForegroundWindow(windowHandle);
+            _ = SetFocus(windowHandle);
+            return activated;
+        }
+        finally
+        {
+            if (attached)
+            {
+                _ = AttachThreadInput(currentThread, targetThread, false);
+            }
+        }
     }
 
     internal static bool SendMouseWheel(int wheelDelta)

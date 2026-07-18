@@ -240,7 +240,7 @@ public sealed class ScreenshotHistoryStore
     {
         var normalized = string.Join(" ", content
             .Split(new[] { '\r', '\n', '\t' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
-        return normalized.Length <= 76 ? normalized : $"{normalized[..76]}…";
+        return normalized;
     }
 
     public Task<string> SaveClipboardTextAsync(string content)
