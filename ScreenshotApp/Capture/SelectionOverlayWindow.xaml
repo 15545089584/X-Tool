@@ -297,7 +297,7 @@
                         Click="ShapeToolButton_Click"
                         ToolTip="选择形状">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Margin="0,0,5,0" FontSize="14" Text="□" />
+                        <TextBlock Margin="0,0,5,0" VerticalAlignment="Center" FontSize="18" Text="□" />
                         <TextBlock VerticalAlignment="Center" Text="形状" />
                     </StackPanel>
                 </Button>

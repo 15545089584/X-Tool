@@ -202,7 +202,7 @@ internal static class ScreenshotAnnotationRenderer
         }
 
         vector.Normalize();
-        var headLength = Math.Max(10, pen.Thickness * 3.2);
+        var headLength = Math.Max(16, pen.Thickness * 4.5);
         var left = end + Rotate(vector, 28) * headLength;
         var right = end + Rotate(vector, -28) * headLength;
         drawing.DrawLine(pen, end, left);

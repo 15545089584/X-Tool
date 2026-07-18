@@ -142,6 +142,7 @@ public partial class SelectionOverlayWindow : Window
         ResetAnnotations();
         ActionToolbar.Visibility = Visibility.Collapsed;
         RecordingOptionsPanel.Visibility = Visibility.Collapsed;
+        HideToolPanels();
         CaptureSurface.CaptureMouse();
         UpdateSelectionVisuals(_selection);
         e.Handled = true;
@@ -335,6 +336,7 @@ public partial class SelectionOverlayWindow : Window
         _selectedShape = shape;
         ShapeOptionsPanel.Visibility = Visibility.Collapsed;
         SetActiveAnnotationTool(ScreenshotAnnotationTool.Shape);
+        ToggleToolPanel(PenOptionsPanel, ShapeToolButton);
     }
 
     private async void OcrToolButton_Click(object sender, RoutedEventArgs e)
@@ -568,6 +570,12 @@ public partial class SelectionOverlayWindow : Window
         panel.Margin = new Thickness(x, y, 0, 0);
     }
 
+    private void HideToolPanels()
+    {
+        PenOptionsPanel.Visibility = Visibility.Collapsed;
+        ShapeOptionsPanel.Visibility = Visibility.Collapsed;
+    }
+
     private Shape CreateWorkingShape(Brush stroke)
     {
         Shape shape = _selectedShape switch
@@ -625,8 +633,8 @@ public partial class SelectionOverlayWindow : Window
                 if (vector.Length >= 1)
                 {
                     vector.Normalize();
-                    var left = end + RotateVector(vector, 28) * Math.Max(10, _annotationThickness * 3);
-                    var right = end + RotateVector(vector, -28) * Math.Max(10, _annotationThickness * 3);
+                    var left = end + RotateVector(vector, 28) * Math.Max(16, _annotationThickness * 4.5);
+                    var right = end + RotateVector(vector, -28) * Math.Max(16, _annotationThickness * 4.5);
                     context.BeginFigure(end, false, false);
                     context.LineTo(left, true, false);
                     context.BeginFigure(end, false, false);
@@ -977,6 +985,7 @@ public partial class SelectionOverlayWindow : Window
 
     private void CancelSelection()
     {
+        HideToolPanels();
         DialogResult = false;
         Close();
     }
@@ -997,6 +1006,7 @@ public partial class SelectionOverlayWindow : Window
             SizeBadge.Visibility = Visibility.Collapsed;
             ActionToolbar.Visibility = Visibility.Collapsed;
             RecordingOptionsPanel.Visibility = Visibility.Collapsed;
+            HideToolPanels();
             AnnotationCanvas.Visibility = Visibility.Collapsed;
             _toolbarBelowSelection = null;
             _toolbarPositioned = false;
