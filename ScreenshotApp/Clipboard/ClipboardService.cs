@@ -1,5 +1,7 @@
 using System.Windows;
 using System.Windows.Media.Imaging;
+using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace ScreenshotApp.ClipboardUi;
 
@@ -15,7 +17,7 @@ internal static class ClipboardService
         data.SetData(DataFormats.Text, content);
         data.SetData(DataFormats.StringFormat, content);
         data.SetData(InternalFormat, true);
-        System.Windows.Clipboard.SetDataObject(data, true);
+        SetDataObjectWithRetry(data);
     }
 
     internal static void SetImage(BitmapSource image)
@@ -23,6 +25,23 @@ internal static class ClipboardService
         var data = new DataObject();
         data.SetImage(image);
         data.SetData(InternalFormat, true);
-        System.Windows.Clipboard.SetDataObject(data, true);
+        SetDataObjectWithRetry(data);
+    }
+
+    private static void SetDataObjectWithRetry(DataObject data)
+    {
+        // 浏览器、输入法等程序会在短时间内占用系统剪贴板；短暂重试避免瞬时占用直接失败。
+        for (var attempt = 0; attempt < 16; attempt++)
+        {
+            try
+            {
+                System.Windows.Clipboard.SetDataObject(data, true);
+                return;
+            }
+            catch (COMException) when (attempt < 15)
+            {
+                Thread.Sleep(45);
+            }
+        }
     }
 }
