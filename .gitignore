@@ -8,6 +8,13 @@
 # 截图与长截图算法调试产物
 ScreenshotApp/artifacts/
 
+# 离线翻译模型为独立语言包，体积大且不纳入源码仓库。
+ScreenshotApp/Models/Translation/default/*.onnx
+ScreenshotApp/Models/Translation/default/*.spm
+ScreenshotApp/Models/Translation/default/tokenizer.json
+ScreenshotApp/Models/Translation/default/manifest.json
+ScreenshotApp/Models/Translation/default/vocab.json
+
 # 常见本地临时文件
 *.user
 *.suo

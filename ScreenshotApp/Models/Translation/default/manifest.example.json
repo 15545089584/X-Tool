@@ -1,0 +1,21 @@
+{
+  "name": "opus-mt-en-zh-offline",
+  "version": "1.0.0",
+  "sourceLanguage": "en",
+  "targetLanguage": "zh-Hans",
+  "runtime": "ONNX Runtime CPU",
+  "modelFamily": "Marian / OPUS-MT",
+  "modelLicense": "Apache-2.0",
+  "requiredFiles": [
+    "encoder_model.onnx",
+    "decoder_model.onnx",
+    "source.spm",
+    "target.spm",
+    "vocab.json",
+    "manifest.json"
+  ],
+  "sha256": {
+    "encoder_model.onnx": "填写经验证的 SHA-256",
+    "decoder_model.onnx": "填写经验证的 SHA-256"
+  }
+}
