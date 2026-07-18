@@ -7,15 +7,37 @@
         AllowsTransparency="True" Background="Transparent">
     <Window.Resources>
         <Style x:Key="FilterButtonStyle" TargetType="Button">
-            <Setter Property="Height" Value="32" /><Setter Property="Margin" Value="3" /><Setter Property="Padding" Value="2,0" />
-            <Setter Property="BorderThickness" Value="1" /><Setter Property="Cursor" Value="Hand" /><Setter Property="FontSize" Value="12" />
-            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="Root" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10"><Border.Effect><DropShadowEffect BlurRadius="8" ShadowDepth="2" Opacity="0.08" Color="#3D566F" /></Border.Effect><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" /></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.78" /></Trigger><Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.62" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Margin" Value="3" />
+            <Setter Property="Padding" Value="2,0" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10">
+                            <Border.Effect><DropShadowEffect BlurRadius="8" ShadowDepth="2" Opacity="0.08" Color="#3D566F" /></Border.Effect>
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.78" /></Trigger>
+                            <Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.62" /></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </Window.Resources>
     <Border Margin="8" Padding="18" Background="#EEF6FC" BorderBrush="#D1E4F1" BorderThickness="1" CornerRadius="18">
         <Border.Effect><DropShadowEffect BlurRadius="24" ShadowDepth="8" Direction="270" Opacity="0.25" Color="#253B56" /></Border.Effect>
         <Grid>
-            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="12" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
             <Grid MouseLeftButtonDown="Header_MouseLeftButtonDown">
                 <TextBlock FontSize="20" FontWeight="SemiBold" Foreground="#263747" Text="剪贴板" />
             </Grid>
@@ -29,25 +51,81 @@
             </primitives:UniformGrid>
             <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
                 <ItemsControl x:Name="ClipboardItemsPanel">
+                    <ItemsControl.ItemContainerStyle>
+                        <Style TargetType="ContentPresenter">
+                            <Setter Property="HorizontalAlignment" Value="Stretch" />
+                        </Style>
+                    </ItemsControl.ItemContainerStyle>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Button Background="Transparent" BorderThickness="0" Padding="0" Margin="0,0,0,3" Focusable="False" Cursor="Hand" Click="ClipboardItem_Click">
-                                <Button.Template><ControlTemplate TargetType="Button"><Grid><Grid x:Name="SelectionGlow" IsHitTestVisible="False" Visibility="Collapsed"><Border x:Name="TopGlow" Height="8" Margin="8,0,8,0" VerticalAlignment="Top" Background="#78A8F5" CornerRadius="12" Opacity="0.9" /><Border x:Name="BottomGlow" Height="8" Margin="8,0,8,0" VerticalAlignment="Bottom" Background="#78A8F5" CornerRadius="12" Opacity="0.9" /><Border x:Name="LeftGlow" Width="8" Margin="0,8,0,8" HorizontalAlignment="Left" Background="#78A8F5" CornerRadius="12" Opacity="0.9" /><Border x:Name="RightGlow" Width="8" Margin="0,8,0,8" HorizontalAlignment="Right" Background="#78A8F5" CornerRadius="12" Opacity="0.9" /></Grid><Border x:Name="Root" Margin="8" Background="#F8FCFF" BorderBrush="#C6E1F1" BorderThickness="1" CornerRadius="13" Padding="16"><ContentPresenter /></Border></Grid><ControlTemplate.Triggers>
-                                    <DataTrigger Binding="{Binding KindText}" Value="外部复制"><Setter TargetName="Root" Property="Background" Value="#FFF1E5" /><Setter TargetName="Root" Property="BorderBrush" Value="#F3D1AF" /><Setter TargetName="TopGlow" Property="Background" Value="#EE9A51" /><Setter TargetName="BottomGlow" Property="Background" Value="#EE9A51" /><Setter TargetName="LeftGlow" Property="Background" Value="#EE9A51" /><Setter TargetName="RightGlow" Property="Background" Value="#EE9A51" /></DataTrigger>
-                                    <DataTrigger Binding="{Binding KindText}" Value="翻译"><Setter TargetName="Root" Property="Background" Value="#F0EAFF" /><Setter TargetName="Root" Property="BorderBrush" Value="#D6C3FF" /><Setter TargetName="TopGlow" Property="Background" Value="#9667DC" /><Setter TargetName="BottomGlow" Property="Background" Value="#9667DC" /><Setter TargetName="LeftGlow" Property="Background" Value="#9667DC" /><Setter TargetName="RightGlow" Property="Background" Value="#9667DC" /></DataTrigger>
-                                    <DataTrigger Binding="{Binding KindText}" Value="文字提取"><Setter TargetName="Root" Property="Background" Value="#E9F8ED" /><Setter TargetName="Root" Property="BorderBrush" Value="#BAE6C5" /><Setter TargetName="TopGlow" Property="Background" Value="#55BD7B" /><Setter TargetName="BottomGlow" Property="Background" Value="#55BD7B" /><Setter TargetName="LeftGlow" Property="Background" Value="#55BD7B" /><Setter TargetName="RightGlow" Property="Background" Value="#55BD7B" /></DataTrigger>
-                                    <DataTrigger Binding="{Binding KindText}" Value="普通截图"><Setter TargetName="Root" Property="Background" Value="#E8ECFF" /><Setter TargetName="Root" Property="BorderBrush" Value="#AEBBF4" /><Setter TargetName="TopGlow" Property="Background" Value="#6F91EC" /><Setter TargetName="BottomGlow" Property="Background" Value="#6F91EC" /><Setter TargetName="LeftGlow" Property="Background" Value="#6F91EC" /><Setter TargetName="RightGlow" Property="Background" Value="#6F91EC" /></DataTrigger>
-                                    <DataTrigger Binding="{Binding KindText}" Value="长截图"><Setter TargetName="Root" Property="Background" Value="#E8ECFF" /><Setter TargetName="Root" Property="BorderBrush" Value="#AEBBF4" /><Setter TargetName="TopGlow" Property="Background" Value="#6F91EC" /><Setter TargetName="BottomGlow" Property="Background" Value="#6F91EC" /><Setter TargetName="LeftGlow" Property="Background" Value="#6F91EC" /><Setter TargetName="RightGlow" Property="Background" Value="#6F91EC" /></DataTrigger>
-                                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="SelectionGlow" Property="Visibility" Value="Visible" /></Trigger>
-                                    <Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.88" /></Trigger>
-                                </ControlTemplate.Triggers></ControlTemplate></Button.Template>
+                            <Button Background="Transparent" BorderThickness="0" Padding="0" Margin="0,0,0,6" HorizontalAlignment="Stretch" Focusable="False" Cursor="Hand" Click="ClipboardItem_Click">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Grid>
+                                            <Border x:Name="GlowAura" Margin="2" BorderBrush="#78A8F5" BorderThickness="7" CornerRadius="19" Opacity="0.20" Visibility="Collapsed" />
+                                            <Rectangle x:Name="GlowFrame" Margin="5" RadiusX="16" RadiusY="16" Stroke="#78A8F5" StrokeThickness="2.4" StrokeDashArray="18,90" StrokeDashCap="Round" Visibility="Collapsed" />
+                                            <Border x:Name="Root" Margin="8" Background="#F8FCFF" BorderBrush="#C6E1F1" BorderThickness="1" CornerRadius="13" Padding="16">
+                                                <ContentPresenter />
+                                            </Border>
+                                        </Grid>
+                                        <ControlTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding KindText}" Value="外部复制">
+                                                <Setter TargetName="Root" Property="Background" Value="#FFF1E5" />
+                                                <Setter TargetName="Root" Property="BorderBrush" Value="#F3D1AF" />
+                                                <Setter TargetName="GlowAura" Property="BorderBrush" Value="#EE9A51" />
+                                                <Setter TargetName="GlowFrame" Property="Stroke" Value="#EE9A51" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding KindText}" Value="翻译">
+                                                <Setter TargetName="Root" Property="Background" Value="#F0EAFF" />
+                                                <Setter TargetName="Root" Property="BorderBrush" Value="#D6C3FF" />
+                                                <Setter TargetName="GlowAura" Property="BorderBrush" Value="#9667DC" />
+                                                <Setter TargetName="GlowFrame" Property="Stroke" Value="#9667DC" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding KindText}" Value="文字提取">
+                                                <Setter TargetName="Root" Property="Background" Value="#E9F8ED" />
+                                                <Setter TargetName="Root" Property="BorderBrush" Value="#BAE6C5" />
+                                                <Setter TargetName="GlowAura" Property="BorderBrush" Value="#55BD7B" />
+                                                <Setter TargetName="GlowFrame" Property="Stroke" Value="#55BD7B" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding KindText}" Value="普通截图">
+                                                <Setter TargetName="Root" Property="Background" Value="#E8ECFF" />
+                                                <Setter TargetName="Root" Property="BorderBrush" Value="#AEBBF4" />
+                                                <Setter TargetName="GlowAura" Property="BorderBrush" Value="#6F91EC" />
+                                                <Setter TargetName="GlowFrame" Property="Stroke" Value="#6F91EC" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding KindText}" Value="长截图">
+                                                <Setter TargetName="Root" Property="Background" Value="#E8ECFF" />
+                                                <Setter TargetName="Root" Property="BorderBrush" Value="#AEBBF4" />
+                                                <Setter TargetName="GlowAura" Property="BorderBrush" Value="#6F91EC" />
+                                                <Setter TargetName="GlowFrame" Property="Stroke" Value="#6F91EC" />
+                                            </DataTrigger>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="GlowAura" Property="Visibility" Value="Visible" />
+                                                <Setter TargetName="GlowFrame" Property="Visibility" Value="Visible" />
+                                                <Trigger.EnterActions>
+                                                    <BeginStoryboard>
+                                                        <Storyboard RepeatBehavior="Forever">
+                                                            <DoubleAnimation Storyboard.TargetName="GlowFrame" Storyboard.TargetProperty="StrokeDashOffset" From="0" To="-108" Duration="0:0:1.8" />
+                                                            <DoubleAnimation Storyboard.TargetName="GlowFrame" Storyboard.TargetProperty="Opacity" From="0.50" To="1" AutoReverse="True" Duration="0:0:0.85" />
+                                                            <DoubleAnimation Storyboard.TargetName="GlowAura" Storyboard.TargetProperty="Opacity" From="0.15" To="0.36" AutoReverse="True" Duration="0:0:0.9" />
+                                                        </Storyboard>
+                                                    </BeginStoryboard>
+                                                </Trigger.EnterActions>
+                                            </Trigger>
+                                            <Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.88" /></Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Button.Template>
                                 <Grid>
                                     <TextBlock x:Name="TextPreview" FontSize="15" LineHeight="22" Foreground="#334B62" Text="{Binding PreviewText}" TextWrapping="Wrap" />
                                     <Image x:Name="ImagePreview" MaxHeight="158" HorizontalAlignment="Stretch" Stretch="Uniform" Source="{Binding Thumbnail}" Visibility="Collapsed" />
                                 </Grid>
                             </Button>
                             <DataTemplate.Triggers>
-                                <DataTrigger Binding="{Binding HasThumbnail}" Value="True"><Setter TargetName="TextPreview" Property="Visibility" Value="Collapsed" /><Setter TargetName="ImagePreview" Property="Visibility" Value="Visible" /></DataTrigger>
+                                <DataTrigger Binding="{Binding HasThumbnail}" Value="True">
+                                    <Setter TargetName="TextPreview" Property="Visibility" Value="Collapsed" />
+                                    <Setter TargetName="ImagePreview" Property="Visibility" Value="Visible" />
+                                </DataTrigger>
                             </DataTemplate.Triggers>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
