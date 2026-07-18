@@ -63,12 +63,23 @@ internal static class TranslationTextPreprocessor
                 continue;
             }
 
-            result.Add(line);
+            result.Add(RepairSplitContractions(line));
             previousWasBlank = false;
         }
 
         return string.Join(Environment.NewLine, result).Trim();
     }
+
+    /// <summary>
+    /// 修正 OCR 常见的英文缩写断开，例如 can' t、don' t、we' d。
+    /// 仅处理确定的一字母缩写，避免误改朋友名、普通单词等内容。
+    /// </summary>
+    private static string RepairSplitContractions(string text) =>
+        System.Text.RegularExpressions.Regex.Replace(
+            text,
+            @"\b([A-Za-z]+)'\s+(t|s|d|m|r|ve|ll)\b",
+            match => $"{match.Groups[1].Value}'{match.Groups[2].Value}",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
     internal static bool ContainsEnglish(string text) => text.Any(character =>
         (character >= 'A' && character <= 'Z') ||

@@ -102,15 +102,116 @@ internal sealed class OnnxTranslationEngine : ITranslationEngine
 
         var stopwatch = Stopwatch.StartNew();
         var sessions = _sessions.Value;
-        var sourceIds = sessions.Tokenizer.EncodeSource(sourceText).Select(id => (long)id).ToArray();
-        if (sourceIds.Length == 0)
+        var units = SplitIntoUnits(sourceText, sessions.Tokenizer).ToArray();
+        if (units.Length == 0)
         {
             return new TranslationResult(sourceText, string.Empty, stopwatch.Elapsed, "opus-mt-en-zh-onnx-int8");
         }
 
-        if (sourceIds.Length > 480)
+        var translatedUnits = new List<string>(units.Length);
+        foreach (var unit in units)
         {
-            throw new InvalidOperationException("当前离线模型一次最多翻译约 480 个词元，请缩小框选区域后重试。");
+            cancellationToken.ThrowIfCancellationRequested();
+            var translated = TranslateUnit(unit, sessions, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(translated))
+            {
+                translatedUnits.Add(translated);
+            }
+        }
+
+        return new TranslationResult(
+            sourceText,
+            string.Join(Environment.NewLine, translatedUnits),
+            stopwatch.Elapsed,
+            "opus-mt-en-zh-onnx-int8");
+    }
+
+    /// <summary>
+    /// 将较长段落先按句子切开，再按模型输入词元上限切块。
+    /// 小型离线模型整段生成时容易在输出长度达到上限后丢失开头或结尾；
+    /// 分句能让每一段都拥有完整的编码与解码预算。
+    /// </summary>
+    private static IEnumerable<string> SplitIntoUnits(string sourceText, SentencePieceMarianTokenizer tokenizer)
+    {
+        var sentenceStart = 0;
+        for (var index = 0; index < sourceText.Length; index++)
+        {
+            if (sourceText[index] is not ('.' or '!' or '?' or '\n'))
+            {
+                continue;
+            }
+
+            var sentenceEnd = index + 1;
+            if (sourceText[index] != '\n' &&
+                sentenceEnd < sourceText.Length &&
+                !char.IsWhiteSpace(sourceText[sentenceEnd]))
+            {
+                continue;
+            }
+
+            foreach (var unit in SplitLongUnit(sourceText[sentenceStart..sentenceEnd], tokenizer))
+            {
+                yield return unit;
+            }
+
+            sentenceStart = sentenceEnd;
+        }
+
+        if (sentenceStart < sourceText.Length)
+        {
+            foreach (var unit in SplitLongUnit(sourceText[sentenceStart..], tokenizer))
+            {
+                yield return unit;
+            }
+        }
+    }
+
+    private static IEnumerable<string> SplitLongUnit(string unit, SentencePieceMarianTokenizer tokenizer)
+    {
+        var normalized = unit.Trim();
+        if (normalized.Length == 0)
+        {
+            yield break;
+        }
+
+        if (GetSourceTokenCount(normalized, tokenizer) <= MaximumSourceTokensPerUnit)
+        {
+            yield return normalized;
+            yield break;
+        }
+
+        var words = normalized.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var current = new List<string>();
+        foreach (var word in words)
+        {
+            var candidate = string.Join(' ', current.Append(word));
+            if (current.Count > 0 && GetSourceTokenCount(candidate, tokenizer) > MaximumSourceTokensPerUnit)
+            {
+                yield return string.Join(' ', current);
+                current.Clear();
+            }
+
+            current.Add(word);
+        }
+
+        if (current.Count > 0)
+        {
+            yield return string.Join(' ', current);
+        }
+    }
+
+    private static int GetSourceTokenCount(string sourceText, SentencePieceMarianTokenizer tokenizer) =>
+        tokenizer.EncodeSource(sourceText).Count();
+
+    private static string TranslateUnit(
+        string sourceText,
+        ModelSessions sessions,
+        CancellationToken cancellationToken)
+    {
+        var sourceIds = sessions.Tokenizer.EncodeSource(sourceText).Select(id => (long)id).ToArray();
+        if (sourceIds.Length == 0)
+        {
+            return string.Empty;
         }
 
         var attentionMask = Enumerable.Repeat(1L, sourceIds.Length).ToArray();
@@ -127,7 +228,8 @@ internal sealed class OnnxTranslationEngine : ITranslationEngine
 
         var generatedIds = new List<uint>();
         var decoderInput = new List<long> { DecoderStartTokenId };
-        for (var step = 0; step < MaximumGeneratedTokens; step++)
+        var maximumGeneratedTokens = Math.Clamp(sourceIds.Length * 3, MinimumGeneratedTokens, MaximumGeneratedTokens);
+        for (var step = 0; step < maximumGeneratedTokens; step++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var decoderInputs = new List<NamedOnnxValue>
@@ -150,7 +252,7 @@ internal sealed class OnnxTranslationEngine : ITranslationEngine
         }
 
         var translated = sessions.Tokenizer.DecodeTarget(generatedIds).Trim();
-        return new TranslationResult(sourceText, translated, stopwatch.Elapsed, "opus-mt-en-zh-onnx-int8");
+        return translated;
     }
 
     private static DenseTensor<long> ToLongTensor(long[] values) =>
@@ -181,6 +283,8 @@ internal sealed class OnnxTranslationEngine : ITranslationEngine
     private const long EndOfSentenceTokenId = 0;
     private const int VocabularySize = 65001;
     private const int MaximumGeneratedTokens = 192;
+    private const int MinimumGeneratedTokens = 32;
+    private const int MaximumSourceTokensPerUnit = 160;
 
     private sealed record ModelSessions(
         InferenceSession Encoder,
