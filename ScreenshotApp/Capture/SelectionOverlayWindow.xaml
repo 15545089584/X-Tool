@@ -2,6 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:capture="clr-namespace:ScreenshotApp.Capture"
+        xmlns:primitives="clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework"
         Title="选择截图区域"
         WindowStyle="None"
         ResizeMode="NoResize"
@@ -93,6 +94,30 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <Style x:Key="SelectionResizeHandleStyle" TargetType="primitives:Thumb">
+            <Setter Property="Width" Value="14" />
+            <Setter Property="Height" Value="14" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="primitives:Thumb">
+                        <Border Width="14" Height="14" Background="Transparent">
+                            <Border Width="8" Height="8"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Background="#F8FBFD"
+                                    BorderBrush="#2D7DFF"
+                                    BorderThickness="1.5"
+                                    CornerRadius="4">
+                                <Border.Effect>
+                                    <DropShadowEffect Color="#1C5FB8" BlurRadius="4" ShadowDepth="0" Opacity="0.45" />
+                                </Border.Effect>
+                            </Border>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <Grid x:Name="CaptureSurface"
@@ -133,6 +158,49 @@
                     CornerRadius="5">
                 <TextBlock x:Name="SizeText" Foreground="White" FontSize="12" />
             </Border>
+        </Canvas>
+
+        <Canvas x:Name="SelectionResizeLayer" Visibility="Collapsed">
+            <primitives:Thumb x:Name="TopLeftResizeHandle" Tag="TopLeft" Cursor="SizeNWSE"
+                              Style="{StaticResource SelectionResizeHandleStyle}"
+                              DragStarted="SelectionResizeHandle_DragStarted"
+                              DragDelta="SelectionResizeHandle_DragDelta"
+                              DragCompleted="SelectionResizeHandle_DragCompleted" />
+            <primitives:Thumb x:Name="TopResizeHandle" Tag="Top" Cursor="SizeNS"
+                              Style="{StaticResource SelectionResizeHandleStyle}"
+                              DragStarted="SelectionResizeHandle_DragStarted"
+                              DragDelta="SelectionResizeHandle_DragDelta"
+                              DragCompleted="SelectionResizeHandle_DragCompleted" />
+            <primitives:Thumb x:Name="TopRightResizeHandle" Tag="TopRight" Cursor="SizeNESW"
+                              Style="{StaticResource SelectionResizeHandleStyle}"
+                              DragStarted="SelectionResizeHandle_DragStarted"
+                              DragDelta="SelectionResizeHandle_DragDelta"
+                              DragCompleted="SelectionResizeHandle_DragCompleted" />
+            <primitives:Thumb x:Name="RightResizeHandle" Tag="Right" Cursor="SizeWE"
+                              Style="{StaticResource SelectionResizeHandleStyle}"
+                              DragStarted="SelectionResizeHandle_DragStarted"
+                              DragDelta="SelectionResizeHandle_DragDelta"
+                              DragCompleted="SelectionResizeHandle_DragCompleted" />
+            <primitives:Thumb x:Name="BottomRightResizeHandle" Tag="BottomRight" Cursor="SizeNWSE"
+                              Style="{StaticResource SelectionResizeHandleStyle}"
+                              DragStarted="SelectionResizeHandle_DragStarted"
+                              DragDelta="SelectionResizeHandle_DragDelta"
+                              DragCompleted="SelectionResizeHandle_DragCompleted" />
+            <primitives:Thumb x:Name="BottomResizeHandle" Tag="Bottom" Cursor="SizeNS"
+                              Style="{StaticResource SelectionResizeHandleStyle}"
+                              DragStarted="SelectionResizeHandle_DragStarted"
+                              DragDelta="SelectionResizeHandle_DragDelta"
+                              DragCompleted="SelectionResizeHandle_DragCompleted" />
+            <primitives:Thumb x:Name="BottomLeftResizeHandle" Tag="BottomLeft" Cursor="SizeNESW"
+                              Style="{StaticResource SelectionResizeHandleStyle}"
+                              DragStarted="SelectionResizeHandle_DragStarted"
+                              DragDelta="SelectionResizeHandle_DragDelta"
+                              DragCompleted="SelectionResizeHandle_DragCompleted" />
+            <primitives:Thumb x:Name="LeftResizeHandle" Tag="Left" Cursor="SizeWE"
+                              Style="{StaticResource SelectionResizeHandleStyle}"
+                              DragStarted="SelectionResizeHandle_DragStarted"
+                              DragDelta="SelectionResizeHandle_DragDelta"
+                              DragCompleted="SelectionResizeHandle_DragCompleted" />
         </Canvas>
 
         <Border x:Name="HintPanel"

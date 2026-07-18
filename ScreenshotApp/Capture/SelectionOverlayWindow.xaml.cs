@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -28,6 +29,12 @@ public partial class SelectionOverlayWindow : Window
     private Rectangle? _workingRectangle;
     private List<Point>? _workingPoints;
     private bool _ocrInProgress;
+    private ResizeHandle? _activeResizeHandle;
+    private Rect _resizeStartSelection;
+    private Point _resizeStartPoint;
+
+    private const double MinimumSelectionSize = 16;
+    private const double ResizeHandleSize = 14;
 
     public SelectionOverlayWindow(CaptureFrame frame, SelectionPurpose purpose = SelectionPurpose.Screenshot)
     {
@@ -151,6 +158,7 @@ public partial class SelectionOverlayWindow : Window
         AnnotationCanvas.Visibility = Visibility.Visible;
         AnnotationCanvas.Clip = new RectangleGeometry(_selection);
         HintText.Text = "选择标注工具进行涂鸦或描框  ·  Enter 完成  ·  Esc / 右键取消";
+        UpdateSelectionVisuals(_selection);
         PositionToolbar();
         e.Handled = true;
     }
@@ -389,6 +397,71 @@ public partial class SelectionOverlayWindow : Window
         e.Handled = true;
     }
 
+    private void SelectionResizeHandle_DragStarted(object sender, DragStartedEventArgs e)
+    {
+        if (_purpose != SelectionPurpose.Screenshot ||
+            _selection.IsEmpty ||
+            sender is not Thumb { Tag: string tag } ||
+            !Enum.TryParse<ResizeHandle>(tag, out var handle))
+        {
+            return;
+        }
+
+        _activeResizeHandle = handle;
+        _resizeStartSelection = _selection;
+        _resizeStartPoint = Mouse.GetPosition(CaptureSurface);
+        SetActiveAnnotationTool(ScreenshotAnnotationTool.None);
+        e.Handled = true;
+    }
+
+    private void SelectionResizeHandle_DragDelta(object sender, DragDeltaEventArgs e)
+    {
+        if (_activeResizeHandle is not ResizeHandle handle)
+        {
+            return;
+        }
+
+        var current = ClampToSurface(Mouse.GetPosition(CaptureSurface));
+        var deltaX = current.X - _resizeStartPoint.X;
+        var deltaY = current.Y - _resizeStartPoint.Y;
+        var left = _resizeStartSelection.Left;
+        var top = _resizeStartSelection.Top;
+        var right = _resizeStartSelection.Right;
+        var bottom = _resizeStartSelection.Bottom;
+        var surfaceWidth = CaptureSurface.ActualWidth;
+        var surfaceHeight = CaptureSurface.ActualHeight;
+
+        if (handle is ResizeHandle.Left or ResizeHandle.TopLeft or ResizeHandle.BottomLeft)
+        {
+            left = Math.Clamp(_resizeStartSelection.Left + deltaX, 0, right - MinimumSelectionSize);
+        }
+
+        if (handle is ResizeHandle.Right or ResizeHandle.TopRight or ResizeHandle.BottomRight)
+        {
+            right = Math.Clamp(_resizeStartSelection.Right + deltaX, left + MinimumSelectionSize, surfaceWidth);
+        }
+
+        if (handle is ResizeHandle.Top or ResizeHandle.TopLeft or ResizeHandle.TopRight)
+        {
+            top = Math.Clamp(_resizeStartSelection.Top + deltaY, 0, bottom - MinimumSelectionSize);
+        }
+
+        if (handle is ResizeHandle.Bottom or ResizeHandle.BottomLeft or ResizeHandle.BottomRight)
+        {
+            bottom = Math.Clamp(_resizeStartSelection.Bottom + deltaY, top + MinimumSelectionSize, surfaceHeight);
+        }
+
+        ApplyResizedSelection(new Rect(left, top, right - left, bottom - top));
+        e.Handled = true;
+    }
+
+    private void SelectionResizeHandle_DragCompleted(object sender, DragCompletedEventArgs e)
+    {
+        _activeResizeHandle = null;
+        UpdateSelectionVisuals(_selection);
+        e.Handled = true;
+    }
+
     private void AnnotationCanvas_MouseMove(object sender, MouseEventArgs e)
     {
         if (_activeAnnotationTool == ScreenshotAnnotationTool.ColorPicker)
@@ -564,6 +637,7 @@ public partial class SelectionOverlayWindow : Window
             SetCanvasRect(MaskRight, 0, 0, 0, 0);
             SetCanvasRect(MaskBottom, 0, 0, 0, 0);
             SelectionBorder.Visibility = Visibility.Collapsed;
+            SelectionResizeLayer.Visibility = Visibility.Collapsed;
             SizeBadge.Visibility = Visibility.Collapsed;
             ActionToolbar.Visibility = Visibility.Collapsed;
             AnnotationCanvas.Visibility = Visibility.Collapsed;
@@ -577,6 +651,7 @@ public partial class SelectionOverlayWindow : Window
 
         SetCanvasRect(SelectionBorder, selection.Left, selection.Top, selection.Width, selection.Height);
         SelectionBorder.Visibility = Visibility.Visible;
+        UpdateResizeHandles(selection);
 
         var pixelWidth = Math.Max(1, (int)Math.Round(selection.Width * _frame.Bitmap.PixelWidth / width));
         var pixelHeight = Math.Max(1, (int)Math.Round(selection.Height * _frame.Bitmap.PixelHeight / height));
@@ -585,6 +660,88 @@ public partial class SelectionOverlayWindow : Window
         SizeBadge.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         Canvas.SetLeft(SizeBadge, Math.Max(6, selection.Left));
         Canvas.SetTop(SizeBadge, Math.Max(6, selection.Top - SizeBadge.DesiredSize.Height - 7));
+
+        if (_purpose == SelectionPurpose.Screenshot && ActionToolbar.Visibility == Visibility.Visible)
+        {
+            AnnotationCanvas.Clip = new RectangleGeometry(selection);
+            PositionToolbar();
+        }
+    }
+
+    private void ApplyResizedSelection(Rect resizedSelection)
+    {
+        if (resizedSelection == _selection)
+        {
+            return;
+        }
+
+        var previousSelection = _selection;
+        _selection = resizedSelection;
+        TranslateAnnotations(previousSelection, resizedSelection);
+        UpdateSelectionVisuals(resizedSelection);
+    }
+
+    private void UpdateResizeHandles(Rect selection)
+    {
+        if (_purpose != SelectionPurpose.Screenshot || _isDragging || selection.IsEmpty)
+        {
+            SelectionResizeLayer.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        SelectionResizeLayer.Visibility = Visibility.Visible;
+        var halfHandle = ResizeHandleSize / 2;
+        var centerX = selection.Left + selection.Width / 2 - halfHandle;
+        var centerY = selection.Top + selection.Height / 2 - halfHandle;
+        PlaceResizeHandle(TopLeftResizeHandle, selection.Left - halfHandle, selection.Top - halfHandle);
+        PlaceResizeHandle(TopResizeHandle, centerX, selection.Top - halfHandle);
+        PlaceResizeHandle(TopRightResizeHandle, selection.Right - halfHandle, selection.Top - halfHandle);
+        PlaceResizeHandle(RightResizeHandle, selection.Right - halfHandle, centerY);
+        PlaceResizeHandle(BottomRightResizeHandle, selection.Right - halfHandle, selection.Bottom - halfHandle);
+        PlaceResizeHandle(BottomResizeHandle, centerX, selection.Bottom - halfHandle);
+        PlaceResizeHandle(BottomLeftResizeHandle, selection.Left - halfHandle, selection.Bottom - halfHandle);
+        PlaceResizeHandle(LeftResizeHandle, selection.Left - halfHandle, centerY);
+    }
+
+    private static void PlaceResizeHandle(Thumb handle, double left, double top)
+    {
+        Canvas.SetLeft(handle, left);
+        Canvas.SetTop(handle, top);
+    }
+
+    private void TranslateAnnotations(Rect previousSelection, Rect resizedSelection)
+    {
+        if (_annotations.Count == 0)
+        {
+            return;
+        }
+
+        var offsetX = previousSelection.Left - resizedSelection.Left;
+        var offsetY = previousSelection.Top - resizedSelection.Top;
+        if (Math.Abs(offsetX) < 0.01 && Math.Abs(offsetY) < 0.01)
+        {
+            return;
+        }
+
+        for (var index = 0; index < _annotations.Count; index++)
+        {
+            _annotations[index] = _annotations[index] switch
+            {
+                PenScreenshotAnnotation pen => pen with
+                {
+                    Points = pen.Points.Select(point => new Point(point.X + offsetX, point.Y + offsetY)).ToArray()
+                },
+                RectangleScreenshotAnnotation rectangle => rectangle with
+                {
+                    Bounds = new Rect(
+                        rectangle.Bounds.X + offsetX,
+                        rectangle.Bounds.Y + offsetY,
+                        rectangle.Bounds.Width,
+                        rectangle.Bounds.Height)
+                },
+                var annotation => annotation
+            };
+        }
     }
 
     private void PositionToolbar()
@@ -615,6 +772,18 @@ public partial class SelectionOverlayWindow : Window
             Math.Min(start.Y, end.Y),
             Math.Abs(end.X - start.X),
             Math.Abs(end.Y - start.Y));
+    }
+
+    private enum ResizeHandle
+    {
+        TopLeft,
+        Top,
+        TopRight,
+        Right,
+        BottomRight,
+        Bottom,
+        BottomLeft,
+        Left
     }
 
     private void SetActiveAnnotationTool(ScreenshotAnnotationTool tool)
