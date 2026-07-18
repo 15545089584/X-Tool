@@ -419,8 +419,15 @@ public partial class MainWindow : Window
                 new ScreenRecordingOptions(screenRegion, recordSystemAudio, recordMicrophone),
                 () => controlWindow.IsStopRequested || NativeMethods.IsEscapePressed(),
                 controlWindow.SetElapsed);
-            ClipboardStatusText.Text = $"录像已保存 · {result.Duration:mm\\:ss}";
-            ShowToast($"录像已保存到 {result.FilePath}");
+            var audioDescription = result.IncludesSystemAudio && result.IncludesMicrophone
+                ? "电脑声音 + 麦克风"
+                : result.IncludesSystemAudio
+                    ? "电脑声音"
+                    : result.IncludesMicrophone
+                        ? "麦克风"
+                        : "静音";
+            ClipboardStatusText.Text = $"录像已保存 · {result.Duration:mm\\:ss} · {audioDescription}";
+            ShowToast($"录像已保存（{audioDescription}）");
         }
         finally
         {

@@ -36,6 +36,8 @@ public partial class SelectionOverlayWindow : Window
     private Point _resizeStartPoint;
     private bool? _toolbarBelowSelection;
     private bool _toolbarPositioned;
+    private bool _recordSystemAudio;
+    private bool _recordMicrophone;
 
     private const double MinimumSelectionSize = 16;
     private const double ResizeHandleSize = 14;
@@ -130,6 +132,7 @@ public partial class SelectionOverlayWindow : Window
         _toolbarPositioned = false;
         ResetAnnotations();
         ActionToolbar.Visibility = Visibility.Collapsed;
+        RecordingOptionsPanel.Visibility = Visibility.Collapsed;
         CaptureSurface.CaptureMouse();
         UpdateSelectionVisuals(_selection);
         e.Handled = true;
@@ -233,22 +236,51 @@ public partial class SelectionOverlayWindow : Window
             return;
         }
 
-        RecordingMenu.PlacementTarget = RecordingToolButton;
-        RecordingMenu.IsOpen = true;
+        if (RecordingOptionsPanel.Visibility == Visibility.Visible)
+        {
+            RecordingOptionsPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        UpdateRecordingOptionStates();
+        RecordingOptionsPanel.Visibility = Visibility.Visible;
+        PositionRecordingOptionsPanel();
     }
 
-    private void StartRecordingMenuItem_Click(object sender, RoutedEventArgs e)
+    private void SystemAudioOptionButton_Click(object sender, RoutedEventArgs e)
+    {
+        _recordSystemAudio = !_recordSystemAudio;
+        UpdateRecordingOptionStates();
+    }
+
+    private void MicrophoneOptionButton_Click(object sender, RoutedEventArgs e)
+    {
+        _recordMicrophone = !_recordMicrophone;
+        UpdateRecordingOptionStates();
+    }
+
+    private void StartRecordingButton_Click(object sender, RoutedEventArgs e)
     {
         if (_selection.IsEmpty)
         {
             return;
         }
 
-        RecordSystemAudio = SystemAudioMenuItem.IsChecked;
-        RecordMicrophone = MicrophoneMenuItem.IsChecked;
+        RecordSystemAudio = _recordSystemAudio;
+        RecordMicrophone = _recordMicrophone;
         IsScreenRecordingRequested = true;
         SetActiveAnnotationTool(ScreenshotAnnotationTool.None);
         ConfirmSelection(useForScreenRecording: true);
+    }
+
+    private void UpdateRecordingOptionStates()
+    {
+        SystemAudioOptionText.Text = _recordSystemAudio ? "电脑声音：开" : "电脑声音：关";
+        MicrophoneOptionText.Text = _recordMicrophone ? "麦克风：开" : "麦克风：关";
+        SystemAudioOptionButton.Background = _recordSystemAudio ? new SolidColorBrush(Color.FromRgb(224, 238, 255)) : new SolidColorBrush(Color.FromRgb(247, 250, 253));
+        SystemAudioOptionButton.BorderBrush = _recordSystemAudio ? new SolidColorBrush(Color.FromRgb(88, 149, 255)) : new SolidColorBrush(Color.FromRgb(215, 225, 236));
+        MicrophoneOptionButton.Background = _recordMicrophone ? new SolidColorBrush(Color.FromRgb(224, 238, 255)) : new SolidColorBrush(Color.FromRgb(247, 250, 253));
+        MicrophoneOptionButton.BorderBrush = _recordMicrophone ? new SolidColorBrush(Color.FromRgb(88, 149, 255)) : new SolidColorBrush(Color.FromRgb(215, 225, 236));
     }
 
     private void PenToolButton_Click(object sender, RoutedEventArgs e)
@@ -781,6 +813,7 @@ public partial class SelectionOverlayWindow : Window
             SelectionResizeLayer.Visibility = Visibility.Collapsed;
             SizeBadge.Visibility = Visibility.Collapsed;
             ActionToolbar.Visibility = Visibility.Collapsed;
+            RecordingOptionsPanel.Visibility = Visibility.Collapsed;
             AnnotationCanvas.Visibility = Visibility.Collapsed;
             _toolbarBelowSelection = null;
             _toolbarPositioned = false;
@@ -952,7 +985,35 @@ public partial class SelectionOverlayWindow : Window
         }
 
         ActionToolbar.Margin = new Thickness(x, y, 0, 0);
+        if (RecordingOptionsPanel.Visibility == Visibility.Visible)
+        {
+            PositionRecordingOptionsPanel();
+        }
         _toolbarPositioned = true;
+    }
+
+    private void PositionRecordingOptionsPanel()
+    {
+        RecordingOptionsPanel.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        ActionToolbar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+
+        var panelWidth = RecordingOptionsPanel.DesiredSize.Width;
+        var panelHeight = RecordingOptionsPanel.DesiredSize.Height;
+        var toolbarTop = ActionToolbar.Margin.Top;
+        var toolbarHeight = ActionToolbar.DesiredSize.Height;
+        var x = Math.Clamp(ActionToolbar.Margin.Left, 8, Math.Max(8, CaptureSurface.ActualWidth - panelWidth - 8));
+        var belowY = toolbarTop + toolbarHeight + 8;
+        var aboveY = toolbarTop - panelHeight - 8;
+        var panelRect = new Rect(x, belowY, panelWidth, panelHeight);
+
+        // 默认在工具栏下方；若会遮挡选区或超出屏幕，才切换到工具栏上方。
+        var y = belowY;
+        if (belowY + panelHeight > CaptureSurface.ActualHeight - 8 || panelRect.IntersectsWith(_selection))
+        {
+            y = aboveY >= 8 ? aboveY : Math.Clamp(belowY, 8, Math.Max(8, CaptureSurface.ActualHeight - panelHeight - 8));
+        }
+
+        RecordingOptionsPanel.Margin = new Thickness(x, y, 0, 0);
     }
 
     private bool ToolbarIntersectsSelection(double toolbarWidth, double toolbarHeight)

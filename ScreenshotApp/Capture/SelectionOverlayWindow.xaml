@@ -95,6 +95,41 @@
             </Setter>
         </Style>
 
+        <!-- 录像设置沿用截图工具栏的轻玻璃质感，避免系统右键菜单的割裂感。 -->
+        <Style x:Key="RecordingOptionButtonStyle" TargetType="Button">
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Padding" Value="11,0" />
+            <Setter Property="Margin" Value="0,0,4,0" />
+            <Setter Property="Foreground" Value="#344255" />
+            <Setter Property="Background" Value="#F7FAFD" />
+            <Setter Property="BorderBrush" Value="#D7E1EC" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Background"
+                                Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Background" Property="Background" Value="#E8F1FF" />
+                                <Setter TargetName="Background" Property="BorderBrush" Value="#8CB8FF" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Background" Property="Opacity" Value="0.72" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="SelectionResizeHandleStyle" TargetType="primitives:Thumb">
             <Setter Property="Width" Value="14" />
             <Setter Property="Height" Value="14" />
@@ -289,14 +324,6 @@
                         <TextBlock Margin="0,0,5,0" FontSize="14" Foreground="#E04C5B" Text="●" />
                         <TextBlock VerticalAlignment="Center" Text="录像" />
                     </StackPanel>
-                    <Button.ContextMenu>
-                        <ContextMenu x:Name="RecordingMenu">
-                            <MenuItem x:Name="SystemAudioMenuItem" Header="录入电脑声音（开发中）" IsCheckable="True" IsEnabled="False" />
-                            <MenuItem x:Name="MicrophoneMenuItem" Header="录入麦克风声音（开发中）" IsCheckable="True" IsEnabled="False" />
-                            <Separator />
-                            <MenuItem Header="开始录像" Click="StartRecordingMenuItem_Click" />
-                        </ContextMenu>
-                    </Button.ContextMenu>
                 </Button>
 
                 <Border Width="1" Height="20" Margin="4,0,7,0"
@@ -359,6 +386,58 @@
                                 </Trigger>
                                 <Trigger Property="IsPressed" Value="True">
                                     <Setter TargetName="Background" Property="Background" Value="#2469D9" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+            </StackPanel>
+        </Border>
+
+        <!-- 默认紧贴主工具栏下方横向展开；所有控制均在选区外完成。 -->
+        <Border x:Name="RecordingOptionsPanel"
+                Visibility="Collapsed"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top"
+                Padding="6"
+                Background="#F4F8FBFF"
+                BorderBrush="#D8AFC4DD"
+                BorderThickness="1"
+                CornerRadius="8"
+                Cursor="Arrow">
+            <Border.Effect>
+                <DropShadowEffect Color="#263B56" BlurRadius="18" ShadowDepth="4" Opacity="0.3" />
+            </Border.Effect>
+            <StackPanel Orientation="Horizontal">
+                <Button x:Name="SystemAudioOptionButton"
+                        Style="{StaticResource RecordingOptionButtonStyle}"
+                        Click="SystemAudioOptionButton_Click">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Margin="0,0,5,0" FontFamily="Segoe Fluent Icons" Text="&#xE767;" />
+                        <TextBlock x:Name="SystemAudioOptionText" Text="电脑声音：关" />
+                    </StackPanel>
+                </Button>
+                <Button x:Name="MicrophoneOptionButton"
+                        Style="{StaticResource RecordingOptionButtonStyle}"
+                        Click="MicrophoneOptionButton_Click">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Margin="0,0,5,0" FontFamily="Segoe Fluent Icons" Text="&#xE720;" />
+                        <TextBlock x:Name="MicrophoneOptionText" Text="麦克风：关" />
+                    </StackPanel>
+                </Button>
+                <Border Width="1" Height="20" Margin="3,0,7,0" VerticalAlignment="Center" Background="#CCD5E0" />
+                <Button Width="82" Height="30" Click="StartRecordingButton_Click" Cursor="Hand">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Background" Background="#E94D5D" CornerRadius="6">
+                                <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="White" FontWeight="SemiBold" Text="开始录像" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Background" Property="Background" Value="#F15E6B" />
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="Background" Property="Background" Value="#CC3D4C" />
                                 </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
