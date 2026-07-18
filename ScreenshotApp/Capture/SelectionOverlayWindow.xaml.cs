@@ -55,6 +55,7 @@ public partial class SelectionOverlayWindow : Window
         ScreenshotImage.Source = frame.Bitmap;
         UpdateAnnotationToolStates();
         UpdateColorStates();
+        SyncCustomColorControls();
         UpdateThicknessStates();
 
 #if DEBUG
@@ -325,14 +326,6 @@ public partial class SelectionOverlayWindow : Window
         ToggleToolPanel(ShapeOptionsPanel, ShapeToolButton);
     }
 
-    private void ColorSubmenuButton_Click(object sender, RoutedEventArgs e)
-    {
-        SyncCustomColorControls();
-        ToggleToolPanel(ColorOptionsPanel, ColorSubmenuButton);
-    }
-
-    private void ThicknessSubmenuButton_Click(object sender, RoutedEventArgs e) => ToggleToolPanel(ThicknessOptionsPanel, ThicknessSubmenuButton);
-
     private void ShapeOptionButton_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement { Tag: string shapeText } || !Enum.TryParse<AnnotationShape>(shapeText, out var shape))
@@ -347,7 +340,7 @@ public partial class SelectionOverlayWindow : Window
 
     private void CustomColorSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        if (_updatingCustomColor)
+        if (_updatingCustomColor || RedColorSlider is null || GreenColorSlider is null || BlueColorSlider is null)
         {
             return;
         }
@@ -357,6 +350,7 @@ public partial class SelectionOverlayWindow : Window
             (byte)Math.Round(GreenColorSlider.Value),
             (byte)Math.Round(BlueColorSlider.Value));
         UpdateColorStates();
+        SyncCustomColorControls();
     }
 
     private async void OcrToolButton_Click(object sender, RoutedEventArgs e)
@@ -532,7 +526,6 @@ public partial class SelectionOverlayWindow : Window
         }
 
         UpdateColorStates();
-        ColorOptionsPanel.Visibility = Visibility.Collapsed;
     }
 
     private void ThicknessButton_Click(object sender, RoutedEventArgs e)
@@ -545,7 +538,20 @@ public partial class SelectionOverlayWindow : Window
 
         _annotationThickness = thickness;
         UpdateThicknessStates();
-        ThicknessOptionsPanel.Visibility = Visibility.Collapsed;
+    }
+
+    private void ThicknessSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (ThicknessSlider is null)
+        {
+            return;
+        }
+
+        _annotationThickness = ThicknessSlider.Value;
+        if (StrokePreviewPath is not null)
+        {
+            StrokePreviewPath.StrokeThickness = _annotationThickness;
+        }
     }
 
     private void ToggleToolPanel(Border panel, FrameworkElement anchor)
@@ -554,20 +560,11 @@ public partial class SelectionOverlayWindow : Window
         if (panel == PenOptionsPanel)
         {
             ShapeOptionsPanel.Visibility = Visibility.Collapsed;
-            ColorOptionsPanel.Visibility = Visibility.Collapsed;
-            ThicknessOptionsPanel.Visibility = Visibility.Collapsed;
         }
         else
         {
+            PenOptionsPanel.Visibility = Visibility.Collapsed;
             ShapeOptionsPanel.Visibility = Visibility.Collapsed;
-            if (panel != ColorOptionsPanel)
-            {
-                ColorOptionsPanel.Visibility = Visibility.Collapsed;
-            }
-            if (panel != ThicknessOptionsPanel)
-            {
-                ThicknessOptionsPanel.Visibility = Visibility.Collapsed;
-            }
         }
         if (!shouldShow)
         {
@@ -1272,10 +1269,16 @@ public partial class SelectionOverlayWindow : Window
 
     private void UpdateColorStates()
     {
-        AnnotationColorPreview.Fill = new SolidColorBrush(_annotationColor);
-        RedColorValueText.Text = _annotationColor.R.ToString();
-        GreenColorValueText.Text = _annotationColor.G.ToString();
-        BlueColorValueText.Text = _annotationColor.B.ToString();
+        if (StrokePreviewPath is not null)
+        {
+            StrokePreviewPath.Stroke = new SolidColorBrush(_annotationColor);
+        }
+        if (RedColorValueText is not null)
+        {
+            RedColorValueText.Text = _annotationColor.R.ToString();
+            GreenColorValueText.Text = _annotationColor.G.ToString();
+            BlueColorValueText.Text = _annotationColor.B.ToString();
+        }
     }
 
     private void SyncCustomColorControls()
@@ -1292,6 +1295,14 @@ public partial class SelectionOverlayWindow : Window
 
     private void UpdateThicknessStates()
     {
+        if (ThicknessSlider is not null && Math.Abs(ThicknessSlider.Value - _annotationThickness) > 0.01)
+        {
+            ThicknessSlider.Value = _annotationThickness;
+        }
+        if (StrokePreviewPath is not null)
+        {
+            StrokePreviewPath.StrokeThickness = _annotationThickness;
+        }
     }
 
     private void ResetAnnotations()
