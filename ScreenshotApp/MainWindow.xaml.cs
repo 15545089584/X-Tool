@@ -855,17 +855,16 @@ public partial class MainWindow : Window
         NavigateToPage("History");
     }
 
-    private async Task ShowClipboardPickerAsync()
+    private Task ShowClipboardPickerAsync()
     {
         if (_clipboardPicker is not null)
         {
             _clipboardPicker.Activate();
-            return;
+            return Task.CompletedTask;
         }
 
         _clipboardPasteTarget = NativeMethods.GetForegroundWindow();
-        var items = await _historyStore.LoadAsync(80);
-        var choices = items
+        var choices = _allHistoryItems
             .Where(item => item.Kind != HistoryEntryKind.ScreenRecording &&
                            (item.IsTextRecord || Path.GetExtension(item.FilePath).Equals(".png", StringComparison.OrdinalIgnoreCase)))
             .Take(18)
@@ -873,7 +872,7 @@ public partial class MainWindow : Window
         if (choices.Length == 0)
         {
             ShowToast("剪贴板还没有可粘贴的内容");
-            return;
+            return Task.CompletedTask;
         }
 
         var picker = new ClipboardPickerWindow(choices);
@@ -887,6 +886,7 @@ public partial class MainWindow : Window
             }
         };
         picker.Show();
+        return Task.CompletedTask;
     }
 
     private async void ClipboardPicker_ItemSelected(object? sender, ScreenshotHistoryItem item)
