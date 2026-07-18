@@ -1016,6 +1016,15 @@ public partial class MainWindow : Window
         }
 
         UpdateImageFileSummary();
+        UpdateImagePreviews();
+    }
+
+    private void ClearImageFileList_Click(object sender, RoutedEventArgs e)
+    {
+        _imageConversionFiles.Clear();
+        UpdateImageFileSummary();
+        UpdateImagePreviews();
+        ImageConversionStatusText.Text = "已清空文件队列";
     }
 
     private void SelectConverterOutputFolder_Click(object sender, RoutedEventArgs e)
@@ -1056,6 +1065,13 @@ public partial class MainWindow : Window
         ImageFilesSummaryText.Text = _imageConversionFiles.Count == 0
             ? "支持 PNG、JPEG、BMP、TIFF，可一次选择多张"
             : $"已添加 {_imageConversionFiles.Count} 张图片，处理结果会生成到新文件中";
+    }
+
+    private void UpdateImagePreviews()
+    {
+        var thumbnail = _imageConversionFiles.FirstOrDefault()?.Thumbnail;
+        ImagePreviewBefore.Source = thumbnail;
+        ImagePreviewAfter.Source = thumbnail;
     }
 
     private void UpdateImageConversionControls()
