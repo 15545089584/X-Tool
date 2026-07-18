@@ -11,6 +11,7 @@ using System.Windows.Interop;
 using System.ComponentModel;
 using ScreenshotApp.Capture;
 using ScreenshotApp.History;
+using ScreenshotApp.Recording;
 
 namespace ScreenshotApp;
 
@@ -22,6 +23,7 @@ public partial class MainWindow : Window
         new GdiScreenCaptureBackend());
     private readonly ICaptureBackend _scrollCaptureBackend;
     private readonly ScrollCaptureService _scrollCaptureService;
+    private readonly ScreenRecordingService _screenRecordingService;
     private readonly ScreenshotHistoryStore _historyStore = new();
     private readonly ObservableCollection<ScreenshotHistoryItem> _historyItems = new();
     private HwndSource? _windowSource;
@@ -39,6 +41,7 @@ public partial class MainWindow : Window
             new GdiScreenCaptureBackend(),
             new DxgiDesktopCaptureBackend());
         _scrollCaptureService = new ScrollCaptureService(_scrollCaptureBackend);
+        _screenRecordingService = new ScreenRecordingService(_scrollCaptureBackend);
         HistoryItemsControl.ItemsSource = _historyItems;
 
         _toastTimer = new DispatcherTimer
@@ -266,6 +269,17 @@ public partial class MainWindow : Window
             var confirmed = overlay.ShowDialog() == true;
 
             if (confirmed &&
+                overlay.IsScreenRecordingRequested &&
+                overlay.SelectedScreenBounds is Int32Rect recordingRegion)
+            {
+                await CaptureScreenRecordingAsync(
+                    recordingRegion,
+                    overlay.RecordSystemAudio,
+                    overlay.RecordMicrophone);
+                return;
+            }
+
+            if (confirmed &&
                 overlay.IsScrollCaptureRequested &&
                 overlay.SelectedScreenBounds is Int32Rect scrollRegion)
             {
@@ -392,6 +406,25 @@ public partial class MainWindow : Window
         {
             ClipboardStatusText.Text = "长截图已复制，保存失败";
             ShowToast("长截图已复制，但无法保存到 E 盘");
+        }
+    }
+
+    private async Task CaptureScreenRecordingAsync(Int32Rect screenRegion, bool recordSystemAudio, bool recordMicrophone)
+    {
+        var controlWindow = new ScreenRecordingControlWindow(screenRegion);
+        controlWindow.Show();
+        try
+        {
+            var result = await _screenRecordingService.RecordAsync(
+                new ScreenRecordingOptions(screenRegion, recordSystemAudio, recordMicrophone),
+                () => controlWindow.IsStopRequested || NativeMethods.IsEscapePressed(),
+                controlWindow.SetElapsed);
+            ClipboardStatusText.Text = $"录像已保存 · {result.Duration:mm\\:ss}";
+            ShowToast($"录像已保存到 {result.FilePath}");
+        }
+        finally
+        {
+            controlWindow.Close();
         }
     }
 

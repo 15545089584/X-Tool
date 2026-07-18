@@ -73,6 +73,12 @@ public partial class SelectionOverlayWindow : Window
     /// </summary>
     public bool IsScrollCaptureRequested { get; private set; }
 
+    public bool IsScreenRecordingRequested { get; private set; }
+
+    public bool RecordSystemAudio { get; private set; }
+
+    public bool RecordMicrophone { get; private set; }
+
     private void Window_SourceInitialized(object? sender, EventArgs e)
     {
         var handle = new WindowInteropHelper(this).Handle;
@@ -218,6 +224,31 @@ public partial class SelectionOverlayWindow : Window
 
         SetActiveAnnotationTool(ScreenshotAnnotationTool.None);
         ConfirmSelection(useForScrollCapture: true);
+    }
+
+    private void RecordingToolButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selection.IsEmpty)
+        {
+            return;
+        }
+
+        RecordingMenu.PlacementTarget = RecordingToolButton;
+        RecordingMenu.IsOpen = true;
+    }
+
+    private void StartRecordingMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selection.IsEmpty)
+        {
+            return;
+        }
+
+        RecordSystemAudio = SystemAudioMenuItem.IsChecked;
+        RecordMicrophone = MicrophoneMenuItem.IsChecked;
+        IsScreenRecordingRequested = true;
+        SetActiveAnnotationTool(ScreenshotAnnotationTool.None);
+        ConfirmSelection(useForScreenRecording: true);
     }
 
     private void PenToolButton_Click(object sender, RoutedEventArgs e)
@@ -676,14 +707,14 @@ public partial class SelectionOverlayWindow : Window
         CancelSelection();
     }
 
-    private void ConfirmSelection(bool useForScrollCapture = false)
+    private void ConfirmSelection(bool useForScrollCapture = false, bool useForScreenRecording = false)
     {
         if (_selection.IsEmpty || CaptureSurface.ActualWidth <= 0 || CaptureSurface.ActualHeight <= 0)
         {
             return;
         }
 
-        if (_purpose == SelectionPurpose.Screenshot && !useForScrollCapture)
+        if (_purpose == SelectionPurpose.Screenshot && !useForScrollCapture && !useForScreenRecording)
         {
             SelectedBitmap = CreateSelectionBitmap(includeAnnotations: true);
         }
@@ -695,7 +726,7 @@ public partial class SelectionOverlayWindow : Window
                 _frame.ScreenBounds.Y + pixelBounds.Y,
                 pixelBounds.Width,
                 pixelBounds.Height);
-            IsScrollCaptureRequested = true;
+            IsScrollCaptureRequested = _purpose == SelectionPurpose.ScrollCaptureRegion || useForScrollCapture;
         }
 
         DialogResult = true;

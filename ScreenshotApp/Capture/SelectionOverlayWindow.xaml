@@ -281,6 +281,23 @@
                         <TextBlock VerticalAlignment="Center" Text="长截图" />
                     </StackPanel>
                 </Button>
+                <Button x:Name="RecordingToolButton"
+                        Style="{StaticResource AnnotationToolButtonStyle}"
+                        Click="RecordingToolButton_Click"
+                        ToolTip="录制当前框选区域">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Margin="0,0,5,0" FontSize="14" Foreground="#E04C5B" Text="●" />
+                        <TextBlock VerticalAlignment="Center" Text="录像" />
+                    </StackPanel>
+                    <Button.ContextMenu>
+                        <ContextMenu x:Name="RecordingMenu">
+                            <MenuItem x:Name="SystemAudioMenuItem" Header="录入电脑声音" IsCheckable="True" />
+                            <MenuItem x:Name="MicrophoneMenuItem" Header="录入麦克风声音" IsCheckable="True" />
+                            <Separator />
+                            <MenuItem Header="开始录像" Click="StartRecordingMenuItem_Click" />
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
 
                 <Border Width="1" Height="20" Margin="4,0,7,0"
                         VerticalAlignment="Center" Background="#CCD5E0" />
