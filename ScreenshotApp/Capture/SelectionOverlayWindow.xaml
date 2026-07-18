@@ -291,8 +291,8 @@
                     </StackPanel>
                     <Button.ContextMenu>
                         <ContextMenu x:Name="RecordingMenu">
-                            <MenuItem x:Name="SystemAudioMenuItem" Header="录入电脑声音" IsCheckable="True" />
-                            <MenuItem x:Name="MicrophoneMenuItem" Header="录入麦克风声音" IsCheckable="True" />
+                            <MenuItem x:Name="SystemAudioMenuItem" Header="录入电脑声音（开发中）" IsCheckable="True" IsEnabled="False" />
+                            <MenuItem x:Name="MicrophoneMenuItem" Header="录入麦克风声音（开发中）" IsCheckable="True" IsEnabled="False" />
                             <Separator />
                             <MenuItem Header="开始录像" Click="StartRecordingMenuItem_Click" />
                         </ContextMenu>
