@@ -123,8 +123,7 @@ public partial class App : System.Windows.Application
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add("打开主界面", null, (_, _) => Dispatcher.Invoke(ShowMainWindow));
         menu.Items.Add(new Forms.ToolStripSeparator());
-        menu.Items.Add("普通截图", null, (_, _) => Dispatcher.Invoke(mainWindow.BeginRegionCapture));
-        menu.Items.Add("长截图", null, (_, _) => Dispatcher.Invoke(mainWindow.BeginScrollCapture));
+        menu.Items.Add("截图", null, (_, _) => Dispatcher.Invoke(mainWindow.BeginRegionCapture));
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("退出截影", null, (_, _) => Dispatcher.Invoke(ExitApplication));
 

@@ -26,7 +26,6 @@ public partial class MainWindow : Window
     private readonly ObservableCollection<ScreenshotHistoryItem> _historyItems = new();
     private HwndSource? _windowSource;
     private bool _hotKeyRegistered;
-    private bool _longCaptureHotKeyRegistered;
     private bool _captureInProgress;
     private bool _historyRefreshInProgress;
 
@@ -138,15 +137,9 @@ public partial class MainWindow : Window
     private async void CaptureAction_Click(object sender, RoutedEventArgs e)
     {
         var action = (sender as FrameworkElement)?.Tag?.ToString() ?? "截图";
-        if (action is "普通截图" or "区域截图")
+        if (action is "截图" or "普通截图" or "区域截图")
         {
             await StartRegionCaptureAsync();
-            return;
-        }
-
-        if (action is "长截图" or "滚动长截图")
-        {
-            await StartScrollCaptureAsync();
             return;
         }
 
@@ -169,20 +162,9 @@ public partial class MainWindow : Window
             NativeMethods.ModControl | NativeMethods.ModShift,
             virtualKey);
 
-        var longCaptureVirtualKey = (uint)KeyInterop.VirtualKeyFromKey(Key.S);
-        _longCaptureHotKeyRegistered = NativeMethods.RegisterHotKey(
-            handle,
-            NativeMethods.LongCaptureHotKeyId,
-            NativeMethods.ModControl | NativeMethods.ModShift,
-            longCaptureVirtualKey);
-
         if (!_hotKeyRegistered)
         {
             Dispatcher.BeginInvoke(() => ShowToast("Ctrl + Shift + A 已被其他程序占用"), DispatcherPriority.Loaded);
-        }
-        else if (!_longCaptureHotKeyRegistered)
-        {
-            Dispatcher.BeginInvoke(() => ShowToast("Ctrl + Shift + S 已被其他程序占用"), DispatcherPriority.Loaded);
         }
     }
 
@@ -196,11 +178,6 @@ public partial class MainWindow : Window
         if (_hotKeyRegistered)
         {
             NativeMethods.UnregisterHotKey(_windowSource.Handle, NativeMethods.HotKeyId);
-        }
-
-        if (_longCaptureHotKeyRegistered)
-        {
-            NativeMethods.UnregisterHotKey(_windowSource.Handle, NativeMethods.LongCaptureHotKeyId);
         }
 
         _windowSource.RemoveHook(WindowMessageHook);
@@ -233,11 +210,6 @@ public partial class MainWindow : Window
         _ = StartRegionCaptureAsync();
     }
 
-    internal void BeginScrollCapture()
-    {
-        _ = StartScrollCaptureAsync();
-    }
-
 #if SCROLL_CAPTURE_TEST
     /// <summary>
     /// 专用回归构建入口：等待整次长截图真正结束，便于自动关闭测试进程。
@@ -268,12 +240,6 @@ public partial class MainWindow : Window
             handled = true;
             _ = StartRegionCaptureAsync();
         }
-        else if (message == NativeMethods.WmHotKey && wParam.ToInt32() == NativeMethods.LongCaptureHotKeyId)
-        {
-            handled = true;
-            _ = StartScrollCaptureAsync();
-        }
-
         return IntPtr.Zero;
     }
 

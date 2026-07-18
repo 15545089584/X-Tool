@@ -5,7 +5,6 @@ namespace ScreenshotApp.Capture;
 internal static class NativeMethods
 {
     internal const int HotKeyId = 0x4A59;
-    internal const int LongCaptureHotKeyId = 0x4A5A;
     internal const int WmHotKey = 0x0312;
     internal const uint ModControl = 0x0002;
     internal const uint ModShift = 0x0004;

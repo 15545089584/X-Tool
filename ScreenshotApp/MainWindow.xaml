@@ -172,18 +172,10 @@
                             <TextBlock x:Name="ContextTitle" FontSize="22" FontWeight="SemiBold" Text="截图" />
 
                             <Button Grid.Row="2" Style="{StaticResource PrimaryButtonStyle}"
-                                    Tag="普通截图" Click="CaptureAction_Click">
+                                    Tag="截图" Click="CaptureAction_Click">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock FontFamily="Segoe Fluent Icons" FontSize="17" Text="&#xE722;" />
-                                    <TextBlock Margin="10,0,0,0" FontSize="15" Foreground="{StaticResource PrimaryBrush}" Text="普通截图" />
-                                </StackPanel>
-                            </Button>
-
-                            <Button Grid.Row="4" Style="{StaticResource SecondaryButtonStyle}"
-                                    Tag="长截图" Click="CaptureAction_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock FontFamily="Segoe Fluent Icons" FontSize="17" Text="&#xE74A;" />
-                                    <TextBlock Margin="10,0,0,0" FontSize="15" Text="长截图" />
+                                    <TextBlock Margin="10,0,0,0" FontSize="15" Foreground="{StaticResource PrimaryBrush}" Text="截图" />
                                 </StackPanel>
                             </Button>
 
@@ -191,7 +183,7 @@
                                 <Border Height="1" Background="{StaticResource GlassDividerBrush}" />
                                 <TextBlock Margin="0,22,0,12" FontSize="12" Foreground="#999FA8" Text="最近使用" />
                                 <Button Height="48" Background="Transparent" BorderThickness="0" Cursor="Hand"
-                                        HorizontalContentAlignment="Stretch" Tag="区域截图" Click="CaptureAction_Click">
+                                        HorizontalContentAlignment="Stretch" Tag="截图" Click="CaptureAction_Click">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="32" />
@@ -199,19 +191,7 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="#747B84"
                                                    VerticalAlignment="Center" Text="&#xE8B7;" />
-                                        <TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="14" Text="区域截图" />
-                                    </Grid>
-                                </Button>
-                                <Button Height="48" Background="Transparent" BorderThickness="0" Cursor="Hand"
-                                        HorizontalContentAlignment="Stretch" Tag="滚动长截图" Click="CaptureAction_Click">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="32" />
-                                            <ColumnDefinition Width="*" />
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="#747B84"
-                                                   VerticalAlignment="Center" Text="&#xE74A;" />
-                                        <TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="14" Text="滚动长截图" />
+                                        <TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="14" Text="截图" />
                                     </Grid>
                                 </Button>
                             </StackPanel>
@@ -265,7 +245,7 @@
                                                FontSize="31" FontWeight="SemiBold" Text="随手一截，马上可用" />
                                     <TextBlock Margin="0,10,0,0" HorizontalAlignment="Center"
                                                FontSize="15" Foreground="{StaticResource SecondaryTextBrush}"
-                                               Text="普通截图、滚动长截图，完成后自动复制到剪贴板" />
+                                               Text="框选后可复制、标注、提取文字、翻译或切换为滚动长截图" />
                                 </StackPanel>
 
                                 <Grid Grid.Row="2">
@@ -273,11 +253,9 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="18" />
                                         <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="18" />
-                                        <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
 
-                                    <Button Grid.Column="0" Style="{StaticResource ActionCardStyle}" Tag="普通截图" Click="CaptureAction_Click">
+                                    <Button Grid.Column="0" Style="{StaticResource ActionCardStyle}" Tag="截图" Click="CaptureAction_Click">
                                         <Grid>
                                             <Grid.RowDefinitions>
                                                 <RowDefinition Height="38" />
@@ -287,29 +265,13 @@
                                                 <TextBlock Style="{StaticResource IconTextStyle}" FontSize="17" Foreground="#2D7DFF" Text="&#xE722;" />
                                             </Border>
                                             <StackPanel Grid.Row="1">
-                                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="普通截图" />
+                                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="截图" />
                                                 <TextBlock Margin="0,6,0,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="Ctrl + Shift + A" />
                                             </StackPanel>
                                         </Grid>
                                     </Button>
 
-                                    <Button Grid.Column="2" Style="{StaticResource ActionCardStyle}" Tag="长截图" Click="CaptureAction_Click">
-                                        <Grid>
-                                            <Grid.RowDefinitions>
-                                                <RowDefinition Height="38" />
-                                                <RowDefinition Height="*" />
-                                            </Grid.RowDefinitions>
-                                            <Border Width="34" Height="34" HorizontalAlignment="Left" Background="#E2F7F8" CornerRadius="8">
-                                                <TextBlock Style="{StaticResource IconTextStyle}" FontSize="17" Foreground="#34AAB1" Text="&#xE74A;" />
-                                            </Border>
-                                            <StackPanel Grid.Row="1">
-                                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="长截图" />
-                                                <TextBlock Margin="0,6,0,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="Ctrl + Shift + S" />
-                                            </StackPanel>
-                                        </Grid>
-                                    </Button>
-
-                                    <Button Grid.Column="4" Style="{StaticResource ActionCardStyle}" Tag="窗口截图" Click="CaptureAction_Click">
+                                    <Button Grid.Column="2" Style="{StaticResource ActionCardStyle}" Tag="窗口截图" Click="CaptureAction_Click">
                                         <Grid>
                                             <Grid.RowDefinitions>
                                                 <RowDefinition Height="38" />
@@ -440,17 +402,10 @@
                                         BorderBrush="#5AFFFFFF" BorderThickness="1" CornerRadius="14">
                                     <StackPanel>
                                         <Grid Height="72" Margin="22,0">
-                                            <TextBlock VerticalAlignment="Center" FontSize="15" Text="普通截图" />
+                                            <TextBlock VerticalAlignment="Center" FontSize="15" Text="截图" />
                                             <Button HorizontalAlignment="Right" VerticalAlignment="Center" Padding="14,8"
                                                     Background="#AFFFFFFF" BorderBrush="#CFFFFFFF" BorderThickness="1"
                                                     Content="Ctrl + Shift + A" Click="ShortcutButton_Click" />
-                                        </Grid>
-                                        <Border Height="1" Margin="22,0" Background="{StaticResource GlassDividerBrush}" />
-                                        <Grid Height="72" Margin="22,0">
-                                            <TextBlock VerticalAlignment="Center" FontSize="15" Text="长截图" />
-                                            <Button HorizontalAlignment="Right" VerticalAlignment="Center" Padding="14,8"
-                                                    Background="#AFFFFFFF" BorderBrush="#CFFFFFFF" BorderThickness="1"
-                                                    Content="Ctrl + Shift + S" Click="ShortcutButton_Click" />
                                         </Grid>
                                     </StackPanel>
                                 </Border>

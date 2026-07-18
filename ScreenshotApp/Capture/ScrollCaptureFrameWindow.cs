@@ -2,16 +2,32 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Shapes;
 
 namespace ScreenshotApp.Capture;
 
 /// <summary>
-/// 长截图期间常驻的框线。框线绘制在采集区域外侧，并完全穿透鼠标输入。
+/// 滚动采集期间突出当前选区：选区外降低亮度，选区内保持原始画面，
+/// 同时整层完全穿透鼠标并从屏幕采集结果中排除。
 /// </summary>
 internal sealed class ScrollCaptureFrameWindow : Window
 {
-    private const int BorderSize = 3;
+    private const double BorderSize = 3;
     private readonly Int32Rect _screenRegion;
+    private readonly Canvas _canvas = new() { IsHitTestVisible = false };
+    private readonly Rectangle _topMask = CreateMask();
+    private readonly Rectangle _leftMask = CreateMask();
+    private readonly Rectangle _rightMask = CreateMask();
+    private readonly Rectangle _bottomMask = CreateMask();
+    private readonly Border _selectionBorder = new()
+    {
+        BorderBrush = new SolidColorBrush(Color.FromRgb(77, 149, 255)),
+        BorderThickness = new Thickness(BorderSize),
+        CornerRadius = new CornerRadius(4),
+        Background = Brushes.Transparent,
+        IsHitTestVisible = false
+    };
+    private NativeMethods.Rect _monitorBounds;
 
     internal ScrollCaptureFrameWindow(Int32Rect screenRegion)
     {
@@ -26,15 +42,17 @@ internal sealed class ScrollCaptureFrameWindow : Window
         Topmost = true;
         Focusable = false;
         IsHitTestVisible = false;
-        Content = new Border
-        {
-            BorderBrush = new SolidColorBrush(Color.FromRgb(77, 149, 255)),
-            BorderThickness = new Thickness(BorderSize),
-            CornerRadius = new CornerRadius(4),
-            Background = Brushes.Transparent
-        };
+
+        _canvas.Children.Add(_topMask);
+        _canvas.Children.Add(_leftMask);
+        _canvas.Children.Add(_rightMask);
+        _canvas.Children.Add(_bottomMask);
+        _canvas.Children.Add(_selectionBorder);
+        Content = _canvas;
 
         SourceInitialized += OnSourceInitialized;
+        SizeChanged += (_, _) => UpdateVisualGeometry();
+        ContentRendered += (_, _) => UpdateVisualGeometry();
     }
 
     private void OnSourceInitialized(object? sender, EventArgs e)
@@ -42,19 +60,68 @@ internal sealed class ScrollCaptureFrameWindow : Window
         var handle = new WindowInteropHelper(this).Handle;
         NativeMethods.MakeWindowMouseTransparent(handle);
         _ = NativeMethods.SetWindowDisplayAffinity(handle, NativeMethods.WdaExcludeFromCapture);
+
+        var center = new NativeMethods.Point
+        {
+            X = _screenRegion.X + _screenRegion.Width / 2,
+            Y = _screenRegion.Y + _screenRegion.Height / 2
+        };
+        var monitorHandle = NativeMethods.MonitorFromPoint(center, NativeMethods.MonitorDefaultToNearest);
+        var monitorInfo = new NativeMethods.MonitorInfo
+        {
+            Size = System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.MonitorInfo>()
+        };
+        _ = NativeMethods.GetMonitorInfo(monitorHandle, ref monitorInfo);
+        _monitorBounds = monitorInfo.Monitor;
+
         _ = NativeMethods.SetWindowPos(
             handle,
             new IntPtr(NativeMethods.HwndTopmost),
-            _screenRegion.X - BorderSize,
-            _screenRegion.Y - BorderSize,
-            _screenRegion.Width + BorderSize * 2,
-            _screenRegion.Height + BorderSize * 2,
+            _monitorBounds.Left,
+            _monitorBounds.Top,
+            _monitorBounds.Right - _monitorBounds.Left,
+            _monitorBounds.Bottom - _monitorBounds.Top,
             NativeMethods.SwpNoActivate);
-        // HWND 本身也只保留外侧四条框线，避免透明窗口内部被 GDI 当作采集图层。
-        NativeMethods.MakeWindowFrameOnly(
-            handle,
-            _screenRegion.Width + BorderSize * 2,
-            _screenRegion.Height + BorderSize * 2,
-            BorderSize);
+    }
+
+    private void UpdateVisualGeometry()
+    {
+        if (ActualWidth <= 0 || ActualHeight <= 0 || _monitorBounds.Right <= _monitorBounds.Left)
+        {
+            return;
+        }
+
+        var dpi = VisualTreeHelper.GetDpi(this);
+        var x = Math.Clamp(
+            (_screenRegion.X - _monitorBounds.Left) / dpi.DpiScaleX,
+            0,
+            ActualWidth);
+        var y = Math.Clamp(
+            (_screenRegion.Y - _monitorBounds.Top) / dpi.DpiScaleY,
+            0,
+            ActualHeight);
+        var width = Math.Clamp(_screenRegion.Width / dpi.DpiScaleX, 0, ActualWidth - x);
+        var height = Math.Clamp(_screenRegion.Height / dpi.DpiScaleY, 0, ActualHeight - y);
+
+        SetBounds(_topMask, 0, 0, ActualWidth, y);
+        SetBounds(_leftMask, 0, y, x, height);
+        SetBounds(_rightMask, x + width, y, Math.Max(0, ActualWidth - x - width), height);
+        SetBounds(_bottomMask, 0, y + height, ActualWidth, Math.Max(0, ActualHeight - y - height));
+        SetBounds(_selectionBorder, x - BorderSize, y - BorderSize, width + BorderSize * 2, height + BorderSize * 2);
+        Panel.SetZIndex(_selectionBorder, 1);
+    }
+
+    private static Rectangle CreateMask() => new()
+    {
+        Fill = new SolidColorBrush(Color.FromArgb(104, 26, 34, 45)),
+        IsHitTestVisible = false
+    };
+
+    private static void SetBounds(FrameworkElement element, double left, double top, double width, double height)
+    {
+        Canvas.SetLeft(element, left);
+        Canvas.SetTop(element, top);
+        element.Width = Math.Max(0, width);
+        element.Height = Math.Max(0, height);
     }
 }
