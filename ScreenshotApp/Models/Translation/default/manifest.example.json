@@ -5,7 +5,8 @@
   "targetLanguage": "zh-Hans",
   "runtime": "ONNX Runtime CPU",
   "modelFamily": "Marian / OPUS-MT",
-  "modelLicense": "Apache-2.0",
+  "baseModelLicense": "Apache-2.0",
+  "onnxExportLicense": "CC-BY-4.0",
   "requiredFiles": [
     "encoder_model.onnx",
     "decoder_model.onnx",
