@@ -1,13 +1,14 @@
 <Window x:Class="ScreenshotApp.ClipboardUi.ClipboardPickerWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="剪贴板" Width="560" Height="620"
+        xmlns:primitives="clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework"
+        Title="剪贴板" Width="410" Height="520"
         WindowStartupLocation="Manual" WindowStyle="None" ResizeMode="NoResize" ShowInTaskbar="False" Topmost="True"
         AllowsTransparency="True" Background="Transparent">
     <Window.Resources>
         <Style x:Key="FilterButtonStyle" TargetType="Button">
-            <Setter Property="Height" Value="32" /><Setter Property="Margin" Value="0,0,10,8" /><Setter Property="Padding" Value="14,0" />
-            <Setter Property="BorderThickness" Value="1" /><Setter Property="Cursor" Value="Hand" /><Setter Property="FontSize" Value="13" />
+            <Setter Property="Height" Value="32" /><Setter Property="Margin" Value="3" /><Setter Property="Padding" Value="2,0" />
+            <Setter Property="BorderThickness" Value="1" /><Setter Property="Cursor" Value="Hand" /><Setter Property="FontSize" Value="12" />
             <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="Root" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10"><Border.Effect><DropShadowEffect BlurRadius="8" ShadowDepth="2" Opacity="0.08" Color="#3D566F" /></Border.Effect><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" /></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.78" /></Trigger><Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.62" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
         </Style>
     </Window.Resources>
@@ -18,14 +19,14 @@
             <Grid MouseLeftButtonDown="Header_MouseLeftButtonDown">
                 <TextBlock FontSize="20" FontWeight="SemiBold" Foreground="#263747" Text="剪贴板" />
             </Grid>
-            <WrapPanel Grid.Row="1" Margin="0,12,0,0">
-                <Button Style="{StaticResource FilterButtonStyle}" Tag="All" Click="FilterButton_Click" Background="#DCEEFF" BorderBrush="#9BC7F4" Foreground="#357FEB" Content="全部" />
-                <Button Style="{StaticResource FilterButtonStyle}" Tag="Image" Click="FilterButton_Click" Background="#E7F2FF" BorderBrush="#B4D8FF" Foreground="#387DD2" Content="图片" />
+            <primitives:UniformGrid Grid.Row="1" Rows="1" Columns="6" Margin="0,12,0,0">
+                <Button Style="{StaticResource FilterButtonStyle}" Tag="All" Click="FilterButton_Click" Background="#EEF1F6" BorderBrush="#D1D9E5" Foreground="#52657A" Content="全部" />
+                <Button Style="{StaticResource FilterButtonStyle}" Tag="Image" Click="FilterButton_Click" Background="#E8ECFF" BorderBrush="#AEBBF4" Foreground="#5369C7" Content="图片" />
                 <Button Style="{StaticResource FilterButtonStyle}" Tag="Text" Click="FilterButton_Click" Background="#FBEAF3" BorderBrush="#F1BED8" Foreground="#C1508A" Content="文字" />
                 <Button Style="{StaticResource FilterButtonStyle}" Tag="Translation" Click="FilterButton_Click" Background="#F0EAFF" BorderBrush="#D6C3FF" Foreground="#8055C8" Content="翻译" />
                 <Button Style="{StaticResource FilterButtonStyle}" Tag="TextExtraction" Click="FilterButton_Click" Background="#E9F8ED" BorderBrush="#BAE6C5" Foreground="#3F9B65" Content="文本提取" />
                 <Button Style="{StaticResource FilterButtonStyle}" Tag="External" Click="FilterButton_Click" Background="#FFF1E5" BorderBrush="#F3D1AF" Foreground="#D08337" Content="外部复制" />
-            </WrapPanel>
+            </primitives:UniformGrid>
             <ListBox x:Name="ClipboardItemsList" Grid.Row="3" Background="Transparent" BorderThickness="0"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto"
                      SelectionChanged="ClipboardItemsList_SelectionChanged">
@@ -36,8 +37,8 @@
                             <DataTrigger Binding="{Binding KindText}" Value="外部复制"><Setter TargetName="Root" Property="Background" Value="#FFF1E5" /><Setter TargetName="Root" Property="BorderBrush" Value="#F3D1AF" /></DataTrigger>
                             <DataTrigger Binding="{Binding KindText}" Value="翻译"><Setter TargetName="Root" Property="Background" Value="#F0EAFF" /><Setter TargetName="Root" Property="BorderBrush" Value="#D6C3FF" /></DataTrigger>
                             <DataTrigger Binding="{Binding KindText}" Value="文字提取"><Setter TargetName="Root" Property="Background" Value="#E9F8ED" /><Setter TargetName="Root" Property="BorderBrush" Value="#BAE6C5" /></DataTrigger>
-                            <DataTrigger Binding="{Binding KindText}" Value="普通截图"><Setter TargetName="Root" Property="Background" Value="#E7F2FF" /><Setter TargetName="Root" Property="BorderBrush" Value="#B4D8FF" /></DataTrigger>
-                            <DataTrigger Binding="{Binding KindText}" Value="长截图"><Setter TargetName="Root" Property="Background" Value="#E7F2FF" /><Setter TargetName="Root" Property="BorderBrush" Value="#B4D8FF" /></DataTrigger>
+                            <DataTrigger Binding="{Binding KindText}" Value="普通截图"><Setter TargetName="Root" Property="Background" Value="#E8ECFF" /><Setter TargetName="Root" Property="BorderBrush" Value="#AEBBF4" /></DataTrigger>
+                            <DataTrigger Binding="{Binding KindText}" Value="长截图"><Setter TargetName="Root" Property="Background" Value="#E8ECFF" /><Setter TargetName="Root" Property="BorderBrush" Value="#AEBBF4" /></DataTrigger>
                             <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.8" /></Trigger>
                             <Trigger Property="IsSelected" Value="True"><Setter TargetName="Root" Property="BorderBrush" Value="#4D91F7" /><Setter TargetName="Root" Property="BorderThickness" Value="2" /></Trigger>
                         </ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>

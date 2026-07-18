@@ -11,7 +11,9 @@ internal static class ClipboardService
     internal static void SetText(string content)
     {
         var data = new DataObject();
-        data.SetData(DataFormats.UnicodeText, content);
+        data.SetText(content, TextDataFormat.UnicodeText);
+        data.SetData(DataFormats.Text, content);
+        data.SetData(DataFormats.StringFormat, content);
         data.SetData(InternalFormat, true);
         System.Windows.Clipboard.SetDataObject(data, true);
     }
