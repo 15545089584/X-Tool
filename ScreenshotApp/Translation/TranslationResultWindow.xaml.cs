@@ -7,22 +7,28 @@ public partial class TranslationResultWindow : Window
 {
     private const double PlacementGap = 16;
     private readonly Rect? _selectionScreenBounds;
+    private readonly Func<string, Task<TranslationResult>>? _retranslateAsync;
 
     internal TranslationResultWindow(
         string sourceText,
         string? translatedText,
         string? unavailableReason,
+        Func<string, Task<TranslationResult>>? retranslateAsync = null,
         Rect? selectionScreenBounds = null)
     {
         _selectionScreenBounds = selectionScreenBounds;
+        _retranslateAsync = retranslateAsync;
         InitializeComponent();
         SourceTextBox.Text = sourceText;
         TranslationTextBox.Text = translatedText ?? unavailableReason ?? "未生成译文";
         var translated = !string.IsNullOrWhiteSpace(translatedText);
         TranslationTextBox.IsReadOnly = !translated;
         CopyButton.IsEnabled = translated;
+        RetranslateButton.Visibility = _retranslateAsync is null
+            ? Visibility.Collapsed
+            : Visibility.Visible;
         StatusText.Text = translated
-            ? $"共 {translatedText!.Count(character => !char.IsWhiteSpace(character)):N0} 个中文字符"
+            ? $"原文可编辑；修改后可重新翻译"
             : "请安装离线模型包后再试";
         PositionNearSelection();
         Loaded += (_, _) => PositionNearSelection();
@@ -51,6 +57,35 @@ public partial class TranslationResultWindow : Window
         catch
         {
             StatusText.Text = "剪贴板忙，请再次单击";
+        }
+    }
+
+    private async void RetranslateButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_retranslateAsync is null || string.IsNullOrWhiteSpace(SourceTextBox.Text))
+        {
+            return;
+        }
+
+        RetranslateButton.IsEnabled = false;
+        CopyButton.IsEnabled = false;
+        StatusText.Text = "正在重新翻译…";
+        try
+        {
+            var result = await _retranslateAsync(SourceTextBox.Text);
+            SourceTextBox.Text = result.SourceText;
+            TranslationTextBox.Text = result.TranslatedText;
+            TranslationTextBox.IsReadOnly = false;
+            CopyButton.IsEnabled = !string.IsNullOrWhiteSpace(result.TranslatedText);
+            StatusText.Text = $"共 {result.TranslatedText.Count(character => !char.IsWhiteSpace(character)):N0} 个中文字符";
+        }
+        catch (Exception exception)
+        {
+            StatusText.Text = $"重新翻译失败：{exception.Message}";
+        }
+        finally
+        {
+            RetranslateButton.IsEnabled = true;
         }
     }
 

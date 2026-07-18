@@ -331,6 +331,7 @@ public partial class SelectionOverlayWindow : Window
                     sourceText,
                     null,
                     engine.UnavailableReason,
+                    null,
                     selectionScreenBounds) { Owner = this }.ShowDialog();
                 return;
             }
@@ -343,6 +344,9 @@ public partial class SelectionOverlayWindow : Window
                 translation.SourceText,
                 translation.TranslatedText,
                 null,
+                editedSource => engine.TranslateAsync(
+                    new TranslationRequest(TranslationTextPreprocessor.Normalize(editedSource)),
+                    CancellationToken.None),
                 selectionScreenBounds) { Owner = this }.ShowDialog();
         }
         catch (Exception exception)

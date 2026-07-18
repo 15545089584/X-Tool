@@ -67,10 +67,8 @@
                         <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
                                    Foreground="#1A9A67" FontSize="16" FontWeight="SemiBold" Text="译" />
                     </Border>
-                    <StackPanel Margin="11,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Foreground="#182230" FontSize="16" FontWeight="SemiBold" Text="英译中" />
-                        <TextBlock Foreground="#7B899A" FontSize="11" Text="完全离线处理" />
-                    </StackPanel>
+                    <TextBlock Margin="11,0,0,0" VerticalAlignment="Center"
+                               Foreground="#182230" FontSize="16" FontWeight="SemiBold" Text="英译中" />
                 </StackPanel>
                 <Button Grid.Column="1" Style="{StaticResource HeaderButtonStyle}" Click="CloseButton_Click" ToolTip="关闭">
                     <TextBlock FontSize="17" Text="×" />
@@ -86,7 +84,7 @@
                 </Grid.RowDefinitions>
                 <TextBlock Foreground="#738196" FontSize="12" FontWeight="SemiBold" Text="英文原文" />
                 <Border Grid.Row="1" Margin="0,6,0,10" Background="#EEF3F8" CornerRadius="9">
-                    <TextBox x:Name="SourceTextBox" Padding="10,8" IsReadOnly="True"
+                    <TextBox x:Name="SourceTextBox" Padding="10,8"
                              Background="Transparent" BorderThickness="0" Foreground="#405064"
                              FontSize="13" TextWrapping="Wrap" AcceptsReturn="True"
                              VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" />
@@ -104,11 +102,14 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <TextBlock x:Name="StatusText" VerticalAlignment="Center" Foreground="#7B899A" FontSize="12" />
-                <Button Grid.Column="1" Width="76" Height="34" Margin="0,0,8,0"
+                <Button x:Name="RetranslateButton" Grid.Column="1" Width="84" Height="34" Margin="0,0,8,0"
+                        Background="#EAF3FF" BorderThickness="0" Cursor="Hand" Content="重新翻译" Click="RetranslateButton_Click" />
+                <Button Grid.Column="2" Width="76" Height="34" Margin="0,0,8,0"
                         Background="#ECF1F7" BorderThickness="0" Cursor="Hand" Content="关闭" Click="CloseButton_Click" />
-                <Button x:Name="CopyButton" Grid.Column="2" Width="92" Height="34"
+                <Button x:Name="CopyButton" Grid.Column="3" Width="92" Height="34"
                         Background="#2D7DFF" BorderThickness="0" Cursor="Hand" Click="CopyButton_Click">
                     <TextBlock Foreground="White" FontWeight="SemiBold" Text="复制译文" />
                 </Button>
