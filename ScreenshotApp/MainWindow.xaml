@@ -4,6 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        xmlns:primitives="clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework"
         mc:Ignorable="d"
         Title="截影"
         Icon="Assets/JieYing.ico"
@@ -333,13 +334,15 @@
                                             <ItemsControl x:Name="HistoryItemsControl">
                                                 <ItemsControl.ItemsPanel>
                                                     <ItemsPanelTemplate>
-                                                        <WrapPanel ItemWidth="248" ItemHeight="214" />
+                                                        <!-- 四列等宽占满滚动区域，避免固定宽度卡片在右侧遗留大块空白。 -->
+                                                        <primitives:UniformGrid Columns="4" />
                                                     </ItemsPanelTemplate>
                                                 </ItemsControl.ItemsPanel>
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate>
-                                                        <Button Width="232" Height="198" Margin="7"
+                                                        <Button Height="198" Margin="7"
                                                                 Padding="0" Background="Transparent" BorderThickness="0"
+                                                                HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
                                                                 Cursor="Hand" Tag="{Binding FilePath}" Click="OpenHistoryItem_Click">
                                                             <Button.Style>
                                                                 <Style TargetType="Button">

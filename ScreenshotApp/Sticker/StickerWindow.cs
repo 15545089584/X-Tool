@@ -23,7 +23,7 @@ internal sealed class StickerWindow : Window
         AllowsTransparency = true;
         Background = Brushes.Transparent;
         ShowInTaskbar = false;
-        Topmost = false;
+        Topmost = true;
         UseLayoutRounding = true;
         SnapsToDevicePixels = true;
 
@@ -61,7 +61,7 @@ internal sealed class StickerWindow : Window
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
             RenderTransformOrigin = new Point(0.5, 0.5),
-            Opacity = 0.48
+            Opacity = 1
         };
         var pinButton = CreateActionButton(_pinIcon, "置顶");
         pinButton.Click += (_, _) => ToggleTopmost();
