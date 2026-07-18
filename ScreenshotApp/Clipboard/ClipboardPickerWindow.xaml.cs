@@ -71,15 +71,16 @@ public partial class ClipboardPickerWindow : Window
     private void ApplyFilter(string filter)
     {
         ClipboardItemsList.SelectedItem = null;
-        ClipboardItemsList.ItemsSource = filter switch
+        var items = filter switch
         {
-            "Image" => _items.Where(item => item.Kind is HistoryEntryKind.Screenshot or HistoryEntryKind.LongScreenshot),
+            "Image" => _items.Where(item => item.HasThumbnail),
             "Text" => _items.Where(item => item.Kind == HistoryEntryKind.ExternalClipboard && item.IsTextRecord),
             "Translation" => _items.Where(item => item.Kind == HistoryEntryKind.Translation),
             "TextExtraction" => _items.Where(item => item.Kind == HistoryEntryKind.TextExtraction),
             "External" => _items.Where(item => item.Kind == HistoryEntryKind.ExternalClipboard),
             _ => _items
         };
+        ClipboardItemsList.ItemsSource = items.Take(18).ToArray();
     }
 
     private void ClipboardItem_Click(object sender, RoutedEventArgs e)

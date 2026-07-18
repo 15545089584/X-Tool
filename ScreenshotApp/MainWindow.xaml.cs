@@ -867,7 +867,6 @@ public partial class MainWindow : Window
         var choices = _allHistoryItems
             .Where(item => item.Kind != HistoryEntryKind.ScreenRecording &&
                            (item.IsTextRecord || Path.GetExtension(item.FilePath).Equals(".png", StringComparison.OrdinalIgnoreCase)))
-            .Take(18)
             .ToArray();
         if (choices.Length == 0)
         {
@@ -921,17 +920,18 @@ public partial class MainWindow : Window
             }
             _suppressClipboardCapture = true;
 
-            await Task.Delay(80);
             if (_clipboardPasteTarget != IntPtr.Zero)
             {
                 // 剪贴板浮窗为非激活窗口时，外部输入框会持续保持焦点，直接发送粘贴即可。
                 var activated = NativeMethods.IsWindowForeground(_clipboardPasteTarget);
+                var focusRestored = false;
                 for (var attempt = 0; attempt < 3 && !activated; attempt++)
                 {
                     activated = NativeMethods.RestoreAndActivateWindow(_clipboardPasteTarget);
+                    focusRestored |= activated;
                     if (!activated)
                     {
-                        await Task.Delay(80);
+                        await Task.Delay(40);
                     }
                 }
 
@@ -941,7 +941,12 @@ public partial class MainWindow : Window
                     return;
                 }
 
-                await Task.Delay(100);
+                if (focusRestored)
+                {
+                    // 仅在刚恢复外部窗口时留出一帧时间让其内部控件重新接收输入。
+                    await Task.Delay(35);
+                }
+
                 if (!NativeMethods.SendPasteShortcut())
                 {
                     ShowToast("未能自动粘贴，内容已复制到系统剪贴板");
@@ -950,11 +955,7 @@ public partial class MainWindow : Window
         }
         catch (Exception exception)
         {
-            var clipboardOwner = exception is ClipboardLockedException clipboardException
-                ? clipboardException.OwnerDescription
-                : NativeMethods.GetOpenClipboardOwnerDescription();
-            Trace.WriteLine($"[X-Tool] 剪贴板写入失败：{exception}；占用者：{clipboardOwner}");
-            ShowToast($"粘贴失败：{exception.Message} · 占用者：{clipboardOwner}");
+            ShowToast($"粘贴失败：{exception.Message}");
         }
     }
 

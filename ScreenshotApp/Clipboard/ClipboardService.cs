@@ -1,8 +1,7 @@
 using System.Windows;
 using System.Windows.Media.Imaging;
-using System.Runtime.InteropServices;
-using System.Threading;
-using ScreenshotApp.Capture;
+using System.IO;
+using Forms = System.Windows.Forms;
 
 namespace ScreenshotApp.ClipboardUi;
 
@@ -13,60 +12,31 @@ internal static class ClipboardService
 
     internal static void SetText(string content)
     {
-        var data = new DataObject();
-        data.SetText(content, TextDataFormat.UnicodeText);
-        data.SetData(DataFormats.Text, content);
-        data.SetData(DataFormats.StringFormat, content);
+        var data = new Forms.DataObject();
+        data.SetText(content, Forms.TextDataFormat.UnicodeText);
+        data.SetData(Forms.DataFormats.Text, true, content);
         data.SetData(InternalFormat, true);
-        SetDataObjectWithRetry(data);
+        SetDataObjectWithShortRetry(data);
     }
 
     internal static void SetImage(BitmapSource image)
     {
-        var data = new DataObject();
-        data.SetImage(image);
+        using var pngStream = new MemoryStream();
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(image));
+        encoder.Save(pngStream);
+        pngStream.Position = 0;
+
+        using var bitmap = new System.Drawing.Bitmap(pngStream);
+        var data = new Forms.DataObject();
+        data.SetImage(new System.Drawing.Bitmap(bitmap));
         data.SetData(InternalFormat, true);
-        SetDataObjectWithRetry(data);
+        SetDataObjectWithShortRetry(data);
     }
 
-    private static void SetDataObjectWithRetry(DataObject data)
+    private static void SetDataObjectWithShortRetry(Forms.DataObject data)
     {
-        // 浏览器、输入法等程序会在短时间内占用系统剪贴板；短暂重试避免瞬时占用直接失败。
-        string? capturedOwner = null;
-        for (var attempt = 0; attempt < 16; attempt++)
-        {
-            try
-            {
-                System.Windows.Clipboard.SetDataObject(data, true);
-                return;
-            }
-            catch (COMException exception)
-            {
-                var currentOwner = NativeMethods.GetOpenClipboardOwnerDescription();
-                if (currentOwner != "占用窗口已释放，无法识别")
-                {
-                    capturedOwner = currentOwner;
-                }
-
-                if (attempt == 15)
-                {
-                    throw new ClipboardLockedException(exception, capturedOwner ?? currentOwner);
-                }
-
-                Thread.Sleep(45);
-            }
-        }
+        // WinForms 原生提供受控重试，仍写入同一个 Windows 系统剪贴板。
+        Forms.Clipboard.SetDataObject(data, true, 3, 25);
     }
-}
-
-/// <summary>用于保留剪贴板被锁定瞬间的占用窗口信息。</summary>
-internal sealed class ClipboardLockedException : Exception
-{
-    internal ClipboardLockedException(COMException innerException, string ownerDescription)
-        : base(innerException.Message, innerException)
-    {
-        OwnerDescription = ownerDescription;
-    }
-
-    internal string OwnerDescription { get; }
 }

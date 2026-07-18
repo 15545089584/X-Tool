@@ -28,10 +28,10 @@
                 <Button Style="{StaticResource FilterButtonStyle}" Tag="External" Click="FilterButton_Click" Background="#FFF1E5" BorderBrush="#F3D1AF" Foreground="#D08337" Content="外部复制" />
             </primitives:UniformGrid>
             <ListBox x:Name="ClipboardItemsList" Grid.Row="3" Background="Transparent" BorderThickness="0"
-                     ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto">
+                     Focusable="False" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Hidden">
                 <ListBox.ItemContainerStyle>
                     <Style TargetType="ListBoxItem">
-                        <Setter Property="Padding" Value="0" /><Setter Property="Margin" Value="0,0,0,9" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /><Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        <Setter Property="Padding" Value="3" /><Setter Property="Margin" Value="0,0,0,6" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /><Setter Property="Focusable" Value="False" /><Setter Property="FocusVisualStyle" Value="{x:Null}" /><Setter Property="HorizontalContentAlignment" Value="Stretch" />
                         <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem"><Border x:Name="Root" Background="#F8FCFF" BorderBrush="#C6E1F1" BorderThickness="1" CornerRadius="13" Padding="16"><ContentPresenter /></Border><ControlTemplate.Triggers>
                             <DataTrigger Binding="{Binding KindText}" Value="外部复制"><Setter TargetName="Root" Property="Background" Value="#FFF1E5" /><Setter TargetName="Root" Property="BorderBrush" Value="#F3D1AF" /></DataTrigger>
                             <DataTrigger Binding="{Binding KindText}" Value="翻译"><Setter TargetName="Root" Property="Background" Value="#F0EAFF" /><Setter TargetName="Root" Property="BorderBrush" Value="#D6C3FF" /></DataTrigger>

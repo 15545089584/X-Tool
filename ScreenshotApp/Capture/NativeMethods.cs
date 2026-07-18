@@ -1,6 +1,4 @@
 using System.Runtime.InteropServices;
-using System.Diagnostics;
-using System.Text;
 
 namespace ScreenshotApp.Capture;
 
@@ -138,15 +136,6 @@ internal static class NativeMethods
 
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr windowHandle, out uint processId);
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr GetOpenClipboardWindow();
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern int GetWindowTextLength(IntPtr windowHandle);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern int GetWindowText(IntPtr windowHandle, StringBuilder text, int maxCount);
 
     [DllImport("kernel32.dll")]
     private static extern uint GetCurrentThreadId();
@@ -348,35 +337,6 @@ internal static class NativeMethods
 
         var rootWindow = GetAncestor(windowHandle, GetAncestorRoot);
         return GetForegroundWindow() == (rootWindow == IntPtr.Zero ? windowHandle : rootWindow);
-    }
-
-    internal static string GetOpenClipboardOwnerDescription()
-    {
-        var ownerWindow = GetOpenClipboardWindow();
-        if (ownerWindow == IntPtr.Zero)
-        {
-            return "占用窗口已释放，无法识别";
-        }
-
-        _ = GetWindowThreadProcessId(ownerWindow, out var processId);
-        var processName = processId == 0 ? "未知进程" : $"PID {processId}";
-        try
-        {
-            using var process = Process.GetProcessById(unchecked((int)processId));
-            processName = process.ProcessName;
-        }
-        catch
-        {
-            // 某些系统进程无法读取名称时保留 PID 作为诊断信息。
-        }
-
-        var titleLength = GetWindowTextLength(ownerWindow);
-        var titleBuffer = new StringBuilder(Math.Max(1, titleLength + 1));
-        _ = GetWindowText(ownerWindow, titleBuffer, titleBuffer.Capacity);
-        var title = titleBuffer.ToString().Trim();
-        return string.IsNullOrWhiteSpace(title)
-            ? processName
-            : $"{processName}（{title}）";
     }
 
     internal static void MakeWindowNonActivating(IntPtr windowHandle)
