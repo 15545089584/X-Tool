@@ -24,6 +24,45 @@
                             UseAeroCaptionButtons="False" />
     </shell:WindowChrome.WindowChrome>
 
+    <Window.Resources>
+        <!-- 历史分类使用半透明圆角胶囊，融入主界面的毛玻璃层次。 -->
+        <Style x:Key="HistoryFilterButtonStyle" TargetType="Button">
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Padding" Value="15,0" />
+            <Setter Property="Margin" Value="0,0,8,0" />
+            <Setter Property="Background" Value="#8FFFFFFF" />
+            <Setter Property="BorderBrush" Value="#BFFFFFFF" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="#56606C" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root" Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="10">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="10" ShadowDepth="2" Direction="270" Opacity="0.08" Color="#486177" />
+                            </Border.Effect>
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="#C8FFFFFF" />
+                                <Setter TargetName="Root" Property="BorderBrush" Value="#C9E0F8FF" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Root" Property="Opacity" Value="0.76" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
     <Grid x:Name="RootVisual" Background="{StaticResource WindowTintBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="48" />
@@ -160,24 +199,7 @@
                 <Grid ClipToBounds="True">
                     <!-- 主内容区 -->
                     <Grid Background="Transparent">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="58" />
-                            <RowDefinition Height="*" />
-                        </Grid.RowDefinitions>
-
-                        <Grid Grid.Row="0" Margin="42,0,28,0">
-                            <TextBlock VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="18"
-                                       Foreground="#5F656D" Text="&#xE700;" />
-                            <Border HorizontalAlignment="Right" VerticalAlignment="Center" Padding="13,7"
-                                    Background="#AFFFFFFF" BorderBrush="#D5FFFFFF" BorderThickness="1" CornerRadius="9">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#69717A" Text="&#xE8C8;" />
-                                    <TextBlock x:Name="ClipboardStatusText" Margin="7,0,0,0" FontSize="13" Text="剪贴板就绪" />
-                                </StackPanel>
-                            </Border>
-                        </Grid>
-
-                        <Grid Grid.Row="1">
+                        <Grid>
                             <!-- 首页 -->
                             <Grid x:Name="HomeView" Margin="52,48,52,38">
                                 <Grid.RowDefinitions>
@@ -265,7 +287,7 @@
                             </Grid>
 
                             <!-- 统一历史记录页 -->
-                            <Grid x:Name="HistoryView" Visibility="Collapsed" Margin="58,44,48,38">
+                            <Grid x:Name="HistoryView" Visibility="Collapsed" Margin="58,32,48,38">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="16" />
@@ -286,18 +308,12 @@
                                 </Grid>
 
                                 <StackPanel Grid.Row="2" Orientation="Horizontal">
-                                    <Button x:Name="AllHistoryFilterButton" Tag="All" Click="HistoryFilterButton_Click"
-                                            Padding="13,7" Margin="0,0,8,0" BorderThickness="1" Cursor="Hand" Content="全部" />
-                                    <Button x:Name="ScreenshotHistoryFilterButton" Tag="Screenshot" Click="HistoryFilterButton_Click"
-                                            Padding="13,7" Margin="0,0,8,0" BorderThickness="1" Cursor="Hand" Content="普通截图" />
-                                    <Button x:Name="LongScreenshotHistoryFilterButton" Tag="LongScreenshot" Click="HistoryFilterButton_Click"
-                                            Padding="13,7" Margin="0,0,8,0" BorderThickness="1" Cursor="Hand" Content="长截图" />
-                                    <Button x:Name="TextExtractionHistoryFilterButton" Tag="TextExtraction" Click="HistoryFilterButton_Click"
-                                            Padding="13,7" Margin="0,0,8,0" BorderThickness="1" Cursor="Hand" Content="文字提取" />
-                                    <Button x:Name="TranslationHistoryFilterButton" Tag="Translation" Click="HistoryFilterButton_Click"
-                                            Padding="13,7" Margin="0,0,8,0" BorderThickness="1" Cursor="Hand" Content="翻译" />
-                                    <Button x:Name="ScreenRecordingHistoryFilterButton" Tag="ScreenRecording" Click="HistoryFilterButton_Click"
-                                            Padding="13,7" BorderThickness="1" Cursor="Hand" Content="屏幕录制" />
+                                    <Button x:Name="AllHistoryFilterButton" Style="{StaticResource HistoryFilterButtonStyle}" Tag="All" Click="HistoryFilterButton_Click" Content="全部" />
+                                    <Button x:Name="ScreenshotHistoryFilterButton" Style="{StaticResource HistoryFilterButtonStyle}" Tag="Screenshot" Click="HistoryFilterButton_Click" Content="普通截图" />
+                                    <Button x:Name="LongScreenshotHistoryFilterButton" Style="{StaticResource HistoryFilterButtonStyle}" Tag="LongScreenshot" Click="HistoryFilterButton_Click" Content="长截图" />
+                                    <Button x:Name="TextExtractionHistoryFilterButton" Style="{StaticResource HistoryFilterButtonStyle}" Tag="TextExtraction" Click="HistoryFilterButton_Click" Content="文字提取" />
+                                    <Button x:Name="TranslationHistoryFilterButton" Style="{StaticResource HistoryFilterButtonStyle}" Tag="Translation" Click="HistoryFilterButton_Click" Content="翻译" />
+                                    <Button x:Name="ScreenRecordingHistoryFilterButton" Style="{StaticResource HistoryFilterButtonStyle}" Tag="ScreenRecording" Click="HistoryFilterButton_Click" Content="屏幕录制" />
                                 </StackPanel>
 
                                 <Border Grid.Row="4" Background="#36FFFFFF"

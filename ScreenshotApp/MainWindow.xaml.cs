@@ -145,7 +145,6 @@ public partial class MainWindow : Window
             return;
         }
 
-        ClipboardStatusText.Text = $"{action}将在后续阶段接入";
         ShowToast($"{action}将在后续阶段接入");
     }
 
@@ -293,12 +292,10 @@ public partial class MainWindow : Window
                 var savedPath = await TrySaveCaptureAsync(overlay.SelectedBitmap, false);
                 if (savedPath is not null)
                 {
-                    ClipboardStatusText.Text = "截图已复制并保存";
                     ShowToast($"已保存到 {savedPath}");
                 }
                 else
                 {
-                    ClipboardStatusText.Text = "截图已复制，保存失败";
                     ShowToast("截图已复制，但无法保存到 E 盘");
                 }
             }
@@ -309,7 +306,6 @@ public partial class MainWindow : Window
         }
         catch (Exception exception)
         {
-            ClipboardStatusText.Text = "截图失败";
             ShowToast($"截图失败：{exception.Message}");
         }
         finally
@@ -362,7 +358,6 @@ public partial class MainWindow : Window
         }
         catch (Exception exception)
         {
-            ClipboardStatusText.Text = "长截图失败";
             ShowToast($"长截图失败：{exception.Message}");
         }
         finally
@@ -399,12 +394,10 @@ public partial class MainWindow : Window
         var savedPath = await TrySaveCaptureAsync(result.Bitmap, true);
         if (savedPath is not null)
         {
-            ClipboardStatusText.Text = $"长截图 {result.Bitmap.PixelWidth} × {result.Bitmap.PixelHeight} 已复制并保存";
             ShowToast($"长截图已保存 · {result.FrameCount} 帧 · {result.StopReason}");
         }
         else
         {
-            ClipboardStatusText.Text = "长截图已复制，保存失败";
             ShowToast("长截图已复制，但无法保存到 E 盘");
         }
     }
@@ -426,7 +419,6 @@ public partial class MainWindow : Window
                     : result.IncludesMicrophone
                         ? "麦克风"
                         : "静音";
-            ClipboardStatusText.Text = $"录像已保存 · {result.Duration:mm\\:ss} · {audioDescription}";
             ShowToast($"录像已保存（{audioDescription}）");
             await RefreshHistoryAsync();
         }
