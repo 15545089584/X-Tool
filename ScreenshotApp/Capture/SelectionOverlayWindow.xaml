@@ -277,14 +277,9 @@
                         Click="ShapeToolButton_Click"
                         ToolTip="选择形状">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Margin="0,0,5,0" FontSize="15" Text="◯□" />
+                        <TextBlock Margin="0,0,5,0" FontSize="15" Text="□" />
                         <TextBlock VerticalAlignment="Center" Text="形状" />
                     </StackPanel>
-                </Button>
-                <Button x:Name="ColorMenuButton" Width="34"
-                        Style="{StaticResource AnnotationToolButtonStyle}"
-                        Padding="4,0" Click="ColorMenuButton_Click" ToolTip="标注颜色">
-                    <Ellipse x:Name="AnnotationColorPreview" Width="15" Height="15" Fill="#FF4D5E" Stroke="#8390A0" StrokeThickness="1" />
                 </Button>
                 <Button x:Name="OcrToolButton"
                         Style="{StaticResource AnnotationToolButtonStyle}"
@@ -329,17 +324,6 @@
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Margin="0,0,5,0" FontFamily="Segoe Fluent Icons" FontSize="14" Text="&#xE8A5;" />
                         <TextBlock VerticalAlignment="Center" Text="贴图" />
-                    </StackPanel>
-                </Button>
-
-                <Button x:Name="ThicknessMenuButton" Width="38" Style="{StaticResource AnnotationToolButtonStyle}"
-                        Padding="3,0" Margin="4,0,3,0" Click="ThicknessMenuButton_Click" ToolTip="笔画粗细">
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <TextBlock FontSize="15" Text="✎" />
-                        <StackPanel Margin="3,0,0,0" VerticalAlignment="Center">
-                            <Border Width="14" Height="2" Margin="0,1" Background="#334255" CornerRadius="1" />
-                            <Border Width="14" Height="4" Margin="0,1" Background="#334255" CornerRadius="2" />
-                        </StackPanel>
                     </StackPanel>
                 </Button>
 
@@ -392,6 +376,19 @@
             </StackPanel>
         </Border>
 
+        <Border x:Name="PenOptionsPanel" Visibility="Collapsed" HorizontalAlignment="Left" VerticalAlignment="Top"
+                Padding="6" Background="#EEF8FBFF" BorderBrush="#C9DCEB" BorderThickness="1" CornerRadius="9">
+            <Border.Effect><DropShadowEffect Color="#263B56" BlurRadius="16" ShadowDepth="4" Opacity="0.28" /></Border.Effect>
+            <StackPanel Orientation="Horizontal">
+                <Button x:Name="ColorSubmenuButton" Style="{StaticResource AnnotationToolButtonStyle}" Height="30" Padding="10,0" Click="ColorSubmenuButton_Click">
+                    <StackPanel Orientation="Horizontal"><Ellipse x:Name="AnnotationColorPreview" Width="13" Height="13" Margin="0,0,5,0" Fill="#FF4D5E" Stroke="#8390A0" StrokeThickness="1" /><TextBlock Text="颜色" /></StackPanel>
+                </Button>
+                <Button x:Name="ThicknessSubmenuButton" Style="{StaticResource AnnotationToolButtonStyle}" Height="30" Padding="10,0" Click="ThicknessSubmenuButton_Click">
+                    <StackPanel Orientation="Horizontal"><TextBlock Margin="0,0,5,0" FontSize="14" Text="▌" /><TextBlock Text="线宽" /></StackPanel>
+                </Button>
+            </StackPanel>
+        </Border>
+
         <Border x:Name="ShapeOptionsPanel" Visibility="Collapsed" HorizontalAlignment="Left" VerticalAlignment="Top"
                 Padding="6" Background="#EEF8FBFF" BorderBrush="#C9DCEB" BorderThickness="1" CornerRadius="9">
             <Border.Effect><DropShadowEffect Color="#263B56" BlurRadius="16" ShadowDepth="4" Opacity="0.28" /></Border.Effect>
@@ -404,18 +401,24 @@
         </Border>
 
         <Border x:Name="ColorOptionsPanel" Visibility="Collapsed" HorizontalAlignment="Left" VerticalAlignment="Top"
-                Padding="8" Background="#EEF8FBFF" BorderBrush="#C9DCEB" BorderThickness="1" CornerRadius="9">
+                Padding="10" Background="#EEF8FBFF" BorderBrush="#C9DCEB" BorderThickness="1" CornerRadius="9">
             <Border.Effect><DropShadowEffect Color="#263B56" BlurRadius="16" ShadowDepth="4" Opacity="0.28" /></Border.Effect>
-            <StackPanel Orientation="Horizontal">
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button Style="{StaticResource ColorButtonStyle}" Tag="#FF4D5E" Click="ColorButton_Click" ToolTip="红色" />
-                    <Button Style="{StaticResource ColorButtonStyle}" Tag="#3E8BFF" Click="ColorButton_Click" ToolTip="蓝色" />
-                    <Button Style="{StaticResource ColorButtonStyle}" Tag="#35B779" Click="ColorButton_Click" ToolTip="绿色" />
-                    <Button Style="{StaticResource ColorButtonStyle}" Tag="#FFC847" Click="ColorButton_Click" ToolTip="黄色" />
-                    <Button Style="{StaticResource ColorButtonStyle}" Tag="#FFFFFF" Click="ColorButton_Click" ToolTip="白色" />
+            <StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <Button Width="30" Height="30" Margin="1" Padding="5" Tag="#FF4D5E" Click="ColorButton_Click" ToolTip="红色"><Border Background="#FF4D5E" CornerRadius="10" /></Button>
+                    <Button Width="30" Height="30" Margin="1" Padding="5" Tag="#3E8BFF" Click="ColorButton_Click" ToolTip="蓝色"><Border Background="#3E8BFF" CornerRadius="10" /></Button>
+                    <Button Width="30" Height="30" Margin="1" Padding="5" Tag="#35B779" Click="ColorButton_Click" ToolTip="绿色"><Border Background="#35B779" CornerRadius="10" /></Button>
+                    <Button Width="30" Height="30" Margin="1" Padding="5" Tag="#FFC847" Click="ColorButton_Click" ToolTip="黄色"><Border Background="#FFC847" CornerRadius="10" /></Button>
+                    <Button Width="30" Height="30" Margin="1" Padding="5" Tag="#FFFFFF" Click="ColorButton_Click" ToolTip="白色"><Border Background="#FFFFFF" BorderBrush="#8A99AA" BorderThickness="1" CornerRadius="10" /></Button>
                 </StackPanel>
-                <Border Width="1" Height="24" Margin="7,0" Background="#CCD5E0" />
-                <Button Style="{StaticResource AnnotationToolButtonStyle}" Height="30" Padding="9,0" Click="CustomColorButton_Click" Content="自定义颜色" />
+                <Border Height="1" Margin="3,8" Background="#C9D8E7" />
+                <Grid Margin="2,0,2,2">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="22" /><ColumnDefinition Width="150" /><ColumnDefinition Width="36" /></Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions><RowDefinition Height="24" /><RowDefinition Height="24" /><RowDefinition Height="24" /></Grid.RowDefinitions>
+                    <TextBlock VerticalAlignment="Center" Foreground="#E04D5B" Text="R" /><Slider x:Name="RedColorSlider" Grid.Column="1" Maximum="255" ValueChanged="CustomColorSlider_ValueChanged" /><TextBlock x:Name="RedColorValueText" Grid.Column="2" VerticalAlignment="Center" TextAlignment="Right" Foreground="#6E7E90" />
+                    <TextBlock Grid.Row="1" VerticalAlignment="Center" Foreground="#35B779" Text="G" /><Slider x:Name="GreenColorSlider" Grid.Row="1" Grid.Column="1" Maximum="255" ValueChanged="CustomColorSlider_ValueChanged" /><TextBlock x:Name="GreenColorValueText" Grid.Row="1" Grid.Column="2" VerticalAlignment="Center" TextAlignment="Right" Foreground="#6E7E90" />
+                    <TextBlock Grid.Row="2" VerticalAlignment="Center" Foreground="#3E8BFF" Text="B" /><Slider x:Name="BlueColorSlider" Grid.Row="2" Grid.Column="1" Maximum="255" ValueChanged="CustomColorSlider_ValueChanged" /><TextBlock x:Name="BlueColorValueText" Grid.Row="2" Grid.Column="2" VerticalAlignment="Center" TextAlignment="Right" Foreground="#6E7E90" />
+                </Grid>
             </StackPanel>
         </Border>
 

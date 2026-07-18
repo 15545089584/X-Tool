@@ -41,6 +41,7 @@ public partial class SelectionOverlayWindow : Window
     private bool _toolbarPositioned;
     private bool _recordSystemAudio;
     private bool _recordMicrophone;
+    private bool _updatingCustomColor;
 
     private const double MinimumSelectionSize = 16;
     private const double ResizeHandleSize = 14;
@@ -314,23 +315,23 @@ public partial class SelectionOverlayWindow : Window
 
     private void PenToolButton_Click(object sender, RoutedEventArgs e)
     {
-        SetActiveAnnotationTool(
-            _activeAnnotationTool == ScreenshotAnnotationTool.Pen
-                ? ScreenshotAnnotationTool.None
-                : ScreenshotAnnotationTool.Pen);
+        SetActiveAnnotationTool(ScreenshotAnnotationTool.Pen);
+        ToggleToolPanel(PenOptionsPanel, PenToolButton);
     }
 
     private void ShapeToolButton_Click(object sender, RoutedEventArgs e)
     {
+        PenOptionsPanel.Visibility = Visibility.Collapsed;
         ToggleToolPanel(ShapeOptionsPanel, ShapeToolButton);
     }
 
-    private void ColorMenuButton_Click(object sender, RoutedEventArgs e)
+    private void ColorSubmenuButton_Click(object sender, RoutedEventArgs e)
     {
-        ToggleToolPanel(ColorOptionsPanel, ColorMenuButton);
+        SyncCustomColorControls();
+        ToggleToolPanel(ColorOptionsPanel, ColorSubmenuButton);
     }
 
-    private void ThicknessMenuButton_Click(object sender, RoutedEventArgs e) => ToggleToolPanel(ThicknessOptionsPanel, ThicknessMenuButton);
+    private void ThicknessSubmenuButton_Click(object sender, RoutedEventArgs e) => ToggleToolPanel(ThicknessOptionsPanel, ThicknessSubmenuButton);
 
     private void ShapeOptionButton_Click(object sender, RoutedEventArgs e)
     {
@@ -344,18 +345,18 @@ public partial class SelectionOverlayWindow : Window
         SetActiveAnnotationTool(ScreenshotAnnotationTool.Shape);
     }
 
-    private void CustomColorButton_Click(object sender, RoutedEventArgs e)
+    private void CustomColorSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        var dialog = new System.Windows.Forms.ColorDialog
+        if (_updatingCustomColor)
         {
-            FullOpen = true,
-            Color = System.Drawing.Color.FromArgb(_annotationColor.A, _annotationColor.R, _annotationColor.G, _annotationColor.B)
-        };
-        if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
-        {
-            _annotationColor = Color.FromArgb(dialog.Color.A, dialog.Color.R, dialog.Color.G, dialog.Color.B);
-            UpdateColorStates();
+            return;
         }
+
+        _annotationColor = Color.FromRgb(
+            (byte)Math.Round(RedColorSlider.Value),
+            (byte)Math.Round(GreenColorSlider.Value),
+            (byte)Math.Round(BlueColorSlider.Value));
+        UpdateColorStates();
     }
 
     private async void OcrToolButton_Click(object sender, RoutedEventArgs e)
@@ -550,9 +551,24 @@ public partial class SelectionOverlayWindow : Window
     private void ToggleToolPanel(Border panel, FrameworkElement anchor)
     {
         var shouldShow = panel.Visibility != Visibility.Visible;
-        ShapeOptionsPanel.Visibility = Visibility.Collapsed;
-        ColorOptionsPanel.Visibility = Visibility.Collapsed;
-        ThicknessOptionsPanel.Visibility = Visibility.Collapsed;
+        if (panel == PenOptionsPanel)
+        {
+            ShapeOptionsPanel.Visibility = Visibility.Collapsed;
+            ColorOptionsPanel.Visibility = Visibility.Collapsed;
+            ThicknessOptionsPanel.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            ShapeOptionsPanel.Visibility = Visibility.Collapsed;
+            if (panel != ColorOptionsPanel)
+            {
+                ColorOptionsPanel.Visibility = Visibility.Collapsed;
+            }
+            if (panel != ThicknessOptionsPanel)
+            {
+                ThicknessOptionsPanel.Visibility = Visibility.Collapsed;
+            }
+        }
         if (!shouldShow)
         {
             return;
@@ -1257,6 +1273,21 @@ public partial class SelectionOverlayWindow : Window
     private void UpdateColorStates()
     {
         AnnotationColorPreview.Fill = new SolidColorBrush(_annotationColor);
+        RedColorValueText.Text = _annotationColor.R.ToString();
+        GreenColorValueText.Text = _annotationColor.G.ToString();
+        BlueColorValueText.Text = _annotationColor.B.ToString();
+    }
+
+    private void SyncCustomColorControls()
+    {
+        _updatingCustomColor = true;
+        RedColorSlider.Value = _annotationColor.R;
+        GreenColorSlider.Value = _annotationColor.G;
+        BlueColorSlider.Value = _annotationColor.B;
+        RedColorValueText.Text = _annotationColor.R.ToString();
+        GreenColorValueText.Text = _annotationColor.G.ToString();
+        BlueColorValueText.Text = _annotationColor.B.ToString();
+        _updatingCustomColor = false;
     }
 
     private void UpdateThicknessStates()
