@@ -950,7 +950,9 @@ public partial class MainWindow : Window
         }
         catch (Exception exception)
         {
-            ShowToast($"粘贴失败：{exception.Message}");
+            var clipboardOwner = NativeMethods.GetOpenClipboardOwnerDescription();
+            Trace.WriteLine($"[X-Tool] 剪贴板写入失败：{exception}；占用者：{clipboardOwner}");
+            ShowToast($"粘贴失败：{exception.Message} · 占用者：{clipboardOwner}");
         }
     }
 
