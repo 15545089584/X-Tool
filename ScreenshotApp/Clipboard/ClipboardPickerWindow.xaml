@@ -28,8 +28,7 @@
                 <Button Style="{StaticResource FilterButtonStyle}" Tag="External" Click="FilterButton_Click" Background="#FFF1E5" BorderBrush="#F3D1AF" Foreground="#D08337" Content="外部复制" />
             </primitives:UniformGrid>
             <ListBox x:Name="ClipboardItemsList" Grid.Row="3" Background="Transparent" BorderThickness="0"
-                     ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto"
-                     SelectionChanged="ClipboardItemsList_SelectionChanged">
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto">
                 <ListBox.ItemContainerStyle>
                     <Style TargetType="ListBoxItem">
                         <Setter Property="Padding" Value="0" /><Setter Property="Margin" Value="0,0,0,9" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /><Setter Property="HorizontalContentAlignment" Value="Stretch" />
@@ -40,16 +39,17 @@
                             <DataTrigger Binding="{Binding KindText}" Value="普通截图"><Setter TargetName="Root" Property="Background" Value="#E8ECFF" /><Setter TargetName="Root" Property="BorderBrush" Value="#AEBBF4" /></DataTrigger>
                             <DataTrigger Binding="{Binding KindText}" Value="长截图"><Setter TargetName="Root" Property="Background" Value="#E8ECFF" /><Setter TargetName="Root" Property="BorderBrush" Value="#AEBBF4" /></DataTrigger>
                             <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.8" /></Trigger>
-                            <Trigger Property="IsSelected" Value="True"><Setter TargetName="Root" Property="BorderBrush" Value="#4D91F7" /><Setter TargetName="Root" Property="BorderThickness" Value="2" /></Trigger>
                         </ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
                     </Style>
                 </ListBox.ItemContainerStyle>
                 <ListBox.ItemTemplate>
                     <DataTemplate>
-                        <Grid>
-                            <TextBlock x:Name="TextPreview" FontSize="15" LineHeight="22" Foreground="#334B62" Text="{Binding PreviewText}" TextWrapping="Wrap" />
-                            <Image x:Name="ImagePreview" MaxHeight="158" HorizontalAlignment="Stretch" Stretch="Uniform" Source="{Binding Thumbnail}" Visibility="Collapsed" />
-                        </Grid>
+                        <Button Background="Transparent" BorderThickness="0" Padding="0" Focusable="False" Cursor="Hand" Click="ClipboardItem_Click">
+                            <Grid>
+                                <TextBlock x:Name="TextPreview" FontSize="15" LineHeight="22" Foreground="#334B62" Text="{Binding PreviewText}" TextWrapping="Wrap" />
+                                <Image x:Name="ImagePreview" MaxHeight="158" HorizontalAlignment="Stretch" Stretch="Uniform" Source="{Binding Thumbnail}" Visibility="Collapsed" />
+                            </Grid>
+                        </Button>
                         <DataTemplate.Triggers>
                             <DataTrigger Binding="{Binding HasThumbnail}" Value="True"><Setter TargetName="TextPreview" Property="Visibility" Value="Collapsed" /><Setter TargetName="ImagePreview" Property="Visibility" Value="Visible" /></DataTrigger>
                         </DataTemplate.Triggers>

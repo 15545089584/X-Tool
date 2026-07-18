@@ -82,9 +82,9 @@ public partial class ClipboardPickerWindow : Window
         };
     }
 
-    private void ClipboardItemsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void ClipboardItem_Click(object sender, RoutedEventArgs e)
     {
-        if (ClipboardItemsList.SelectedItem is ScreenshotHistoryItem item)
+        if (sender is FrameworkElement { DataContext: ScreenshotHistoryItem item })
         {
             ItemSelected?.Invoke(this, item);
         }
