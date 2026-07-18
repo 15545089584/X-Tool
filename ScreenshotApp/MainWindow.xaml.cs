@@ -299,6 +299,14 @@ public partial class MainWindow : Window
             var overlay = new SelectionOverlayWindow(frame);
             var confirmed = overlay.ShowDialog() == true;
 
+            if (confirmed &&
+                overlay.IsScrollCaptureRequested &&
+                overlay.SelectedScreenBounds is Int32Rect scrollRegion)
+            {
+                await CaptureScrollRegionAsync(scrollRegion);
+                return;
+            }
+
             if (confirmed && overlay.SelectedBitmap is not null)
             {
                 await SetClipboardImageWithRetryAsync(overlay.SelectedBitmap);
@@ -366,26 +374,7 @@ public partial class MainWindow : Window
                 return;
             }
 
-            await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
-            NativeMethods.DwmFlush();
-            await Task.Delay(140);
-
-#if SCROLL_CAPTURE_TEST
-            _ = DriveScrollCaptureTestInputAsync();
-#endif
-            var result = await _scrollCaptureService.CaptureInteractiveAsync(screenRegion);
-            await SetClipboardImageWithRetryAsync(result.Bitmap);
-            var savedPath = await TrySaveCaptureAsync(result.Bitmap, true);
-            if (savedPath is not null)
-            {
-                ClipboardStatusText.Text = $"长截图 {result.Bitmap.PixelWidth} × {result.Bitmap.PixelHeight} 已复制并保存";
-                ShowToast($"长截图已保存 · {result.FrameCount} 帧 · {result.StopReason}");
-            }
-            else
-            {
-                ClipboardStatusText.Text = "长截图已复制，保存失败";
-                ShowToast("长截图已复制，但无法保存到 E 盘");
-            }
+            await CaptureScrollRegionAsync(screenRegion);
         }
         catch (OperationCanceledException)
         {
@@ -409,6 +398,34 @@ public partial class MainWindow : Window
             }
 
             _captureInProgress = false;
+        }
+    }
+
+    /// <summary>
+    /// 复用同一个已确认区域进入自由长截图会话。
+    /// 该入口同时服务于独立长截图和普通截图工具栏中的“长截图”。
+    /// </summary>
+    private async Task CaptureScrollRegionAsync(Int32Rect screenRegion)
+    {
+        await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+        NativeMethods.DwmFlush();
+        await Task.Delay(140);
+
+#if SCROLL_CAPTURE_TEST
+        _ = DriveScrollCaptureTestInputAsync();
+#endif
+        var result = await _scrollCaptureService.CaptureInteractiveAsync(screenRegion);
+        await SetClipboardImageWithRetryAsync(result.Bitmap);
+        var savedPath = await TrySaveCaptureAsync(result.Bitmap, true);
+        if (savedPath is not null)
+        {
+            ClipboardStatusText.Text = $"长截图 {result.Bitmap.PixelWidth} × {result.Bitmap.PixelHeight} 已复制并保存";
+            ShowToast($"长截图已保存 · {result.FrameCount} 帧 · {result.StopReason}");
+        }
+        else
+        {
+            ClipboardStatusText.Text = "长截图已复制，保存失败";
+            ShowToast("长截图已复制，但无法保存到 E 盘");
         }
     }
 

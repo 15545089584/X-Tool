@@ -272,6 +272,15 @@
                         <TextBlock x:Name="TranslationToolButtonText" VerticalAlignment="Center" Text="翻译" />
                     </StackPanel>
                 </Button>
+                <Button x:Name="LongCaptureButton"
+                        Style="{StaticResource AnnotationToolButtonStyle}"
+                        Click="LongCaptureButton_Click"
+                        ToolTip="使用当前框选区域开始手动滚动长截图">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Margin="0,0,5,0" FontFamily="Segoe Fluent Icons" FontSize="14" Text="&#xE74A;" />
+                        <TextBlock VerticalAlignment="Center" Text="长截图" />
+                    </StackPanel>
+                </Button>
 
                 <Border Width="1" Height="20" Margin="4,0,7,0"
                         VerticalAlignment="Center" Background="#CCD5E0" />

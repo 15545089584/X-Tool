@@ -67,6 +67,12 @@ public partial class SelectionOverlayWindow : Window
 
     public Int32Rect? SelectedScreenBounds { get; private set; }
 
+    /// <summary>
+    /// 普通截图工具栏中选择“长截图”后为 true。选区本身直接复用，
+    /// 主窗口据此切换到滚动采集会话，不会要求用户再次框选。
+    /// </summary>
+    public bool IsScrollCaptureRequested { get; private set; }
+
     private void Window_SourceInitialized(object? sender, EventArgs e)
     {
         var handle = new WindowInteropHelper(this).Handle;
@@ -201,6 +207,17 @@ public partial class SelectionOverlayWindow : Window
     private void CopyButton_Click(object sender, RoutedEventArgs e)
     {
         ConfirmSelection();
+    }
+
+    private void LongCaptureButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selection.IsEmpty)
+        {
+            return;
+        }
+
+        SetActiveAnnotationTool(ScreenshotAnnotationTool.None);
+        ConfirmSelection(useForScrollCapture: true);
     }
 
     private void PenToolButton_Click(object sender, RoutedEventArgs e)
@@ -659,14 +676,14 @@ public partial class SelectionOverlayWindow : Window
         CancelSelection();
     }
 
-    private void ConfirmSelection()
+    private void ConfirmSelection(bool useForScrollCapture = false)
     {
         if (_selection.IsEmpty || CaptureSurface.ActualWidth <= 0 || CaptureSurface.ActualHeight <= 0)
         {
             return;
         }
 
-        if (_purpose == SelectionPurpose.Screenshot)
+        if (_purpose == SelectionPurpose.Screenshot && !useForScrollCapture)
         {
             SelectedBitmap = CreateSelectionBitmap(includeAnnotations: true);
         }
@@ -678,6 +695,7 @@ public partial class SelectionOverlayWindow : Window
                 _frame.ScreenBounds.Y + pixelBounds.Y,
                 pixelBounds.Width,
                 pixelBounds.Height);
+            IsScrollCaptureRequested = true;
         }
 
         DialogResult = true;
