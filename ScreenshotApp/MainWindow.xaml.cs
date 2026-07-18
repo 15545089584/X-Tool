@@ -921,12 +921,30 @@ public partial class MainWindow : Window
             }
             _suppressClipboardCapture = true;
 
-            await Task.Delay(90);
+            await Task.Delay(80);
             if (_clipboardPasteTarget != IntPtr.Zero)
             {
-                _ = NativeMethods.RestoreAndActivateWindow(_clipboardPasteTarget);
-                await Task.Delay(140);
-                _ = NativeMethods.SendPasteShortcut();
+                var activated = false;
+                for (var attempt = 0; attempt < 3 && !activated; attempt++)
+                {
+                    activated = NativeMethods.RestoreAndActivateWindow(_clipboardPasteTarget);
+                    if (!activated)
+                    {
+                        await Task.Delay(80);
+                    }
+                }
+
+                if (!activated)
+                {
+                    ShowToast("无法恢复原输入窗口，内容已复制到系统剪贴板");
+                    return;
+                }
+
+                await Task.Delay(100);
+                if (!NativeMethods.SendPasteShortcut())
+                {
+                    ShowToast("未能自动粘贴，内容已复制到系统剪贴板");
+                }
             }
         }
         catch (Exception exception)

@@ -32,6 +32,7 @@ internal static class NativeMethods
     private const ushort VirtualKeyV = 0x56;
     private const uint GetAncestorRoot = 2;
     private const int RgnDiff = 4;
+    private const int SwRestore = 9;
 
     [StructLayout(LayoutKind.Sequential)]
     internal struct Point
@@ -148,7 +149,15 @@ internal static class NativeMethods
     private static extern bool BringWindowToTop(IntPtr windowHandle);
 
     [DllImport("user32.dll")]
-    private static extern IntPtr SetFocus(IntPtr windowHandle);
+    private static extern IntPtr SetActiveWindow(IntPtr windowHandle);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsWindow(IntPtr windowHandle);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ShowWindow(IntPtr windowHandle, int command);
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetAncestor(IntPtr windowHandle, uint flags);
@@ -286,20 +295,29 @@ internal static class NativeMethods
 
     internal static bool RestoreAndActivateWindow(IntPtr windowHandle)
     {
-        if (windowHandle == IntPtr.Zero)
+        if (windowHandle == IntPtr.Zero || !IsWindow(windowHandle))
         {
             return false;
         }
 
+        var rootWindow = GetAncestor(windowHandle, GetAncestorRoot);
+        if (rootWindow == IntPtr.Zero)
+        {
+            rootWindow = windowHandle;
+        }
+
         var currentThread = GetCurrentThreadId();
-        var targetThread = GetWindowThreadProcessId(windowHandle, IntPtr.Zero);
+        var targetThread = GetWindowThreadProcessId(rootWindow, IntPtr.Zero);
         var attached = targetThread != 0 && targetThread != currentThread && AttachThreadInput(currentThread, targetThread, true);
         try
         {
-            _ = BringWindowToTop(windowHandle);
-            var activated = SetForegroundWindow(windowHandle);
-            _ = SetFocus(windowHandle);
-            return activated;
+            // 只恢复并激活顶层窗口，保留外部程序原来获得焦点的输入控件。
+            // 对顶层窗口调用 SetFocus 会清空浏览器/编辑器内部输入框焦点，导致 Ctrl+V 没有接收方。
+            _ = ShowWindow(rootWindow, SwRestore);
+            _ = BringWindowToTop(rootWindow);
+            _ = SetActiveWindow(rootWindow);
+            var activated = SetForegroundWindow(rootWindow);
+            return activated || GetForegroundWindow() == rootWindow;
         }
         finally
         {
