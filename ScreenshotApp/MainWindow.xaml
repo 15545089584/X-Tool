@@ -592,8 +592,24 @@
                                                         </Grid>
                                                         <Border Grid.Row="2" Padding="14" Background="#3DF7FAFF" BorderBrush="#8FC9E0F5" BorderThickness="1" CornerRadius="15">
                                                             <Grid>
-                                                                <TextBlock Margin="1,0,0,10" VerticalAlignment="Top" FontSize="13" FontWeight="SemiBold" Text="已选文件" />
-                                                                <ListBox x:Name="ImageFileList" Margin="0,28,0,0" Background="Transparent" BorderThickness="0" IsHitTestVisible="False" FontSize="12" Foreground="#4B6680" />
+                                                                <Grid Margin="1,0,1,10" VerticalAlignment="Top">
+                                                                    <TextBlock FontSize="13" FontWeight="SemiBold" Text="文件队列" />
+                                                                    <StackPanel HorizontalAlignment="Right" Orientation="Horizontal"><TextBlock FontSize="10" Foreground="#7890A6" Text="缩略图" /><TextBlock Margin="28,0,0,0" FontSize="10" Foreground="#7890A6" Text="格式 / 大小" /></StackPanel>
+                                                                </Grid>
+                                                                <ListBox x:Name="ImageFileList" Margin="0,28,0,0" Background="Transparent" BorderThickness="0" IsHitTestVisible="False" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                                                    <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="Padding" Value="0" /><Setter Property="Margin" Value="0,0,0,7" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /><Setter Property="Focusable" Value="False" /></Style></ListBox.ItemContainerStyle>
+                                                                    <ListBox.ItemTemplate>
+                                                                        <DataTemplate>
+                                                                            <Border Padding="9" Background="#7DFFFFFF" BorderBrush="#9AD6E5F3" BorderThickness="1" CornerRadius="10">
+                                                                                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="48" /><ColumnDefinition Width="12" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                                                                    <Border Width="48" Height="40" Background="#DCEBFF" CornerRadius="8" ClipToBounds="True"><Image Source="{Binding Thumbnail}" Stretch="UniformToFill" /></Border>
+                                                                                    <StackPanel Grid.Column="2" VerticalAlignment="Center"><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#3F5D78" Text="{Binding FileName}" TextTrimming="CharacterEllipsis" /><TextBlock Margin="0,4,0,0" FontSize="10" Foreground="#7890A6" Text="{Binding FilePath}" TextTrimming="CharacterEllipsis" /></StackPanel>
+                                                                                    <StackPanel Grid.Column="3" Margin="10,0,0,0" VerticalAlignment="Center"><TextBlock HorizontalAlignment="Right" FontSize="10" FontWeight="SemiBold" Foreground="#527AB0" Text="{Binding Extension}" /><TextBlock Margin="0,4,0,0" HorizontalAlignment="Right" FontSize="10" Foreground="#7890A6" Text="{Binding FileSize}" /></StackPanel>
+                                                                                </Grid>
+                                                                            </Border>
+                                                                        </DataTemplate>
+                                                                    </ListBox.ItemTemplate>
+                                                                </ListBox>
                                                             </Grid>
                                                         </Border>
                                                         <Border Grid.Row="4" Padding="14,12" Background="#5BFFFFFF" BorderBrush="#9ECFE2F1" BorderThickness="1" CornerRadius="14">

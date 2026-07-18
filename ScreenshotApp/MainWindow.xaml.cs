@@ -33,7 +33,7 @@ public partial class MainWindow : Window
     private readonly ScreenshotHistoryStore _historyStore;
     private readonly ObservableCollection<ScreenshotHistoryItem> _historyItems = new();
     private readonly ObservableCollection<ScreenshotHistoryItem> _textHistoryItems = new();
-    private readonly ObservableCollection<string> _imageConversionFiles = new();
+    private readonly ObservableCollection<ImageConversionQueueItem> _imageConversionFiles = new();
     private IReadOnlyList<ScreenshotHistoryItem> _allHistoryItems = Array.Empty<ScreenshotHistoryItem>();
     private HistoryEntryKind? _historyFilter;
     private HwndSource? _windowSource;
@@ -1012,7 +1012,7 @@ public partial class MainWindow : Window
         _imageConversionFiles.Clear();
         foreach (var fileName in dialog.FileNames.Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            _imageConversionFiles.Add(fileName);
+            _imageConversionFiles.Add(ImageConversionQueueItem.Create(fileName));
         }
 
         UpdateImageFileSummary();
@@ -1096,7 +1096,7 @@ public partial class MainWindow : Window
         {
             var progress = new Progress<string>(message => ImageConversionStatusText.Text = message);
             var result = await ImageConversionService.ConvertAsync(
-                _imageConversionFiles.ToArray(),
+                _imageConversionFiles.Select(item => item.FilePath).ToArray(),
                 GetSelectedImageFormat(),
                 (int)Math.Round(ImageScaleSlider.Value),
                 (int)Math.Round(ImageQualitySlider.Value),
@@ -1175,4 +1175,52 @@ public partial class MainWindow : Window
         }
     }
 #endif
+}
+
+/// <summary>图片处理队列的展示项，缩略图只在用户主动选择文件后生成。</summary>
+internal sealed class ImageConversionQueueItem
+{
+    private ImageConversionQueueItem(string filePath, BitmapImage? thumbnail, string fileSize)
+    {
+        FilePath = filePath;
+        FileName = Path.GetFileName(filePath);
+        Extension = Path.GetExtension(filePath).TrimStart('.').ToUpperInvariant();
+        FileSize = fileSize;
+        Thumbnail = thumbnail;
+    }
+
+    public string FilePath { get; }
+    public string FileName { get; }
+    public string Extension { get; }
+    public string FileSize { get; }
+    public BitmapImage? Thumbnail { get; }
+
+    public static ImageConversionQueueItem Create(string filePath)
+    {
+        BitmapImage? thumbnail = null;
+        try
+        {
+            thumbnail = new BitmapImage();
+            thumbnail.BeginInit();
+            thumbnail.CacheOption = BitmapCacheOption.OnLoad;
+            thumbnail.DecodePixelWidth = 96;
+            thumbnail.UriSource = new Uri(filePath, UriKind.Absolute);
+            thumbnail.EndInit();
+            thumbnail.Freeze();
+        }
+        catch
+        {
+            // 单个文件缩略图解码失败不影响转换任务本身。
+        }
+
+        var length = new FileInfo(filePath).Length;
+        return new ImageConversionQueueItem(filePath, thumbnail, FormatFileSize(length));
+    }
+
+    private static string FormatFileSize(long length) => length switch
+    {
+        < 1024 => $"{length} B",
+        < 1024 * 1024 => $"{length / 1024d:0.0} KB",
+        _ => $"{length / 1024d / 1024d:0.00} MB"
+    };
 }
