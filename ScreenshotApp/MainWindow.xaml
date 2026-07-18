@@ -263,16 +263,6 @@
                 <Border Grid.Row="1" Height="1" Margin="0,18,12,0" Background="{StaticResource GlassDividerBrush}" />
 
                 <StackPanel Grid.Row="2" Margin="0,12,0,0">
-                    <!-- 截图仍是全局快捷动作，但作为 X-Tool 的一个子工具呈现。 -->
-                    <Button Height="48" Margin="0,0,12,10" Style="{StaticResource PrimaryButtonStyle}"
-                            Tag="截图" Click="CaptureAction_Click">
-                        <StackPanel Orientation="Horizontal">
-                            <Border Width="30" Height="30" Background="#CFE4FF" CornerRadius="9">
-                                <TextBlock Style="{StaticResource IconTextStyle}" FontSize="16" Foreground="#2D7DFF" Text="&#xE722;" />
-                            </Border>
-                            <TextBlock Margin="12,0,0,0" VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" Text="开始截图" />
-                        </StackPanel>
-                    </Button>
                     <RadioButton x:Name="HomeNav" GroupName="Navigation" IsChecked="True"
                                  Style="{StaticResource NavItemStyle}" Tag="Home" Checked="NavButton_Checked">
                         <StackPanel Orientation="Horizontal">
@@ -455,15 +445,27 @@
                                 </Grid>
                                 <Border Grid.Row="4" Background="{StaticResource GlassCardBrush}" BorderBrush="#5AFFFFFF" BorderThickness="1" CornerRadius="14">
                                     <Grid Margin="26,22">
-                                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="18" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                                         <TextBlock FontSize="16" FontWeight="SemiBold" Text="当前能力" />
-                                        <WrapPanel Grid.Row="1" Margin="0,18,0,0">
-                                            <Border Width="132" Height="66" Margin="0,0,12,12" Background="#66FFFFFF" CornerRadius="11"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#506174" Text="标注与取色" /></Border>
-                                            <Border Width="132" Height="66" Margin="0,0,12,12" Background="#66FFFFFF" CornerRadius="11"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#506174" Text="文字提取" /></Border>
-                                            <Border Width="132" Height="66" Margin="0,0,12,12" Background="#66FFFFFF" CornerRadius="11"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#506174" Text="离线翻译" /></Border>
-                                            <Border Width="132" Height="66" Margin="0,0,12,12" Background="#66FFFFFF" CornerRadius="11"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#506174" Text="屏幕录制" /></Border>
-                                            <Border Width="132" Height="66" Margin="0,0,12,12" Background="#66FFFFFF" CornerRadius="11"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#506174" Text="截图贴图" /></Border>
-                                        </WrapPanel>
+                                        <Grid Grid.Row="2">
+                                            <Grid.RowDefinitions><RowDefinition Height="*" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="18" /><ColumnDefinition Width="*" /><ColumnDefinition Width="18" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                            <Border Grid.Row="0" Grid.Column="0" Margin="0,0,0,9" Background="#82EAF3FF" BorderBrush="#A6D7E9FF" BorderThickness="1" CornerRadius="14">
+                                                <Grid Margin="20,16"><Grid.ColumnDefinitions><ColumnDefinition Width="54" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><Border Width="44" Height="44" VerticalAlignment="Center" Background="#D8EEFAFF" CornerRadius="13"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="21" Foreground="#2D7DFF" Text="&#xE70F;" /></Border><StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center"><TextBlock FontSize="16" FontWeight="SemiBold" Text="标注与取色" /><TextBlock Margin="0,5,0,0" FontSize="12" Foreground="#69809A" Text="涂鸦、形状和屏幕取色" /></StackPanel></Grid>
+                                            </Border>
+                                            <Border Grid.Row="0" Grid.Column="2" Margin="0,0,0,9" Background="#87F4EEFF" BorderBrush="#A9D7EDE8" BorderThickness="1" CornerRadius="14">
+                                                <Grid Margin="20,16"><Grid.ColumnDefinitions><ColumnDefinition Width="54" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><Border Width="44" Height="44" VerticalAlignment="Center" Background="#DCF6F3" CornerRadius="13"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="21" Foreground="#2E9F95" Text="&#xE8A5;" /></Border><StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center"><TextBlock FontSize="16" FontWeight="SemiBold" Text="文字提取" /><TextBlock Margin="0,5,0,0" FontSize="12" Foreground="#63858A" Text="识别屏幕中的文字内容" /></StackPanel></Grid>
+                                            </Border>
+                                            <Border Grid.Row="0" Grid.Column="4" Margin="0,0,0,9" Background="#8EEFE5FF" BorderBrush="#B7D8C7" BorderThickness="1" CornerRadius="14">
+                                                <Grid Margin="20,16"><Grid.ColumnDefinitions><ColumnDefinition Width="54" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><Border Width="44" Height="44" VerticalAlignment="Center" Background="#E1F8EA" CornerRadius="13"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="21" Foreground="#3BA768" Text="&#xE8C8;" /></Border><StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center"><TextBlock FontSize="16" FontWeight="SemiBold" Text="离线翻译" /><TextBlock Margin="0,5,0,0" FontSize="12" Foreground="#668676" Text="本地模型，离线也能翻译" /></StackPanel></Grid>
+                                            </Border>
+                                            <Border Grid.Row="1" Grid.Column="0" Margin="0,9,0,0" Background="#91FFF0E4" BorderBrush="#F0D7B3" BorderThickness="1" CornerRadius="14">
+                                                <Grid Margin="20,16"><Grid.ColumnDefinitions><ColumnDefinition Width="54" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><Border Width="44" Height="44" VerticalAlignment="Center" Background="#FFF1D9" CornerRadius="13"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="21" Foreground="#DF9723" Text="&#xE714;" /></Border><StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center"><TextBlock FontSize="16" FontWeight="SemiBold" Text="屏幕录制" /><TextBlock Margin="0,5,0,0" FontSize="12" Foreground="#92775A" Text="录制选定区域与声音" /></StackPanel></Grid>
+                                            </Border>
+                                            <Border Grid.Row="1" Grid.Column="2" Margin="0,9,0,0" Background="#91F0E8FF" BorderBrush="#D7C4EF" BorderThickness="1" CornerRadius="14">
+                                                <Grid Margin="20,16"><Grid.ColumnDefinitions><ColumnDefinition Width="54" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><Border Width="44" Height="44" VerticalAlignment="Center" Background="#EEE7FF" CornerRadius="13"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="21" Foreground="#8454D6" Text="&#xE91B;" /></Border><StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center"><TextBlock FontSize="16" FontWeight="SemiBold" Text="截图贴图" /><TextBlock Margin="0,5,0,0" FontSize="12" Foreground="#786B9A" Text="将选区固定在桌面上" /></StackPanel></Grid>
+                                            </Border>
+                                        </Grid>
                                     </Grid>
                                 </Border>
                             </Grid>
