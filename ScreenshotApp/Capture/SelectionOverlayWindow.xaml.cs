@@ -30,6 +30,7 @@ public partial class SelectionOverlayWindow : Window
     private Point _annotationStart;
     private Polyline? _workingPolyline;
     private Shape? _workingShape;
+    private Path? _workingLine;
     private AnnotationShape _selectedShape = AnnotationShape.Rectangle;
     private List<Point>? _workingPoints;
     private bool _ocrInProgress;
@@ -41,7 +42,6 @@ public partial class SelectionOverlayWindow : Window
     private bool _toolbarPositioned;
     private bool _recordSystemAudio;
     private bool _recordMicrophone;
-    private bool _updatingCustomColor;
 
     private const double MinimumSelectionSize = 16;
     private const double ResizeHandleSize = 14;
@@ -55,7 +55,6 @@ public partial class SelectionOverlayWindow : Window
         ScreenshotImage.Source = frame.Bitmap;
         UpdateAnnotationToolStates();
         UpdateColorStates();
-        SyncCustomColorControls();
         UpdateThicknessStates();
 
 #if DEBUG
@@ -338,21 +337,6 @@ public partial class SelectionOverlayWindow : Window
         SetActiveAnnotationTool(ScreenshotAnnotationTool.Shape);
     }
 
-    private void CustomColorSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-    {
-        if (_updatingCustomColor || RedColorSlider is null || GreenColorSlider is null || BlueColorSlider is null)
-        {
-            return;
-        }
-
-        _annotationColor = Color.FromRgb(
-            (byte)Math.Round(RedColorSlider.Value),
-            (byte)Math.Round(GreenColorSlider.Value),
-            (byte)Math.Round(BlueColorSlider.Value));
-        UpdateColorStates();
-        SyncCustomColorControls();
-    }
-
     private async void OcrToolButton_Click(object sender, RoutedEventArgs e)
     {
         if (_ocrInProgress || _selection.IsEmpty)
@@ -621,6 +605,46 @@ public partial class SelectionOverlayWindow : Window
             };
     }
 
+    private void UpdateWorkingLine(Point surfacePoint)
+    {
+        if (_workingLine is null)
+        {
+            return;
+        }
+
+        var start = new Point(_selection.Left + _annotationStart.X, _selection.Top + _annotationStart.Y);
+        var end = surfacePoint;
+        var geometry = new StreamGeometry();
+        using (var context = geometry.Open())
+        {
+            context.BeginFigure(start, false, false);
+            context.LineTo(end, true, false);
+            if (_selectedShape == AnnotationShape.Arrow)
+            {
+                var vector = start - end;
+                if (vector.Length >= 1)
+                {
+                    vector.Normalize();
+                    var left = end + RotateVector(vector, 28) * Math.Max(10, _annotationThickness * 3);
+                    var right = end + RotateVector(vector, -28) * Math.Max(10, _annotationThickness * 3);
+                    context.BeginFigure(end, false, false);
+                    context.LineTo(left, true, false);
+                    context.BeginFigure(end, false, false);
+                    context.LineTo(right, true, false);
+                }
+            }
+        }
+
+        geometry.Freeze();
+        _workingLine.Data = geometry;
+    }
+
+    private static Vector RotateVector(Vector vector, double degrees)
+    {
+        var radians = degrees * Math.PI / 180;
+        return new Vector(vector.X * Math.Cos(radians) - vector.Y * Math.Sin(radians), vector.X * Math.Sin(radians) + vector.Y * Math.Cos(radians));
+    }
+
     private void UndoButton_Click(object sender, RoutedEventArgs e)
     {
         if (_annotations.Count == 0 || _annotationVisuals.Count == 0)
@@ -687,6 +711,18 @@ public partial class SelectionOverlayWindow : Window
             Canvas.SetLeft(_workingPolyline, _selection.Left);
             Canvas.SetTop(_workingPolyline, _selection.Top);
             AnnotationCanvas.Children.Add(_workingPolyline);
+        }
+        else if (_selectedShape is AnnotationShape.Arrow or AnnotationShape.Line)
+        {
+            _workingLine = new Path
+            {
+                Stroke = stroke,
+                StrokeThickness = _annotationThickness,
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round,
+                IsHitTestVisible = false
+            };
+            AnnotationCanvas.Children.Add(_workingLine);
         }
         else
         {
@@ -801,6 +837,10 @@ public partial class SelectionOverlayWindow : Window
                 _workingPolyline.Points.Add(localPoint);
             }
         }
+        else if (_workingLine is not null)
+        {
+            UpdateWorkingLine(surfacePoint);
+        }
         else if (_workingShape is not null)
         {
             var bounds = Normalize(_annotationStart, localPoint);
@@ -829,6 +869,13 @@ public partial class SelectionOverlayWindow : Window
                 _annotationThickness));
             _annotationVisuals.Add(_workingPolyline);
         }
+        else if (_workingLine is not null &&
+                 (_annotationStart - ToSelectionPoint(ConstrainToSelection(e.GetPosition(CaptureSurface)))).Length >= 2)
+        {
+            var end = ToSelectionPoint(ConstrainToSelection(e.GetPosition(CaptureSurface)));
+            _annotations.Add(new LineScreenshotAnnotation(_selectedShape, _annotationStart, end, _annotationColor, _annotationThickness));
+            _annotationVisuals.Add(_workingLine);
+        }
         else if (_workingShape is not null &&
                  _workingShape.Width >= 2 &&
                  _workingShape.Height >= 2)
@@ -856,10 +903,15 @@ public partial class SelectionOverlayWindow : Window
             {
                 AnnotationCanvas.Children.Remove(_workingShape);
             }
+            if (_workingLine is not null)
+            {
+                AnnotationCanvas.Children.Remove(_workingLine);
+            }
         }
 
         _workingPolyline = null;
         _workingShape = null;
+        _workingLine = null;
         _workingPoints = null;
         UndoButton.IsEnabled = _annotations.Count > 0;
         e.Handled = true;
@@ -1046,6 +1098,11 @@ public partial class SelectionOverlayWindow : Window
                         shape.Bounds.Y + offsetY,
                         shape.Bounds.Width,
                         shape.Bounds.Height)
+                },
+                LineScreenshotAnnotation line => line with
+                {
+                    Start = new Point(line.Start.X + offsetX, line.Start.Y + offsetY),
+                    End = new Point(line.End.X + offsetX, line.End.Y + offsetY)
                 },
                 var annotation => annotation
             };
@@ -1273,24 +1330,6 @@ public partial class SelectionOverlayWindow : Window
         {
             StrokePreviewPath.Stroke = new SolidColorBrush(_annotationColor);
         }
-        if (RedColorValueText is not null)
-        {
-            RedColorValueText.Text = _annotationColor.R.ToString();
-            GreenColorValueText.Text = _annotationColor.G.ToString();
-            BlueColorValueText.Text = _annotationColor.B.ToString();
-        }
-    }
-
-    private void SyncCustomColorControls()
-    {
-        _updatingCustomColor = true;
-        RedColorSlider.Value = _annotationColor.R;
-        GreenColorSlider.Value = _annotationColor.G;
-        BlueColorSlider.Value = _annotationColor.B;
-        RedColorValueText.Text = _annotationColor.R.ToString();
-        GreenColorValueText.Text = _annotationColor.G.ToString();
-        BlueColorValueText.Text = _annotationColor.B.ToString();
-        _updatingCustomColor = false;
     }
 
     private void UpdateThicknessStates()
@@ -1314,6 +1353,7 @@ public partial class SelectionOverlayWindow : Window
         AnnotationCanvas.Visibility = Visibility.Collapsed;
         _workingPolyline = null;
         _workingShape = null;
+        _workingLine = null;
         _workingPoints = null;
         _isDrawingAnnotation = false;
         UndoButton.IsEnabled = false;

@@ -17,7 +17,9 @@ internal enum AnnotationShape
     Rectangle,
     Ellipse,
     Diamond,
-    Triangle
+    Triangle,
+    Arrow,
+    Line
 }
 
 internal abstract record ScreenshotAnnotation(Color Color, double Thickness);
@@ -30,6 +32,13 @@ internal sealed record PenScreenshotAnnotation(
 internal sealed record ShapeScreenshotAnnotation(
     AnnotationShape Shape,
     Rect Bounds,
+    Color Color,
+    double Thickness) : ScreenshotAnnotation(Color, Thickness);
+
+internal sealed record LineScreenshotAnnotation(
+    AnnotationShape Shape,
+    Point Start,
+    Point End,
     Color Color,
     double Thickness) : ScreenshotAnnotation(Color, Thickness);
 
@@ -82,6 +91,9 @@ internal static class ScreenshotAnnotationRenderer
                         break;
                     case ShapeScreenshotAnnotation shape:
                         DrawShape(drawing, shape, pen, scaleX, scaleY);
+                        break;
+                    case LineScreenshotAnnotation line:
+                        DrawLine(drawing, line, pen, scaleX, scaleY);
                         break;
                 }
             }
@@ -171,6 +183,38 @@ internal static class ScreenshotAnnotationRenderer
 
         geometry.Freeze();
         drawing.DrawGeometry(null, pen, geometry);
+    }
+
+    private static void DrawLine(DrawingContext drawing, LineScreenshotAnnotation line, Pen pen, double scaleX, double scaleY)
+    {
+        var start = Scale(line.Start, scaleX, scaleY);
+        var end = Scale(line.End, scaleX, scaleY);
+        drawing.DrawLine(pen, start, end);
+        if (line.Shape != AnnotationShape.Arrow)
+        {
+            return;
+        }
+
+        var vector = start - end;
+        if (vector.Length < 1)
+        {
+            return;
+        }
+
+        vector.Normalize();
+        var headLength = Math.Max(10, pen.Thickness * 3.2);
+        var left = end + Rotate(vector, 28) * headLength;
+        var right = end + Rotate(vector, -28) * headLength;
+        drawing.DrawLine(pen, end, left);
+        drawing.DrawLine(pen, end, right);
+    }
+
+    private static Vector Rotate(Vector vector, double degrees)
+    {
+        var radians = degrees * Math.PI / 180;
+        return new Vector(
+            vector.X * Math.Cos(radians) - vector.Y * Math.Sin(radians),
+            vector.X * Math.Sin(radians) + vector.Y * Math.Cos(radians));
     }
 
     private static Point Scale(Point point, double scaleX, double scaleY)

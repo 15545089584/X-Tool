@@ -95,6 +95,25 @@
             </Setter>
         </Style>
 
+        <Style x:Key="ColorSwatchButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="30" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Margin" Value="4" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Ellipse x:Name="Swatch" Fill="{TemplateBinding Background}" Stroke="#B8FFFFFF" StrokeThickness="1.2" />
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Swatch" Property="Stroke" Value="#2D7DFF" /><Setter TargetName="Swatch" Property="StrokeThickness" Value="2.5" /></Trigger>
+                            <Trigger Property="IsPressed" Value="True"><Setter TargetName="Swatch" Property="Opacity" Value="0.7" /></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- 录像设置沿用截图工具栏的轻玻璃质感，避免系统右键菜单的割裂感。 -->
         <Style x:Key="RecordingOptionButtonStyle" TargetType="Button">
             <Setter Property="Height" Value="30" />
@@ -314,7 +333,7 @@
                         Click="RecordingToolButton_Click"
                         ToolTip="录制当前框选区域">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Margin="0,0,5,0" FontSize="14" Foreground="#E04C5B" Text="●" />
+                        <TextBlock Margin="0,0,5,0" VerticalAlignment="Center" FontSize="16" Foreground="#E04C5B" Text="●" />
                         <TextBlock VerticalAlignment="Center" Text="录像" />
                     </StackPanel>
                 </Button>
@@ -380,27 +399,13 @@
         <Border x:Name="PenOptionsPanel" Visibility="Collapsed" HorizontalAlignment="Left" VerticalAlignment="Top"
                 Padding="12" Background="#EEF8FBFF" BorderBrush="#C9DCEB" BorderThickness="1" CornerRadius="10">
             <Border.Effect><DropShadowEffect Color="#263B56" BlurRadius="16" ShadowDepth="4" Opacity="0.28" /></Border.Effect>
-            <StackPanel Width="250">
+            <StackPanel Width="270">
                 <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#334255" Text="颜色" />
-                <WrapPanel Margin="0,8,0,5">
-                    <Button Width="28" Height="28" Margin="2" Padding="4" Tag="#FF4D5E" Click="ColorButton_Click"><Border Background="#FF4D5E" CornerRadius="10" /></Button>
-                    <Button Width="28" Height="28" Margin="2" Padding="4" Tag="#FF7A45" Click="ColorButton_Click"><Border Background="#FF7A45" CornerRadius="10" /></Button>
-                    <Button Width="28" Height="28" Margin="2" Padding="4" Tag="#FFC847" Click="ColorButton_Click"><Border Background="#FFC847" CornerRadius="10" /></Button>
-                    <Button Width="28" Height="28" Margin="2" Padding="4" Tag="#35B779" Click="ColorButton_Click"><Border Background="#35B779" CornerRadius="10" /></Button>
-                    <Button Width="28" Height="28" Margin="2" Padding="4" Tag="#2ED3E6" Click="ColorButton_Click"><Border Background="#2ED3E6" CornerRadius="10" /></Button>
-                    <Button Width="28" Height="28" Margin="2" Padding="4" Tag="#3E8BFF" Click="ColorButton_Click"><Border Background="#3E8BFF" CornerRadius="10" /></Button>
-                    <Button Width="28" Height="28" Margin="2" Padding="4" Tag="#8A62F5" Click="ColorButton_Click"><Border Background="#8A62F5" CornerRadius="10" /></Button>
-                    <Button Width="28" Height="28" Margin="2" Padding="4" Tag="#EC70C8" Click="ColorButton_Click"><Border Background="#EC70C8" CornerRadius="10" /></Button>
-                    <Button Width="28" Height="28" Margin="2" Padding="4" Tag="#FFFFFF" Click="ColorButton_Click"><Border Background="#FFFFFF" BorderBrush="#8A99AA" BorderThickness="1" CornerRadius="10" /></Button>
-                    <Button Width="28" Height="28" Margin="2" Padding="4" Tag="#202833" Click="ColorButton_Click"><Border Background="#202833" CornerRadius="10" /></Button>
+                <WrapPanel Margin="0,8,0,8">
+                    <Button Style="{StaticResource ColorSwatchButtonStyle}" Background="#FF4D5E" Tag="#FF4D5E" Click="ColorButton_Click" /><Button Style="{StaticResource ColorSwatchButtonStyle}" Background="#FF7A45" Tag="#FF7A45" Click="ColorButton_Click" /><Button Style="{StaticResource ColorSwatchButtonStyle}" Background="#FFC847" Tag="#FFC847" Click="ColorButton_Click" /><Button Style="{StaticResource ColorSwatchButtonStyle}" Background="#B8E94E" Tag="#B8E94E" Click="ColorButton_Click" /><Button Style="{StaticResource ColorSwatchButtonStyle}" Background="#35B779" Tag="#35B779" Click="ColorButton_Click" /><Button Style="{StaticResource ColorSwatchButtonStyle}" Background="#2ED3E6" Tag="#2ED3E6" Click="ColorButton_Click" />
+                    <Button Style="{StaticResource ColorSwatchButtonStyle}" Background="#3E8BFF" Tag="#3E8BFF" Click="ColorButton_Click" /><Button Style="{StaticResource ColorSwatchButtonStyle}" Background="#5167E8" Tag="#5167E8" Click="ColorButton_Click" /><Button Style="{StaticResource ColorSwatchButtonStyle}" Background="#8A62F5" Tag="#8A62F5" Click="ColorButton_Click" /><Button Style="{StaticResource ColorSwatchButtonStyle}" Background="#C75CEA" Tag="#C75CEA" Click="ColorButton_Click" /><Button Style="{StaticResource ColorSwatchButtonStyle}" Background="#EC70C8" Tag="#EC70C8" Click="ColorButton_Click" /><Button Style="{StaticResource ColorSwatchButtonStyle}" Background="#FFB4E6" Tag="#FFB4E6" Click="ColorButton_Click" />
+                    <Button Style="{StaticResource ColorSwatchButtonStyle}" Background="#FFFFFF" Tag="#FFFFFF" Click="ColorButton_Click" /><Button Style="{StaticResource ColorSwatchButtonStyle}" Background="#E0E7EF" Tag="#E0E7EF" Click="ColorButton_Click" /><Button Style="{StaticResource ColorSwatchButtonStyle}" Background="#9CA9B8" Tag="#9CA9B8" Click="ColorButton_Click" /><Button Style="{StaticResource ColorSwatchButtonStyle}" Background="#596779" Tag="#596779" Click="ColorButton_Click" /><Button Style="{StaticResource ColorSwatchButtonStyle}" Background="#202833" Tag="#202833" Click="ColorButton_Click" /><Button Style="{StaticResource ColorSwatchButtonStyle}" Background="#8B5E3C" Tag="#8B5E3C" Click="ColorButton_Click" />
                 </WrapPanel>
-                <Grid Margin="2,5,2,0">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="20" /><ColumnDefinition Width="*" /><ColumnDefinition Width="30" /></Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions><RowDefinition Height="22" /><RowDefinition Height="22" /><RowDefinition Height="22" /></Grid.RowDefinitions>
-                    <TextBlock VerticalAlignment="Center" Foreground="#E04D5B" Text="R" /><Slider x:Name="RedColorSlider" Grid.Column="1" Maximum="255" ValueChanged="CustomColorSlider_ValueChanged" /><TextBlock x:Name="RedColorValueText" Grid.Column="2" VerticalAlignment="Center" TextAlignment="Right" Foreground="#6E7E90" />
-                    <TextBlock Grid.Row="1" VerticalAlignment="Center" Foreground="#35B779" Text="G" /><Slider x:Name="GreenColorSlider" Grid.Row="1" Grid.Column="1" Maximum="255" ValueChanged="CustomColorSlider_ValueChanged" /><TextBlock x:Name="GreenColorValueText" Grid.Row="1" Grid.Column="2" VerticalAlignment="Center" TextAlignment="Right" Foreground="#6E7E90" />
-                    <TextBlock Grid.Row="2" VerticalAlignment="Center" Foreground="#3E8BFF" Text="B" /><Slider x:Name="BlueColorSlider" Grid.Row="2" Grid.Column="1" Maximum="255" ValueChanged="CustomColorSlider_ValueChanged" /><TextBlock x:Name="BlueColorValueText" Grid.Row="2" Grid.Column="2" VerticalAlignment="Center" TextAlignment="Right" Foreground="#6E7E90" />
-                </Grid>
                 <Border Height="1" Margin="0,10,0,9" Background="#C9D8E7" />
                 <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#334255" Text="大小" />
                 <Path x:Name="StrokePreviewPath" Margin="4,7,4,3" Stroke="#FF4D5E" StrokeThickness="4" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Data="M 2,16 C 38,0 70,32 110,16 S 180,30 230,4" />
@@ -409,13 +414,15 @@
         </Border>
 
         <Border x:Name="ShapeOptionsPanel" Visibility="Collapsed" HorizontalAlignment="Left" VerticalAlignment="Top"
-                Padding="6" Background="#EEF8FBFF" BorderBrush="#C9DCEB" BorderThickness="1" CornerRadius="9">
-            <Border.Effect><DropShadowEffect Color="#263B56" BlurRadius="16" ShadowDepth="4" Opacity="0.28" /></Border.Effect>
+                Padding="10" Background="#EAF7FCFF" BorderBrush="#B8D9EC" BorderThickness="1" CornerRadius="11">
+            <Border.Effect><DropShadowEffect Color="#263B56" BlurRadius="20" ShadowDepth="5" Opacity="0.32" /></Border.Effect>
             <StackPanel Orientation="Horizontal">
-                <Button Style="{StaticResource AnnotationToolButtonStyle}" Width="42" Tag="Rectangle" Click="ShapeOptionButton_Click" ToolTip="矩形" Content="□" />
-                <Button Style="{StaticResource AnnotationToolButtonStyle}" Width="42" Tag="Ellipse" Click="ShapeOptionButton_Click" ToolTip="圆形" Content="○" />
-                <Button Style="{StaticResource AnnotationToolButtonStyle}" Width="42" Tag="Diamond" Click="ShapeOptionButton_Click" ToolTip="菱形" Content="◇" />
-                <Button Style="{StaticResource AnnotationToolButtonStyle}" Width="42" Tag="Triangle" Click="ShapeOptionButton_Click" ToolTip="三角形" Content="△" />
+                <Button Style="{StaticResource AnnotationToolButtonStyle}" Width="52" Height="44" Tag="Rectangle" Click="ShapeOptionButton_Click" ToolTip="矩形" Content="□" FontSize="26" />
+                <Button Style="{StaticResource AnnotationToolButtonStyle}" Width="52" Height="44" Tag="Ellipse" Click="ShapeOptionButton_Click" ToolTip="圆形" Content="○" FontSize="28" />
+                <Button Style="{StaticResource AnnotationToolButtonStyle}" Width="52" Height="44" Tag="Diamond" Click="ShapeOptionButton_Click" ToolTip="菱形" Content="◇" FontSize="28" />
+                <Button Style="{StaticResource AnnotationToolButtonStyle}" Width="52" Height="44" Tag="Triangle" Click="ShapeOptionButton_Click" ToolTip="三角形" Content="△" FontSize="27" />
+                <Button Style="{StaticResource AnnotationToolButtonStyle}" Width="52" Height="44" Tag="Arrow" Click="ShapeOptionButton_Click" ToolTip="箭头" Content="→" FontSize="25" />
+                <Button Style="{StaticResource AnnotationToolButtonStyle}" Width="52" Height="44" Tag="Line" Click="ShapeOptionButton_Click" ToolTip="横线" Content="—" FontSize="28" />
             </StackPanel>
         </Border>
 
