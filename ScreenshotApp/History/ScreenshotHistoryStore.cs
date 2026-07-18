@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text;
 using System.Windows.Media.Imaging;
+using ScreenshotApp.Recording;
 
 namespace ScreenshotApp.History;
 
@@ -129,6 +130,9 @@ public sealed class ScreenshotHistoryStore
             {
                 var fileInfo = new FileInfo(filePath);
                 var timestamp = fileInfo.LastWriteTime;
+                var coverPath = Path.Combine(
+                    ScreenRecordingService.CoverDirectory,
+                    $"{Path.GetFileNameWithoutExtension(filePath)}.png");
                 items.Add(new ScreenshotHistoryItem(
                     HistoryEntryKind.ScreenRecording,
                     "屏幕录制",
@@ -138,7 +142,7 @@ public sealed class ScreenshotHistoryStore
                     timestamp.ToString("yyyy-MM-dd  HH:mm:ss"),
                     $"{Math.Max(1, fileInfo.Length / 1024d / 1024d):0.0} MB · MP4",
                     "点击即可播放这段屏幕录制",
-                    null));
+                    File.Exists(coverPath) ? LoadThumbnail(coverPath) : null));
             }
             catch
             {
@@ -161,14 +165,7 @@ public sealed class ScreenshotHistoryStore
             pixelHeight = decoder.Frames[0].PixelHeight;
         }
 
-        var thumbnail = new BitmapImage();
-        thumbnail.BeginInit();
-        thumbnail.CacheOption = BitmapCacheOption.OnLoad;
-        thumbnail.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
-        thumbnail.DecodePixelWidth = 360;
-        thumbnail.UriSource = new Uri(filePath, UriKind.Absolute);
-        thumbnail.EndInit();
-        thumbnail.Freeze();
+        var thumbnail = LoadThumbnail(filePath);
 
         var capturedAt = File.GetLastWriteTime(filePath);
         return new ScreenshotHistoryItem(
@@ -181,6 +178,19 @@ public sealed class ScreenshotHistoryStore
             $"{pixelWidth} × {pixelHeight}",
             string.Empty,
             thumbnail);
+    }
+
+    private static BitmapSource LoadThumbnail(string filePath)
+    {
+        var thumbnail = new BitmapImage();
+        thumbnail.BeginInit();
+        thumbnail.CacheOption = BitmapCacheOption.OnLoad;
+        thumbnail.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
+        thumbnail.DecodePixelWidth = 360;
+        thumbnail.UriSource = new Uri(filePath, UriKind.Absolute);
+        thumbnail.EndInit();
+        thumbnail.Freeze();
+        return thumbnail;
     }
 
     private static string CreatePreview(string content)

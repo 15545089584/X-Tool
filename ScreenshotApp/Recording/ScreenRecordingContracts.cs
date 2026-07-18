@@ -10,6 +10,7 @@ public sealed record ScreenRecordingOptions(
 
 public sealed record ScreenRecordingResult(
     string FilePath,
+    string? CoverImagePath,
     TimeSpan Duration,
     int FrameCount,
     bool IncludesSystemAudio,

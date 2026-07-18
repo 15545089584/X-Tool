@@ -19,6 +19,7 @@ namespace ScreenshotApp.Recording;
 public sealed class ScreenRecordingService
 {
     public const string StorageDirectory = @"E:\截影\Recordings";
+    public const string CoverDirectory = @"E:\截影\Recordings\Covers";
     private readonly ICaptureBackend _captureBackend;
 
     public ScreenRecordingService(ICaptureBackend captureBackend)
@@ -42,6 +43,7 @@ public sealed class ScreenRecordingService
         Directory.CreateDirectory(StorageDirectory);
         var filePath = Path.Combine(StorageDirectory, $"截影_录像_{DateTime.Now:yyyy-MM-dd_HH-mm-ss-fff}.mp4");
         var firstFrame = await CaptureRegionAsync(recordingRegion, cancellationToken);
+        var coverImagePath = await TrySaveCoverAsync(firstFrame, filePath);
         var stopwatch = Stopwatch.StartNew();
         var frameCount = 0;
 
@@ -111,6 +113,7 @@ public sealed class ScreenRecordingService
 
             return new ScreenRecordingResult(
                 filePath,
+                coverImagePath,
                 stopwatch.Elapsed,
                 frameCount,
                 audioSession?.IncludesSystemAudio == true,
@@ -231,6 +234,33 @@ public sealed class ScreenRecordingService
         sample.SampleTime = timestamp;
         sample.SampleDuration = duration;
         writer.WriteSample(streamIndex, sample);
+    }
+
+    private static Task<string?> TrySaveCoverAsync(BitmapSource frame, string videoPath)
+    {
+        if (frame.CanFreeze && !frame.IsFrozen)
+        {
+            frame.Freeze();
+        }
+
+        return Task.Run<string?>(() =>
+        {
+            try
+            {
+                Directory.CreateDirectory(CoverDirectory);
+                var coverPath = Path.Combine(CoverDirectory, $"{Path.GetFileNameWithoutExtension(videoPath)}.png");
+                var encoder = new PngBitmapEncoder();
+                encoder.Frames.Add(BitmapFrame.Create(frame));
+                using var stream = new FileStream(coverPath, FileMode.Create, FileAccess.Write, FileShare.Read);
+                encoder.Save(stream);
+                return coverPath;
+            }
+            catch
+            {
+                // 封面写入失败不应影响录像文件本身。
+                return null;
+            }
+        });
     }
 
     private async Task<BitmapSource> CaptureRegionAsync(Int32Rect screenRegion, CancellationToken cancellationToken)
