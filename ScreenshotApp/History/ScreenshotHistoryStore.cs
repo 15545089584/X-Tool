@@ -74,6 +74,7 @@ public sealed class ScreenshotHistoryStore
             LoadTextEntries(items, _preferences.TextExtractionDirectory, HistoryEntryKind.TextExtraction, "文字提取", loadedFiles);
             LoadTextEntries(items, _preferences.TranslationDirectory, HistoryEntryKind.Translation, "翻译", loadedFiles);
             LoadRecordingEntries(items, _preferences.RecordingDirectory);
+            LoadExternalClipboardEntries(items, _preferences.ClipboardDirectory, loadedFiles);
             return items
                 .OrderByDescending(item => item.CapturedAt)
                 .Take(maximumCount)
@@ -179,6 +180,15 @@ public sealed class ScreenshotHistoryStore
         }
     }
 
+    private static void LoadExternalClipboardEntries(
+        ICollection<ScreenshotHistoryItem> items,
+        string directory,
+        ISet<string> loadedFiles)
+    {
+        LoadImageEntries(items, directory, HistoryEntryKind.ExternalClipboard, loadedFiles);
+        LoadTextEntries(items, directory, HistoryEntryKind.ExternalClipboard, "外部复制", loadedFiles);
+    }
+
     private static ScreenshotHistoryItem CreateImageItem(string filePath, HistoryEntryKind kind)
     {
         int pixelWidth;
@@ -198,7 +208,12 @@ public sealed class ScreenshotHistoryStore
         var capturedAt = File.GetLastWriteTime(filePath);
         return new ScreenshotHistoryItem(
             kind,
-            kind == HistoryEntryKind.LongScreenshot ? "长截图" : "普通截图",
+            kind switch
+            {
+                HistoryEntryKind.LongScreenshot => "长截图",
+                HistoryEntryKind.ExternalClipboard => "外部复制",
+                _ => "普通截图"
+            },
             filePath,
             Path.GetFileName(filePath),
             capturedAt,
@@ -227,4 +242,35 @@ public sealed class ScreenshotHistoryStore
             .Split(new[] { '\r', '\n', '\t' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
         return normalized.Length <= 76 ? normalized : $"{normalized[..76]}…";
     }
+
+    public Task<string> SaveClipboardTextAsync(string content)
+    {
+        return Task.Run(async () =>
+        {
+            Directory.CreateDirectory(_preferences.ClipboardDirectory);
+            var filePath = Path.Combine(_preferences.ClipboardDirectory, $"外部复制_文本_{DateTime.Now:yyyy-MM-dd_HH-mm-ss-fff}.txt");
+            await File.WriteAllTextAsync(filePath, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+            return filePath;
+        });
+    }
+
+    public Task<string> SaveClipboardImageAsync(BitmapSource bitmap)
+    {
+        if (bitmap.CanFreeze && !bitmap.IsFrozen)
+        {
+            bitmap.Freeze();
+        }
+
+        return Task.Run(() =>
+        {
+            Directory.CreateDirectory(_preferences.ClipboardDirectory);
+            var filePath = Path.Combine(_preferences.ClipboardDirectory, $"外部复制_图片_{DateTime.Now:yyyy-MM-dd_HH-mm-ss-fff}.png");
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(bitmap));
+            using var stream = new FileStream(filePath, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
+            encoder.Save(stream);
+            return filePath;
+        });
+    }
+
 }

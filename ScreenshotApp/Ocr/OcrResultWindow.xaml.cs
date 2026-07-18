@@ -1,4 +1,5 @@
 using System.Windows;
+using ScreenshotApp.ClipboardUi;
 using System.Windows.Input;
 
 namespace ScreenshotApp.Ocr;
@@ -44,7 +45,7 @@ public partial class OcrResultWindow : Window
 
         try
         {
-            Clipboard.SetText(ResultTextBox.Text);
+            ClipboardService.SetText(ResultTextBox.Text);
             CopyStatusText.Text = "文字已复制到剪贴板";
         }
         catch

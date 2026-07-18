@@ -5,7 +5,9 @@ namespace ScreenshotApp.Capture;
 internal static class NativeMethods
 {
     internal const int HotKeyId = 0x4A59;
+    internal const int ClipboardHotKeyId = 0x4A5A;
     internal const int WmHotKey = 0x0312;
+    internal const int WmClipboardUpdate = 0x031D;
     internal const uint ModControl = 0x0002;
     internal const uint ModShift = 0x0004;
     internal const uint SwpNoActivate = 0x0010;
@@ -23,7 +25,11 @@ internal static class NativeMethods
     internal const uint WdaExcludeFromCapture = 0x00000011;
     private const int VirtualKeyEscape = 0x1B;
     private const uint InputMouse = 0;
+    private const uint InputKeyboard = 1;
     private const uint MouseEventWheel = 0x0800;
+    private const uint KeyEventKeyUp = 0x0002;
+    private const ushort VirtualKeyControl = 0x11;
+    private const ushort VirtualKeyV = 0x56;
     private const uint GetAncestorRoot = 2;
     private const int RgnDiff = 4;
 
@@ -87,6 +93,9 @@ internal static class NativeMethods
     {
         [FieldOffset(0)]
         internal MouseInput Mouse;
+
+        [FieldOffset(0)]
+        internal KeyboardInput Keyboard;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -95,6 +104,16 @@ internal static class NativeMethods
         internal int X;
         internal int Y;
         internal uint MouseData;
+        internal uint Flags;
+        internal uint Time;
+        internal IntPtr ExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct KeyboardInput
+    {
+        internal ushort VirtualKey;
+        internal ushort ScanCode;
         internal uint Flags;
         internal uint Time;
         internal IntPtr ExtraInfo;
@@ -112,11 +131,14 @@ internal static class NativeMethods
     private static extern IntPtr WindowFromPoint(Point point);
 
     [DllImport("user32.dll")]
+    internal static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
     private static extern IntPtr GetAncestor(IntPtr windowHandle, uint flags);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetForegroundWindow(IntPtr windowHandle);
+    internal static extern bool SetForegroundWindow(IntPtr windowHandle);
 
     [DllImport("user32.dll")]
     private static extern short GetAsyncKeyState(int virtualKey);
@@ -183,6 +205,14 @@ internal static class NativeMethods
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool UnregisterHotKey(IntPtr windowHandle, int id);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool AddClipboardFormatListener(IntPtr windowHandle);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool RemoveClipboardFormatListener(IntPtr windowHandle);
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -256,6 +286,18 @@ internal static class NativeMethods
         };
 
         return SendInput(1, inputs, Marshal.SizeOf<Input>()) == 1;
+    }
+
+    internal static bool SendPasteShortcut()
+    {
+        var inputs = new[]
+        {
+            new Input { Type = InputKeyboard, Data = new InputUnion { Keyboard = new KeyboardInput { VirtualKey = VirtualKeyControl } } },
+            new Input { Type = InputKeyboard, Data = new InputUnion { Keyboard = new KeyboardInput { VirtualKey = VirtualKeyV } } },
+            new Input { Type = InputKeyboard, Data = new InputUnion { Keyboard = new KeyboardInput { VirtualKey = VirtualKeyV, Flags = KeyEventKeyUp } } },
+            new Input { Type = InputKeyboard, Data = new InputUnion { Keyboard = new KeyboardInput { VirtualKey = VirtualKeyControl, Flags = KeyEventKeyUp } } }
+        };
+        return SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<Input>()) == inputs.Length;
     }
 
     internal static void MakeWindowMouseTransparent(IntPtr windowHandle)

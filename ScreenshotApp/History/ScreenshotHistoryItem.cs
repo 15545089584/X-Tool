@@ -11,7 +11,8 @@ public enum HistoryEntryKind
     LongScreenshot,
     TextExtraction,
     Translation,
-    ScreenRecording
+    ScreenRecording,
+    ExternalClipboard
 }
 
 /// <summary>
@@ -30,7 +31,8 @@ public sealed record ScreenshotHistoryItem(
 {
     public bool HasThumbnail => Thumbnail is not null;
 
-    public bool IsTextRecord => Kind is HistoryEntryKind.TextExtraction or HistoryEntryKind.Translation;
+    public bool IsTextRecord => Kind is HistoryEntryKind.TextExtraction or HistoryEntryKind.Translation
+        || Kind == HistoryEntryKind.ExternalClipboard && Thumbnail is null;
 }
 
 /// <summary>

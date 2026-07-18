@@ -1,0 +1,70 @@
+<Window x:Class="ScreenshotApp.ClipboardUi.ClipboardPickerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="剪贴板"
+        Width="460" Height="430"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Topmost="True"
+        Background="Transparent">
+    <Border Margin="8" Padding="16" Background="#EDF4FA" BorderBrush="#C7DCEC" BorderThickness="1" CornerRadius="16">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="22" ShadowDepth="8" Direction="270" Opacity="0.28" Color="#253B56" />
+        </Border.Effect>
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="12" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <Grid>
+                <TextBlock FontSize="18" FontWeight="SemiBold" Foreground="#263747" Text="剪贴板" />
+                <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12" Foreground="#718398" Text="选择后自动粘贴" />
+            </Grid>
+            <TextBlock Grid.Row="1" Margin="0,7,0,0" FontSize="12" Foreground="#718398" Text="Ctrl + Shift + V  ·  Esc 关闭" />
+            <ListBox x:Name="ClipboardItemsList" Grid.Row="3" Background="Transparent" BorderThickness="0"
+                     ScrollViewer.VerticalScrollBarVisibility="Hidden" SelectionChanged="ClipboardItemsList_SelectionChanged">
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Padding" Value="0" />
+                        <Setter Property="Margin" Value="0,0,0,8" />
+                        <Setter Property="Background" Value="Transparent" />
+                        <Setter Property="BorderThickness" Value="0" />
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListBoxItem">
+                                    <Border x:Name="Root" Background="#92FFFFFF" BorderBrush="#BFFFFFFF" BorderThickness="1" CornerRadius="11" Padding="13,10">
+                                        <ContentPresenter />
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Background" Value="#CFE5F8FF" /></Trigger>
+                                        <Trigger Property="IsSelected" Value="True"><Setter TargetName="Root" Property="BorderBrush" Value="#619CFA" /><Setter TargetName="Root" Property="Background" Value="#DCEEFF" /></Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </ListBox.ItemContainerStyle>
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="42" /><ColumnDefinition Width="*" /><ColumnDefinition Width="120" /></Grid.ColumnDefinitions>
+                            <Border Width="34" Height="34" VerticalAlignment="Center" Background="#E2EFFF" CornerRadius="10">
+                                <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="#357FEB" Text="&#xE8A5;" />
+                            </Border>
+                            <StackPanel Grid.Column="1" Margin="8,0,8,0" VerticalAlignment="Center">
+                                <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="#2F4050" Text="{Binding KindText}" />
+                                <TextBlock Margin="0,3,0,0" FontSize="12" Foreground="#6B7B8E" Text="{Binding PreviewText}" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                            <TextBlock Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" Foreground="#7D8B99" Text="{Binding CapturedAtText}" />
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Grid>
+    </Border>
+</Window>

@@ -388,7 +388,7 @@
                                         <Grid>
                                             <TextBlock FontSize="15" FontWeight="SemiBold" Text="最近使用" />
                                             <Button HorizontalAlignment="Right" Background="Transparent" BorderThickness="0" Cursor="Hand"
-                                                    Foreground="#6F7680" Content="查看全部  →" Click="ShowHistory_Click" />
+                                                    Foreground="#6F7680" Content="打开剪贴板  →" Click="ShowHistory_Click" />
                                         </Grid>
                                         <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Orientation="Horizontal">
                                             <TextBlock FontFamily="Segoe Fluent Icons" FontSize="21" Foreground="#A5ABB3" Text="&#xE91B;" />
@@ -399,7 +399,7 @@
                                 </Border>
                             </Grid>
 
-                            <!-- 屏幕工具的专属工作台；历史记录仅作为这里的子入口。 -->
+                            <!-- 屏幕工具的专属工作台；剪贴板仅作为这里的子入口。 -->
                             <Grid x:Name="ScreenWorkbenchView" Visibility="Collapsed" Margin="52,46,52,38">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
@@ -438,7 +438,7 @@
                                     <Button Grid.Column="4" Style="{StaticResource ActionCardStyle}" Click="ShowHistory_Click">
                                         <StackPanel>
                                             <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#FFF2D9" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#D89623" Text="&#xE81C;" /></Border>
-                                            <TextBlock Margin="0,18,0,0" FontSize="17" FontWeight="SemiBold" Text="历史记录" />
+                                            <TextBlock Margin="0,18,0,0" FontSize="17" FontWeight="SemiBold" Text="剪贴板" />
                                             <TextBlock Margin="0,6,0,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="查看和管理已完成的内容" />
                                         </StackPanel>
                                     </Button>
@@ -447,30 +447,22 @@
                                     <Grid Margin="26,22">
                                         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="18" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                                         <TextBlock FontSize="16" FontWeight="SemiBold" Text="当前能力" />
-                                        <Grid Grid.Row="2">
-                                            <Grid.RowDefinitions><RowDefinition Height="*" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="18" /><ColumnDefinition Width="*" /><ColumnDefinition Width="18" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                                            <Border Grid.Row="0" Grid.Column="0" Margin="0,0,0,9" Background="#82EAF3FF" BorderBrush="#A6D7E9FF" BorderThickness="1" CornerRadius="14">
-                                                <Grid Margin="20,16"><Grid.ColumnDefinitions><ColumnDefinition Width="54" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><Border Width="44" Height="44" VerticalAlignment="Center" Background="#D8EEFAFF" CornerRadius="13"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="21" Foreground="#2D7DFF" Text="&#xE70F;" /></Border><StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center"><TextBlock FontSize="16" FontWeight="SemiBold" Text="标注与取色" /><TextBlock Margin="0,5,0,0" FontSize="12" Foreground="#69809A" Text="涂鸦、形状和屏幕取色" /></StackPanel></Grid>
-                                            </Border>
-                                            <Border Grid.Row="0" Grid.Column="2" Margin="0,0,0,9" Background="#87F4EEFF" BorderBrush="#A9D7EDE8" BorderThickness="1" CornerRadius="14">
-                                                <Grid Margin="20,16"><Grid.ColumnDefinitions><ColumnDefinition Width="54" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><Border Width="44" Height="44" VerticalAlignment="Center" Background="#DCF6F3" CornerRadius="13"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="21" Foreground="#2E9F95" Text="&#xE8A5;" /></Border><StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center"><TextBlock FontSize="16" FontWeight="SemiBold" Text="文字提取" /><TextBlock Margin="0,5,0,0" FontSize="12" Foreground="#63858A" Text="识别屏幕中的文字内容" /></StackPanel></Grid>
-                                            </Border>
-                                            <Border Grid.Row="0" Grid.Column="4" Margin="0,0,0,9" Background="#8EEFE5FF" BorderBrush="#B7D8C7" BorderThickness="1" CornerRadius="14">
-                                                <Grid Margin="20,16"><Grid.ColumnDefinitions><ColumnDefinition Width="54" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><Border Width="44" Height="44" VerticalAlignment="Center" Background="#E1F8EA" CornerRadius="13"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="21" Foreground="#3BA768" Text="&#xE8C8;" /></Border><StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center"><TextBlock FontSize="16" FontWeight="SemiBold" Text="离线翻译" /><TextBlock Margin="0,5,0,0" FontSize="12" Foreground="#668676" Text="本地模型，离线也能翻译" /></StackPanel></Grid>
-                                            </Border>
-                                            <Border Grid.Row="1" Grid.Column="0" Margin="0,9,0,0" Background="#91FFF0E4" BorderBrush="#F0D7B3" BorderThickness="1" CornerRadius="14">
-                                                <Grid Margin="20,16"><Grid.ColumnDefinitions><ColumnDefinition Width="54" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><Border Width="44" Height="44" VerticalAlignment="Center" Background="#FFF1D9" CornerRadius="13"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="21" Foreground="#DF9723" Text="&#xE714;" /></Border><StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center"><TextBlock FontSize="16" FontWeight="SemiBold" Text="屏幕录制" /><TextBlock Margin="0,5,0,0" FontSize="12" Foreground="#92775A" Text="录制选定区域与声音" /></StackPanel></Grid>
-                                            </Border>
-                                            <Border Grid.Row="1" Grid.Column="2" Margin="0,9,0,0" Background="#91F0E8FF" BorderBrush="#D7C4EF" BorderThickness="1" CornerRadius="14">
-                                                <Grid Margin="20,16"><Grid.ColumnDefinitions><ColumnDefinition Width="54" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><Border Width="44" Height="44" VerticalAlignment="Center" Background="#EEE7FF" CornerRadius="13"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="21" Foreground="#8454D6" Text="&#xE91B;" /></Border><StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center"><TextBlock FontSize="16" FontWeight="SemiBold" Text="截图贴图" /><TextBlock Margin="0,5,0,0" FontSize="12" Foreground="#786B9A" Text="将选区固定在桌面上" /></StackPanel></Grid>
-                                            </Border>
-                                        </Grid>
+                                        <primitives:UniformGrid Grid.Row="2" Rows="3" Columns="3">
+                                            <Border Margin="6" Padding="14" Background="#82EAF3FF" BorderBrush="#A6D7E9FF" BorderThickness="1" CornerRadius="13"><StackPanel VerticalAlignment="Center"><Border Width="36" Height="36" HorizontalAlignment="Left" Background="#D8EEFAFF" CornerRadius="11"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#2D7DFF" Text="&#xE722;" /></Border><TextBlock Margin="0,10,0,0" FontSize="15" FontWeight="SemiBold" Text="屏幕截图" /><TextBlock Margin="0,4,0,0" FontSize="11" Foreground="#69809A" Text="框选即截，立即复制" /></StackPanel></Border>
+                                            <Border Margin="6" Padding="14" Background="#86F0F7E8" BorderBrush="#A9D7EDE8" BorderThickness="1" CornerRadius="13"><StackPanel VerticalAlignment="Center"><Border Width="36" Height="36" HorizontalAlignment="Left" Background="#DCF6F3" CornerRadius="11"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#2E9F95" Text="&#xE70D;" /></Border><TextBlock Margin="0,10,0,0" FontSize="15" FontWeight="SemiBold" Text="长截图" /><TextBlock Margin="0,4,0,0" FontSize="11" Foreground="#63858A" Text="连续采集滚动内容" /></StackPanel></Border>
+                                            <Border Margin="6" Padding="14" Background="#8EEFE5FF" BorderBrush="#B7D8C7" BorderThickness="1" CornerRadius="13"><StackPanel VerticalAlignment="Center"><Border Width="36" Height="36" HorizontalAlignment="Left" Background="#E1F8EA" CornerRadius="11"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#3BA768" Text="&#xE70F;" /></Border><TextBlock Margin="0,10,0,0" FontSize="15" FontWeight="SemiBold" Text="标注与取色" /><TextBlock Margin="0,4,0,0" FontSize="11" Foreground="#668676" Text="涂鸦、形状和取色" /></StackPanel></Border>
+                                            <Border Margin="6" Padding="14" Background="#91F0E8FF" BorderBrush="#D7C4EF" BorderThickness="1" CornerRadius="13"><StackPanel VerticalAlignment="Center"><Border Width="36" Height="36" HorizontalAlignment="Left" Background="#EEE7FF" CornerRadius="11"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#8454D6" Text="&#xE8A5;" /></Border><TextBlock Margin="0,10,0,0" FontSize="15" FontWeight="SemiBold" Text="文字提取" /><TextBlock Margin="0,4,0,0" FontSize="11" Foreground="#786B9A" Text="识别屏幕文字内容" /></StackPanel></Border>
+                                            <Border Margin="6" Padding="14" Background="#91FFF0E4" BorderBrush="#F0D7B3" BorderThickness="1" CornerRadius="13"><StackPanel VerticalAlignment="Center"><Border Width="36" Height="36" HorizontalAlignment="Left" Background="#FFF1D9" CornerRadius="11"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#DF9723" Text="&#xE8C8;" /></Border><TextBlock Margin="0,10,0,0" FontSize="15" FontWeight="SemiBold" Text="离线翻译" /><TextBlock Margin="0,4,0,0" FontSize="11" Foreground="#92775A" Text="本地模型即时翻译" /></StackPanel></Border>
+                                            <Border Margin="6" Padding="14" Background="#8CEFF2FF" BorderBrush="#B9D5EC" BorderThickness="1" CornerRadius="13"><StackPanel VerticalAlignment="Center"><Border Width="36" Height="36" HorizontalAlignment="Left" Background="#E0F0FF" CornerRadius="11"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#4384C8" Text="&#xE714;" /></Border><TextBlock Margin="0,10,0,0" FontSize="15" FontWeight="SemiBold" Text="屏幕录制" /><TextBlock Margin="0,4,0,0" FontSize="11" Foreground="#6C8095" Text="录制选定区域与声音" /></StackPanel></Border>
+                                            <Border Margin="6" Padding="14" Background="#90FDEBFF" BorderBrush="#DEC3F1" BorderThickness="1" CornerRadius="13"><StackPanel VerticalAlignment="Center"><Border Width="36" Height="36" HorizontalAlignment="Left" Background="#F1E7FF" CornerRadius="11"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#A15BD1" Text="&#xE91B;" /></Border><TextBlock Margin="0,10,0,0" FontSize="15" FontWeight="SemiBold" Text="截图贴图" /><TextBlock Margin="0,4,0,0" FontSize="11" Foreground="#8B6E9B" Text="固定选区，随时查看" /></StackPanel></Border>
+                                            <Border Margin="6" Padding="14" Background="#8FFFF6E3" BorderBrush="#CFE8C2" BorderThickness="1" CornerRadius="13"><StackPanel VerticalAlignment="Center"><Border Width="36" Height="36" HorizontalAlignment="Left" Background="#ECF9D8" CornerRadius="11"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#6EAA39" Text="&#xE8B7;" /></Border><TextBlock Margin="0,10,0,0" FontSize="15" FontWeight="SemiBold" Text="剪贴板" /><TextBlock Margin="0,4,0,0" FontSize="11" Foreground="#748A60" Text="保存截图与外部复制" /></StackPanel></Border>
+                                            <Border Margin="6" Padding="14" Background="#88F7ECF4" BorderBrush="#E9C8D9" BorderThickness="1" CornerRadius="13"><StackPanel VerticalAlignment="Center"><Border Width="36" Height="36" HorizontalAlignment="Left" Background="#FCE6F0" CornerRadius="11"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#D25C93" Text="&#xE765;" /></Border><TextBlock Margin="0,10,0,0" FontSize="15" FontWeight="SemiBold" Text="快捷粘贴" /><TextBlock Margin="0,4,0,0" FontSize="11" Foreground="#96677C" Text="Ctrl + Shift + V" /></StackPanel></Border>
+                                        </primitives:UniformGrid>
                                     </Grid>
                                 </Border>
                             </Grid>
 
-                            <!-- 统一历史记录页 -->
+                            <!-- 统一剪贴板页：屏幕工作台内容与外部复制内容统一回看。 -->
                             <Grid x:Name="HistoryView" Visibility="Collapsed" Margin="58,32,48,38">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
@@ -481,9 +473,9 @@
                                 </Grid.RowDefinitions>
                                 <Grid>
                                     <StackPanel>
-                                        <TextBlock FontSize="28" FontWeight="SemiBold" Text="历史记录" />
+                                        <TextBlock FontSize="28" FontWeight="SemiBold" Text="剪贴板" />
                                         <TextBlock Margin="0,8,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}"
-                                                   Text="普通截图、长截图、文字提取、翻译与屏幕录制均在本机分类保存" />
+                                                   Text="屏幕工作台内容与外部复制内容都会在本机分类保存" />
                                     </StackPanel>
                                     <Button HorizontalAlignment="Right" VerticalAlignment="Center"
                                             Padding="16,9" Background="#AFFFFFFF"
@@ -498,6 +490,7 @@
                                     <Button x:Name="TextExtractionHistoryFilterButton" Style="{StaticResource HistoryFilterButtonStyle}" Tag="TextExtraction" Click="HistoryFilterButton_Click" Content="文字提取" />
                                     <Button x:Name="TranslationHistoryFilterButton" Style="{StaticResource HistoryFilterButtonStyle}" Tag="Translation" Click="HistoryFilterButton_Click" Content="翻译" />
                                     <Button x:Name="ScreenRecordingHistoryFilterButton" Style="{StaticResource HistoryFilterButtonStyle}" Tag="ScreenRecording" Click="HistoryFilterButton_Click" Content="屏幕录制" />
+                                    <Button x:Name="ExternalClipboardHistoryFilterButton" Style="{StaticResource HistoryFilterButtonStyle}" Tag="ExternalClipboard" Click="HistoryFilterButton_Click" Content="外部复制" />
                                 </StackPanel>
 
                                 <Border Grid.Row="4" Background="#36FFFFFF"
@@ -505,8 +498,8 @@
                                     <Grid>
                                         <StackPanel x:Name="HistoryEmptyPanel" HorizontalAlignment="Center" VerticalAlignment="Center">
                                             <TextBlock HorizontalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="34" Foreground="#A5ABB3" Text="&#xE81C;" />
-                                            <TextBlock Margin="0,16,0,0" FontSize="17" FontWeight="SemiBold" Text="还没有历史记录" />
-                                            <TextBlock Margin="0,8,0,0" FontSize="13" Foreground="{StaticResource SecondaryTextBrush}" Text="完成截图、文字提取、翻译或录制后会按类别显示在这里" />
+                                            <TextBlock Margin="0,16,0,0" FontSize="17" FontWeight="SemiBold" Text="剪贴板还是空的" />
+                                            <TextBlock Margin="0,8,0,0" FontSize="13" Foreground="{StaticResource SecondaryTextBrush}" Text="截图或在其他应用复制内容后，会按类别显示在这里" />
                                         </StackPanel>
 
                                         <ScrollViewer x:Name="HistoryScrollViewer" Visibility="Collapsed"
@@ -676,7 +669,7 @@
                                 </Grid.RowDefinitions>
                                 <StackPanel>
                                     <TextBlock FontSize="28" FontWeight="SemiBold" Text="快捷键" />
-                                    <TextBlock Margin="0,8,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}" Text="为常用截图操作设置全局快捷键" />
+                                    <TextBlock Margin="0,8,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}" Text="为截图和剪贴板操作设置全局快捷键" />
                                 </StackPanel>
                                 <Border Grid.Row="2" Background="{StaticResource GlassCardBrush}"
                                         BorderBrush="#5AFFFFFF" BorderThickness="1" CornerRadius="14">
@@ -686,6 +679,14 @@
                                             <Button HorizontalAlignment="Right" VerticalAlignment="Center" Padding="14,8"
                                                     Background="#AFFFFFFF" BorderBrush="#CFFFFFFF" BorderThickness="1"
                                                     Content="Ctrl + Shift + A" Click="ShortcutButton_Click" />
+                                        </Grid>
+                                        <Border Height="1" Background="#55FFFFFF" />
+                                        <Grid Height="72" Margin="22,0">
+                                            <TextBlock VerticalAlignment="Center" FontSize="15" Text="剪贴板选择粘贴" />
+                                            <Border HorizontalAlignment="Right" VerticalAlignment="Center" Padding="14,8"
+                                                    Background="#AFFFFFFF" BorderBrush="#CFFFFFFF" BorderThickness="1" CornerRadius="8">
+                                                <TextBlock Foreground="#43617E" Text="Ctrl + Shift + V" />
+                                            </Border>
                                         </Grid>
                                     </StackPanel>
                                 </Border>
@@ -700,7 +701,7 @@
                                 </Grid.RowDefinitions>
                                 <StackPanel>
                                     <TextBlock FontSize="28" FontWeight="SemiBold" Text="设置" />
-                                    <TextBlock Margin="0,8,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}" Text="调整截影的常用行为" />
+                                    <TextBlock Margin="0,8,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}" Text="调整 X-Tool 的常用行为" />
                                 </StackPanel>
                                 <Border Grid.Row="2" Background="Transparent" BorderThickness="0">
                                     <ScrollViewer VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
@@ -736,7 +737,7 @@
                                             <Expander.Header>
                                                 <StackPanel VerticalAlignment="Center">
                                                     <TextBlock FontSize="15" Text="存储位置" />
-                                                    <TextBlock Margin="0,5,0,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="分别设置各类历史记录的保存目录" />
+                                                    <TextBlock Margin="0,5,0,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="分别设置各类剪贴板内容的保存目录" />
                                                 </StackPanel>
                                             </Expander.Header>
                                             <StackPanel>
@@ -773,6 +774,13 @@
                                                     <TextBlock VerticalAlignment="Center" FontSize="15" Text="屏幕录制" />
                                                     <TextBlock x:Name="RecordingStoragePathText" Grid.Column="1" Margin="6,0,12,0" VerticalAlignment="Center" Foreground="#708095" TextTrimming="CharacterEllipsis" />
                                                     <Button Grid.Column="2" Height="30" Style="{StaticResource StorageLocationButtonStyle}" Content="选择文件夹" Tag="屏幕录制" Click="StorageLocationButton_Click" />
+                                                </Grid>
+                                                <Border Height="1" Background="#55FFFFFF" />
+                                                <Grid Height="54" Margin="2,0,2,8">
+                                                    <Grid.ColumnDefinitions><ColumnDefinition Width="92" /><ColumnDefinition Width="*" /><ColumnDefinition Width="96" /></Grid.ColumnDefinitions>
+                                                    <TextBlock VerticalAlignment="Center" FontSize="15" Text="外部复制" />
+                                                    <TextBlock x:Name="ClipboardStoragePathText" Grid.Column="1" Margin="6,0,12,0" VerticalAlignment="Center" Foreground="#708095" TextTrimming="CharacterEllipsis" />
+                                                    <Button Grid.Column="2" Height="30" Style="{StaticResource StorageLocationButtonStyle}" Content="选择文件夹" Tag="外部复制" Click="StorageLocationButton_Click" />
                                                 </Grid>
                                             </StackPanel>
                                         </Expander>

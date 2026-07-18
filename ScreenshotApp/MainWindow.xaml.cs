@@ -11,6 +11,7 @@ using System.Windows.Interop;
 using System.ComponentModel;
 using Forms = System.Windows.Forms;
 using ScreenshotApp.Capture;
+using ScreenshotApp.ClipboardUi;
 using ScreenshotApp.History;
 using ScreenshotApp.Recording;
 using ScreenshotApp.Settings;
@@ -34,8 +35,14 @@ public partial class MainWindow : Window
     private HistoryEntryKind? _historyFilter;
     private HwndSource? _windowSource;
     private bool _hotKeyRegistered;
+    private bool _clipboardHotKeyRegistered;
+    private bool _clipboardListenerRegistered;
     private bool _captureInProgress;
     private bool _historyRefreshInProgress;
+    private bool _suppressClipboardCapture;
+    private string? _lastExternalClipboardSignature;
+    private ClipboardPickerWindow? _clipboardPicker;
+    private IntPtr _clipboardPasteTarget;
 
     public MainWindow()
     {
@@ -181,10 +188,20 @@ public partial class MainWindow : Window
             NativeMethods.HotKeyId,
             NativeMethods.ModControl | NativeMethods.ModShift,
             virtualKey);
+        _clipboardHotKeyRegistered = NativeMethods.RegisterHotKey(
+            handle,
+            NativeMethods.ClipboardHotKeyId,
+            NativeMethods.ModControl | NativeMethods.ModShift,
+            (uint)KeyInterop.VirtualKeyFromKey(Key.V));
+        _clipboardListenerRegistered = NativeMethods.AddClipboardFormatListener(handle);
 
         if (!_hotKeyRegistered)
         {
             Dispatcher.BeginInvoke(() => ShowToast("Ctrl + Shift + A 已被其他程序占用"), DispatcherPriority.Loaded);
+        }
+        if (!_clipboardHotKeyRegistered)
+        {
+            Dispatcher.BeginInvoke(() => ShowToast("Ctrl + Shift + V 已被其他程序占用"), DispatcherPriority.Loaded);
         }
     }
 
@@ -198,6 +215,14 @@ public partial class MainWindow : Window
         if (_hotKeyRegistered)
         {
             NativeMethods.UnregisterHotKey(_windowSource.Handle, NativeMethods.HotKeyId);
+        }
+        if (_clipboardHotKeyRegistered)
+        {
+            NativeMethods.UnregisterHotKey(_windowSource.Handle, NativeMethods.ClipboardHotKeyId);
+        }
+        if (_clipboardListenerRegistered)
+        {
+            NativeMethods.RemoveClipboardFormatListener(_windowSource.Handle);
         }
 
         _windowSource.RemoveHook(WindowMessageHook);
@@ -255,10 +280,21 @@ public partial class MainWindow : Window
             return IntPtr.Zero;
         }
 
+        if (message == NativeMethods.WmClipboardUpdate)
+        {
+            _ = CaptureExternalClipboardAsync();
+            return IntPtr.Zero;
+        }
+
         if (message == NativeMethods.WmHotKey && wParam.ToInt32() == NativeMethods.HotKeyId)
         {
             handled = true;
             _ = StartRegionCaptureAsync();
+        }
+        else if (message == NativeMethods.WmHotKey && wParam.ToInt32() == NativeMethods.ClipboardHotKeyId)
+        {
+            handled = true;
+            _ = ShowClipboardPickerAsync();
         }
         return IntPtr.Zero;
     }
@@ -475,14 +511,15 @@ public partial class MainWindow : Window
         }
     }
 
-    private static async Task SetClipboardImageWithRetryAsync(BitmapSource bitmap)
+    private async Task SetClipboardImageWithRetryAsync(BitmapSource bitmap)
     {
         Exception? lastError = null;
         for (var attempt = 0; attempt < 4; attempt++)
         {
             try
             {
-                Clipboard.SetImage(bitmap);
+                ClipboardService.SetImage(bitmap);
+                _suppressClipboardCapture = true;
                 return;
             }
             catch (Exception exception)
@@ -493,6 +530,68 @@ public partial class MainWindow : Window
         }
 
         throw new InvalidOperationException("剪贴板暂时被其他程序占用。", lastError);
+    }
+
+    private async Task CaptureExternalClipboardAsync()
+    {
+        if (_suppressClipboardCapture)
+        {
+            _suppressClipboardCapture = false;
+            return;
+        }
+
+        try
+        {
+            await Task.Delay(80);
+            if (Clipboard.ContainsData(ClipboardService.InternalFormat))
+            {
+                return;
+            }
+            if (Clipboard.ContainsText())
+            {
+                var content = Clipboard.GetText();
+                if (string.IsNullOrWhiteSpace(content))
+                {
+                    return;
+                }
+
+                var signature = $"text:{content}";
+                if (signature == _lastExternalClipboardSignature)
+                {
+                    return;
+                }
+
+                _lastExternalClipboardSignature = signature;
+                await _historyStore.SaveClipboardTextAsync(content);
+            }
+            else if (Clipboard.ContainsImage())
+            {
+                var image = Clipboard.GetImage();
+                if (image is null)
+                {
+                    return;
+                }
+
+                var signature = $"image:{image.PixelWidth}x{image.PixelHeight}";
+                if (signature == _lastExternalClipboardSignature)
+                {
+                    return;
+                }
+
+                _lastExternalClipboardSignature = signature;
+                await _historyStore.SaveClipboardImageAsync(image);
+            }
+            else
+            {
+                return;
+            }
+
+            await RefreshHistoryAsync();
+        }
+        catch
+        {
+            // 剪贴板可能被其他程序短暂占用，下一次复制时会自然重试。
+        }
     }
 
 #if SCROLL_CAPTURE_TEST
@@ -549,7 +648,7 @@ public partial class MainWindow : Window
         {
             HistoryEmptyPanel.Visibility = Visibility.Visible;
             HistoryScrollViewer.Visibility = Visibility.Collapsed;
-            ShowToast($"历史记录加载失败：{exception.Message}");
+            ShowToast($"剪贴板加载失败：{exception.Message}");
         }
         finally
         {
@@ -580,6 +679,7 @@ public partial class MainWindow : Window
             "TextExtraction" => HistoryEntryKind.TextExtraction,
             "Translation" => HistoryEntryKind.Translation,
             "ScreenRecording" => HistoryEntryKind.ScreenRecording,
+            "ExternalClipboard" => HistoryEntryKind.ExternalClipboard,
             _ => null
         };
         ApplyHistoryFilter();
@@ -619,7 +719,8 @@ public partial class MainWindow : Window
             (LongScreenshotHistoryFilterButton, HistoryEntryKind.LongScreenshot),
             (TextExtractionHistoryFilterButton, HistoryEntryKind.TextExtraction),
             (TranslationHistoryFilterButton, HistoryEntryKind.Translation),
-            (ScreenRecordingHistoryFilterButton, HistoryEntryKind.ScreenRecording)
+            (ScreenRecordingHistoryFilterButton, HistoryEntryKind.ScreenRecording),
+            (ExternalClipboardHistoryFilterButton, HistoryEntryKind.ExternalClipboard)
         };
         foreach (var (button, kind) in buttons)
         {
@@ -686,6 +787,7 @@ public partial class MainWindow : Window
         "文字提取" => _preferences.TextExtractionDirectory,
         "翻译" => _preferences.TranslationDirectory,
         "屏幕录制" => _preferences.RecordingDirectory,
+        "外部复制" => _preferences.ClipboardDirectory,
         _ => string.Empty
     };
 
@@ -709,6 +811,9 @@ public partial class MainWindow : Window
             case "屏幕录制":
                 _preferences.RecordingDirectory = fullPath;
                 break;
+            case "外部复制":
+                _preferences.ClipboardDirectory = fullPath;
+                break;
         }
     }
 
@@ -719,6 +824,7 @@ public partial class MainWindow : Window
         TextExtractionStoragePathText.Text = _preferences.TextExtractionDirectory;
         TranslationStoragePathText.Text = _preferences.TranslationDirectory;
         RecordingStoragePathText.Text = _preferences.RecordingDirectory;
+        ClipboardStoragePathText.Text = _preferences.ClipboardDirectory;
     }
 
     private void OpenHistoryItem_Click(object sender, RoutedEventArgs e)
@@ -747,6 +853,80 @@ public partial class MainWindow : Window
     private void ShowHistory_Click(object sender, RoutedEventArgs e)
     {
         NavigateToPage("History");
+    }
+
+    private async Task ShowClipboardPickerAsync()
+    {
+        if (_clipboardPicker is not null)
+        {
+            _clipboardPicker.Activate();
+            return;
+        }
+
+        _clipboardPasteTarget = NativeMethods.GetForegroundWindow();
+        var items = await _historyStore.LoadAsync(80);
+        var choices = items
+            .Where(item => item.Kind != HistoryEntryKind.ScreenRecording &&
+                           (item.IsTextRecord || Path.GetExtension(item.FilePath).Equals(".png", StringComparison.OrdinalIgnoreCase)))
+            .Take(18)
+            .ToArray();
+        if (choices.Length == 0)
+        {
+            ShowToast("剪贴板还没有可粘贴的内容");
+            return;
+        }
+
+        var picker = new ClipboardPickerWindow(choices);
+        _clipboardPicker = picker;
+        picker.ItemSelected += ClipboardPicker_ItemSelected;
+        picker.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_clipboardPicker, picker))
+            {
+                _clipboardPicker = null;
+            }
+        };
+        picker.Show();
+    }
+
+    private async void ClipboardPicker_ItemSelected(object? sender, ScreenshotHistoryItem item)
+    {
+        if (sender is not ClipboardPickerWindow picker)
+        {
+            return;
+        }
+
+        picker.Close();
+        try
+        {
+            if (item.IsTextRecord)
+            {
+                ClipboardService.SetText(await File.ReadAllTextAsync(item.FilePath));
+            }
+            else
+            {
+                var image = new BitmapImage();
+                image.BeginInit();
+                image.CacheOption = BitmapCacheOption.OnLoad;
+                image.UriSource = new Uri(item.FilePath, UriKind.Absolute);
+                image.EndInit();
+                image.Freeze();
+                ClipboardService.SetImage(image);
+            }
+            _suppressClipboardCapture = true;
+
+            await Task.Delay(90);
+            if (_clipboardPasteTarget != IntPtr.Zero)
+            {
+                _ = NativeMethods.SetForegroundWindow(_clipboardPasteTarget);
+                await Task.Delay(90);
+                _ = NativeMethods.SendPasteShortcut();
+            }
+        }
+        catch (Exception exception)
+        {
+            ShowToast($"粘贴失败：{exception.Message}");
+        }
     }
 
     private void NavigateToWorkbench_Click(object sender, RoutedEventArgs e)

@@ -1,4 +1,5 @@
 using System.Windows;
+using ScreenshotApp.ClipboardUi;
 using System.Windows.Input;
 
 namespace ScreenshotApp.Translation;
@@ -51,7 +52,7 @@ public partial class TranslationResultWindow : Window
 
         try
         {
-            Clipboard.SetText(TranslationTextBox.Text);
+            ClipboardService.SetText(TranslationTextBox.Text);
             StatusText.Text = "译文已复制到剪贴板";
         }
         catch

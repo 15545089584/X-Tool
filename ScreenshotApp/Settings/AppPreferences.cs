@@ -22,6 +22,8 @@ public sealed class AppPreferences
 
     public string RecordingDirectory { get; set; } = @"E:\截影\Recordings";
 
+    public string ClipboardDirectory { get; set; } = @"E:\截影\Clipboard";
+
     public bool StickerTopmost { get; set; } = true;
 
     public static AppPreferences Load()

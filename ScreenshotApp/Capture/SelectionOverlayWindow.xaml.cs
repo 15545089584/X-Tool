@@ -10,6 +10,7 @@ using ScreenshotApp.Ocr;
 using ScreenshotApp.Translation;
 using ScreenshotApp.History;
 using ScreenshotApp.Sticker;
+using ScreenshotApp.ClipboardUi;
 
 namespace ScreenshotApp.Capture;
 
@@ -693,7 +694,7 @@ public partial class SelectionOverlayWindow : Window
             var sample = UpdateColorPicker(surfacePoint);
             try
             {
-                Clipboard.SetText(sample.Hex);
+                ClipboardService.SetText(sample.Hex);
                 ColorPickerHintText.Text = $"已复制 {sample.Hex}";
             }
             catch
