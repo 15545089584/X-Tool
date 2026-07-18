@@ -11,7 +11,6 @@ namespace ScreenshotApp.History;
 /// </summary>
 public sealed class ScreenshotHistoryStore
 {
-    public const string RecordingDirectory = @"E:\截影\Recordings";
     private readonly AppPreferences _preferences;
 
     public ScreenshotHistoryStore(AppPreferences preferences)
@@ -74,7 +73,7 @@ public sealed class ScreenshotHistoryStore
             LoadImageEntries(items, _preferences.LongScreenshotDirectory, HistoryEntryKind.LongScreenshot, loadedFiles);
             LoadTextEntries(items, _preferences.TextExtractionDirectory, HistoryEntryKind.TextExtraction, "文字提取", loadedFiles);
             LoadTextEntries(items, _preferences.TranslationDirectory, HistoryEntryKind.Translation, "翻译", loadedFiles);
-            LoadRecordingEntries(items);
+            LoadRecordingEntries(items, _preferences.RecordingDirectory);
             return items
                 .OrderByDescending(item => item.CapturedAt)
                 .Take(maximumCount)
@@ -149,17 +148,18 @@ public sealed class ScreenshotHistoryStore
         }
     }
 
-    private static void LoadRecordingEntries(ICollection<ScreenshotHistoryItem> items)
+    private static void LoadRecordingEntries(ICollection<ScreenshotHistoryItem> items, string directory)
     {
-        Directory.CreateDirectory(RecordingDirectory);
-        foreach (var filePath in Directory.EnumerateFiles(RecordingDirectory, "*.mp4", SearchOption.TopDirectoryOnly))
+        Directory.CreateDirectory(directory);
+        foreach (var filePath in Directory.EnumerateFiles(directory, "*.mp4", SearchOption.TopDirectoryOnly))
         {
             try
             {
                 var fileInfo = new FileInfo(filePath);
                 var timestamp = fileInfo.LastWriteTime;
                 var coverPath = Path.Combine(
-                    ScreenRecordingService.CoverDirectory,
+                    directory,
+                    "Covers",
                     $"{Path.GetFileNameWithoutExtension(filePath)}.png");
                 items.Add(new ScreenshotHistoryItem(
                     HistoryEntryKind.ScreenRecording,

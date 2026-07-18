@@ -8,6 +8,7 @@ using NAudio.CoreAudioApi;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
 using ScreenshotApp.Capture;
+using ScreenshotApp.Settings;
 using Vortice.MediaFoundation;
 
 namespace ScreenshotApp.Recording;
@@ -18,13 +19,17 @@ namespace ScreenshotApp.Recording;
 /// </summary>
 public sealed class ScreenRecordingService
 {
-    public const string StorageDirectory = @"E:\截影\Recordings";
-    public const string CoverDirectory = @"E:\截影\Recordings\Covers";
     private readonly ICaptureBackend _captureBackend;
+    private readonly AppPreferences _preferences;
 
-    public ScreenRecordingService(ICaptureBackend captureBackend)
+    public string StorageDirectory => _preferences.RecordingDirectory;
+
+    public string CoverDirectory => Path.Combine(StorageDirectory, "Covers");
+
+    public ScreenRecordingService(ICaptureBackend captureBackend, AppPreferences preferences)
     {
         _captureBackend = captureBackend;
+        _preferences = preferences;
     }
 
     public async Task<ScreenRecordingResult> RecordAsync(
@@ -236,7 +241,7 @@ public sealed class ScreenRecordingService
         writer.WriteSample(streamIndex, sample);
     }
 
-    private static Task<string?> TrySaveCoverAsync(BitmapSource frame, string videoPath)
+    private Task<string?> TrySaveCoverAsync(BitmapSource frame, string videoPath)
     {
         if (frame.CanFreeze && !frame.IsFrozen)
         {

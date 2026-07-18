@@ -50,7 +50,7 @@ public partial class MainWindow : Window
             new GdiScreenCaptureBackend(),
             new DxgiDesktopCaptureBackend());
         _scrollCaptureService = new ScrollCaptureService(_scrollCaptureBackend);
-        _screenRecordingService = new ScreenRecordingService(_scrollCaptureBackend);
+        _screenRecordingService = new ScreenRecordingService(_scrollCaptureBackend, _preferences);
         HistoryItemsControl.ItemsSource = _historyItems;
         TextHistoryItemsControl.ItemsSource = _textHistoryItems;
 
@@ -674,6 +674,7 @@ public partial class MainWindow : Window
         "长截图" => _preferences.LongScreenshotDirectory,
         "文字提取" => _preferences.TextExtractionDirectory,
         "翻译" => _preferences.TranslationDirectory,
+        "屏幕录制" => _preferences.RecordingDirectory,
         _ => string.Empty
     };
 
@@ -694,6 +695,9 @@ public partial class MainWindow : Window
             case "翻译":
                 _preferences.TranslationDirectory = fullPath;
                 break;
+            case "屏幕录制":
+                _preferences.RecordingDirectory = fullPath;
+                break;
         }
     }
 
@@ -703,6 +707,7 @@ public partial class MainWindow : Window
         LongScreenshotStoragePathText.Text = _preferences.LongScreenshotDirectory;
         TextExtractionStoragePathText.Text = _preferences.TextExtractionDirectory;
         TranslationStoragePathText.Text = _preferences.TranslationDirectory;
+        RecordingStoragePathText.Text = _preferences.RecordingDirectory;
     }
 
     private void OpenHistoryItem_Click(object sender, RoutedEventArgs e)

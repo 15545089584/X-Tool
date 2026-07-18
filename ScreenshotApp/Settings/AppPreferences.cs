@@ -20,6 +20,8 @@ public sealed class AppPreferences
 
     public string TranslationDirectory { get; set; } = @"E:\截影\History\翻译";
 
+    public string RecordingDirectory { get; set; } = @"E:\截影\Recordings";
+
     public bool StickerTopmost { get; set; } = true;
 
     public static AppPreferences Load()

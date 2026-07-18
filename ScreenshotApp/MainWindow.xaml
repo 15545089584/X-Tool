@@ -93,21 +93,81 @@
             </Setter>
         </Style>
 
+        <Style x:Key="SettingCardStyle" TargetType="Border">
+            <Setter Property="Background" Value="#68FFFFFF" />
+            <Setter Property="BorderBrush" Value="#86FFFFFF" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="14" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect BlurRadius="14" ShadowDepth="3" Direction="270" Opacity="0.07" Color="#486177" />
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="StorageLocationButtonStyle" TargetType="Button">
+            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="Foreground" Value="#43617E" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root" Background="#74FFFFFF" BorderBrush="#A8D5E6F5" BorderThickness="1" CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="#BFE5F2FF" />
+                                <Setter TargetName="Root" Property="BorderBrush" Value="#6EAFF5" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Root" Property="Opacity" Value="0.72" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="StorageHeaderToggleStyle" TargetType="ToggleButton">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Root" Background="Transparent" CornerRadius="12">
+                            <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="#24D6EAFA" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="#46C8E4FA" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- 存储位置使用可展开的玻璃容器，平时保持设置页简洁。 -->
         <Style x:Key="StorageExpanderStyle" TargetType="Expander">
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Expander">
-                        <Border Background="#5EFFFFFF" BorderBrush="#7AFFFFFF" BorderThickness="1" CornerRadius="12">
+                        <Border Background="#5EFFFFFF" BorderBrush="#7AFFFFFF" BorderThickness="1" CornerRadius="14">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="14" ShadowDepth="3" Direction="270" Opacity="0.07" Color="#486177" />
+                            </Border.Effect>
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
-                                <ToggleButton x:Name="HeaderToggle" Padding="16,0" Height="64" Background="Transparent" BorderThickness="0"
+                                <ToggleButton x:Name="HeaderToggle" Padding="16,0" Height="64" Background="Transparent" BorderThickness="0" Style="{StaticResource StorageHeaderToggleStyle}"
                                               IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
                                     <Grid>
-                                        <ContentPresenter VerticalAlignment="Center" ContentSource="Header" />
+                                        <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center" ContentSource="Header" />
                                         <TextBlock x:Name="Chevron" HorizontalAlignment="Right" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#64758A" Text="&#xE70D;" />
                                     </Grid>
                                 </ToggleButton>
@@ -581,26 +641,28 @@
                                     <TextBlock FontSize="28" FontWeight="SemiBold" Text="设置" />
                                     <TextBlock Margin="0,8,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}" Text="调整截影的常用行为" />
                                 </StackPanel>
-                                <Border Grid.Row="2" Background="{StaticResource GlassCardBrush}"
-                                        BorderBrush="#5AFFFFFF" BorderThickness="1" CornerRadius="14">
+                                <Border Grid.Row="2" Background="Transparent" BorderThickness="0">
                                     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                                    <StackPanel Margin="0,8">
-                                        <Grid Height="76" Margin="22,0">
+                                    <StackPanel Margin="0,2">
+                                        <Border Style="{StaticResource SettingCardStyle}">
+                                        <Grid Height="76" Margin="20,0">
                                             <StackPanel VerticalAlignment="Center">
                                                 <TextBlock FontSize="15" Text="截图后自动复制" />
                                                 <TextBlock Margin="0,5,0,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="完成截图后写入系统剪贴板" />
                                             </StackPanel>
                                             <CheckBox HorizontalAlignment="Right" VerticalAlignment="Center" IsChecked="True" Style="{StaticResource SettingToggleStyle}" />
                                         </Grid>
-                                        <Border Height="1" Margin="22,0" Background="{StaticResource GlassDividerBrush}" />
-                                        <Grid Height="76" Margin="22,0">
+                                        </Border>
+                                        <Border Style="{StaticResource SettingCardStyle}">
+                                        <Grid Height="76" Margin="20,0">
                                             <StackPanel VerticalAlignment="Center">
                                                 <TextBlock FontSize="15" Text="保存截图历史" />
                                             </StackPanel>
                                             <CheckBox HorizontalAlignment="Right" VerticalAlignment="Center" IsChecked="True" IsEnabled="False" Style="{StaticResource SettingToggleStyle}" />
                                         </Grid>
-                                        <Border Height="1" Margin="22,0" Background="{StaticResource GlassDividerBrush}" />
-                                        <Grid Height="76" Margin="22,0">
+                                        </Border>
+                                        <Border Style="{StaticResource SettingCardStyle}">
+                                        <Grid Height="76" Margin="20,0">
                                             <StackPanel VerticalAlignment="Center">
                                                 <TextBlock FontSize="15" Text="贴图默认置顶" />
                                                 <TextBlock Margin="0,5,0,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="创建贴图后始终显示在其他窗口上方" />
@@ -608,8 +670,8 @@
                                             <CheckBox x:Name="StickerTopmostCheckBox" HorizontalAlignment="Right" VerticalAlignment="Center"
                                                       Style="{StaticResource SettingToggleStyle}" Click="StickerTopmostCheckBox_Click" />
                                         </Grid>
-                                        <Border Height="1" Margin="22,0" Background="{StaticResource GlassDividerBrush}" />
-                                        <Expander Margin="22,12,22,14" Style="{StaticResource StorageExpanderStyle}">
+                                        </Border>
+                                        <Expander Margin="0" Style="{StaticResource StorageExpanderStyle}">
                                             <Expander.Header>
                                                 <StackPanel VerticalAlignment="Center">
                                                     <TextBlock FontSize="15" Text="存储位置" />
@@ -621,28 +683,35 @@
                                                     <Grid.ColumnDefinitions><ColumnDefinition Width="92" /><ColumnDefinition Width="*" /><ColumnDefinition Width="96" /></Grid.ColumnDefinitions>
                                                     <TextBlock VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold" Text="截图" />
                                                     <TextBlock x:Name="ScreenshotStoragePathText" Grid.Column="1" Margin="6,0,12,0" VerticalAlignment="Center" Foreground="#708095" TextTrimming="CharacterEllipsis" />
-                                                    <Button Grid.Column="2" Height="30" Background="#8CFFFFFF" BorderBrush="#A9D5E6F5" BorderThickness="1" Cursor="Hand" Content="选择文件夹" Tag="截图" Click="StorageLocationButton_Click" />
+                                                    <Button Grid.Column="2" Height="30" Style="{StaticResource StorageLocationButtonStyle}" Content="选择文件夹" Tag="截图" Click="StorageLocationButton_Click" />
                                                 </Grid>
                                                 <Border Height="1" Background="#55FFFFFF" />
                                                 <Grid Height="54" Margin="2,0">
                                                     <Grid.ColumnDefinitions><ColumnDefinition Width="92" /><ColumnDefinition Width="*" /><ColumnDefinition Width="96" /></Grid.ColumnDefinitions>
                                                     <TextBlock VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold" Text="长截图" />
                                                     <TextBlock x:Name="LongScreenshotStoragePathText" Grid.Column="1" Margin="6,0,12,0" VerticalAlignment="Center" Foreground="#708095" TextTrimming="CharacterEllipsis" />
-                                                    <Button Grid.Column="2" Height="30" Background="#8CFFFFFF" BorderBrush="#A9D5E6F5" BorderThickness="1" Cursor="Hand" Content="选择文件夹" Tag="长截图" Click="StorageLocationButton_Click" />
+                                                    <Button Grid.Column="2" Height="30" Style="{StaticResource StorageLocationButtonStyle}" Content="选择文件夹" Tag="长截图" Click="StorageLocationButton_Click" />
                                                 </Grid>
                                                 <Border Height="1" Background="#55FFFFFF" />
                                                 <Grid Height="54" Margin="2,0">
                                                     <Grid.ColumnDefinitions><ColumnDefinition Width="92" /><ColumnDefinition Width="*" /><ColumnDefinition Width="96" /></Grid.ColumnDefinitions>
                                                     <TextBlock VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold" Text="文字提取" />
                                                     <TextBlock x:Name="TextExtractionStoragePathText" Grid.Column="1" Margin="6,0,12,0" VerticalAlignment="Center" Foreground="#708095" TextTrimming="CharacterEllipsis" />
-                                                    <Button Grid.Column="2" Height="30" Background="#8CFFFFFF" BorderBrush="#A9D5E6F5" BorderThickness="1" Cursor="Hand" Content="选择文件夹" Tag="文字提取" Click="StorageLocationButton_Click" />
+                                                    <Button Grid.Column="2" Height="30" Style="{StaticResource StorageLocationButtonStyle}" Content="选择文件夹" Tag="文字提取" Click="StorageLocationButton_Click" />
                                                 </Grid>
                                                 <Border Height="1" Background="#55FFFFFF" />
                                                 <Grid Height="54" Margin="2,0,2,8">
                                                     <Grid.ColumnDefinitions><ColumnDefinition Width="92" /><ColumnDefinition Width="*" /><ColumnDefinition Width="96" /></Grid.ColumnDefinitions>
                                                     <TextBlock VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold" Text="翻译" />
                                                     <TextBlock x:Name="TranslationStoragePathText" Grid.Column="1" Margin="6,0,12,0" VerticalAlignment="Center" Foreground="#708095" TextTrimming="CharacterEllipsis" />
-                                                    <Button Grid.Column="2" Height="30" Background="#8CFFFFFF" BorderBrush="#A9D5E6F5" BorderThickness="1" Cursor="Hand" Content="选择文件夹" Tag="翻译" Click="StorageLocationButton_Click" />
+                                                    <Button Grid.Column="2" Height="30" Style="{StaticResource StorageLocationButtonStyle}" Content="选择文件夹" Tag="翻译" Click="StorageLocationButton_Click" />
+                                                </Grid>
+                                                <Border Height="1" Background="#55FFFFFF" />
+                                                <Grid Height="54" Margin="2,0,2,8">
+                                                    <Grid.ColumnDefinitions><ColumnDefinition Width="92" /><ColumnDefinition Width="*" /><ColumnDefinition Width="96" /></Grid.ColumnDefinitions>
+                                                    <TextBlock VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold" Text="屏幕录制" />
+                                                    <TextBlock x:Name="RecordingStoragePathText" Grid.Column="1" Margin="6,0,12,0" VerticalAlignment="Center" Foreground="#708095" TextTrimming="CharacterEllipsis" />
+                                                    <Button Grid.Column="2" Height="30" Style="{StaticResource StorageLocationButtonStyle}" Content="选择文件夹" Tag="屏幕录制" Click="StorageLocationButton_Click" />
                                                 </Grid>
                                             </StackPanel>
                                         </Expander>
