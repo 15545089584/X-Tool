@@ -7,6 +7,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using ScreenshotApp.Ocr;
+using ScreenshotApp.Translation;
 
 namespace ScreenshotApp.Capture;
 
@@ -29,6 +30,7 @@ public partial class SelectionOverlayWindow : Window
     private Rectangle? _workingRectangle;
     private List<Point>? _workingPoints;
     private bool _ocrInProgress;
+    private bool _translationInProgress;
     private ResizeHandle? _activeResizeHandle;
     private Rect _resizeStartSelection;
     private Point _resizeStartPoint;
@@ -275,6 +277,89 @@ public partial class SelectionOverlayWindow : Window
             OcrToolButtonText.Text = "提取文字";
             OcrToolButton.IsEnabled = true;
             _ocrInProgress = false;
+        }
+    }
+
+    private async void TranslationToolButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_translationInProgress || _selection.IsEmpty)
+        {
+            return;
+        }
+
+        _translationInProgress = true;
+        TranslationToolButton.IsEnabled = false;
+        TranslationToolButtonText.Text = "翻译中…";
+        var previousHint = HintText.Text;
+        HintText.Text = "正在本机识别英文并准备离线翻译…";
+        SetActiveAnnotationTool(ScreenshotAnnotationTool.None);
+        try
+        {
+            var bitmap = CreateSelectionBitmap(includeAnnotations: false);
+            var ocrResult = await OcrEngineProvider.Default.RecognizeAsync(
+                OcrImage.FromBitmapSource(bitmap),
+                new OcrOptions
+                {
+                    Language = "zh-en",
+                    ExecutionProvider = OcrExecutionProvider.Cpu,
+                    UseOrientationClassification = false,
+                    ConfidenceThreshold = 0.5f
+                },
+                CancellationToken.None);
+
+            var sourceText = TranslationTextPreprocessor.Normalize(ocrResult.Text);
+            if (!TranslationTextPreprocessor.ContainsEnglish(sourceText))
+            {
+                MessageBox.Show(
+                    this,
+                    "框选区域中没有识别到可翻译的英文文字。",
+                    "离线翻译",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+                return;
+            }
+
+            var selectionScreenBounds = new Rect(
+                Left + _selection.Left,
+                Top + _selection.Top,
+                _selection.Width,
+                _selection.Height);
+            var engine = TranslationEngineProvider.Default;
+            if (!engine.IsReady)
+            {
+                new TranslationResultWindow(
+                    sourceText,
+                    null,
+                    engine.UnavailableReason,
+                    selectionScreenBounds) { Owner = this }.ShowDialog();
+                return;
+            }
+
+            HintText.Text = "正在本机将英文翻译为中文…";
+            var translation = await engine.TranslateAsync(
+                new TranslationRequest(sourceText),
+                CancellationToken.None);
+            new TranslationResultWindow(
+                translation.SourceText,
+                translation.TranslatedText,
+                null,
+                selectionScreenBounds) { Owner = this }.ShowDialog();
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(
+                this,
+                $"离线翻译失败：{exception.Message}",
+                "离线翻译",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+        finally
+        {
+            HintText.Text = previousHint;
+            TranslationToolButtonText.Text = "翻译";
+            TranslationToolButton.IsEnabled = true;
+            _translationInProgress = false;
         }
     }
 

@@ -43,6 +43,11 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <TargetPath>models\ocr\default\%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
     </Content>
+    <!-- 翻译模型按语言包独立分发，避免基础安装包被大模型拖慢。 -->
+    <Content Include="Models\Translation\default\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>models\translation\default\%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
+    </Content>
   </ItemGroup>
 
 </Project>
