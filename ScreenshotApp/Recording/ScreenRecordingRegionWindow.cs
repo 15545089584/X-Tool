@@ -2,7 +2,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
-using System.Windows.Shapes;
 using ScreenshotApp.Capture;
 
 namespace ScreenshotApp.Recording;
@@ -17,8 +16,9 @@ internal sealed class ScreenRecordingRegionWindow : Window
     internal ScreenRecordingRegionWindow(Int32Rect region)
     {
         _region = region;
-        Width = region.Width;
-        Height = region.Height;
+        // 初始化后按当前监视器 DPI 折算为 WPF 逻辑尺寸，避免高 DPI 下被裁切。
+        Width = 1;
+        Height = 1;
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.NoResize;
         AllowsTransparency = true;
@@ -29,15 +29,14 @@ internal sealed class ScreenRecordingRegionWindow : Window
         Focusable = false;
         IsHitTestVisible = false;
 
-        var canvas = new Canvas { IsHitTestVisible = false };
-        canvas.Children.Add(new Rectangle
+        var root = new Grid { IsHitTestVisible = false };
+        root.Children.Add(new Border
         {
-            Stroke = new SolidColorBrush(Color.FromRgb(244, 79, 91)),
-            StrokeThickness = 3,
-            RadiusX = 4,
-            RadiusY = 4,
-            Width = Math.Max(0, region.Width - 3),
-            Height = Math.Max(0, region.Height - 3)
+            BorderBrush = new SolidColorBrush(Color.FromRgb(244, 79, 91)),
+            BorderThickness = new Thickness(3),
+            CornerRadius = new CornerRadius(4),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch
         });
         var label = new Border
         {
@@ -52,10 +51,11 @@ internal sealed class ScreenRecordingRegionWindow : Window
                 FontWeight = FontWeights.SemiBold
             }
         };
-        Canvas.SetLeft(label, 2);
-        Canvas.SetTop(label, 2);
-        canvas.Children.Add(label);
-        Content = canvas;
+        label.HorizontalAlignment = HorizontalAlignment.Left;
+        label.VerticalAlignment = VerticalAlignment.Top;
+        label.Margin = new Thickness(3);
+        root.Children.Add(label);
+        Content = root;
         SourceInitialized += OnSourceInitialized;
     }
 
@@ -63,6 +63,9 @@ internal sealed class ScreenRecordingRegionWindow : Window
     {
         var handle = new WindowInteropHelper(this).Handle;
         _ = NativeMethods.SetWindowDisplayAffinity(handle, NativeMethods.WdaExcludeFromCapture);
+        var dpi = VisualTreeHelper.GetDpi(this);
+        Width = _region.Width / dpi.DpiScaleX;
+        Height = _region.Height / dpi.DpiScaleY;
         _ = NativeMethods.SetWindowPos(
             handle,
             new IntPtr(NativeMethods.HwndTopmost),

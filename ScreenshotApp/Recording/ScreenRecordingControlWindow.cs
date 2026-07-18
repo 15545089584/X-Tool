@@ -10,12 +10,18 @@ namespace ScreenshotApp.Recording;
 internal sealed class ScreenRecordingControlWindow : Window
 {
     private readonly Int32Rect _region;
-    private readonly TextBlock _elapsedText = new() { Foreground = Brushes.White, FontWeight = FontWeights.SemiBold };
+    private readonly TextBlock _elapsedText = new()
+    {
+        Foreground = Brushes.White,
+        FontWeight = FontWeights.SemiBold,
+        VerticalAlignment = VerticalAlignment.Center,
+        TextAlignment = TextAlignment.Center
+    };
 
     internal ScreenRecordingControlWindow(Int32Rect region)
     {
         _region = region;
-        Width = 232;
+        Width = 246;
         Height = 52;
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.NoResize;
@@ -31,7 +37,6 @@ internal sealed class ScreenRecordingControlWindow : Window
             Content = "停止",
             Width = 62,
             Height = 30,
-            Margin = new Thickness(12, 0, 0, 0),
             Background = new SolidColorBrush(Color.FromRgb(236, 83, 96)),
             Foreground = Brushes.White,
             BorderThickness = new Thickness(0),
@@ -43,23 +48,36 @@ internal sealed class ScreenRecordingControlWindow : Window
             Padding = new Thickness(14, 10, 14, 10),
             Background = new SolidColorBrush(Color.FromArgb(232, 25, 31, 42)),
             CornerRadius = new CornerRadius(12),
-            Child = new StackPanel
+            Child = new Grid
             {
-                Orientation = Orientation.Horizontal,
-                Children =
+                ColumnDefinitions =
                 {
-                    new TextBlock { Text = "●", Foreground = new SolidColorBrush(Color.FromRgb(255, 90, 104)), FontSize = 16, VerticalAlignment = VerticalAlignment.Center },
-                    _elapsedText,
-                    stopButton
+                    new ColumnDefinition { Width = new GridLength(16) },
+                    new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) },
+                    new ColumnDefinition { Width = new GridLength(62) }
                 }
             }
         };
+        var contentGrid = (Grid)((Border)Content).Child;
+        var recordingDot = new TextBlock
+        {
+            Text = "●",
+            Foreground = new SolidColorBrush(Color.FromRgb(255, 90, 104)),
+            FontSize = 16,
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Left
+        };
+        Grid.SetColumn(_elapsedText, 1);
+        Grid.SetColumn(stopButton, 2);
+        contentGrid.Children.Add(recordingDot);
+        contentGrid.Children.Add(_elapsedText);
+        contentGrid.Children.Add(stopButton);
         SourceInitialized += OnSourceInitialized;
     }
 
     internal bool IsStopRequested { get; private set; }
 
-    internal void SetElapsed(TimeSpan elapsed) => _elapsedText.Text = $"  正在录像 {elapsed:mm\\:ss}";
+    internal void SetElapsed(TimeSpan elapsed) => _elapsedText.Text = $"正在录像 {elapsed:mm\\:ss}";
 
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
