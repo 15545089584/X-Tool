@@ -9,9 +9,11 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using System.Windows.Interop;
 using System.ComponentModel;
+using Microsoft.Win32;
 using Forms = System.Windows.Forms;
 using ScreenshotApp.Capture;
 using ScreenshotApp.ClipboardUi;
+using ScreenshotApp.Converters;
 using ScreenshotApp.History;
 using ScreenshotApp.Recording;
 using ScreenshotApp.Settings;
@@ -31,6 +33,7 @@ public partial class MainWindow : Window
     private readonly ScreenshotHistoryStore _historyStore;
     private readonly ObservableCollection<ScreenshotHistoryItem> _historyItems = new();
     private readonly ObservableCollection<ScreenshotHistoryItem> _textHistoryItems = new();
+    private readonly ObservableCollection<string> _imageConversionFiles = new();
     private IReadOnlyList<ScreenshotHistoryItem> _allHistoryItems = Array.Empty<ScreenshotHistoryItem>();
     private HistoryEntryKind? _historyFilter;
     private HwndSource? _windowSource;
@@ -60,6 +63,9 @@ public partial class MainWindow : Window
         _screenRecordingService = new ScreenRecordingService(_scrollCaptureBackend, _preferences);
         HistoryItemsControl.ItemsSource = _historyItems;
         TextHistoryItemsControl.ItemsSource = _textHistoryItems;
+        ImageFileList.ItemsSource = _imageConversionFiles;
+        ConverterOutputFolderText.Text = _preferences.ConverterDirectory;
+        UpdateImageConversionControls();
 
         _toastTimer = new DispatcherTimer
         {
@@ -146,6 +152,8 @@ public partial class MainWindow : Window
     {
         HomeView.Visibility = page == "Home" ? Visibility.Visible : Visibility.Collapsed;
         ScreenWorkbenchView.Visibility = page == "ScreenWorkbench" ? Visibility.Visible : Visibility.Collapsed;
+        ConverterWorkbenchView.Visibility = page == "ConverterWorkbench" ? Visibility.Visible : Visibility.Collapsed;
+        ImageConverterView.Visibility = page == "ImageConverter" ? Visibility.Visible : Visibility.Collapsed;
         HistoryView.Visibility = page == "History" ? Visibility.Visible : Visibility.Collapsed;
         ShortcutsView.Visibility = page == "Shortcuts" ? Visibility.Visible : Visibility.Collapsed;
         SettingsView.Visibility = page == "Settings" ? Visibility.Visible : Visibility.Collapsed;
@@ -788,6 +796,7 @@ public partial class MainWindow : Window
         "翻译" => _preferences.TranslationDirectory,
         "屏幕录制" => _preferences.RecordingDirectory,
         "外部复制" => _preferences.ClipboardDirectory,
+        "转换器" => _preferences.ConverterDirectory,
         _ => string.Empty
     };
 
@@ -814,6 +823,10 @@ public partial class MainWindow : Window
             case "外部复制":
                 _preferences.ClipboardDirectory = fullPath;
                 break;
+            case "转换器":
+                _preferences.ConverterDirectory = fullPath;
+                ConverterOutputFolderText.Text = fullPath;
+                break;
         }
     }
 
@@ -825,6 +838,7 @@ public partial class MainWindow : Window
         TranslationStoragePathText.Text = _preferences.TranslationDirectory;
         RecordingStoragePathText.Text = _preferences.RecordingDirectory;
         ClipboardStoragePathText.Text = _preferences.ClipboardDirectory;
+        ConverterStoragePathText.Text = _preferences.ConverterDirectory;
     }
 
     private void OpenHistoryItem_Click(object sender, RoutedEventArgs e)
@@ -963,6 +977,145 @@ public partial class MainWindow : Window
     {
         ScreenWorkbenchNav.IsChecked = true;
         NavigateToPage("ScreenWorkbench");
+    }
+
+    private void NavigateToConverterWorkbench_Click(object sender, RoutedEventArgs e)
+    {
+        ConverterWorkbenchNav.IsChecked = true;
+        NavigateToPage("ConverterWorkbench");
+    }
+
+    private void OpenImageConverter_Click(object sender, RoutedEventArgs e)
+    {
+        ConverterWorkbenchNav.IsChecked = true;
+        NavigateToPage("ImageConverter");
+    }
+
+    private void BackToConverterWorkbench_Click(object sender, RoutedEventArgs e)
+    {
+        NavigateToPage("ConverterWorkbench");
+    }
+
+    private void SelectImageFiles_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "选择需要处理的图片",
+            Multiselect = true,
+            Filter = "图片文件|*.png;*.jpg;*.jpeg;*.bmp;*.tif;*.tiff|PNG|*.png|JPEG|*.jpg;*.jpeg|BMP|*.bmp|TIFF|*.tif;*.tiff"
+        };
+        if (dialog.ShowDialog(this) != true)
+        {
+            return;
+        }
+
+        _imageConversionFiles.Clear();
+        foreach (var fileName in dialog.FileNames.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            _imageConversionFiles.Add(fileName);
+        }
+
+        UpdateImageFileSummary();
+    }
+
+    private void SelectConverterOutputFolder_Click(object sender, RoutedEventArgs e)
+    {
+        using var dialog = new Forms.FolderBrowserDialog
+        {
+            Description = "选择转换结果的保存位置",
+            UseDescriptionForTitle = true,
+            SelectedPath = _preferences.ConverterDirectory
+        };
+        if (dialog.ShowDialog() != Forms.DialogResult.OK || string.IsNullOrWhiteSpace(dialog.SelectedPath))
+        {
+            return;
+        }
+
+        _preferences.ConverterDirectory = Path.GetFullPath(dialog.SelectedPath);
+        _preferences.Save();
+        ConverterOutputFolderText.Text = _preferences.ConverterDirectory;
+    }
+
+    private void ImageFormatComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        UpdateImageConversionControls();
+    }
+
+    private void ImageQualitySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        UpdateImageConversionControls();
+    }
+
+    private void ImageScaleSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        UpdateImageConversionControls();
+    }
+
+    private void UpdateImageFileSummary()
+    {
+        ImageFilesSummaryText.Text = _imageConversionFiles.Count == 0
+            ? "支持 PNG、JPEG、BMP、TIFF，可一次选择多张"
+            : $"已添加 {_imageConversionFiles.Count} 张图片，处理结果会生成到新文件中";
+    }
+
+    private void UpdateImageConversionControls()
+    {
+        if (ImageQualitySlider is null || ImageScaleSlider is null || ImageFormatComboBox is null)
+        {
+            return;
+        }
+
+        var isJpeg = GetSelectedImageFormat() == ImageOutputFormat.Jpeg;
+        ImageQualitySlider.IsEnabled = isJpeg;
+        ImageQualityValueText.Text = isJpeg ? $"{Math.Round(ImageQualitySlider.Value)}%" : "仅 JPEG";
+        ImageScaleValueText.Text = $"{Math.Round(ImageScaleSlider.Value)}%";
+    }
+
+    private ImageOutputFormat GetSelectedImageFormat()
+    {
+        return (ImageFormatComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() switch
+        {
+            "Jpeg" => ImageOutputFormat.Jpeg,
+            "Bmp" => ImageOutputFormat.Bmp,
+            "Tiff" => ImageOutputFormat.Tiff,
+            _ => ImageOutputFormat.Png
+        };
+    }
+
+    private async void StartImageConversion_Click(object sender, RoutedEventArgs e)
+    {
+        if (_imageConversionFiles.Count == 0)
+        {
+            ShowToast("请先添加至少一张图片");
+            return;
+        }
+
+        StartImageConversionButton.IsEnabled = false;
+        ImageConversionStatusText.Text = "正在准备本地转换…";
+        try
+        {
+            var progress = new Progress<string>(message => ImageConversionStatusText.Text = message);
+            var result = await ImageConversionService.ConvertAsync(
+                _imageConversionFiles.ToArray(),
+                GetSelectedImageFormat(),
+                (int)Math.Round(ImageScaleSlider.Value),
+                (int)Math.Round(ImageQualitySlider.Value),
+                _preferences.ConverterDirectory,
+                progress);
+            ImageConversionStatusText.Text = result.Failed == 0
+                ? $"已完成 {result.Succeeded} 张图片，可在输出目录中查看。"
+                : $"已完成 {result.Succeeded} 张，失败 {result.Failed} 张。{result.Errors.FirstOrDefault()}";
+            ShowToast(result.Failed == 0 ? "图片处理完成" : "部分图片处理失败");
+        }
+        catch (Exception exception)
+        {
+            ImageConversionStatusText.Text = $"处理失败：{exception.Message}";
+            ShowToast("图片处理失败");
+        }
+        finally
+        {
+            StartImageConversionButton.IsEnabled = true;
+        }
     }
 
     private void FutureTools_Click(object sender, RoutedEventArgs e)

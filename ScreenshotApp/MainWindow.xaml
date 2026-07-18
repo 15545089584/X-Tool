@@ -130,6 +130,38 @@
             </Setter>
         </Style>
 
+        <!-- 转换器页面使用更明确的操作层级，不与屏幕工作台复用能力卡布局。 -->
+        <Style x:Key="ConverterActionButtonStyle" TargetType="Button">
+            <Setter Property="Height" Value="38" />
+            <Setter Property="Padding" Value="16,0" />
+            <Setter Property="Foreground" Value="#FFFFFF" />
+            <Setter Property="Background" Value="#4D7CFE" />
+            <Setter Property="BorderBrush" Value="#75A0FF" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10">
+                            <Border.Effect><DropShadowEffect BlurRadius="12" ShadowDepth="3" Direction="270" Opacity="0.18" Color="#3867C5" /></Border.Effect>
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.84" /></Trigger>
+                            <Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.68" /></Trigger>
+                            <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Root" Property="Opacity" Value="0.42" /></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ConverterSecondaryButtonStyle" TargetType="Button" BasedOn="{StaticResource ConverterActionButtonStyle}">
+            <Setter Property="Background" Value="#8CFFFFFF" />
+            <Setter Property="BorderBrush" Value="#A8D8E8F7" />
+            <Setter Property="Foreground" Value="#45637E" />
+        </Style>
+
         <Style x:Key="StorageHeaderToggleStyle" TargetType="ToggleButton">
             <Setter Property="Template">
                 <Setter.Value>
@@ -281,6 +313,15 @@
                             <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" FontSize="15" Text="屏幕工作台" />
                         </StackPanel>
                     </RadioButton>
+                    <RadioButton x:Name="ConverterWorkbenchNav" GroupName="Navigation" Style="{StaticResource NavItemStyle}"
+                                 Tag="ConverterWorkbench" Checked="NavButton_Checked">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Width="34" Height="34" Background="#F7F8FA" CornerRadius="9">
+                                <TextBlock Style="{StaticResource IconTextStyle}" FontSize="17" Text="&#xE8C8;" Foreground="#626971" />
+                            </Border>
+                            <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" FontSize="15" Text="转换器工作台" />
+                        </StackPanel>
+                    </RadioButton>
                     <RadioButton GroupName="Navigation" Style="{StaticResource NavItemStyle}"
                                  Tag="Shortcuts" Checked="NavButton_Checked">
                         <StackPanel Orientation="Horizontal">
@@ -358,7 +399,7 @@
                                         </Grid>
                                     </Button>
 
-                                    <Button Grid.Column="2" Style="{StaticResource ActionCardStyle}" Click="FutureTools_Click">
+                                    <Button Grid.Column="2" Style="{StaticResource ActionCardStyle}" Click="NavigateToConverterWorkbench_Click">
                                         <Grid>
                                             <Grid.RowDefinitions>
                                                 <RowDefinition Height="38" />
@@ -368,8 +409,8 @@
                                                 <TextBlock Style="{StaticResource IconTextStyle}" FontSize="17" Foreground="#E6A326" Text="&#xE8A7;" />
                                             </Border>
                                             <StackPanel Grid.Row="1">
-                                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="更多工具" />
-                                                <TextBlock Margin="0,6,0,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="更多桌面效率工具正在准备中" />
+                                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="转换器工作台" />
+                                                <TextBlock Margin="0,6,0,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="处理图片、文本与文件格式" />
                                             </StackPanel>
                                         </Grid>
                                     </Button>
@@ -456,6 +497,130 @@
                                         </primitives:UniformGrid>
                                     </Grid>
                                 </Border>
+                            </Grid>
+
+                            <!-- 转换器独立使用“工具目录”布局：先选择能力，再进入专用操作页。 -->
+                            <Grid x:Name="ConverterWorkbenchView" Visibility="Collapsed" Margin="52,42,52,38">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="24" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+                                <Grid>
+                                    <StackPanel>
+                                        <TextBlock FontSize="30" FontWeight="SemiBold" Text="转换器工作台" />
+                                        <TextBlock Margin="0,9,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}" Text="将常用内容处理成适合保存、分享和继续使用的格式" />
+                                    </StackPanel>
+                                    <Border HorizontalAlignment="Right" VerticalAlignment="Center" Padding="12,7" Background="#8CEAF1FF" BorderBrush="#C3D9EFFF" BorderThickness="1" CornerRadius="10">
+                                        <StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="14" Foreground="#4D7CFE" Text="&#xE8C8;" /><TextBlock Margin="7,0,0,0" FontSize="12" Foreground="#54708F" Text="本地处理，不上传文件" /></StackPanel>
+                                    </Border>
+                                </Grid>
+                                <Grid Grid.Row="2">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="1.55*" /><ColumnDefinition Width="22" /><ColumnDefinition Width="1*" /></Grid.ColumnDefinitions>
+                                    <Border Background="#70FFFFFF" BorderBrush="#90FFFFFF" BorderThickness="1" CornerRadius="18">
+                                        <Border.Effect><DropShadowEffect BlurRadius="18" ShadowDepth="4" Direction="270" Opacity="0.08" Color="#496785" /></Border.Effect>
+                                        <Grid Margin="26">
+                                            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="16" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                            <StackPanel>
+                                                <TextBlock FontSize="17" FontWeight="SemiBold" Text="可用工具" />
+                                                <TextBlock Margin="0,5,0,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="每项工具拥有独立参数与任务队列，不会影响原文件" />
+                                            </StackPanel>
+                                            <Grid Grid.Row="2">
+                                                <Grid.RowDefinitions><RowDefinition Height="1.15*" /><RowDefinition Height="16" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                                <Button Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand" Click="OpenImageConverter_Click">
+                                                    <Button.Template>
+                                                        <ControlTemplate TargetType="Button">
+                                                            <Border x:Name="Root" Background="#EAF1FF" BorderBrush="#A8C7FF" BorderThickness="1" CornerRadius="16">
+                                                                <Border.Effect><DropShadowEffect BlurRadius="16" ShadowDepth="4" Direction="270" Opacity="0.14" Color="#5688E6" /></Border.Effect>
+                                                                <ContentPresenter Margin="22" />
+                                                            </Border>
+                                                            <ControlTemplate.Triggers>
+                                                                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Background" Value="#DCEBFF" /><Setter TargetName="Root" Property="BorderBrush" Value="#6E9CFC" /></Trigger>
+                                                                <Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.76" /></Trigger>
+                                                            </ControlTemplate.Triggers>
+                                                        </ControlTemplate>
+                                                    </Button.Template>
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions><ColumnDefinition Width="68" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                                        <Border Width="54" Height="54" VerticalAlignment="Center" Background="#D8E7FF" CornerRadius="16"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="27" Foreground="#4D7CFE" Text="&#xEB9F;" /></Border>
+                                                        <StackPanel Grid.Column="1" Margin="18,0" VerticalAlignment="Center">
+                                                            <TextBlock FontSize="20" FontWeight="SemiBold" Foreground="#284976" Text="图片处理" />
+                                                            <TextBlock Margin="0,7,0,0" FontSize="13" Foreground="#5D7593" Text="格式转换、压缩与缩放" />
+                                                            <TextBlock Margin="0,11,0,0" FontSize="11" Foreground="#7590AE" Text="PNG · JPEG · BMP · TIFF" />
+                                                        </StackPanel>
+                                                        <TextBlock Grid.Column="2" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="#4D7CFE" Text="&#xE76C;" />
+                                                    </Grid>
+                                                </Button>
+                                                <Grid Grid.Row="2">
+                                                    <Grid.RowDefinitions><RowDefinition Height="112" /><RowDefinition Height="12" /><RowDefinition Height="112" /></Grid.RowDefinitions>
+                                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="12" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                                    <Border Padding="16" Background="#44FFFFFF" BorderBrush="#76D8E2EF" BorderThickness="1" CornerRadius="14"><StackPanel><TextBlock FontFamily="Segoe Fluent Icons" FontSize="19" Foreground="#8C70C9" Text="&#xE8A5;" /><TextBlock Margin="0,10,0,0" FontSize="14" FontWeight="SemiBold" Text="文本与数据" /><TextBlock Margin="0,4,0,0" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}" Text="编码、结构化数据" /></StackPanel></Border>
+                                                    <Border Grid.Column="2" Padding="16" Background="#44FFFFFF" BorderBrush="#76D8E2EF" BorderThickness="1" CornerRadius="14"><StackPanel><TextBlock FontFamily="Segoe Fluent Icons" FontSize="19" Foreground="#D48A4B" Text="&#xE8A7;" /><TextBlock Margin="0,10,0,0" FontSize="14" FontWeight="SemiBold" Text="文档与 PDF" /><TextBlock Margin="0,4,0,0" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}" Text="后续接入专用组件" /></StackPanel></Border>
+                                                    <Border Grid.Row="2" Padding="16" Background="#44FFFFFF" BorderBrush="#76D8E2EF" BorderThickness="1" CornerRadius="14"><StackPanel><TextBlock FontFamily="Segoe Fluent Icons" FontSize="19" Foreground="#54A878" Text="&#xE714;" /><TextBlock Margin="0,10,0,0" FontSize="14" FontWeight="SemiBold" Text="音视频" /><TextBlock Margin="0,4,0,0" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}" Text="后续接入转码引擎" /></StackPanel></Border>
+                                                    <Border Grid.Row="2" Grid.Column="2" Padding="16" Background="#32FFFFFF" BorderBrush="#52C8D4E1" BorderThickness="1" CornerRadius="14"><StackPanel VerticalAlignment="Center"><TextBlock HorizontalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="19" Foreground="#97A6B6" Text="&#xE710;" /><TextBlock Margin="0,8,0,0" HorizontalAlignment="Center" FontSize="12" Foreground="#7D8B9A" Text="预留新工具" /></StackPanel></Border>
+                                                </Grid>
+                                            </Grid>
+                                        </Grid>
+                                    </Border>
+                                    <Border Grid.Column="2" Padding="24" Background="#58EEF7F7" BorderBrush="#86D8EAEB" BorderThickness="1" CornerRadius="18">
+                                        <StackPanel>
+                                            <Border Width="42" Height="42" Background="#DDF4EF" CornerRadius="13"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="20" Foreground="#4BA278" Text="&#xE73E;" /></Border>
+                                            <TextBlock Margin="0,17,0,0" FontSize="17" FontWeight="SemiBold" Text="处理原则" />
+                                            <TextBlock Margin="0,8,0,0" FontSize="12" LineHeight="20" Foreground="#617B87" Text="转换结果会保存为新文件，原始文件不会被覆盖。" />
+                                            <Border Height="1" Margin="0,20,0,16" Background="#76CDE0E0" />
+                                            <TextBlock FontSize="14" FontWeight="SemiBold" Text="下一步" />
+                                            <TextBlock Margin="0,7,0,0" FontSize="12" LineHeight="19" Foreground="#617B87" Text="后续可在此接入文本、数据、PDF 与音视频等转换能力。" />
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                            </Grid>
+
+                            <!-- 图片处理专用页：参数区与文件队列分离，便于后续扩展预设、进度与批处理。 -->
+                            <Grid x:Name="ImageConverterView" Visibility="Collapsed" Margin="52,36,52,34">
+                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="20" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                <Grid>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button Width="36" Height="36" Margin="0,0,12,0" Style="{StaticResource ConverterSecondaryButtonStyle}" Content="&#xE72B;" FontFamily="Segoe Fluent Icons" Click="BackToConverterWorkbench_Click" />
+                                        <StackPanel><TextBlock FontSize="28" FontWeight="SemiBold" Text="图片处理" /><TextBlock Margin="0,6,0,0" FontSize="13" Foreground="{StaticResource SecondaryTextBrush}" Text="批量转换图片格式、压缩质量与像素尺寸" /></StackPanel>
+                                    </StackPanel>
+                                    <Border HorizontalAlignment="Right" VerticalAlignment="Center" Padding="12,7" Background="#80E9F3FF" BorderBrush="#B8D2EFFF" BorderThickness="1" CornerRadius="10"><TextBlock FontSize="12" Foreground="#4D6E91" Text="原始文件保持不变" /></Border>
+                                </Grid>
+                                <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="1.15*" /><ColumnDefinition Width="20" /><ColumnDefinition Width="0.85*" /></Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <Border Padding="22" Background="#72FFFFFF" BorderBrush="#92FFFFFF" BorderThickness="1" CornerRadius="16">
+                                                <StackPanel>
+                                                    <Grid><TextBlock FontSize="16" FontWeight="SemiBold" Text="1. 添加图片" /><Button HorizontalAlignment="Right" Style="{StaticResource ConverterSecondaryButtonStyle}" Content="选择文件" Click="SelectImageFiles_Click" /></Grid>
+                                                    <TextBlock x:Name="ImageFilesSummaryText" Margin="0,9,0,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="支持 PNG、JPEG、BMP、TIFF，可一次选择多张" />
+                                                    <Border Margin="0,16,0,0" MinHeight="164" Padding="12" Background="#42EEF5FF" BorderBrush="#86C7DFF3" BorderThickness="1" CornerRadius="12">
+                                                        <ListBox x:Name="ImageFileList" Background="Transparent" BorderThickness="0" IsHitTestVisible="False" FontSize="12" Foreground="#4B6680" />
+                                                    </Border>
+                                                </StackPanel>
+                                            </Border>
+                                            <Border Margin="0,14,0,0" Padding="22" Background="#72FFFFFF" BorderBrush="#92FFFFFF" BorderThickness="1" CornerRadius="16">
+                                                <StackPanel>
+                                                    <TextBlock FontSize="16" FontWeight="SemiBold" Text="2. 输出位置" />
+                                                    <Grid Margin="0,13,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="12" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><Border Padding="12,10" Background="#56EAF1F8" BorderBrush="#8ACCE0EF" BorderThickness="1" CornerRadius="9"><TextBlock x:Name="ConverterOutputFolderText" TextTrimming="CharacterEllipsis" Foreground="#52708C" /></Border><Button Grid.Column="2" Style="{StaticResource ConverterSecondaryButtonStyle}" Content="选择文件夹" Click="SelectConverterOutputFolder_Click" /></Grid>
+                                                </StackPanel>
+                                            </Border>
+                                        </StackPanel>
+                                        <Border Grid.Column="2" Padding="22" Background="#78F4F7FF" BorderBrush="#9ACEDCFA" BorderThickness="1" CornerRadius="16">
+                                            <StackPanel>
+                                                <TextBlock FontSize="16" FontWeight="SemiBold" Text="3. 处理参数" />
+                                                <TextBlock Margin="0,15,0,6" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="输出格式" />
+                                                <ComboBox x:Name="ImageFormatComboBox" Height="38" SelectedIndex="0" SelectionChanged="ImageFormatComboBox_SelectionChanged"><ComboBoxItem Tag="Png">PNG · 无损</ComboBoxItem><ComboBoxItem Tag="Jpeg">JPEG · 体积更小</ComboBoxItem><ComboBoxItem Tag="Bmp">BMP · 位图</ComboBoxItem><ComboBoxItem Tag="Tiff">TIFF · 高保真</ComboBoxItem></ComboBox>
+                                                <Grid Margin="0,18,0,0"><TextBlock FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="JPEG 质量" /><TextBlock x:Name="ImageQualityValueText" HorizontalAlignment="Right" FontSize="12" Foreground="#507AB3" /></Grid>
+                                                <Slider x:Name="ImageQualitySlider" Minimum="20" Maximum="100" Value="88" TickFrequency="10" IsSnapToTickEnabled="False" ValueChanged="ImageQualitySlider_ValueChanged" />
+                                                <Grid Margin="0,14,0,0"><TextBlock FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="输出尺寸" /><TextBlock x:Name="ImageScaleValueText" HorizontalAlignment="Right" FontSize="12" Foreground="#507AB3" /></Grid>
+                                                <Slider x:Name="ImageScaleSlider" Minimum="10" Maximum="200" Value="100" TickFrequency="10" IsSnapToTickEnabled="False" ValueChanged="ImageScaleSlider_ValueChanged" />
+                                                <TextBlock Margin="0,22,0,0" FontSize="11" LineHeight="18" Foreground="#72869B" Text="JPEG 会以白色填充透明区域；其他格式保留透明通道。" TextWrapping="Wrap" />
+                                                <Button x:Name="StartImageConversionButton" Margin="0,20,0,0" Style="{StaticResource ConverterActionButtonStyle}" Content="开始处理" Click="StartImageConversion_Click" />
+                                                <TextBlock x:Name="ImageConversionStatusText" Margin="0,12,0,0" FontSize="12" Foreground="#5C7894" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+                                </ScrollViewer>
                             </Grid>
 
                             <!-- 统一剪贴板页：屏幕工作台内容与外部复制内容统一回看。 -->
@@ -777,6 +942,13 @@
                                                     <TextBlock VerticalAlignment="Center" FontSize="15" Text="外部复制" />
                                                     <TextBlock x:Name="ClipboardStoragePathText" Grid.Column="1" Margin="6,0,12,0" VerticalAlignment="Center" Foreground="#708095" TextTrimming="CharacterEllipsis" />
                                                     <Button Grid.Column="2" Height="30" Style="{StaticResource StorageLocationButtonStyle}" Content="选择文件夹" Tag="外部复制" Click="StorageLocationButton_Click" />
+                                                </Grid>
+                                                <Border Height="1" Background="#55FFFFFF" />
+                                                <Grid Height="46" Margin="2,0,2,5">
+                                                    <Grid.ColumnDefinitions><ColumnDefinition Width="92" /><ColumnDefinition Width="*" /><ColumnDefinition Width="96" /></Grid.ColumnDefinitions>
+                                                    <TextBlock VerticalAlignment="Center" FontSize="15" Text="转换器" />
+                                                    <TextBlock x:Name="ConverterStoragePathText" Grid.Column="1" Margin="6,0,12,0" VerticalAlignment="Center" Foreground="#708095" TextTrimming="CharacterEllipsis" />
+                                                    <Button Grid.Column="2" Height="30" Style="{StaticResource StorageLocationButtonStyle}" Content="选择文件夹" Tag="转换器" Click="StorageLocationButton_Click" />
                                                 </Grid>
                                             </StackPanel>
                                         </Expander>
