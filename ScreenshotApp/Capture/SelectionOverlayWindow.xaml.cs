@@ -33,7 +33,7 @@ public partial class SelectionOverlayWindow : Window
     private Rect _resizeStartSelection;
     private Point _resizeStartPoint;
     private bool? _toolbarBelowSelection;
-    private bool _isResizingSelection;
+    private bool _toolbarPositioned;
 
     private const double MinimumSelectionSize = 16;
     private const double ResizeHandleSize = 14;
@@ -113,6 +113,7 @@ public partial class SelectionOverlayWindow : Window
         _selection = new Rect(position, position);
         _isDragging = true;
         _toolbarBelowSelection = null;
+        _toolbarPositioned = false;
         ResetAnnotations();
         ActionToolbar.Visibility = Visibility.Collapsed;
         CaptureSurface.CaptureMouse();
@@ -412,7 +413,6 @@ public partial class SelectionOverlayWindow : Window
         _activeResizeHandle = handle;
         _resizeStartSelection = _selection;
         _resizeStartPoint = Mouse.GetPosition(CaptureSurface);
-        _isResizingSelection = true;
         SetActiveAnnotationTool(ScreenshotAnnotationTool.None);
         e.Handled = true;
     }
@@ -461,7 +461,6 @@ public partial class SelectionOverlayWindow : Window
     private void SelectionResizeHandle_DragCompleted(object sender, DragCompletedEventArgs e)
     {
         _activeResizeHandle = null;
-        _isResizingSelection = false;
         UpdateSelectionVisuals(_selection);
         e.Handled = true;
     }
@@ -646,6 +645,7 @@ public partial class SelectionOverlayWindow : Window
             ActionToolbar.Visibility = Visibility.Collapsed;
             AnnotationCanvas.Visibility = Visibility.Collapsed;
             _toolbarBelowSelection = null;
+            _toolbarPositioned = false;
             return;
         }
 
@@ -667,8 +667,7 @@ public partial class SelectionOverlayWindow : Window
         Canvas.SetTop(SizeBadge, Math.Max(6, selection.Top - SizeBadge.DesiredSize.Height - 7));
 
         if (_purpose == SelectionPurpose.Screenshot &&
-            ActionToolbar.Visibility == Visibility.Visible &&
-            !_isResizingSelection)
+            ActionToolbar.Visibility == Visibility.Visible)
         {
             AnnotationCanvas.Clip = new RectangleGeometry(selection);
             PositionToolbar();
@@ -756,6 +755,11 @@ public partial class SelectionOverlayWindow : Window
         ActionToolbar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         var toolbarWidth = ActionToolbar.DesiredSize.Width;
         var toolbarHeight = ActionToolbar.DesiredSize.Height;
+        if (_toolbarPositioned && !ToolbarIntersectsSelection(toolbarWidth, toolbarHeight))
+        {
+            return;
+        }
+
         var x = Math.Clamp(_selection.Right - toolbarWidth, 8, Math.Max(8, CaptureSurface.ActualWidth - toolbarWidth - 8));
         var preferredBelow = _selection.Bottom + 10;
         var preferredAbove = _selection.Top - toolbarHeight - 10;
@@ -778,6 +782,19 @@ public partial class SelectionOverlayWindow : Window
             : Math.Max(8, preferredAbove);
 
         ActionToolbar.Margin = new Thickness(x, y, 0, 0);
+        _toolbarPositioned = true;
+    }
+
+    private bool ToolbarIntersectsSelection(double toolbarWidth, double toolbarHeight)
+    {
+        var toolbarBounds = new Rect(
+            ActionToolbar.Margin.Left,
+            ActionToolbar.Margin.Top,
+            toolbarWidth,
+            toolbarHeight);
+        var protectedSelection = _selection;
+        protectedSelection.Inflate(4, 4);
+        return toolbarBounds.IntersectsWith(protectedSelection);
     }
 
     private Point ClampToSurface(Point point)
