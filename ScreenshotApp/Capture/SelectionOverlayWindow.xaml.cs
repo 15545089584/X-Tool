@@ -33,6 +33,7 @@ public partial class SelectionOverlayWindow : Window
     private Rect _resizeStartSelection;
     private Point _resizeStartPoint;
     private bool? _toolbarBelowSelection;
+    private bool _isResizingSelection;
 
     private const double MinimumSelectionSize = 16;
     private const double ResizeHandleSize = 14;
@@ -87,7 +88,7 @@ public partial class SelectionOverlayWindow : Window
 
     private void CaptureSurface_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (IsInsideButton(e.OriginalSource as DependencyObject))
+        if (IsInsideInteractiveControl(e.OriginalSource as DependencyObject))
         {
             return;
         }
@@ -411,6 +412,7 @@ public partial class SelectionOverlayWindow : Window
         _activeResizeHandle = handle;
         _resizeStartSelection = _selection;
         _resizeStartPoint = Mouse.GetPosition(CaptureSurface);
+        _isResizingSelection = true;
         SetActiveAnnotationTool(ScreenshotAnnotationTool.None);
         e.Handled = true;
     }
@@ -459,6 +461,7 @@ public partial class SelectionOverlayWindow : Window
     private void SelectionResizeHandle_DragCompleted(object sender, DragCompletedEventArgs e)
     {
         _activeResizeHandle = null;
+        _isResizingSelection = false;
         UpdateSelectionVisuals(_selection);
         e.Handled = true;
     }
@@ -663,7 +666,9 @@ public partial class SelectionOverlayWindow : Window
         Canvas.SetLeft(SizeBadge, Math.Max(6, selection.Left));
         Canvas.SetTop(SizeBadge, Math.Max(6, selection.Top - SizeBadge.DesiredSize.Height - 7));
 
-        if (_purpose == SelectionPurpose.Screenshot && ActionToolbar.Visibility == Visibility.Visible)
+        if (_purpose == SelectionPurpose.Screenshot &&
+            ActionToolbar.Visibility == Visibility.Visible &&
+            !_isResizingSelection)
         {
             AnnotationCanvas.Clip = new RectangleGeometry(selection);
             PositionToolbar();
@@ -960,11 +965,11 @@ public partial class SelectionOverlayWindow : Window
         element.Height = Math.Max(0, height);
     }
 
-    private static bool IsInsideButton(DependencyObject? source)
+    private static bool IsInsideInteractiveControl(DependencyObject? source)
     {
         while (source is not null)
         {
-            if (source is Button)
+            if (source is Button or Thumb)
             {
                 return true;
             }
