@@ -9,9 +9,11 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using System.Windows.Interop;
 using System.ComponentModel;
+using Forms = System.Windows.Forms;
 using ScreenshotApp.Capture;
 using ScreenshotApp.History;
 using ScreenshotApp.Recording;
+using ScreenshotApp.Settings;
 
 namespace ScreenshotApp;
 
@@ -24,7 +26,8 @@ public partial class MainWindow : Window
     private readonly ICaptureBackend _scrollCaptureBackend;
     private readonly ScrollCaptureService _scrollCaptureService;
     private readonly ScreenRecordingService _screenRecordingService;
-    private readonly ScreenshotHistoryStore _historyStore = new();
+    private readonly AppPreferences _preferences = AppPreferences.Load();
+    private readonly ScreenshotHistoryStore _historyStore;
     private readonly ObservableCollection<ScreenshotHistoryItem> _historyItems = new();
     private readonly ObservableCollection<ScreenshotHistoryItem> _textHistoryItems = new();
     private IReadOnlyList<ScreenshotHistoryItem> _allHistoryItems = Array.Empty<ScreenshotHistoryItem>();
@@ -37,6 +40,9 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        _historyStore = new ScreenshotHistoryStore(_preferences);
+        StickerTopmostCheckBox.IsChecked = _preferences.StickerTopmost;
+        UpdateStorageLocationText();
         // 长截图需要连续拿到“此刻”的画面。每次重新创建桌面复制会话时，
         // 部分显卡驱动可能先返回上一帧，因此滚动采集优先使用同步的 GDI 帧，
         // 若遇到不可捕获或空帧内容，再回退到 DXGI。
@@ -617,7 +623,7 @@ public partial class MainWindow : Window
     {
         try
         {
-            var historyRoot = Path.GetDirectoryName(ScreenshotHistoryStore.StorageDirectory) ?? ScreenshotHistoryStore.StorageDirectory;
+            var historyRoot = Path.GetDirectoryName(_preferences.ScreenshotDirectory) ?? _preferences.ScreenshotDirectory;
             Directory.CreateDirectory(historyRoot);
             Process.Start(new ProcessStartInfo
             {
@@ -629,6 +635,74 @@ public partial class MainWindow : Window
         {
             ShowToast($"无法打开存储位置：{exception.Message}");
         }
+    }
+
+    private void StickerTopmostCheckBox_Click(object sender, RoutedEventArgs e)
+    {
+        _preferences.StickerTopmost = StickerTopmostCheckBox.IsChecked == true;
+        _preferences.Save();
+    }
+
+    private async void StorageLocationButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: string category })
+        {
+            return;
+        }
+
+        using var dialog = new Forms.FolderBrowserDialog
+        {
+            Description = $"选择{category}的保存位置",
+            UseDescriptionForTitle = true,
+            SelectedPath = GetStorageLocation(category)
+        };
+        if (dialog.ShowDialog() != Forms.DialogResult.OK || string.IsNullOrWhiteSpace(dialog.SelectedPath))
+        {
+            return;
+        }
+
+        SetStorageLocation(category, dialog.SelectedPath);
+        _preferences.Save();
+        UpdateStorageLocationText();
+        await RefreshHistoryAsync();
+        ShowToast($"已更新{category}的存储位置");
+    }
+
+    private string GetStorageLocation(string category) => category switch
+    {
+        "截图" => _preferences.ScreenshotDirectory,
+        "长截图" => _preferences.LongScreenshotDirectory,
+        "文字提取" => _preferences.TextExtractionDirectory,
+        "翻译" => _preferences.TranslationDirectory,
+        _ => string.Empty
+    };
+
+    private void SetStorageLocation(string category, string directory)
+    {
+        var fullPath = Path.GetFullPath(directory);
+        switch (category)
+        {
+            case "截图":
+                _preferences.ScreenshotDirectory = fullPath;
+                break;
+            case "长截图":
+                _preferences.LongScreenshotDirectory = fullPath;
+                break;
+            case "文字提取":
+                _preferences.TextExtractionDirectory = fullPath;
+                break;
+            case "翻译":
+                _preferences.TranslationDirectory = fullPath;
+                break;
+        }
+    }
+
+    private void UpdateStorageLocationText()
+    {
+        ScreenshotStoragePathText.Text = _preferences.ScreenshotDirectory;
+        LongScreenshotStoragePathText.Text = _preferences.LongScreenshotDirectory;
+        TextExtractionStoragePathText.Text = _preferences.TextExtractionDirectory;
+        TranslationStoragePathText.Text = _preferences.TranslationDirectory;
     }
 
     private void OpenHistoryItem_Click(object sender, RoutedEventArgs e)

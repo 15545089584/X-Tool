@@ -6,6 +6,7 @@ using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using ScreenshotApp.Capture;
+using ScreenshotApp.Settings;
 
 namespace ScreenshotApp.Sticker;
 
@@ -23,7 +24,7 @@ internal sealed class StickerWindow : Window
         AllowsTransparency = true;
         Background = Brushes.Transparent;
         ShowInTaskbar = false;
-        Topmost = true;
+        Topmost = AppPreferences.Load().StickerTopmost;
         UseLayoutRounding = true;
         SnapsToDevicePixels = true;
 
@@ -61,7 +62,7 @@ internal sealed class StickerWindow : Window
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
             RenderTransformOrigin = new Point(0.5, 0.5),
-            Opacity = 1
+            Opacity = Topmost ? 1 : 0.48
         };
         var pinButton = CreateActionButton(_pinIcon, "置顶");
         pinButton.Click += (_, _) => ToggleTopmost();

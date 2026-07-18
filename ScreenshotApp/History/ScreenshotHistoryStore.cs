@@ -2,18 +2,22 @@ using System.IO;
 using System.Text;
 using System.Windows.Media.Imaging;
 using ScreenshotApp.Recording;
+using ScreenshotApp.Settings;
 
 namespace ScreenshotApp.History;
 
 /// <summary>
-/// 将图片、文字和录像统一保存到 E 盘，并按类别提供历史页记录。
+/// 将图片、文字和录像按用户设置的目录保存，并提供统一的历史页记录。
 /// </summary>
 public sealed class ScreenshotHistoryStore
 {
-    public const string StorageDirectory = @"E:\截影\Screenshots";
-    public const string TextExtractionDirectory = @"E:\截影\History\文字提取";
-    public const string TranslationDirectory = @"E:\截影\History\翻译";
     public const string RecordingDirectory = @"E:\截影\Recordings";
+    private readonly AppPreferences _preferences;
+
+    public ScreenshotHistoryStore(AppPreferences preferences)
+    {
+        _preferences = preferences;
+    }
 
     public Task<string> SaveAsync(BitmapSource bitmap, bool isLongCapture)
     {
@@ -24,10 +28,13 @@ public sealed class ScreenshotHistoryStore
 
         return Task.Run(() =>
         {
-            Directory.CreateDirectory(StorageDirectory);
+            var directory = isLongCapture
+                ? _preferences.LongScreenshotDirectory
+                : _preferences.ScreenshotDirectory;
+            Directory.CreateDirectory(directory);
             var kind = isLongCapture ? "长截图" : "截图";
             var fileName = $"截影_{kind}_{DateTime.Now:yyyy-MM-dd_HH-mm-ss-fff}.png";
-            var filePath = Path.Combine(StorageDirectory, fileName);
+            var filePath = Path.Combine(directory, fileName);
 
             var encoder = new PngBitmapEncoder();
             encoder.Frames.Add(BitmapFrame.Create(bitmap));
@@ -47,8 +54,8 @@ public sealed class ScreenshotHistoryStore
         return Task.Run(async () =>
         {
             var directory = content.Kind == HistoryEntryKind.TextExtraction
-                ? TextExtractionDirectory
-                : TranslationDirectory;
+                ? _preferences.TextExtractionDirectory
+                : _preferences.TranslationDirectory;
             var prefix = content.Kind == HistoryEntryKind.TextExtraction ? "文字提取" : "翻译";
             Directory.CreateDirectory(directory);
             var filePath = Path.Combine(directory, $"截影_{prefix}_{DateTime.Now:yyyy-MM-dd_HH-mm-ss-fff}.txt");
@@ -62,9 +69,11 @@ public sealed class ScreenshotHistoryStore
         return Task.Run<IReadOnlyList<ScreenshotHistoryItem>>(() =>
         {
             var items = new List<ScreenshotHistoryItem>();
-            LoadImageEntries(items);
-            LoadTextEntries(items, TextExtractionDirectory, HistoryEntryKind.TextExtraction, "文字提取");
-            LoadTextEntries(items, TranslationDirectory, HistoryEntryKind.Translation, "翻译");
+            var loadedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            LoadImageEntries(items, _preferences.ScreenshotDirectory, HistoryEntryKind.Screenshot, loadedFiles, detectLongCapture: true);
+            LoadImageEntries(items, _preferences.LongScreenshotDirectory, HistoryEntryKind.LongScreenshot, loadedFiles);
+            LoadTextEntries(items, _preferences.TextExtractionDirectory, HistoryEntryKind.TextExtraction, "文字提取", loadedFiles);
+            LoadTextEntries(items, _preferences.TranslationDirectory, HistoryEntryKind.Translation, "翻译", loadedFiles);
             LoadRecordingEntries(items);
             return items
                 .OrderByDescending(item => item.CapturedAt)
@@ -73,15 +82,28 @@ public sealed class ScreenshotHistoryStore
         });
     }
 
-    private static void LoadImageEntries(ICollection<ScreenshotHistoryItem> items)
+    private static void LoadImageEntries(
+        ICollection<ScreenshotHistoryItem> items,
+        string directory,
+        HistoryEntryKind expectedKind,
+        ISet<string> loadedFiles,
+        bool detectLongCapture = false)
     {
-        Directory.CreateDirectory(StorageDirectory);
-        foreach (var filePath in Directory.EnumerateFiles(StorageDirectory, "*.png", SearchOption.TopDirectoryOnly))
+        Directory.CreateDirectory(directory);
+        foreach (var filePath in Directory.EnumerateFiles(directory, "*.png", SearchOption.TopDirectoryOnly))
         {
             try
             {
-                var isLongCapture = Path.GetFileName(filePath).Contains("长截图", StringComparison.OrdinalIgnoreCase);
-                items.Add(CreateImageItem(filePath, isLongCapture ? HistoryEntryKind.LongScreenshot : HistoryEntryKind.Screenshot));
+                var fullPath = Path.GetFullPath(filePath);
+                if (!loadedFiles.Add(fullPath))
+                {
+                    continue;
+                }
+
+                var kind = detectLongCapture && Path.GetFileName(filePath).Contains("长截图", StringComparison.OrdinalIgnoreCase)
+                    ? HistoryEntryKind.LongScreenshot
+                    : expectedKind;
+                items.Add(CreateImageItem(filePath, kind));
             }
             catch
             {
@@ -94,13 +116,19 @@ public sealed class ScreenshotHistoryStore
         ICollection<ScreenshotHistoryItem> items,
         string directory,
         HistoryEntryKind kind,
-        string kindText)
+        string kindText,
+        ISet<string> loadedFiles)
     {
         Directory.CreateDirectory(directory);
         foreach (var filePath in Directory.EnumerateFiles(directory, "*.txt", SearchOption.TopDirectoryOnly))
         {
             try
             {
+                if (!loadedFiles.Add(Path.GetFullPath(filePath)))
+                {
+                    continue;
+                }
+
                 var content = File.ReadAllText(filePath, Encoding.UTF8);
                 var timestamp = File.GetLastWriteTime(filePath);
                 items.Add(new ScreenshotHistoryItem(

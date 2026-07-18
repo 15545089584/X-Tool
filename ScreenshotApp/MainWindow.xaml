@@ -62,6 +62,68 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- 设置项统一使用轻玻璃开关，替代系统原生复选框的硬边框。 -->
+        <Style x:Key="SettingToggleStyle" TargetType="CheckBox">
+            <Setter Property="Width" Value="48" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Border x:Name="Track" Padding="3" Background="#82DCE4EE" BorderBrush="#9FC6D4E3" BorderThickness="1" CornerRadius="14">
+                            <Ellipse x:Name="Thumb" Width="20" Height="20" HorizontalAlignment="Left" Fill="#F8FCFF">
+                                <Ellipse.Effect>
+                                    <DropShadowEffect BlurRadius="5" ShadowDepth="1" Opacity="0.18" Color="#36506A" />
+                                </Ellipse.Effect>
+                            </Ellipse>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Track" Property="Background" Value="#5E82C8FF" />
+                                <Setter TargetName="Track" Property="BorderBrush" Value="#9C58A8FF" />
+                                <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Track" Property="Opacity" Value="0.82" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 存储位置使用可展开的玻璃容器，平时保持设置页简洁。 -->
+        <Style x:Key="StorageExpanderStyle" TargetType="Expander">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Expander">
+                        <Border Background="#5EFFFFFF" BorderBrush="#7AFFFFFF" BorderThickness="1" CornerRadius="12">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <ToggleButton x:Name="HeaderToggle" Padding="16,0" Height="64" Background="Transparent" BorderThickness="0"
+                                              IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+                                    <Grid>
+                                        <ContentPresenter VerticalAlignment="Center" ContentSource="Header" />
+                                        <TextBlock x:Name="Chevron" HorizontalAlignment="Right" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#64758A" Text="&#xE70D;" />
+                                    </Grid>
+                                </ToggleButton>
+                                <ContentPresenter x:Name="ExpandSite" Grid.Row="1" Margin="16,0,16,16" ContentSource="Content" Visibility="Collapsed" />
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsExpanded" Value="True">
+                                <Setter TargetName="ExpandSite" Property="Visibility" Value="Visible" />
+                                <Setter TargetName="Chevron" Property="Text" Value="&#xE70E;" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <Grid x:Name="RootVisual" Background="{StaticResource WindowTintBrush}">
@@ -411,7 +473,7 @@
                                                 </ItemsControl.ItemTemplate>
                                             </ItemsControl>
                                             <!-- 文字提取与翻译以满宽横条显示，便于直接扫读内容摘要。 -->
-                                            <ItemsControl x:Name="TextHistoryItemsControl" Margin="7,3,7,7">
+                                            <ItemsControl x:Name="TextHistoryItemsControl" Margin="20,3,20,7">
                                                 <ItemsControl.ItemsPanel>
                                                     <ItemsPanelTemplate>
                                                         <StackPanel />
@@ -426,6 +488,24 @@
                                                             <Button.Style>
                                                                 <Style TargetType="Button">
                                                                     <Setter Property="Visibility" Value="Collapsed" />
+                                                                    <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                                                                    <Setter Property="Template">
+                                                                        <Setter.Value>
+                                                                            <ControlTemplate TargetType="Button">
+                                                                                <Border x:Name="TextHistoryButtonRoot" Background="Transparent" CornerRadius="16">
+                                                                                    <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
+                                                                                </Border>
+                                                                                <ControlTemplate.Triggers>
+                                                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                                                        <Setter TargetName="TextHistoryButtonRoot" Property="Background" Value="#30BFDFFF" />
+                                                                                    </Trigger>
+                                                                                    <Trigger Property="IsPressed" Value="True">
+                                                                                        <Setter TargetName="TextHistoryButtonRoot" Property="Background" Value="#5AA7D5FF" />
+                                                                                    </Trigger>
+                                                                                </ControlTemplate.Triggers>
+                                                                            </ControlTemplate>
+                                                                        </Setter.Value>
+                                                                    </Setter>
                                                                     <Style.Triggers>
                                                                         <DataTrigger Binding="{Binding IsTextRecord}" Value="True">
                                                                             <Setter Property="Visibility" Value="Visible" />
@@ -495,7 +575,7 @@
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="28" />
-                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
                                 </Grid.RowDefinitions>
                                 <StackPanel>
                                     <TextBlock FontSize="28" FontWeight="SemiBold" Text="设置" />
@@ -503,23 +583,71 @@
                                 </StackPanel>
                                 <Border Grid.Row="2" Background="{StaticResource GlassCardBrush}"
                                         BorderBrush="#5AFFFFFF" BorderThickness="1" CornerRadius="14">
-                                    <StackPanel>
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                    <StackPanel Margin="0,8">
                                         <Grid Height="76" Margin="22,0">
                                             <StackPanel VerticalAlignment="Center">
                                                 <TextBlock FontSize="15" Text="截图后自动复制" />
                                                 <TextBlock Margin="0,5,0,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="完成截图后写入系统剪贴板" />
                                             </StackPanel>
-                                            <CheckBox HorizontalAlignment="Right" VerticalAlignment="Center" IsChecked="True" />
+                                            <CheckBox HorizontalAlignment="Right" VerticalAlignment="Center" IsChecked="True" Style="{StaticResource SettingToggleStyle}" />
                                         </Grid>
                                         <Border Height="1" Margin="22,0" Background="{StaticResource GlassDividerBrush}" />
                                         <Grid Height="76" Margin="22,0">
                                             <StackPanel VerticalAlignment="Center">
                                                 <TextBlock FontSize="15" Text="保存截图历史" />
-                                                <TextBlock Margin="0,5,0,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="默认保存到 E:\截影\Screenshots" />
                                             </StackPanel>
-                                            <CheckBox HorizontalAlignment="Right" VerticalAlignment="Center" IsChecked="True" IsEnabled="False" />
+                                            <CheckBox HorizontalAlignment="Right" VerticalAlignment="Center" IsChecked="True" IsEnabled="False" Style="{StaticResource SettingToggleStyle}" />
                                         </Grid>
+                                        <Border Height="1" Margin="22,0" Background="{StaticResource GlassDividerBrush}" />
+                                        <Grid Height="76" Margin="22,0">
+                                            <StackPanel VerticalAlignment="Center">
+                                                <TextBlock FontSize="15" Text="贴图默认置顶" />
+                                                <TextBlock Margin="0,5,0,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="创建贴图后始终显示在其他窗口上方" />
+                                            </StackPanel>
+                                            <CheckBox x:Name="StickerTopmostCheckBox" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                      Style="{StaticResource SettingToggleStyle}" Click="StickerTopmostCheckBox_Click" />
+                                        </Grid>
+                                        <Border Height="1" Margin="22,0" Background="{StaticResource GlassDividerBrush}" />
+                                        <Expander Margin="22,12,22,14" Style="{StaticResource StorageExpanderStyle}">
+                                            <Expander.Header>
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock FontSize="15" Text="存储位置" />
+                                                    <TextBlock Margin="0,5,0,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="分别设置各类历史记录的保存目录" />
+                                                </StackPanel>
+                                            </Expander.Header>
+                                            <StackPanel>
+                                                <Grid Height="54" Margin="2,8,2,0">
+                                                    <Grid.ColumnDefinitions><ColumnDefinition Width="92" /><ColumnDefinition Width="*" /><ColumnDefinition Width="96" /></Grid.ColumnDefinitions>
+                                                    <TextBlock VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold" Text="截图" />
+                                                    <TextBlock x:Name="ScreenshotStoragePathText" Grid.Column="1" Margin="6,0,12,0" VerticalAlignment="Center" Foreground="#708095" TextTrimming="CharacterEllipsis" />
+                                                    <Button Grid.Column="2" Height="30" Background="#8CFFFFFF" BorderBrush="#A9D5E6F5" BorderThickness="1" Cursor="Hand" Content="选择文件夹" Tag="截图" Click="StorageLocationButton_Click" />
+                                                </Grid>
+                                                <Border Height="1" Background="#55FFFFFF" />
+                                                <Grid Height="54" Margin="2,0">
+                                                    <Grid.ColumnDefinitions><ColumnDefinition Width="92" /><ColumnDefinition Width="*" /><ColumnDefinition Width="96" /></Grid.ColumnDefinitions>
+                                                    <TextBlock VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold" Text="长截图" />
+                                                    <TextBlock x:Name="LongScreenshotStoragePathText" Grid.Column="1" Margin="6,0,12,0" VerticalAlignment="Center" Foreground="#708095" TextTrimming="CharacterEllipsis" />
+                                                    <Button Grid.Column="2" Height="30" Background="#8CFFFFFF" BorderBrush="#A9D5E6F5" BorderThickness="1" Cursor="Hand" Content="选择文件夹" Tag="长截图" Click="StorageLocationButton_Click" />
+                                                </Grid>
+                                                <Border Height="1" Background="#55FFFFFF" />
+                                                <Grid Height="54" Margin="2,0">
+                                                    <Grid.ColumnDefinitions><ColumnDefinition Width="92" /><ColumnDefinition Width="*" /><ColumnDefinition Width="96" /></Grid.ColumnDefinitions>
+                                                    <TextBlock VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold" Text="文字提取" />
+                                                    <TextBlock x:Name="TextExtractionStoragePathText" Grid.Column="1" Margin="6,0,12,0" VerticalAlignment="Center" Foreground="#708095" TextTrimming="CharacterEllipsis" />
+                                                    <Button Grid.Column="2" Height="30" Background="#8CFFFFFF" BorderBrush="#A9D5E6F5" BorderThickness="1" Cursor="Hand" Content="选择文件夹" Tag="文字提取" Click="StorageLocationButton_Click" />
+                                                </Grid>
+                                                <Border Height="1" Background="#55FFFFFF" />
+                                                <Grid Height="54" Margin="2,0,2,8">
+                                                    <Grid.ColumnDefinitions><ColumnDefinition Width="92" /><ColumnDefinition Width="*" /><ColumnDefinition Width="96" /></Grid.ColumnDefinitions>
+                                                    <TextBlock VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold" Text="翻译" />
+                                                    <TextBlock x:Name="TranslationStoragePathText" Grid.Column="1" Margin="6,0,12,0" VerticalAlignment="Center" Foreground="#708095" TextTrimming="CharacterEllipsis" />
+                                                    <Button Grid.Column="2" Height="30" Background="#8CFFFFFF" BorderBrush="#A9D5E6F5" BorderThickness="1" Cursor="Hand" Content="选择文件夹" Tag="翻译" Click="StorageLocationButton_Click" />
+                                                </Grid>
+                                            </StackPanel>
+                                        </Expander>
                                     </StackPanel>
+                                    </ScrollViewer>
                                 </Border>
                             </Grid>
 
