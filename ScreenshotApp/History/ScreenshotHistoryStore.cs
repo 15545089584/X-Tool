@@ -1,14 +1,18 @@
 using System.IO;
+using System.Text;
 using System.Windows.Media.Imaging;
 
 namespace ScreenshotApp.History;
 
 /// <summary>
-/// 将截图持久化到 E 盘，并为历史页生成轻量缩略图。
+/// 将图片、文字和录像统一保存到 E 盘，并按类别提供历史页记录。
 /// </summary>
 public sealed class ScreenshotHistoryStore
 {
     public const string StorageDirectory = @"E:\截影\Screenshots";
+    public const string TextExtractionDirectory = @"E:\截影\History\文字提取";
+    public const string TranslationDirectory = @"E:\截影\History\翻译";
+    public const string RecordingDirectory = @"E:\截影\Recordings";
 
     public Task<string> SaveAsync(BitmapSource bitmap, bool isLongCapture)
     {
@@ -32,32 +36,118 @@ public sealed class ScreenshotHistoryStore
         });
     }
 
-    public Task<IReadOnlyList<ScreenshotHistoryItem>> LoadAsync(int maximumCount = 120)
+    public Task<string> SaveTextAsync(HistoryTextContent content)
     {
-        return Task.Run<IReadOnlyList<ScreenshotHistoryItem>>(() =>
+        if (content.Kind is not (HistoryEntryKind.TextExtraction or HistoryEntryKind.Translation))
         {
-            Directory.CreateDirectory(StorageDirectory);
-            var items = new List<ScreenshotHistoryItem>();
-            foreach (var filePath in Directory
-                         .EnumerateFiles(StorageDirectory, "*.png", SearchOption.TopDirectoryOnly)
-                         .OrderByDescending(File.GetLastWriteTime)
-                         .Take(maximumCount))
-            {
-                try
-                {
-                    items.Add(CreateItem(filePath));
-                }
-                catch
-                {
-                    // 单个损坏或正在写入的图片不会阻止其余历史记录显示。
-                }
-            }
+            throw new ArgumentOutOfRangeException(nameof(content), "只有文字提取和翻译结果可以写入文本历史。 ");
+        }
 
-            return items;
+        return Task.Run(async () =>
+        {
+            var directory = content.Kind == HistoryEntryKind.TextExtraction
+                ? TextExtractionDirectory
+                : TranslationDirectory;
+            var prefix = content.Kind == HistoryEntryKind.TextExtraction ? "文字提取" : "翻译";
+            Directory.CreateDirectory(directory);
+            var filePath = Path.Combine(directory, $"截影_{prefix}_{DateTime.Now:yyyy-MM-dd_HH-mm-ss-fff}.txt");
+            await File.WriteAllTextAsync(filePath, content.Content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+            return filePath;
         });
     }
 
-    private static ScreenshotHistoryItem CreateItem(string filePath)
+    public Task<IReadOnlyList<ScreenshotHistoryItem>> LoadAsync(int maximumCount = 160)
+    {
+        return Task.Run<IReadOnlyList<ScreenshotHistoryItem>>(() =>
+        {
+            var items = new List<ScreenshotHistoryItem>();
+            LoadImageEntries(items);
+            LoadTextEntries(items, TextExtractionDirectory, HistoryEntryKind.TextExtraction, "文字提取");
+            LoadTextEntries(items, TranslationDirectory, HistoryEntryKind.Translation, "翻译");
+            LoadRecordingEntries(items);
+            return items
+                .OrderByDescending(item => item.CapturedAt)
+                .Take(maximumCount)
+                .ToArray();
+        });
+    }
+
+    private static void LoadImageEntries(ICollection<ScreenshotHistoryItem> items)
+    {
+        Directory.CreateDirectory(StorageDirectory);
+        foreach (var filePath in Directory.EnumerateFiles(StorageDirectory, "*.png", SearchOption.TopDirectoryOnly))
+        {
+            try
+            {
+                var isLongCapture = Path.GetFileName(filePath).Contains("长截图", StringComparison.OrdinalIgnoreCase);
+                items.Add(CreateImageItem(filePath, isLongCapture ? HistoryEntryKind.LongScreenshot : HistoryEntryKind.Screenshot));
+            }
+            catch
+            {
+                // 单个损坏或正在写入的图片不会阻止其余历史记录显示。
+            }
+        }
+    }
+
+    private static void LoadTextEntries(
+        ICollection<ScreenshotHistoryItem> items,
+        string directory,
+        HistoryEntryKind kind,
+        string kindText)
+    {
+        Directory.CreateDirectory(directory);
+        foreach (var filePath in Directory.EnumerateFiles(directory, "*.txt", SearchOption.TopDirectoryOnly))
+        {
+            try
+            {
+                var content = File.ReadAllText(filePath, Encoding.UTF8);
+                var timestamp = File.GetLastWriteTime(filePath);
+                items.Add(new ScreenshotHistoryItem(
+                    kind,
+                    kindText,
+                    filePath,
+                    Path.GetFileName(filePath),
+                    timestamp,
+                    timestamp.ToString("yyyy-MM-dd  HH:mm:ss"),
+                    $"{content.Count(character => !char.IsWhiteSpace(character)):N0} 个字符",
+                    CreatePreview(content),
+                    null));
+            }
+            catch
+            {
+                // 单个损坏的文本记录不影响其余历史条目。
+            }
+        }
+    }
+
+    private static void LoadRecordingEntries(ICollection<ScreenshotHistoryItem> items)
+    {
+        Directory.CreateDirectory(RecordingDirectory);
+        foreach (var filePath in Directory.EnumerateFiles(RecordingDirectory, "*.mp4", SearchOption.TopDirectoryOnly))
+        {
+            try
+            {
+                var fileInfo = new FileInfo(filePath);
+                var timestamp = fileInfo.LastWriteTime;
+                items.Add(new ScreenshotHistoryItem(
+                    HistoryEntryKind.ScreenRecording,
+                    "屏幕录制",
+                    filePath,
+                    fileInfo.Name,
+                    timestamp,
+                    timestamp.ToString("yyyy-MM-dd  HH:mm:ss"),
+                    $"{Math.Max(1, fileInfo.Length / 1024d / 1024d):0.0} MB · MP4",
+                    "点击即可播放这段屏幕录制",
+                    null));
+            }
+            catch
+            {
+                // 删除中的录像文件会在下次刷新时自然消失。
+            }
+        }
+    }
+
+    private static ScreenshotHistoryItem CreateImageItem(string filePath, HistoryEntryKind kind)
     {
         int pixelWidth;
         int pixelHeight;
@@ -82,10 +172,21 @@ public sealed class ScreenshotHistoryStore
 
         var capturedAt = File.GetLastWriteTime(filePath);
         return new ScreenshotHistoryItem(
+            kind,
+            kind == HistoryEntryKind.LongScreenshot ? "长截图" : "普通截图",
             filePath,
             Path.GetFileName(filePath),
+            capturedAt,
             capturedAt.ToString("yyyy-MM-dd  HH:mm:ss"),
             $"{pixelWidth} × {pixelHeight}",
+            string.Empty,
             thumbnail);
+    }
+
+    private static string CreatePreview(string content)
+    {
+        var normalized = string.Join(" ", content
+            .Split(new[] { '\r', '\n', '\t' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        return normalized.Length <= 76 ? normalized : $"{normalized[..76]}…";
     }
 }

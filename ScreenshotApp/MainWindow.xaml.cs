@@ -26,6 +26,8 @@ public partial class MainWindow : Window
     private readonly ScreenRecordingService _screenRecordingService;
     private readonly ScreenshotHistoryStore _historyStore = new();
     private readonly ObservableCollection<ScreenshotHistoryItem> _historyItems = new();
+    private IReadOnlyList<ScreenshotHistoryItem> _allHistoryItems = Array.Empty<ScreenshotHistoryItem>();
+    private HistoryEntryKind? _historyFilter;
     private HwndSource? _windowSource;
     private bool _hotKeyRegistered;
     private bool _captureInProgress;
@@ -263,6 +265,7 @@ public partial class MainWindow : Window
 
             var frame = await _captureBackend.CaptureCurrentMonitorAsync();
             var overlay = new SelectionOverlayWindow(frame);
+            overlay.HistoryTextCreated += Overlay_HistoryTextCreated;
             var confirmed = overlay.ShowDialog() == true;
 
             if (confirmed &&
@@ -425,6 +428,7 @@ public partial class MainWindow : Window
                         : "静音";
             ClipboardStatusText.Text = $"录像已保存 · {result.Duration:mm\\:ss} · {audioDescription}";
             ShowToast($"录像已保存（{audioDescription}）");
+            await RefreshHistoryAsync();
         }
         finally
         {
@@ -499,16 +503,8 @@ public partial class MainWindow : Window
         _historyRefreshInProgress = true;
         try
         {
-            var items = await _historyStore.LoadAsync();
-            _historyItems.Clear();
-            foreach (var item in items)
-            {
-                _historyItems.Add(item);
-            }
-
-            var hasItems = _historyItems.Count > 0;
-            HistoryEmptyPanel.Visibility = hasItems ? Visibility.Collapsed : Visibility.Visible;
-            HistoryScrollViewer.Visibility = hasItems ? Visibility.Visible : Visibility.Collapsed;
+            _allHistoryItems = await _historyStore.LoadAsync();
+            ApplyHistoryFilter();
         }
         catch (Exception exception)
         {
@@ -522,14 +518,80 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void Overlay_HistoryTextCreated(object? sender, HistoryTextContent content)
+    {
+        try
+        {
+            await _historyStore.SaveTextAsync(content);
+            await RefreshHistoryAsync();
+        }
+        catch (Exception exception)
+        {
+            ShowToast($"保存{(content.Kind == HistoryEntryKind.Translation ? "翻译" : "文字提取")}记录失败：{exception.Message}");
+        }
+    }
+
+    private void HistoryFilterButton_Click(object sender, RoutedEventArgs e)
+    {
+        var tag = (sender as FrameworkElement)?.Tag?.ToString();
+        _historyFilter = tag switch
+        {
+            "Screenshot" => HistoryEntryKind.Screenshot,
+            "LongScreenshot" => HistoryEntryKind.LongScreenshot,
+            "TextExtraction" => HistoryEntryKind.TextExtraction,
+            "Translation" => HistoryEntryKind.Translation,
+            "ScreenRecording" => HistoryEntryKind.ScreenRecording,
+            _ => null
+        };
+        ApplyHistoryFilter();
+    }
+
+    private void ApplyHistoryFilter()
+    {
+        var filteredItems = _historyFilter is null
+            ? _allHistoryItems
+            : _allHistoryItems.Where(item => item.Kind == _historyFilter.Value).ToArray();
+        _historyItems.Clear();
+        foreach (var item in filteredItems)
+        {
+            _historyItems.Add(item);
+        }
+
+        var hasItems = _historyItems.Count > 0;
+        HistoryEmptyPanel.Visibility = hasItems ? Visibility.Collapsed : Visibility.Visible;
+        HistoryScrollViewer.Visibility = hasItems ? Visibility.Visible : Visibility.Collapsed;
+        UpdateHistoryFilterStates();
+    }
+
+    private void UpdateHistoryFilterStates()
+    {
+        var buttons = new (Button Button, HistoryEntryKind? Kind)[]
+        {
+            (AllHistoryFilterButton, null),
+            (ScreenshotHistoryFilterButton, HistoryEntryKind.Screenshot),
+            (LongScreenshotHistoryFilterButton, HistoryEntryKind.LongScreenshot),
+            (TextExtractionHistoryFilterButton, HistoryEntryKind.TextExtraction),
+            (TranslationHistoryFilterButton, HistoryEntryKind.Translation),
+            (ScreenRecordingHistoryFilterButton, HistoryEntryKind.ScreenRecording)
+        };
+        foreach (var (button, kind) in buttons)
+        {
+            var selected = kind == _historyFilter;
+            button.Background = new SolidColorBrush(selected ? Color.FromRgb(222, 236, 255) : Color.FromArgb(140, 255, 255, 255));
+            button.BorderBrush = new SolidColorBrush(selected ? Color.FromRgb(102, 158, 255) : Color.FromArgb(180, 255, 255, 255));
+            button.Foreground = new SolidColorBrush(selected ? Color.FromRgb(35, 111, 224) : Color.FromRgb(86, 96, 108));
+        }
+    }
+
     private void OpenStorageFolder_Click(object sender, RoutedEventArgs e)
     {
         try
         {
-            Directory.CreateDirectory(ScreenshotHistoryStore.StorageDirectory);
+            var historyRoot = Path.GetDirectoryName(ScreenshotHistoryStore.StorageDirectory) ?? ScreenshotHistoryStore.StorageDirectory;
+            Directory.CreateDirectory(historyRoot);
             Process.Start(new ProcessStartInfo
             {
-                FileName = ScreenshotHistoryStore.StorageDirectory,
+                FileName = historyRoot,
                 UseShellExecute = true
             });
         }

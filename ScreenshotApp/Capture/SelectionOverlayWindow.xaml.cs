@@ -8,6 +8,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using ScreenshotApp.Ocr;
 using ScreenshotApp.Translation;
+using ScreenshotApp.History;
 
 namespace ScreenshotApp.Capture;
 
@@ -80,6 +81,11 @@ public partial class SelectionOverlayWindow : Window
     public bool RecordSystemAudio { get; private set; }
 
     public bool RecordMicrophone { get; private set; }
+
+    /// <summary>
+    /// OCR、翻译完成后把文本交由主窗口写入统一历史记录。
+    /// </summary>
+    public event EventHandler<HistoryTextContent>? HistoryTextCreated;
 
     private void Window_SourceInitialized(object? sender, EventArgs e)
     {
@@ -334,6 +340,11 @@ public partial class SelectionOverlayWindow : Window
                     ConfidenceThreshold = 0.5f
                 },
                 CancellationToken.None);
+            if (!string.IsNullOrWhiteSpace(result.Text))
+            {
+                HistoryTextCreated?.Invoke(this, new HistoryTextContent(HistoryEntryKind.TextExtraction, result.Text));
+            }
+
             var selectionScreenBounds = new Rect(
                 Left + _selection.Left,
                 Top + _selection.Top,
@@ -420,6 +431,12 @@ public partial class SelectionOverlayWindow : Window
             var translation = await engine.TranslateAsync(
                 new TranslationRequest(sourceText),
                 CancellationToken.None);
+            if (!string.IsNullOrWhiteSpace(translation.TranslatedText))
+            {
+                var historyContent = $"英文原文{Environment.NewLine}{translation.SourceText}{Environment.NewLine}{Environment.NewLine}中文译文{Environment.NewLine}{translation.TranslatedText}";
+                HistoryTextCreated?.Invoke(this, new HistoryTextContent(HistoryEntryKind.Translation, historyContent));
+            }
+
             new TranslationResultWindow(
                 translation.SourceText,
                 translation.TranslatedText,

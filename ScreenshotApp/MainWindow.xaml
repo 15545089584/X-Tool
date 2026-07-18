@@ -126,7 +126,7 @@
                             <Border Width="34" Height="34" Background="#F7F8FA" CornerRadius="9">
                                 <TextBlock Style="{StaticResource IconTextStyle}" FontSize="17" Text="&#xE81C;" Foreground="#626971" />
                             </Border>
-                            <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" FontSize="15" Text="截图历史" />
+                            <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" FontSize="15" Text="历史记录" />
                         </StackPanel>
                     </RadioButton>
                     <RadioButton GroupName="Navigation" Style="{StaticResource NavItemStyle}"
@@ -251,7 +251,7 @@
                                             <RowDefinition Height="*" />
                                         </Grid.RowDefinitions>
                                         <Grid>
-                                            <TextBlock FontSize="15" FontWeight="SemiBold" Text="最近截图" />
+                                            <TextBlock FontSize="15" FontWeight="SemiBold" Text="最近记录" />
                                             <Button HorizontalAlignment="Right" Background="Transparent" BorderThickness="0" Cursor="Hand"
                                                     Foreground="#6F7680" Content="查看全部  →" Click="ShowHistory_Click" />
                                         </Grid>
@@ -264,18 +264,20 @@
                                 </Border>
                             </Grid>
 
-                            <!-- 截图历史页 -->
+                            <!-- 统一历史记录页 -->
                             <Grid x:Name="HistoryView" Visibility="Collapsed" Margin="58,44,48,38">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="22" />
+                                    <RowDefinition Height="16" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="16" />
                                     <RowDefinition Height="*" />
                                 </Grid.RowDefinitions>
                                 <Grid>
                                     <StackPanel>
-                                        <TextBlock FontSize="28" FontWeight="SemiBold" Text="截图历史" />
+                                        <TextBlock FontSize="28" FontWeight="SemiBold" Text="历史记录" />
                                         <TextBlock Margin="0,8,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}"
-                                                   Text="自动保存到 E:\截影\Screenshots，点击卡片可查看原图" />
+                                                   Text="普通截图、长截图、文字提取、翻译与屏幕录制均在本机分类保存" />
                                     </StackPanel>
                                     <Button HorizontalAlignment="Right" VerticalAlignment="Center"
                                             Padding="16,9" Background="#AFFFFFFF"
@@ -283,13 +285,28 @@
                                             Cursor="Hand" Content="打开存储位置" Click="OpenStorageFolder_Click" />
                                 </Grid>
 
-                                <Border Grid.Row="2" Background="#36FFFFFF"
+                                <StackPanel Grid.Row="2" Orientation="Horizontal">
+                                    <Button x:Name="AllHistoryFilterButton" Tag="All" Click="HistoryFilterButton_Click"
+                                            Padding="13,7" Margin="0,0,8,0" BorderThickness="1" Cursor="Hand" Content="全部" />
+                                    <Button x:Name="ScreenshotHistoryFilterButton" Tag="Screenshot" Click="HistoryFilterButton_Click"
+                                            Padding="13,7" Margin="0,0,8,0" BorderThickness="1" Cursor="Hand" Content="普通截图" />
+                                    <Button x:Name="LongScreenshotHistoryFilterButton" Tag="LongScreenshot" Click="HistoryFilterButton_Click"
+                                            Padding="13,7" Margin="0,0,8,0" BorderThickness="1" Cursor="Hand" Content="长截图" />
+                                    <Button x:Name="TextExtractionHistoryFilterButton" Tag="TextExtraction" Click="HistoryFilterButton_Click"
+                                            Padding="13,7" Margin="0,0,8,0" BorderThickness="1" Cursor="Hand" Content="文字提取" />
+                                    <Button x:Name="TranslationHistoryFilterButton" Tag="Translation" Click="HistoryFilterButton_Click"
+                                            Padding="13,7" Margin="0,0,8,0" BorderThickness="1" Cursor="Hand" Content="翻译" />
+                                    <Button x:Name="ScreenRecordingHistoryFilterButton" Tag="ScreenRecording" Click="HistoryFilterButton_Click"
+                                            Padding="13,7" BorderThickness="1" Cursor="Hand" Content="屏幕录制" />
+                                </StackPanel>
+
+                                <Border Grid.Row="4" Background="#36FFFFFF"
                                         BorderBrush="#62FFFFFF" BorderThickness="1" CornerRadius="14">
                                     <Grid>
                                         <StackPanel x:Name="HistoryEmptyPanel" HorizontalAlignment="Center" VerticalAlignment="Center">
                                             <TextBlock HorizontalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="34" Foreground="#A5ABB3" Text="&#xE81C;" />
-                                            <TextBlock Margin="0,16,0,0" FontSize="17" FontWeight="SemiBold" Text="还没有截图记录" />
-                                            <TextBlock Margin="0,8,0,0" FontSize="13" Foreground="{StaticResource SecondaryTextBrush}" Text="完成截图后会按时间显示在这里" />
+                                            <TextBlock Margin="0,16,0,0" FontSize="17" FontWeight="SemiBold" Text="还没有历史记录" />
+                                            <TextBlock Margin="0,8,0,0" FontSize="13" Foreground="{StaticResource SecondaryTextBrush}" Text="完成截图、文字提取、翻译或录制后会按类别显示在这里" />
                                         </StackPanel>
 
                                         <ScrollViewer x:Name="HistoryScrollViewer" Visibility="Collapsed"
@@ -314,14 +331,42 @@
                                                                         <RowDefinition Height="*" />
                                                                     </Grid.RowDefinitions>
                                                                     <Border Background="#EEF1F5" CornerRadius="9" ClipToBounds="True">
-                                                                        <Image Source="{Binding Thumbnail}" Stretch="UniformToFill" />
+                                                                        <Grid>
+                                                                            <Image Source="{Binding Thumbnail}" Stretch="UniformToFill">
+                                                                                <Image.Style>
+                                                                                    <Style TargetType="Image">
+                                                                                        <Setter Property="Visibility" Value="Visible" />
+                                                                                        <Style.Triggers>
+                                                                                            <DataTrigger Binding="{Binding HasThumbnail}" Value="False">
+                                                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                                                            </DataTrigger>
+                                                                                        </Style.Triggers>
+                                                                                    </Style>
+                                                                                </Image.Style>
+                                                                            </Image>
+                                                                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                                                <StackPanel.Style>
+                                                                                    <Style TargetType="StackPanel">
+                                                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                                                        <Style.Triggers>
+                                                                                            <DataTrigger Binding="{Binding HasThumbnail}" Value="False">
+                                                                                                <Setter Property="Visibility" Value="Visible" />
+                                                                                            </DataTrigger>
+                                                                                        </Style.Triggers>
+                                                                                    </Style>
+                                                                                </StackPanel.Style>
+                                                                                <TextBlock HorizontalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="28" Foreground="#6085B8" Text="&#xE8A5;" />
+                                                                                <TextBlock Margin="0,8,0,0" HorizontalAlignment="Center" FontSize="13" FontWeight="SemiBold" Text="{Binding KindText}" />
+                                                                                <TextBlock Width="178" Margin="0,5,0,0" HorizontalAlignment="Center" FontSize="11" Foreground="#738092" TextAlignment="Center" TextTrimming="CharacterEllipsis" Text="{Binding PreviewText}" />
+                                                                            </StackPanel>
+                                                                        </Grid>
                                                                     </Border>
                                                                     <Grid Grid.Row="1" Margin="2,9,2,0">
                                                                         <Grid.RowDefinitions>
                                                                             <RowDefinition Height="Auto" />
                                                                             <RowDefinition Height="Auto" />
                                                                         </Grid.RowDefinitions>
-                                                                        <TextBlock Text="{Binding FileName}" FontSize="12" FontWeight="SemiBold"
+                                                                        <TextBlock Text="{Binding KindText}" FontSize="12" FontWeight="SemiBold"
                                                                                    Foreground="#313842" TextTrimming="CharacterEllipsis" />
                                                                         <Grid Grid.Row="1" Margin="0,5,0,0">
                                                                             <TextBlock Text="{Binding CapturedAtText}" FontSize="10" Foreground="#858D98" />
