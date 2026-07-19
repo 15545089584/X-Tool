@@ -8,7 +8,9 @@ namespace ScreenshotApp.VoiceInput;
 internal sealed class VoiceInputService : IDisposable
 {
     private const int SampleRate = 16_000;
-    private const int MaximumRecordingSeconds = 28;
+    // 长段口述应优先由用户再次按右 Alt 完成；仅以较长静音或时长上限作为兜底。
+    private const int MaximumRecordingSeconds = 90;
+    private const int AutoStopSilenceMilliseconds = 4_000;
     // 较低的阈值可兼容笔记本内置麦克风；识别阶段仍由模型决定是否返回文字。
     private const double VoiceThreshold = 0.004;
     private readonly object _syncRoot = new();
@@ -184,7 +186,7 @@ internal sealed class VoiceInputService : IDisposable
         }
 
         var isLongEnough = now - _recordingStartedAt >= TimeSpan.FromMilliseconds(650);
-        var isSilentAfterSpeech = _hasDetectedVoice && now - _lastVoiceAt >= TimeSpan.FromMilliseconds(850);
+        var isSilentAfterSpeech = _hasDetectedVoice && now - _lastVoiceAt >= TimeSpan.FromMilliseconds(AutoStopSilenceMilliseconds);
         var isTooLong = now - _recordingStartedAt >= TimeSpan.FromSeconds(MaximumRecordingSeconds);
         if (isLongEnough && (isSilentAfterSpeech || isTooLong) && Interlocked.Exchange(ref _autoStopRequested, 1) == 0)
         {
