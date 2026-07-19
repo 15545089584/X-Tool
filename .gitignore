@@ -15,6 +15,12 @@ ScreenshotApp/Models/Translation/default/tokenizer.json
 ScreenshotApp/Models/Translation/default/manifest.json
 ScreenshotApp/Models/Translation/default/vocab.json
 
+# 离线语音输入模型作为 Release/安装包资源分发，单个权重文件不纳入普通 Git 仓库。
+ScreenshotApp/Models/VoiceInput/default/model.int8.onnx
+ScreenshotApp/Models/VoiceInput/default/test_wavs/
+ScreenshotApp/Models/VoiceInput/default/export-onnx.py
+ScreenshotApp/Models/VoiceInput/sensevoice.tar.bz2
+
 # 常见本地临时文件
 *.user
 *.suo

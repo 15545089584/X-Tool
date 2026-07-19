@@ -17,6 +17,7 @@ using ScreenshotApp.Converters;
 using ScreenshotApp.History;
 using ScreenshotApp.Recording;
 using ScreenshotApp.Settings;
+using ScreenshotApp.VoiceInput;
 
 namespace ScreenshotApp;
 
@@ -40,6 +41,7 @@ public partial class MainWindow : Window
     private HwndSource? _windowSource;
     private bool _hotKeyRegistered;
     private bool _clipboardHotKeyRegistered;
+    private bool _voiceInputHotKeyRegistered;
     private bool _clipboardListenerRegistered;
     private bool _captureInProgress;
     private bool _historyRefreshInProgress;
@@ -47,12 +49,22 @@ public partial class MainWindow : Window
     private string? _lastExternalClipboardSignature;
     private ClipboardPickerWindow? _clipboardPicker;
     private IntPtr _clipboardPasteTarget;
+    private readonly VoiceInputService _voiceInputService = new();
+    private VoiceInputOverlayWindow? _voiceInputOverlay;
+    private IntPtr _voiceInputPasteTarget;
+    private CancellationTokenSource? _voiceInputCancellation;
 
     public MainWindow()
     {
         InitializeComponent();
         _historyStore = new ScreenshotHistoryStore(_preferences);
         StickerTopmostCheckBox.IsChecked = _preferences.StickerTopmost;
+        VoiceInputEnabledCheckBox.IsChecked = _preferences.VoiceInputEnabled;
+        VoiceInputPasteAutomaticallyCheckBox.IsChecked = _preferences.VoiceInputPasteAutomatically;
+        VoiceInputModelStatusText.Text = _voiceInputService.IsModelAvailable
+            ? "标准中文离线模型已就绪"
+            : "本地模型缺失，请修复或重新安装 X-Tool";
+        _voiceInputService.AutoStopRequested += VoiceInputService_AutoStopRequested;
         UpdateStorageLocationText();
         // 长截图需要连续拿到“此刻”的画面。每次重新创建桌面复制会话时，
         // 部分显卡驱动可能先返回上一帧，因此滚动采集优先使用同步的 GDI 帧，
@@ -263,6 +275,7 @@ public partial class MainWindow : Window
             NativeMethods.ClipboardHotKeyId,
             NativeMethods.ModControl | NativeMethods.ModShift,
             (uint)KeyInterop.VirtualKeyFromKey(Key.V));
+        RegisterVoiceInputHotKey(handle);
         _clipboardListenerRegistered = NativeMethods.AddClipboardFormatListener(handle);
 
         if (!_hotKeyRegistered)
@@ -272,6 +285,10 @@ public partial class MainWindow : Window
         if (!_clipboardHotKeyRegistered)
         {
             Dispatcher.BeginInvoke(() => ShowToast("Ctrl + Shift + V 已被其他程序占用"), DispatcherPriority.Loaded);
+        }
+        if (_preferences.VoiceInputEnabled && !_voiceInputHotKeyRegistered)
+        {
+            Dispatcher.BeginInvoke(() => ShowToast("Ctrl + Alt + Space 已被其他程序占用"), DispatcherPriority.Loaded);
         }
     }
 
@@ -290,6 +307,10 @@ public partial class MainWindow : Window
         {
             NativeMethods.UnregisterHotKey(_windowSource.Handle, NativeMethods.ClipboardHotKeyId);
         }
+        if (_voiceInputHotKeyRegistered)
+        {
+            NativeMethods.UnregisterHotKey(_windowSource.Handle, NativeMethods.VoiceInputHotKeyId);
+        }
         if (_clipboardListenerRegistered)
         {
             NativeMethods.RemoveClipboardFormatListener(_windowSource.Handle);
@@ -297,6 +318,7 @@ public partial class MainWindow : Window
 
         _windowSource.RemoveHook(WindowMessageHook);
         _windowSource = null;
+        _voiceInputService.Dispose();
     }
 
     private void MainWindow_Closing(object? sender, CancelEventArgs e)
@@ -365,6 +387,11 @@ public partial class MainWindow : Window
         {
             handled = true;
             _ = ShowClipboardPickerAsync();
+        }
+        else if (message == NativeMethods.WmHotKey && wParam.ToInt32() == NativeMethods.VoiceInputHotKeyId)
+        {
+            handled = true;
+            _ = ToggleVoiceInputAsync();
         }
         return IntPtr.Zero;
     }
@@ -1027,6 +1054,173 @@ public partial class MainWindow : Window
         {
             ShowToast($"粘贴失败：{exception.Message}");
         }
+    }
+
+    private void RegisterVoiceInputHotKey(IntPtr handle)
+    {
+        if (!_preferences.VoiceInputEnabled || _voiceInputHotKeyRegistered)
+        {
+            return;
+        }
+
+        _voiceInputHotKeyRegistered = NativeMethods.RegisterHotKey(
+            handle,
+            NativeMethods.VoiceInputHotKeyId,
+            NativeMethods.ModControl | NativeMethods.ModAlt,
+            (uint)KeyInterop.VirtualKeyFromKey(Key.Space));
+    }
+
+    private async Task ToggleVoiceInputAsync()
+    {
+        if (!_preferences.VoiceInputEnabled)
+        {
+            ShowToast("本地语音输入已在设置中关闭");
+            return;
+        }
+
+        if (_voiceInputService.IsRecording)
+        {
+            await FinishVoiceInputAsync();
+            return;
+        }
+
+        try
+        {
+            _voiceInputPasteTarget = NativeMethods.GetForegroundWindow();
+            _voiceInputCancellation?.Cancel();
+            _voiceInputCancellation?.Dispose();
+            _voiceInputCancellation = new CancellationTokenSource();
+            _voiceInputService.Start();
+            ShowVoiceInputOverlay("正在聆听…", "再次按 Ctrl + Alt + Space 结束");
+        }
+        catch (Exception exception)
+        {
+            CloseVoiceInputOverlay();
+            ShowToast($"无法启动语音输入：{exception.Message}");
+        }
+    }
+
+    private void VoiceInputService_AutoStopRequested(object? sender, EventArgs e)
+    {
+        Dispatcher.BeginInvoke(async () => await FinishVoiceInputAsync());
+    }
+
+    private async Task FinishVoiceInputAsync()
+    {
+        if (!_voiceInputService.IsRecording)
+        {
+            return;
+        }
+
+        var cancellation = _voiceInputCancellation;
+        if (cancellation is null)
+        {
+            return;
+        }
+
+        try
+        {
+            ShowVoiceInputOverlay("正在识别…", "所有音频仅在本机内存中处理");
+            var text = await _voiceInputService.StopAndRecognizeAsync(cancellation.Token);
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                ShowToast("未检测到清晰语音");
+                return;
+            }
+
+            ClipboardService.SetText(text);
+            _suppressClipboardCapture = true;
+            if (!_preferences.VoiceInputPasteAutomatically || _voiceInputPasteTarget == IntPtr.Zero)
+            {
+                ShowToast("识别结果已复制到系统剪贴板");
+                return;
+            }
+
+            var activated = NativeMethods.IsWindowForeground(_voiceInputPasteTarget);
+            for (var attempt = 0; attempt < 3 && !activated; attempt++)
+            {
+                activated = NativeMethods.RestoreAndActivateWindow(_voiceInputPasteTarget);
+                if (!activated)
+                {
+                    await Task.Delay(40);
+                }
+            }
+
+            if (!activated || !NativeMethods.SendPasteShortcut())
+            {
+                ShowToast("识别结果已复制，请手动粘贴");
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            ShowToast("语音输入已取消");
+        }
+        catch (Exception exception)
+        {
+            ShowToast($"语音识别失败：{exception.Message}");
+        }
+        finally
+        {
+            CloseVoiceInputOverlay();
+            cancellation.Dispose();
+            if (ReferenceEquals(_voiceInputCancellation, cancellation))
+            {
+                _voiceInputCancellation = null;
+            }
+        }
+    }
+
+    private void ShowVoiceInputOverlay(string title, string detail)
+    {
+        if (_voiceInputOverlay is null)
+        {
+            _voiceInputOverlay = new VoiceInputOverlayWindow();
+            _voiceInputOverlay.Closed += (_, _) => _voiceInputOverlay = null;
+            if (NativeMethods.GetCursorPos(out var cursor))
+            {
+                var workArea = SystemParameters.WorkArea;
+                _voiceInputOverlay.Left = Math.Clamp(cursor.X - _voiceInputOverlay.Width / 2, workArea.Left + 8, workArea.Right - _voiceInputOverlay.Width - 8);
+                _voiceInputOverlay.Top = Math.Clamp(cursor.Y - 96, workArea.Top + 8, workArea.Bottom - _voiceInputOverlay.Height - 8);
+            }
+            _voiceInputOverlay.Show();
+        }
+
+        _voiceInputOverlay.UpdateStatus(title, detail);
+    }
+
+    private void CloseVoiceInputOverlay()
+    {
+        _voiceInputOverlay?.Close();
+        _voiceInputOverlay = null;
+    }
+
+    private void VoiceInputEnabledCheckBox_Click(object sender, RoutedEventArgs e)
+    {
+        _preferences.VoiceInputEnabled = VoiceInputEnabledCheckBox.IsChecked == true;
+        _preferences.Save();
+        if (!_preferences.VoiceInputEnabled)
+        {
+            _voiceInputService.Cancel();
+            CloseVoiceInputOverlay();
+            if (_voiceInputHotKeyRegistered && _windowSource is not null)
+            {
+                NativeMethods.UnregisterHotKey(_windowSource.Handle, NativeMethods.VoiceInputHotKeyId);
+                _voiceInputHotKeyRegistered = false;
+            }
+            return;
+        }
+
+        if (_windowSource is not null)
+        {
+            RegisterVoiceInputHotKey(_windowSource.Handle);
+        }
+        ShowToast(_voiceInputHotKeyRegistered ? "本地语音输入已开启" : "快捷键被其他程序占用");
+    }
+
+    private void VoiceInputPasteAutomaticallyCheckBox_Click(object sender, RoutedEventArgs e)
+    {
+        _preferences.VoiceInputPasteAutomatically = VoiceInputPasteAutomaticallyCheckBox.IsChecked == true;
+        _preferences.Save();
     }
 
     private void NavigateToWorkbench_Click(object sender, RoutedEventArgs e)

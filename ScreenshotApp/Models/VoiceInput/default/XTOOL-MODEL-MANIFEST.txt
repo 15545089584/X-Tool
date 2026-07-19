@@ -1,0 +1,6 @@
+模型名称：sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17
+模型文件：model.int8.onnx
+模型 SHA-256：C71F0CE00BEC95B07744E116345E33D8CBBE08CEF896382CF907BF4B51A2CD51
+来源：https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17.tar.bz2
+用途：X-Tool 本地离线语音输入；不上传录音或文本。
+运行时：org.k2fsa.sherpa.onnx 1.13.4（Apache-2.0）。

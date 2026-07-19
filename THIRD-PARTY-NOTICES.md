@@ -20,3 +20,13 @@
 - 引用方式：NuGet `PDFsharp` 6.2.4。
 - 许可证：MIT License。
 - 项目与许可证：<https://www.nuget.org/packages/PDFsharp/6.2.4>。
+
+## sherpa-onnx 1.13.4 与 SenseVoice int8 模型
+
+- 用途：本地离线语音输入的麦克风语音识别。
+- 运行时：NuGet `org.k2fsa.sherpa.onnx` 1.13.4，Apache License 2.0。
+- 模型：`sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17`，适用 FunASR Model Open Source License Agreement 1.1；转换后的 `model.int8.onnx` 与同目录 `LICENSE` 一并随安装包分发，并保留模型名称、来源与作者信息。
+- 模型来源：<https://github.com/k2-fsa/sherpa-onnx/releases/tag/asr-models>。
+- 运行所用权重的 SHA-256、固定下载地址位于 `ScreenshotApp/Models/VoiceInput/default/XTOOL-MODEL-MANIFEST.txt`。
+
+该模型权重超过普通 GitHub 单文件限制，不纳入源码仓库；发布安装包或 GitHub Release 时必须包含模型、`tokens.txt`、许可证和上述清单，保证安装完成后可完全离线使用。

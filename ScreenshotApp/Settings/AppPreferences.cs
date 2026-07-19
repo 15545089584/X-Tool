@@ -26,6 +26,10 @@ public sealed class AppPreferences
 
     public bool StickerTopmost { get; set; } = true;
 
+    public bool VoiceInputEnabled { get; set; } = true;
+
+    public bool VoiceInputPasteAutomatically { get; set; } = true;
+
     public static AppPreferences Load()
     {
         try

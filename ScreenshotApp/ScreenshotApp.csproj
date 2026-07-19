@@ -23,6 +23,8 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.22.1" />
+    <!-- 本地离线语音识别运行时，使用预构建 Windows C# 库。 -->
+    <PackageReference Include="org.k2fsa.sherpa.onnx" Version="1.13.4" />
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="SIL.Machine.Tokenization.SentencePiece" Version="3.7.1" />
     <PackageReference Include="OpenCvSharp4.Windows" Version="4.11.0.20250507" />
@@ -58,6 +60,11 @@
     <Content Include="Models\Translation\default\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <TargetPath>models\translation\default\%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
+    </Content>
+    <!-- 固定版中文离线语音输入模型与语音端点检测模型随程序发布。 -->
+    <Content Include="Models\VoiceInput\default\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>models\voice-input\default\%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
     </Content>
   </ItemGroup>
 

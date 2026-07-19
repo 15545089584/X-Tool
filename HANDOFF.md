@@ -67,6 +67,7 @@ git log -5 --oneline
 
 - `Ctrl + Shift + A`：启动普通截图。
 - `Ctrl + Shift + V`：不唤起主窗口，打开剪贴板快速选择浮窗。
+- `Ctrl + Alt + Space`：启动/结束本地离线语音输入；说话后停顿约 0.85 秒也会自动结束并识别。
 
 ## 三、屏幕工作台现状
 
@@ -91,6 +92,13 @@ git log -5 --oneline
 - 翻译：本地 ONNX 英译中模型。
 - 录像：Media Foundation H.264 MP4，WASAPI 音频采集；包含倒计时、区域边框、控制条与视频封面。
 - 相关辅助窗口均需继续保持排除捕获能力。
+
+### 本地语音输入
+
+- 使用 `org.k2fsa.sherpa.onnx` 1.13.4 与固定版 SenseVoice int8 模型，在本机完成录音与识别，不上传音频或文本。
+- 录音使用 NAudio 的 16 kHz 单声道输入；达到约 0.85 秒静音、再次按快捷键或录音达到 28 秒时结束。识别文本默认沿用既有剪贴板与 `Ctrl+V` 路径插回原输入窗口，也可在设置中改为仅复制。
+- 模型位置：`ScreenshotApp\Models\VoiceInput\default\`。权重单文件超过普通 GitHub 限制，已被 `.gitignore` 排除；发布安装包/Release 时必须带上 `model.int8.onnx`、`tokens.txt`、`LICENSE` 与 `XTOOL-MODEL-MANIFEST.txt`。
+- 关键文件：`ScreenshotApp\VoiceInput\VoiceInputService.cs`、`VoiceInputOverlayWindow.xaml(.cs)`、`MainWindow.xaml(.cs)`。
 
 ## 四、剪贴板现状
 
@@ -123,6 +131,7 @@ git log -5 --oneline
 - 截图后自动复制
 - 保存截图历史
 - 贴图默认置顶
+- 本地语音输入开关与识别后自动粘贴开关
 - 可展开的分类存储位置
 
 默认目录：
