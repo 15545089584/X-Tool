@@ -33,7 +33,7 @@ public partial class VoiceInputOverlayWindow : Window
         {
             var distance = Math.Abs(index - center) / center;
             var emphasis = 0.35 + (1 - distance) * 0.65;
-            _waveBars[index].Height = 4 + level * (7 + emphasis * 19);
+            _waveBars[index].Height = 3 + level * (8 + emphasis * 21);
         }
     }
 }

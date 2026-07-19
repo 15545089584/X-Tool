@@ -8,18 +8,13 @@ namespace ScreenshotApp.VoiceInput;
 internal sealed class VoiceInputService : IDisposable
 {
     private const int SampleRate = 16_000;
-    // 长段口述应优先由用户再次按右 Alt 完成；仅以较长静音或时长上限作为兜底。
+    // 长段口述由用户再次按右 Alt 完成；时长上限仅用于避免忘记结束时持续录音。
     private const int MaximumRecordingSeconds = 90;
-    private const int AutoStopSilenceMilliseconds = 4_000;
-    // 较低的阈值可兼容笔记本内置麦克风；识别阶段仍由模型决定是否返回文字。
-    private const double VoiceThreshold = 0.004;
     private readonly object _syncRoot = new();
     private readonly List<float> _samples = new();
     private WaveInEvent? _waveIn;
     private OfflineRecognizer? _recognizer;
     private DateTime _recordingStartedAt;
-    private DateTime _lastVoiceAt;
-    private bool _hasDetectedVoice;
     private int _autoStopRequested;
     private double _peakRms;
     private string? _recordingError;
@@ -70,11 +65,9 @@ internal sealed class VoiceInputService : IDisposable
             _peakRms = 0;
         }
 
-        _hasDetectedVoice = false;
         _autoStopRequested = 0;
         _recordingError = null;
         _recordingStartedAt = DateTime.UtcNow;
-        _lastVoiceAt = _recordingStartedAt;
         _waveIn = new WaveInEvent
         {
             WaveFormat = new WaveFormat(SampleRate, 16, 1),
@@ -175,20 +168,13 @@ internal sealed class VoiceInputService : IDisposable
             _peakRms = Math.Max(_peakRms, rms);
         }
 
-        // 以对数感知的方式压缩音量，安静时保持细小波形，说话时才明显抬升。
-        var displayLevel = Math.Clamp((rms - 0.0015) / 0.055, 0, 1);
+        // 放大常见笔记本麦克风的低电平，并用非线性映射使正常说话有明显律动。
+        var normalizedLevel = Math.Clamp((rms - 0.0005) / 0.028, 0, 1);
+        var displayLevel = Math.Pow(normalizedLevel, 0.42);
         SoundLevelChanged?.Invoke(displayLevel);
-        if (rms >= VoiceThreshold)
-        {
-            _hasDetectedVoice = true;
-            _lastVoiceAt = now;
-            return;
-        }
 
-        var isLongEnough = now - _recordingStartedAt >= TimeSpan.FromMilliseconds(650);
-        var isSilentAfterSpeech = _hasDetectedVoice && now - _lastVoiceAt >= TimeSpan.FromMilliseconds(AutoStopSilenceMilliseconds);
         var isTooLong = now - _recordingStartedAt >= TimeSpan.FromSeconds(MaximumRecordingSeconds);
-        if (isLongEnough && (isSilentAfterSpeech || isTooLong) && Interlocked.Exchange(ref _autoStopRequested, 1) == 0)
+        if (isTooLong && Interlocked.Exchange(ref _autoStopRequested, 1) == 0)
         {
             AutoStopRequested?.Invoke(this, EventArgs.Empty);
         }
