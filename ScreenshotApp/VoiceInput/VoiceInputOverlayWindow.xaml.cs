@@ -40,7 +40,6 @@ public partial class VoiceInputOverlayWindow : Window
     internal void SetTranslationPreview(string sourceText, string translatedText)
     {
         SetRecognizedText(sourceText);
-        TextBubble.Margin = new Thickness(0, 0, 0, 8);
         TranslatedTextBlock.Text = translatedText;
         TranslationArrow.Visibility = Visibility.Visible;
         TranslatedTextBubble.Visibility = Visibility.Visible;
@@ -51,7 +50,6 @@ public partial class VoiceInputOverlayWindow : Window
         TranslatedTextBlock.Text = string.Empty;
         TranslationArrow.Visibility = Visibility.Collapsed;
         TranslatedTextBubble.Visibility = Visibility.Collapsed;
-        TextBubble.Margin = new Thickness(0, 0, 0, 28);
     }
 
     internal void ClearRecognizedText()
