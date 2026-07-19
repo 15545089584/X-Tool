@@ -34,6 +34,7 @@ public partial class MainWindow : Window
     private readonly ObservableCollection<ScreenshotHistoryItem> _historyItems = new();
     private readonly ObservableCollection<ScreenshotHistoryItem> _textHistoryItems = new();
     private readonly ObservableCollection<ImageConversionQueueItem> _imageConversionFiles = new();
+    private string? _imageOutputDirectory;
     private IReadOnlyList<ScreenshotHistoryItem> _allHistoryItems = Array.Empty<ScreenshotHistoryItem>();
     private HistoryEntryKind? _historyFilter;
     private HwndSource? _windowSource;
@@ -65,7 +66,7 @@ public partial class MainWindow : Window
         TextHistoryItemsControl.ItemsSource = _textHistoryItems;
         ImageFileList.ItemsSource = _imageConversionFiles;
         ImageFileList.ItemContainerStyle.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty, HorizontalAlignment.Stretch));
-        ConverterOutputFolderText.Text = _preferences.ConverterDirectory;
+        ConverterOutputFolderText.Text = "请选择本次任务的输出文件夹";
         UpdateImageConversionControls();
 
         _toastTimer = new DispatcherTimer
@@ -208,6 +209,8 @@ public partial class MainWindow : Window
         ScreenWorkbenchView.Visibility = page == "ScreenWorkbench" ? Visibility.Visible : Visibility.Collapsed;
         ConverterWorkbenchView.Visibility = page == "ConverterWorkbench" ? Visibility.Visible : Visibility.Collapsed;
         ImageConverterView.Visibility = page == "ImageConverter" ? Visibility.Visible : Visibility.Collapsed;
+        AudioConverterView.Visibility = page == "AudioConverter" ? Visibility.Visible : Visibility.Collapsed;
+        VideoConverterView.Visibility = page == "VideoConverter" ? Visibility.Visible : Visibility.Collapsed;
         if (page == "ImageConverter")
         {
             Dispatcher.BeginInvoke(new Action(() => NormalizeImageConverterLabels(ImageConverterView)), DispatcherPriority.Loaded);
@@ -854,7 +857,6 @@ public partial class MainWindow : Window
         "翻译" => _preferences.TranslationDirectory,
         "屏幕录制" => _preferences.RecordingDirectory,
         "外部复制" => _preferences.ClipboardDirectory,
-        "转换器" => _preferences.ConverterDirectory,
         _ => string.Empty
     };
 
@@ -881,10 +883,6 @@ public partial class MainWindow : Window
             case "外部复制":
                 _preferences.ClipboardDirectory = fullPath;
                 break;
-            case "转换器":
-                _preferences.ConverterDirectory = fullPath;
-                ConverterOutputFolderText.Text = fullPath;
-                break;
         }
     }
 
@@ -896,7 +894,6 @@ public partial class MainWindow : Window
         TranslationStoragePathText.Text = _preferences.TranslationDirectory;
         RecordingStoragePathText.Text = _preferences.RecordingDirectory;
         ClipboardStoragePathText.Text = _preferences.ClipboardDirectory;
-        ConverterStoragePathText.Text = _preferences.ConverterDirectory;
     }
 
     private void OpenHistoryItem_Click(object sender, RoutedEventArgs e)
@@ -1049,6 +1046,17 @@ public partial class MainWindow : Window
         NavigateToPage("ImageConverter");
     }
 
+    private void ConverterToolRail_ToolRequested(object? sender, ConverterToolRequestedEventArgs e)
+    {
+        ConverterWorkbenchNav.IsChecked = true;
+        NavigateToPage(e.Tool switch
+        {
+            "Audio" => "AudioConverter",
+            "Video" => "VideoConverter",
+            _ => "ImageConverter"
+        });
+    }
+
     private void BackToConverterWorkbench_Click(object sender, RoutedEventArgs e)
     {
         NavigateToPage("ConverterWorkbench");
@@ -1100,16 +1108,15 @@ public partial class MainWindow : Window
         {
             Description = "选择转换结果的保存位置",
             UseDescriptionForTitle = true,
-            SelectedPath = _preferences.ConverterDirectory
+            SelectedPath = _imageOutputDirectory ?? Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory)
         };
         if (dialog.ShowDialog() != Forms.DialogResult.OK || string.IsNullOrWhiteSpace(dialog.SelectedPath))
         {
             return;
         }
 
-        _preferences.ConverterDirectory = Path.GetFullPath(dialog.SelectedPath);
-        _preferences.Save();
-        ConverterOutputFolderText.Text = _preferences.ConverterDirectory;
+        _imageOutputDirectory = Path.GetFullPath(dialog.SelectedPath);
+        ConverterOutputFolderText.Text = _imageOutputDirectory;
     }
 
     private void ImageFormatComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1188,6 +1195,12 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (string.IsNullOrWhiteSpace(_imageOutputDirectory))
+        {
+            ShowToast("请为本次图片任务选择输出位置");
+            return;
+        }
+
         StartImageConversionButton.IsEnabled = false;
         ImageConversionStatusText.Text = "正在准备本地转换…";
         try
@@ -1198,7 +1211,7 @@ public partial class MainWindow : Window
                 GetSelectedImageFormat(),
                 (int)Math.Round(ImageScaleSlider.Value),
                 (int)Math.Round(ImageQualitySlider.Value),
-                _preferences.ConverterDirectory,
+                _imageOutputDirectory,
                 progress);
             ImageConversionStatusText.Text = result.Failed == 0
                 ? string.Empty

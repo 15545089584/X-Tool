@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:primitives="clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework"
+        xmlns:converters="clr-namespace:ScreenshotApp.Converters"
         mc:Ignorable="d"
         Title="X-Tool"
         Icon="Assets/XTool.ico"
@@ -544,14 +545,7 @@
                                 </StackPanel>
                                 <Grid Grid.Row="2">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="76" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                                    <Border Padding="10" Background="#69FFFFFF" BorderBrush="#8BFFFFFF" BorderThickness="1" CornerRadius="16">
-                                        <StackPanel>
-                                            <Button Width="54" Height="54" Padding="0" HorizontalAlignment="Center" Background="#EAF1FF" BorderBrush="#ABC8FF" BorderThickness="1" Cursor="Hand" ToolTip="图片处理" Click="OpenImageConverter_Click">
-                                                <Button.Template><ControlTemplate TargetType="Button"><Border x:Name="Root" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="14"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" /></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Background" Value="#DCEBFF" /></Trigger><Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.72" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Button.Template>
-                                                <Border Width="34" Height="34" Background="#D6E5FF" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#4D7CFE" Text="&#xEB9F;" /></Border>
-                                            </Button>
-                                        </StackPanel>
-                                    </Border>
+                                    <converters:ConverterToolRail ToolRequested="ConverterToolRail_ToolRequested" />
                                     <Border Grid.Column="2" Background="#5EFFFFFF" BorderBrush="#82FFFFFF" BorderThickness="1" CornerRadius="16">
                                         <Grid>
                                             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -574,13 +568,7 @@
                                 <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
                                     <Grid>
                                         <Grid.ColumnDefinitions><ColumnDefinition Width="76" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                                        <Border Padding="10" Background="#69FFFFFF" BorderBrush="#8BFFFFFF" BorderThickness="1" CornerRadius="16">
-                                            <StackPanel>
-                                                <Border Width="54" Height="54" HorizontalAlignment="Center" Background="#DCEBFF" BorderBrush="#7EA8F7" BorderThickness="1" CornerRadius="14" ToolTip="图片处理">
-                                                    <Border Width="34" Height="34" Background="#C9DEFF" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#4D7CFE" Text="&#xEB9F;" /></Border>
-                                                </Border>
-                                            </StackPanel>
-                                        </Border>
+                                        <converters:ConverterToolRail SelectedTool="Image" ToolRequested="ConverterToolRail_ToolRequested" />
                                         <Grid Grid.Column="2">
                                             <Grid.RowDefinitions><RowDefinition Height="*" /></Grid.RowDefinitions>
                                             <Grid Panel.ZIndex="-1">
@@ -618,6 +606,34 @@
                                         </Grid>
                                     </Grid>
                                 </ScrollViewer>
+                            </Grid>
+
+                            <!-- 音频处理页：文件队列、媒体信息、音质预设与高级参数由独立控件承载。 -->
+                            <Grid x:Name="AudioConverterView" Visibility="Collapsed" Margin="44,42,52,38">
+                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="20" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                <StackPanel>
+                                    <TextBlock FontSize="30" FontWeight="SemiBold" Text="转换器工作台" />
+                                    <TextBlock Margin="0,9,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}" Text="将常用内容处理成适合保存、分享和继续使用的格式" />
+                                </StackPanel>
+                                <Grid Grid.Row="2">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="76" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                    <converters:ConverterToolRail SelectedTool="Audio" ToolRequested="ConverterToolRail_ToolRequested" />
+                                    <converters:AudioConverterView Grid.Column="2" />
+                                </Grid>
+                            </Grid>
+
+                            <!-- 视频处理页：转换、压缩、提取音频和 GIF 共享同一异步任务链路。 -->
+                            <Grid x:Name="VideoConverterView" Visibility="Collapsed" Margin="44,42,52,38">
+                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="20" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                <StackPanel>
+                                    <TextBlock FontSize="30" FontWeight="SemiBold" Text="转换器工作台" />
+                                    <TextBlock Margin="0,9,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}" Text="将常用内容处理成适合保存、分享和继续使用的格式" />
+                                </StackPanel>
+                                <Grid Grid.Row="2">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="76" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                    <converters:ConverterToolRail SelectedTool="Video" ToolRequested="ConverterToolRail_ToolRequested" />
+                                    <converters:VideoConverterView Grid.Column="2" />
+                                </Grid>
                             </Grid>
 
                             <!-- 统一剪贴板页：屏幕工作台内容与外部复制内容统一回看。 -->
@@ -939,13 +955,6 @@
                                                     <TextBlock VerticalAlignment="Center" FontSize="15" Text="外部复制" />
                                                     <TextBlock x:Name="ClipboardStoragePathText" Grid.Column="1" Margin="6,0,12,0" VerticalAlignment="Center" Foreground="#708095" TextTrimming="CharacterEllipsis" />
                                                     <Button Grid.Column="2" Height="30" Style="{StaticResource StorageLocationButtonStyle}" Content="选择文件夹" Tag="外部复制" Click="StorageLocationButton_Click" />
-                                                </Grid>
-                                                <Border Height="1" Background="#55FFFFFF" />
-                                                <Grid Height="46" Margin="2,0,2,5">
-                                                    <Grid.ColumnDefinitions><ColumnDefinition Width="92" /><ColumnDefinition Width="*" /><ColumnDefinition Width="96" /></Grid.ColumnDefinitions>
-                                                    <TextBlock VerticalAlignment="Center" FontSize="15" Text="转换器" />
-                                                    <TextBlock x:Name="ConverterStoragePathText" Grid.Column="1" Margin="6,0,12,0" VerticalAlignment="Center" Foreground="#708095" TextTrimming="CharacterEllipsis" />
-                                                    <Button Grid.Column="2" Height="30" Style="{StaticResource StorageLocationButtonStyle}" Content="选择文件夹" Tag="转换器" Click="StorageLocationButton_Click" />
                                                 </Grid>
                                             </StackPanel>
                                         </Expander>

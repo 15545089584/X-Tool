@@ -24,8 +24,6 @@ public sealed class AppPreferences
 
     public string ClipboardDirectory { get; set; } = @"E:\截影\Clipboard";
 
-    public string ConverterDirectory { get; set; } = @"E:\截影\Converted";
-
     public bool StickerTopmost { get; set; } = true;
 
     public static AppPreferences Load()

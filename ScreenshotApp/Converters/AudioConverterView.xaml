@@ -1,0 +1,188 @@
+<UserControl x:Class="ScreenshotApp.Converters.AudioConverterView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             AllowDrop="True"
+             Drop="Root_Drop"
+             DragOver="Root_DragOver">
+    <UserControl.Resources>
+        <SolidColorBrush x:Key="MutedBrush" Color="#75879B" />
+        <Style x:Key="GlassButton" TargetType="Button">
+            <Setter Property="Height" Value="42" />
+            <Setter Property="Padding" Value="18,0" />
+            <Setter Property="Background" Value="#AFFFFFFF" />
+            <Setter Property="BorderBrush" Value="#C9DDEEF8" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="11">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Background" Value="#D8FFFFFF" /></Trigger>
+                            <Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.72" /></Trigger>
+                            <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Root" Property="Opacity" Value="0.45" /></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource GlassButton}">
+            <Setter Property="Background" Value="#4D7CFE" />
+            <Setter Property="BorderBrush" Value="#6F99FF" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style x:Key="GlassCombo" TargetType="ComboBox">
+            <Setter Property="Height" Value="40" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="Background" Value="#A8FFFFFF" />
+            <Setter Property="BorderBrush" Value="#B7D7EAF8" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+        <Style x:Key="ModeRadio" TargetType="RadioButton">
+            <Setter Property="Margin" Value="0,0,8,0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Card" Padding="12,9" Background="#88FFFFFF" BorderBrush="#C9DDEEF8" BorderThickness="1" CornerRadius="10">
+                            <ContentPresenter HorizontalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Card" Property="Background" Value="#DCE9FF" />
+                                <Setter TargetName="Card" Property="BorderBrush" Value="#7EA8F7" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Card" Property="Opacity" Value="0.82" /></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="GlassProgress" TargetType="ProgressBar">
+            <Setter Property="Height" Value="8" />
+            <Setter Property="Background" Value="#DCEAF4FB" />
+            <Setter Property="Foreground" Value="#5B86FF" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions><ColumnDefinition Width="1.08*" /><ColumnDefinition Width="20" /><ColumnDefinition Width="0.92*" /></Grid.ColumnDefinitions>
+
+        <Grid>
+            <Grid.RowDefinitions><RowDefinition Height="150" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+            <Border Padding="22" Background="#66EEF5FF" BorderBrush="#8EBEDCF5" BorderThickness="1.5" CornerRadius="17">
+                <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="64" /><ColumnDefinition Width="18" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <Border Width="64" Height="64" Background="#D9E8FF" CornerRadius="19">
+                        <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="28" Foreground="#4D7CFE" Text="&#xE8D6;" />
+                    </Border>
+                    <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                        <TextBlock FontSize="17" FontWeight="SemiBold" Text="拖入音频或点击添加" />
+                        <TextBlock Margin="0,7,0,0" FontSize="11" Foreground="{StaticResource MutedBrush}" Text="MP3、WAV、M4A、AAC、FLAC、OGG、OPUS、WMA" />
+                        <TextBlock Margin="0,5,0,0" FontSize="10" Foreground="#8A9AAC" Text="支持多文件队列，原文件不会被覆盖" />
+                    </StackPanel>
+                    <Button Grid.Column="3" Width="108" Style="{StaticResource PrimaryButton}" Click="SelectFiles_Click" Content="选择音频" />
+                </Grid>
+            </Border>
+
+            <Border Grid.Row="2" Padding="16" Background="#D8FFFFFF" BorderBrush="#E7FFFFFF" BorderThickness="1" CornerRadius="17">
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                    <Grid>
+                        <TextBlock FontSize="15" FontWeight="SemiBold" Text="文件列表" />
+                        <TextBlock HorizontalAlignment="Right" FontSize="11" Foreground="{StaticResource MutedBrush}" Text="文件名 · 格式 · 大小 · 时长 · 编码 · 状态" />
+                    </Grid>
+                    <ListBox x:Name="FileList" Grid.Row="2" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Margin" Value="0,0,0,8" /><Setter Property="Background" Value="Transparent" /></Style></ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Border Padding="12" Background="#79F4F9FF" BorderBrush="#A6D6E7F6" BorderThickness="1" CornerRadius="11">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="130" /></Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#304A63" Text="{Binding FileName}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Margin="0,5,0,0" FontSize="10" Foreground="#71869B" Text="{Binding Details}" TextTrimming="CharacterEllipsis" />
+                                            <ProgressBar Margin="0,9,0,0" Style="{StaticResource GlassProgress}" Maximum="100" Value="{Binding Progress}" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                            <TextBlock HorizontalAlignment="Right" FontSize="10" Foreground="#5279A4"><Run Text="{Binding Format}" /><Run Text="  ·  " /><Run Text="{Binding FileSize}" /></TextBlock>
+                                            <TextBlock Margin="0,5,0,0" HorizontalAlignment="Right" FontSize="11" FontWeight="SemiBold" Foreground="#4D7CFE" Text="{Binding Status}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <Border Grid.Column="2" Padding="20" Background="#D8FFFFFF" BorderBrush="#E9FFFFFF" BorderThickness="1" CornerRadius="18">
+            <Grid>
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                <Grid>
+                    <TextBlock FontSize="17" FontWeight="SemiBold" Text="音频设置" />
+                    <TextBlock x:Name="EngineStatusText" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="10" Foreground="#6D8094" />
+                </Grid>
+
+                <Border Grid.Row="2" Padding="13" Background="#55EAF3FF" BorderBrush="#ADD7EAF7" BorderThickness="1" CornerRadius="12">
+                    <StackPanel>
+                        <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#526F8B" Text="输出格式" />
+                        <ComboBox x:Name="OutputFormatCombo" Margin="0,7,0,0" Style="{StaticResource GlassCombo}" SelectedIndex="0">
+                            <ComboBoxItem Tag="mp3">MP3</ComboBoxItem><ComboBoxItem Tag="wav">WAV</ComboBoxItem><ComboBoxItem Tag="m4a">M4A</ComboBoxItem><ComboBoxItem Tag="flac">FLAC</ComboBoxItem><ComboBoxItem Tag="ogg">OGG</ComboBoxItem><ComboBoxItem Tag="opus">OPUS</ComboBoxItem>
+                        </ComboBox>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="4" Padding="13" Background="#55EAF3FF" BorderBrush="#ADD7EAF7" BorderThickness="1" CornerRadius="12">
+                    <StackPanel>
+                        <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#526F8B" Text="音质模式" />
+                        <UniformGrid Margin="0,9,0,0" Rows="1" Columns="4">
+                            <RadioButton x:Name="HighQualityRadio" GroupName="AudioQuality" Style="{StaticResource ModeRadio}" Content="高质量" />
+                            <RadioButton x:Name="StandardQualityRadio" GroupName="AudioQuality" Style="{StaticResource ModeRadio}" Content="标准" IsChecked="True" />
+                            <RadioButton x:Name="SmallQualityRadio" GroupName="AudioQuality" Style="{StaticResource ModeRadio}" Content="小文件" />
+                            <RadioButton x:Name="VoiceQualityRadio" GroupName="AudioQuality" Style="{StaticResource ModeRadio}" Content="语音" />
+                        </UniformGrid>
+                        <TextBlock Margin="0,8,0,0" FontSize="10" Foreground="#8495A7" Text="320 / 192 / 128 / 64 kbps，选择后自动应用" />
+                    </StackPanel>
+                </Border>
+
+                <Expander Grid.Row="6" IsExpanded="False">
+                    <Expander.Header><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#526F8B" Text="高级设置" /></Expander.Header>
+                    <Border Margin="0,8,0,0" Padding="13" Background="#55EAF3FF" BorderBrush="#ADD7EAF7" BorderThickness="1" CornerRadius="12">
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="10" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                            <StackPanel><TextBlock FontSize="10" Foreground="{StaticResource MutedBrush}" Text="比特率" /><ComboBox x:Name="BitRateCombo" Margin="0,5,0,0" Style="{StaticResource GlassCombo}" SelectedIndex="0"><ComboBoxItem Tag="">跟随音质模式</ComboBoxItem><ComboBoxItem Tag="64">64 kbps</ComboBoxItem><ComboBoxItem Tag="128">128 kbps</ComboBoxItem><ComboBoxItem Tag="192">192 kbps</ComboBoxItem><ComboBoxItem Tag="256">256 kbps</ComboBoxItem><ComboBoxItem Tag="320">320 kbps</ComboBoxItem></ComboBox></StackPanel>
+                            <StackPanel Grid.Column="2"><TextBlock FontSize="10" Foreground="{StaticResource MutedBrush}" Text="采样率" /><ComboBox x:Name="SampleRateCombo" Margin="0,5,0,0" Style="{StaticResource GlassCombo}" SelectedIndex="0"><ComboBoxItem Tag="">跟随源文件</ComboBoxItem><ComboBoxItem Tag="44100">44.1 kHz</ComboBoxItem><ComboBoxItem Tag="48000">48 kHz</ComboBoxItem><ComboBoxItem Tag="96000">96 kHz</ComboBoxItem></ComboBox></StackPanel>
+                            <StackPanel Grid.Row="2"><TextBlock FontSize="10" Foreground="{StaticResource MutedBrush}" Text="声道" /><ComboBox x:Name="ChannelsCombo" Margin="0,5,0,0" Style="{StaticResource GlassCombo}" SelectedIndex="0"><ComboBoxItem Tag="">跟随源文件</ComboBoxItem><ComboBoxItem Tag="1">单声道</ComboBoxItem><ComboBoxItem Tag="2">双声道</ComboBoxItem></ComboBox></StackPanel>
+                            <CheckBox x:Name="PreserveMetadataCheck" Grid.Row="2" Grid.Column="2" VerticalAlignment="Center" IsChecked="True" Content="保留元数据" />
+                        </Grid>
+                    </Border>
+                </Expander>
+
+                <Border Grid.Row="8" Padding="13" Background="#55EAF3FF" BorderBrush="#ADD7EAF7" BorderThickness="1" CornerRadius="12">
+                    <Grid>
+                        <StackPanel><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#526F8B" Text="输出位置" /><TextBlock x:Name="OutputFolderText" Margin="0,6,92,0" FontSize="10" Foreground="#6A8096" Text="请选择输出文件夹" TextTrimming="CharacterEllipsis" /></StackPanel>
+                        <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+                            <Button Width="64" Margin="0,0,7,0" Style="{StaticResource GlassButton}" Click="OpenOutput_Click" Content="打开" />
+                            <Button Width="72" Style="{StaticResource GlassButton}" Click="BrowseOutput_Click" Content="浏览" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <TextBlock x:Name="StatusText" Grid.Row="9" Margin="0,12,0,0" FontSize="11" Foreground="#5B7690" TextWrapping="Wrap" />
+                <Grid Grid.Row="10">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="10" /><ColumnDefinition Width="*" /><ColumnDefinition Width="10" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                    <Button Style="{StaticResource GlassButton}" Click="Clear_Click" Content="清空列表" />
+                    <Button x:Name="CancelButton" Grid.Column="2" Style="{StaticResource GlassButton}" Click="Cancel_Click" Content="取消转换" IsEnabled="False" />
+                    <Button x:Name="StartButton" Grid.Column="4" Style="{StaticResource PrimaryButton}" Click="Start_Click" Content="开始转换" />
+                </Grid>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

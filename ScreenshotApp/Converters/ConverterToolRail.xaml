@@ -1,0 +1,17 @@
+<UserControl x:Class="ScreenshotApp.Converters.ConverterToolRail"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <Style x:Key="ToolButton" TargetType="Button">
+            <Setter Property="Width" Value="54" /><Setter Property="Height" Value="54" /><Setter Property="Margin" Value="0,0,0,10" /><Setter Property="Padding" Value="0" /><Setter Property="Background" Value="#9AFFFFFF" /><Setter Property="BorderBrush" Value="#B6D5E8F7" /><Setter Property="BorderThickness" Value="1" /><Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="Root" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="14"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" /></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Background" Value="#E2EDFF" /><Setter TargetName="Root" Property="BorderBrush" Value="#7EA8F7" /></Trigger><Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.72" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+        </Style>
+    </UserControl.Resources>
+    <Border Padding="10" Background="#69FFFFFF" BorderBrush="#8BFFFFFF" BorderThickness="1" CornerRadius="16">
+        <StackPanel>
+            <Button x:Name="ImageButton" Style="{StaticResource ToolButton}" Tag="Image" ToolTip="图片处理" Click="ToolButton_Click"><Border Width="34" Height="34" Background="#D6E5FF" CornerRadius="10"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="#4D7CFE" Text="&#xEB9F;" /></Border></Button>
+            <Button x:Name="AudioButton" Style="{StaticResource ToolButton}" Tag="Audio" ToolTip="音频处理" Click="ToolButton_Click"><Border Width="34" Height="34" Background="#DDF5EC" CornerRadius="10"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="#36A978" Text="&#xE8D6;" /></Border></Button>
+            <Button x:Name="VideoButton" Style="{StaticResource ToolButton}" Tag="Video" ToolTip="视频处理" Click="ToolButton_Click"><Border Width="34" Height="34" Background="#ECE4FF" CornerRadius="10"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="#7B61D8" Text="&#xE714;" /></Border></Button>
+        </StackPanel>
+    </Border>
+</UserControl>
