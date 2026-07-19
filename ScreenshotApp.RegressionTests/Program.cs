@@ -4,6 +4,8 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Media.Imaging;
+using NAudio.Wave;
+using SherpaOnnx;
 using ScreenshotApp;
 using ScreenshotApp.Capture;
 using ScreenshotApp.Ocr;
@@ -80,6 +82,7 @@ RunAnnotationRenderCase();
 RunScreenColorSamplerCase();
 RunOcrTextLayoutCase();
 await RunOcrSmokeCase();
+RunVoiceInputModelSmokeCase();
 RunSingleInstanceCase();
 RunNativeWindowAnimationStyleCase();
 
@@ -552,6 +555,72 @@ async Task RunOcrSmokeCase()
         !result.Text.Contains("2026", StringComparison.Ordinal))
     {
         failures.Add($"PP-OCRv5 未识别出预期的英文或数字文本，结果：{compact}");
+    }
+}
+
+void RunVoiceInputModelSmokeCase()
+{
+    var modelDirectory = Path.Combine(
+        Directory.GetCurrentDirectory(),
+        "ScreenshotApp",
+        "Models",
+        "VoiceInput",
+        "default");
+    var modelPath = Path.Combine(modelDirectory, "model.int8.onnx");
+    var tokenPath = Path.Combine(modelDirectory, "tokens.txt");
+    var samplePath = Path.Combine(modelDirectory, "test_wavs", "zh.wav");
+    if (!File.Exists(modelPath) || !File.Exists(tokenPath) || !File.Exists(samplePath))
+    {
+        Console.WriteLine("语音模型冒烟 | 跳过：本地模型或测试音频未随源码提供。");
+        return;
+    }
+
+    using var reader = new WaveFileReader(samplePath);
+    if (reader.WaveFormat.Encoding != WaveFormatEncoding.Pcm ||
+        reader.WaveFormat.BitsPerSample != 16 ||
+        reader.WaveFormat.Channels != 1 ||
+        reader.WaveFormat.SampleRate != 16_000)
+    {
+        failures.Add($"语音模型测试音频格式异常：{reader.WaveFormat}。");
+        return;
+    }
+
+    var buffer = new byte[checked((int)reader.Length)];
+    var offset = 0;
+    while (offset < buffer.Length)
+    {
+        var count = reader.Read(buffer, offset, buffer.Length - offset);
+        if (count == 0)
+        {
+            break;
+        }
+
+        offset += count;
+    }
+
+    var samples = new float[offset / sizeof(short)];
+    for (var index = 0; index < samples.Length; index++)
+    {
+        samples[index] = BitConverter.ToInt16(buffer, index * sizeof(short)) / 32768f;
+    }
+
+    var config = new OfflineRecognizerConfig();
+    config.FeatConfig.SampleRate = 16_000;
+    config.FeatConfig.FeatureDim = 80;
+    config.ModelConfig.Tokens = tokenPath;
+    config.ModelConfig.SenseVoice.Model = modelPath;
+    config.ModelConfig.SenseVoice.Language = "auto";
+    config.ModelConfig.SenseVoice.UseInverseTextNormalization = 1;
+    config.ModelConfig.NumThreads = Math.Clamp(Environment.ProcessorCount / 2, 1, 4);
+    using var recognizer = new OfflineRecognizer(config);
+    using var stream = recognizer.CreateStream();
+    stream.AcceptWaveform(16_000, samples);
+    recognizer.Decode(stream);
+    var text = System.Text.RegularExpressions.Regex.Replace(stream.Result.Text, "<[^>]+>", string.Empty).Trim();
+    Console.WriteLine($"语音模型冒烟 | {samples.Length / 16_000d:F1} 秒 | {text}");
+    if (string.IsNullOrWhiteSpace(text))
+    {
+        failures.Add("SenseVoice 未能识别模型自带的中文测试音频。");
     }
 }
 

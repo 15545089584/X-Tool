@@ -9,7 +9,8 @@ internal sealed class VoiceInputService : IDisposable
 {
     private const int SampleRate = 16_000;
     private const int MaximumRecordingSeconds = 28;
-    private const double VoiceThreshold = 0.012;
+    // 较低的阈值可兼容笔记本内置麦克风；识别阶段仍由模型决定是否返回文字。
+    private const double VoiceThreshold = 0.004;
     private readonly object _syncRoot = new();
     private readonly List<float> _samples = new();
     private WaveInEvent? _waveIn;
@@ -18,10 +19,26 @@ internal sealed class VoiceInputService : IDisposable
     private DateTime _lastVoiceAt;
     private bool _hasDetectedVoice;
     private int _autoStopRequested;
+    private double _peakRms;
+    private string? _recordingError;
 
     internal event EventHandler? AutoStopRequested;
+    internal event Action<double>? SoundLevelChanged;
+    internal event Action<string>? RecordingFaulted;
 
     internal bool IsRecording => _waveIn is not null;
+
+    internal string CaptureDiagnostics
+    {
+        get
+        {
+            lock (_syncRoot)
+            {
+                var seconds = (double)_samples.Count / SampleRate;
+                return $"已采集 {seconds:F1} 秒，峰值音量 {_peakRms:F3}";
+            }
+        }
+    }
 
     internal string ModelDirectory => Path.Combine(
         AppContext.BaseDirectory,
@@ -48,10 +65,12 @@ internal sealed class VoiceInputService : IDisposable
         lock (_syncRoot)
         {
             _samples.Clear();
+            _peakRms = 0;
         }
 
         _hasDetectedVoice = false;
         _autoStopRequested = 0;
+        _recordingError = null;
         _recordingStartedAt = DateTime.UtcNow;
         _lastVoiceAt = _recordingStartedAt;
         _waveIn = new WaveInEvent
@@ -60,6 +79,7 @@ internal sealed class VoiceInputService : IDisposable
             BufferMilliseconds = 80
         };
         _waveIn.DataAvailable += WaveIn_DataAvailable;
+        _waveIn.RecordingStopped += WaveIn_RecordingStopped;
         _waveIn.StartRecording();
     }
 
@@ -73,8 +93,14 @@ internal sealed class VoiceInputService : IDisposable
 
         _waveIn = null;
         waveIn.DataAvailable -= WaveIn_DataAvailable;
+        waveIn.RecordingStopped -= WaveIn_RecordingStopped;
         waveIn.StopRecording();
         waveIn.Dispose();
+
+        if (!string.IsNullOrWhiteSpace(_recordingError))
+        {
+            throw new InvalidOperationException(_recordingError);
+        }
 
         float[] samples;
         lock (_syncRoot)
@@ -83,7 +109,8 @@ internal sealed class VoiceInputService : IDisposable
             _samples.Clear();
         }
 
-        if (!_hasDetectedVoice || samples.Length < SampleRate / 3)
+        // 即使静音阈值未触发，也尝试识别足够长的录音，避免低灵敏度麦克风被提前丢弃。
+        if (samples.Length < SampleRate / 3)
         {
             return string.Empty;
         }
@@ -98,6 +125,7 @@ internal sealed class VoiceInputService : IDisposable
         if (waveIn is not null)
         {
             waveIn.DataAvailable -= WaveIn_DataAvailable;
+            waveIn.RecordingStopped -= WaveIn_RecordingStopped;
             waveIn.StopRecording();
             waveIn.Dispose();
         }
@@ -140,6 +168,14 @@ internal sealed class VoiceInputService : IDisposable
 
         var now = DateTime.UtcNow;
         var rms = Math.Sqrt(totalEnergy / sampleCount);
+        lock (_syncRoot)
+        {
+            _peakRms = Math.Max(_peakRms, rms);
+        }
+
+        // 以对数感知的方式压缩音量，安静时保持细小波形，说话时才明显抬升。
+        var displayLevel = Math.Clamp((rms - 0.0015) / 0.055, 0, 1);
+        SoundLevelChanged?.Invoke(displayLevel);
         if (rms >= VoiceThreshold)
         {
             _hasDetectedVoice = true;
@@ -154,6 +190,17 @@ internal sealed class VoiceInputService : IDisposable
         {
             AutoStopRequested?.Invoke(this, EventArgs.Empty);
         }
+    }
+
+    private void WaveIn_RecordingStopped(object? sender, StoppedEventArgs e)
+    {
+        if (e.Exception is null)
+        {
+            return;
+        }
+
+        _recordingError = $"麦克风采集失败：{e.Exception.Message}";
+        RecordingFaulted?.Invoke(_recordingError);
     }
 
     private string Recognize(float[] samples, CancellationToken cancellationToken)

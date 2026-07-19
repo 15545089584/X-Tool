@@ -66,6 +66,8 @@ public partial class MainWindow : Window
             ? "标准中文离线模型已就绪"
             : "本地模型缺失，请修复或重新安装 X-Tool";
         _voiceInputService.AutoStopRequested += VoiceInputService_AutoStopRequested;
+        _voiceInputService.SoundLevelChanged += VoiceInputService_SoundLevelChanged;
+        _voiceInputService.RecordingFaulted += VoiceInputService_RecordingFaulted;
         UpdateStorageLocationText();
         // 长截图需要连续拿到“此刻”的画面。每次重新创建桌面复制会话时，
         // 部分显卡驱动可能先返回上一帧，因此滚动采集优先使用同步的 GDI 帧，
@@ -1108,6 +1110,16 @@ public partial class MainWindow : Window
         Dispatcher.BeginInvoke(async () => await FinishVoiceInputAsync());
     }
 
+    private void VoiceInputService_SoundLevelChanged(double level)
+    {
+        Dispatcher.BeginInvoke(() => _voiceInputOverlay?.UpdateLevel(level));
+    }
+
+    private void VoiceInputService_RecordingFaulted(string message)
+    {
+        Dispatcher.BeginInvoke(() => ShowToast(message));
+    }
+
     private async Task FinishVoiceInputAsync()
     {
         if (!_voiceInputService.IsRecording)
@@ -1127,7 +1139,7 @@ public partial class MainWindow : Window
             var text = await _voiceInputService.StopAndRecognizeAsync(cancellation.Token);
             if (string.IsNullOrWhiteSpace(text))
             {
-                ShowToast("未检测到清晰语音");
+                ShowToast($"未识别到文字（{_voiceInputService.CaptureDiagnostics}）。请检查系统麦克风权限和输入设备。");
                 return;
             }
 
@@ -1152,6 +1164,10 @@ public partial class MainWindow : Window
             if (!activated || !NativeMethods.SendPasteShortcut())
             {
                 ShowToast("识别结果已复制，请手动粘贴");
+            }
+            else
+            {
+                ShowToast($"已识别 {text.Length} 个字符并粘贴");
             }
         }
         catch (OperationCanceledException)
