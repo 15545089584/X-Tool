@@ -11,6 +11,7 @@ using ScreenshotApp.Capture;
 using ScreenshotApp.FileWorkbench;
 using ScreenshotApp.Ocr;
 using ScreenshotApp.Translation;
+using ScreenshotApp.Converters;
 
 const int Width = 720;
 const int FrameHeight = 520;
@@ -87,6 +88,7 @@ await RunOcrSmokeCase();
 RunVoiceInputModelSmokeCase();
 await RunChineseEnglishTranslationSmokeCase();
 RunFileWorkbenchPlanningCase();
+RunEncodingConversionCase();
 RunSingleInstanceCase();
 RunNativeWindowAnimationStyleCase();
 
@@ -680,6 +682,28 @@ void RunFileWorkbenchPlanningCase()
         !classified[0].DestinationPath.Contains($"{Path.DirectorySeparatorChar}图片{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
     {
         failures.Add("文件工作台未能生成预期的重命名或分类操作预览。");
+    }
+}
+
+void RunEncodingConversionCase()
+{
+    const string source = "X-Tool 中文";
+    var base64 = EncodingConversionService.Base64Encode(source);
+    var unicode = EncodingConversionService.UnicodeEncode(source);
+    var restoredBase64 = EncodingConversionService.Base64Decode(base64);
+    var restoredUnicode = EncodingConversionService.UnicodeDecode(unicode);
+    var url = EncodingConversionService.UrlDecode(EncodingConversionService.UrlEncode(source));
+    var header = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("{\"alg\":\"none\"}")).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+    var payload = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("{\"sub\":\"xtool\",\"exp\":0}")).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+    var jwt = EncodingConversionService.ParseJwt($"{header}.{payload}.signature");
+    var timestamp = EncodingConversionService.ConvertTimestamp("0");
+    var uuids = EncodingConversionService.GenerateUuids(3);
+    Console.WriteLine($"编码转换 | Base64={base64} | JWT={jwt.SignatureStatus} | 时间戳={timestamp.UtcText} | UUID={uuids.Count}");
+    if (restoredBase64 != source || restoredUnicode != source || url != source ||
+        !jwt.Header.Contains("alg", StringComparison.Ordinal) || !jwt.Payload.Contains("xtool", StringComparison.Ordinal) ||
+        timestamp.Seconds != 0 || timestamp.Milliseconds != 0 || uuids.Count != 3 || uuids.Any(value => !Guid.TryParse(value, out _)))
+    {
+        failures.Add("编码转换的文本、JWT、时间戳或 UUID 本地处理结果不符合预期。");
     }
 }
 

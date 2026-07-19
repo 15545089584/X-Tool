@@ -240,8 +240,9 @@ public partial class MainWindow : Window
         ConverterWorkbenchView.Visibility = page == "ConverterWorkbench" ? Visibility.Visible : Visibility.Collapsed;
         ImageConverterView.Visibility = page == "ImageConverter" ? Visibility.Visible : Visibility.Collapsed;
         AudioConverterView.Visibility = page == "AudioConverter" ? Visibility.Visible : Visibility.Collapsed;
-        VideoConverterView.Visibility = page == "VideoConverter" ? Visibility.Visible : Visibility.Collapsed;
-        PdfConverterView.Visibility = page == "PdfConverter" ? Visibility.Visible : Visibility.Collapsed;
+          VideoConverterView.Visibility = page == "VideoConverter" ? Visibility.Visible : Visibility.Collapsed;
+          PdfConverterView.Visibility = page == "PdfConverter" ? Visibility.Visible : Visibility.Collapsed;
+          EncodingConverterView.Visibility = page == "EncodingConverter" ? Visibility.Visible : Visibility.Collapsed;
         FileWorkbenchView.Visibility = page == "FileWorkbench" ? Visibility.Visible : Visibility.Collapsed;
         if (page == "ImageConverter")
         {
@@ -1532,9 +1533,10 @@ public partial class MainWindow : Window
         NavigateToPage(e.Tool switch
         {
             "Audio" => "AudioConverter",
-            "Video" => "VideoConverter",
-            "Pdf" => "PdfConverter",
-            _ => "ImageConverter"
+              "Video" => "VideoConverter",
+              "Pdf" => "PdfConverter",
+              "Encoding" => "EncodingConverter",
+              _ => "ImageConverter"
         });
     }
 

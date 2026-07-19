@@ -161,7 +161,7 @@ git log -5 --oneline
 
 ## 六、转换器工作台现状
 
-转换器工作台拥有独立的竖向二级工具栏，目前包含图片、音频和视频三个图标入口。顶部始终保留“转换器工作台”标题与介绍；选择工具只替换右侧工作区。
+转换器工作台拥有独立的竖向二级工具栏，目前包含图片、音频、视频、转 PDF 和编码转换五个图标入口。顶部始终保留“转换器工作台”标题与介绍；选择工具只替换右侧工作区。
 
 ### 1. 图片处理（已可用）
 
@@ -271,6 +271,13 @@ git log -5 --oneline
 
 当前本机验证：Release 构建通过，PDF 页面与 Office/WPS/LibreOffice 检测提示已实际显示；本机检测到 Office，未检测到 WPS、LibreOffice。尚未在本机以真实办公文件完成 Office/WPS/LibreOffice 端到端导出，后续应分别补测 Word、Excel、PowerPoint 与 LibreOffice 回退。
 
+### 6. 编码转换（已实现）
+
+入口：转换器工作台左侧第五个“编码转换”图标，页面为
+`ScreenshotApp\Converters\EncodingConverterView.xaml(.cs)`。
+
+全部能力均为离线本地处理：Base64、URL Encode/Decode、Unicode 编码/解码、JWT Header/Payload 只读解析、Unix 秒/毫秒时间戳与日期时间互转、UUID v4 批量生成（1-100 个）。JWT 不上传内容且不验证签名；解析结果会明确显示这一点。
+
 ## 七、关键代码地图
 
 | 模块 | 位置 |
@@ -293,6 +300,7 @@ git log -5 --oneline
 | 音视频队列模型 | `ScreenshotApp\Converters\MediaQueueItem.cs` |
 | PDF 页面与任务队列 | `ScreenshotApp\Converters\PdfConverterView.xaml(.cs)`、`PdfQueueItem.cs` |
 | PDF 转换与引擎回退 | `ScreenshotApp\Converters\PdfConversionService.cs` |
+| 编码转换 | `ScreenshotApp\Converters\EncodingConverterView.xaml(.cs)`、`EncodingConversionService.cs` |
 | 文件工作台 | `ScreenshotApp\FileWorkbench\FileWorkbenchView.xaml(.cs)`、`FileWorkbenchService.cs` |
 | Win32 接口 | `ScreenshotApp\Capture\NativeMethods.cs` |
 

@@ -57,6 +57,7 @@ public partial class ConverterToolRail : UserControl
         SetButtonState(AudioButton, SelectedTool == "Audio", Color.FromRgb(76, 184, 137));
         SetButtonState(VideoButton, SelectedTool == "Video", Color.FromRgb(138, 104, 218));
         SetButtonState(PdfButton, SelectedTool == "Pdf", Color.FromRgb(216, 117, 78));
+        SetButtonState(EncodingButton, SelectedTool == "Encoding", Color.FromRgb(55, 123, 196));
     }
 
     private static void SetButtonState(Button button, bool selected, Color accent)
