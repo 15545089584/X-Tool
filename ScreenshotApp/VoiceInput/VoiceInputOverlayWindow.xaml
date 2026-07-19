@@ -11,7 +11,12 @@
                 <Border.Effect><DropShadowEffect BlurRadius="18" ShadowDepth="5" Direction="270" Opacity="0.20" Color="#334B6A" /></Border.Effect>
                 <TextBlock x:Name="RecognizedTextBlock" MaxWidth="146" FontSize="14" Foreground="#334A65" TextWrapping="Wrap" />
             </Border>
-            <TextBlock x:Name="TranslationArrow" Margin="8,0" VerticalAlignment="Center" Visibility="Collapsed" FontSize="18" FontWeight="SemiBold" Foreground="#A75FE5" Text="→" />
+            <Border x:Name="TranslationArrow" Width="52" Height="52" Margin="10,0" VerticalAlignment="Center" Visibility="Collapsed" BorderThickness="2" CornerRadius="26">
+                <Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#EDF8FFFF" Offset="0" /><GradientStop Color="#F8F0FFF5" Offset="0.5" /><GradientStop Color="#EEFFF3F5" Offset="1" /></LinearGradientBrush></Border.Background>
+                <Border.BorderBrush><LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#6CCBFFFF" Offset="0" /><GradientStop Color="#73E8B1FF" Offset="0.30" /><GradientStop Color="#F2E965FF" Offset="0.55" /><GradientStop Color="#FF8A8AFF" Offset="0.76" /><GradientStop Color="#B780FFFF" Offset="1" /></LinearGradientBrush></Border.BorderBrush>
+                <Border.Effect><DropShadowEffect BlurRadius="14" ShadowDepth="3" Direction="270" Opacity="0.18" Color="#334B6A" /></Border.Effect>
+                <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="30" FontWeight="Bold" Foreground="#8A63D8" Text="→" />
+            </Border>
             <Border x:Name="TranslatedTextBubble" Padding="17,11" HorizontalAlignment="Center" Visibility="Collapsed" BorderThickness="2" CornerRadius="19" MaxWidth="184">
                 <Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#F5F2FFFF" Offset="0" /><GradientStop Color="#E9F5FFF8" Offset="0.48" /><GradientStop Color="#F5EEFFF0" Offset="1" /></LinearGradientBrush></Border.Background>
                 <Border.BorderBrush><LinearGradientBrush StartPoint="0,0" EndPoint="1,0"><GradientStop Color="#5FCFFAFF" Offset="0" /><GradientStop Color="#78E3B1FF" Offset="0.28" /><GradientStop Color="#F3E968FF" Offset="0.52" /><GradientStop Color="#FF9879FF" Offset="0.74" /><GradientStop Color="#B87FFFFF" Offset="1" /></LinearGradientBrush></Border.BorderBrush>
