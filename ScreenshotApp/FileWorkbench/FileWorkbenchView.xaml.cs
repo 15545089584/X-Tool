@@ -52,7 +52,13 @@ public partial class FileWorkbenchView : UserControl
             var type = (TypeFilterComboBox.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "全部";
             var days = (ModifiedFilterComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString();
             DateTime? modifiedAfter = int.TryParse(days, out var value) ? DateTime.Now.AddDays(-value) : null;
-            var results = await Task.Run(() => FileWorkbenchService.Search(root, KeywordTextBox.Text.Trim(), type, ParseSize(MinimumSizeTextBox.Text), ParseSize(MaximumSizeTextBox.Text), modifiedAfter, cancellation.Token), cancellation.Token);
+            // 必须在 UI 线程先读取筛选条件；后台扫描不能直接访问 WPF 控件。
+            var keyword = KeywordTextBox.Text.Trim();
+            var minimumSize = ParseSize(MinimumSizeTextBox.Text);
+            var maximumSize = ParseSize(MaximumSizeTextBox.Text);
+            var results = await Task.Run(
+                () => FileWorkbenchService.Search(root, keyword, type, minimumSize, maximumSize, modifiedAfter, cancellation.Token),
+                cancellation.Token);
             if (cancellation.IsCancellationRequested) return;
             _items.Clear(); foreach (var item in results) _items.Add(item);
             _plans.Clear();

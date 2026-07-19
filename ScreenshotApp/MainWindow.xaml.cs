@@ -1332,7 +1332,7 @@ public partial class MainWindow : Window
                 }
             }
 
-            var outputText = text;
+            var outputText = text.Trim();
             if (_voiceTranslationPreviewActive)
             {
                 await RefreshVoiceTranslationPreviewAsync(text);
@@ -1351,17 +1351,16 @@ public partial class MainWindow : Window
             }
             if (!_preferences.VoiceInputPasteAutomatically || _voiceInputPasteTarget == IntPtr.Zero)
             {
-                ClipboardService.SetText(outputText);
-                _suppressClipboardCapture = true;
-                ShowToast("识别结果已复制到系统剪贴板");
+                ShowToast(await SetVoiceInputClipboardTextAsync(outputText)
+                    ? "识别结果已复制到系统剪贴板"
+                    : "识别结果已生成，但暂时无法写入剪贴板");
                 return;
             }
 
+            _voiceInputCommittedText = outputText;
             if (await PasteVoiceInputTextAsync(outputText, showSuccess: true))
             {
-                _voiceInputCommittedText = outputText;
-                ClipboardService.SetText(outputText);
-                _suppressClipboardCapture = true;
+                await SetVoiceInputClipboardTextAsync(outputText);
             }
         }
         catch (OperationCanceledException)
@@ -1392,8 +1391,15 @@ public partial class MainWindow : Window
             return false;
         }
 
-        ClipboardService.SetText(text);
-        _suppressClipboardCapture = true;
+        if (!await SetVoiceInputClipboardTextAsync(text))
+        {
+            if (showSuccess)
+            {
+                ShowToast("无法写入识别结果到剪贴板，请重试");
+            }
+
+            return false;
+        }
         // 剪贴板拥有者切换和目标窗口的输入控件恢复都需要短暂稳定时间，
         // 否则少数应用会收到 Ctrl+V 却仍读取到上一份或空剪贴板内容。
         await Task.Delay(75);
@@ -1417,7 +1423,18 @@ public partial class MainWindow : Window
             return false;
         }
 
-        await Task.Delay(70);
+        await Task.Delay(90);
+        // 部分剪贴板管理器会短暂改写内容；发送 Ctrl+V 前再次确认仍是本次识别结果。
+        if (!ClipboardMatchesVoiceInputText(text) && !await SetVoiceInputClipboardTextAsync(text))
+        {
+            if (showSuccess)
+            {
+                ShowToast("识别结果已生成，但剪贴板内容被占用，请手动重试");
+            }
+
+            return false;
+        }
+
         var pasted = false;
         for (var attempt = 0; attempt < 3 && !pasted; attempt++)
         {
@@ -1444,6 +1461,43 @@ public partial class MainWindow : Window
         }
 
         return true;
+    }
+
+    private async Task<bool> SetVoiceInputClipboardTextAsync(string text)
+    {
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            try
+            {
+                ClipboardService.SetText(text);
+                _suppressClipboardCapture = true;
+                await Task.Delay(35);
+                if (ClipboardMatchesVoiceInputText(text))
+                {
+                    return true;
+                }
+            }
+            catch (Exception)
+            {
+                // 剪贴板短暂被系统或其他程序占用时继续重试。
+            }
+
+            await Task.Delay(45);
+        }
+
+        return false;
+    }
+
+    private static bool ClipboardMatchesVoiceInputText(string expected)
+    {
+        try
+        {
+            return Clipboard.ContainsText() && string.Equals(Clipboard.GetText(), expected, StringComparison.Ordinal);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 
     private void ShowVoiceInputOverlay(string title, string detail)
