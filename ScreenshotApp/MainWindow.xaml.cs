@@ -73,6 +73,8 @@ public partial class MainWindow : Window
         _ = GlobalShortcut.TryParse(_preferences.ClipboardShortcut, GlobalShortcut.ClipboardDefault, out _clipboardShortcut);
         _ = GlobalShortcut.TryParse(_preferences.VoiceInputShortcut, GlobalShortcut.VoiceDefault, out _voiceInputShortcut);
         StickerTopmostCheckBox.IsChecked = _preferences.StickerTopmost;
+        StartWithWindowsCheckBox.IsChecked = AutoStartService.IsEnabled();
+        _preferences.StartWithWindows = StartWithWindowsCheckBox.IsChecked == true;
         VoiceInputEnabledCheckBox.IsChecked = _preferences.VoiceInputEnabled;
         VoiceInputPasteAutomaticallyCheckBox.IsChecked = _preferences.VoiceInputPasteAutomatically;
         VoiceInputModelStatusText.Text = _voiceInputService.IsModelAvailable
@@ -864,6 +866,21 @@ public partial class MainWindow : Window
     {
         _preferences.StickerTopmost = StickerTopmostCheckBox.IsChecked == true;
         _preferences.Save();
+    }
+
+    private void StartWithWindowsCheckBox_Click(object sender, RoutedEventArgs e)
+    {
+        var enabled = StartWithWindowsCheckBox.IsChecked == true;
+        if (!AutoStartService.TrySetEnabled(enabled, out var error))
+        {
+            StartWithWindowsCheckBox.IsChecked = AutoStartService.IsEnabled();
+            ShowToast($"开机自启动设置失败：{error}");
+            return;
+        }
+
+        _preferences.StartWithWindows = enabled;
+        _preferences.Save();
+        ShowToast(enabled ? "已开启开机自启动" : "已关闭开机自启动");
     }
 
     private async void StorageLocationButton_Click(object sender, RoutedEventArgs e)

@@ -30,6 +30,9 @@ public sealed class AppPreferences
 
     public bool VoiceInputPasteAutomatically { get; set; } = true;
 
+    /// <summary>是否在当前 Windows 用户登录后自动启动 X-Tool。</summary>
+    public bool StartWithWindows { get; set; }
+
     public string ScreenshotShortcut { get; set; } = "Ctrl+Shift+A";
 
     public string ClipboardShortcut { get; set; } = "Ctrl+Shift+V";
