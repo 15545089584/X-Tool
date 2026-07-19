@@ -58,10 +58,19 @@ git log -5 --oneline
 1. 首页
 2. 屏幕工作台
 3. 转换器工作台
-4. 快捷键
-5. 设置
+4. 文件工作台
+5. 快捷键
+6. 设置
 
 剪贴板不再是一级侧栏项，而是屏幕工作台的组成部分；首页与屏幕工作台均可进入剪贴板。
+
+### 文件工作台（已实现第一版）
+
+- 入口：一级侧栏“文件工作台”。
+- 指定文件夹后可按文件名、类型、最小/最大大小和修改时间搜索；搜索会跳过无权限目录与链接目录。
+- 可对选中文件（未选择时为当前结果全部）生成批量重命名、修改后缀、按类型分类、批量移动预览；确认后才执行。
+- 重命名采用“前缀_编号”格式，自动避让已存在文件；分类目录为图片、视频、音频、文档、压缩包、其他。
+- 当前为文件夹内的异步本地扫描，不是 Windows/Everything 的全盘常驻索引；全盘秒级搜索需后续接入 Windows Search 或 Everything 索引。
 
 全局快捷键：
 
@@ -284,6 +293,7 @@ git log -5 --oneline
 | 音视频队列模型 | `ScreenshotApp\Converters\MediaQueueItem.cs` |
 | PDF 页面与任务队列 | `ScreenshotApp\Converters\PdfConverterView.xaml(.cs)`、`PdfQueueItem.cs` |
 | PDF 转换与引擎回退 | `ScreenshotApp\Converters\PdfConversionService.cs` |
+| 文件工作台 | `ScreenshotApp\FileWorkbench\FileWorkbenchView.xaml(.cs)`、`FileWorkbenchService.cs` |
 | Win32 接口 | `ScreenshotApp\Capture\NativeMethods.cs` |
 
 ## 八、当前已知限制与建议顺序

@@ -6,6 +6,7 @@
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:primitives="clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework"
         xmlns:converters="clr-namespace:ScreenshotApp.Converters"
+        xmlns:fileWorkbench="clr-namespace:ScreenshotApp.FileWorkbench"
         mc:Ignorable="d"
         Title="X-Tool"
         Icon="Assets/XTool.ico"
@@ -382,6 +383,15 @@
                                 <TextBlock Style="{StaticResource IconTextStyle}" FontSize="17" Text="&#xE8C8;" Foreground="#626971" />
                             </Border>
                             <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" FontSize="15" Text="转换器工作台" />
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="FileWorkbenchNav" GroupName="Navigation" Style="{StaticResource NavItemStyle}"
+                                 Tag="FileWorkbench" Checked="NavButton_Checked">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Width="34" Height="34" Background="#F7F8FA" CornerRadius="9">
+                                <TextBlock Style="{StaticResource IconTextStyle}" FontSize="17" Text="&#xE8B7;" Foreground="#626971" />
+                            </Border>
+                            <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" FontSize="15" Text="文件工作台" />
                         </StackPanel>
                     </RadioButton>
                     <RadioButton GroupName="Navigation" Style="{StaticResource NavItemStyle}"
@@ -872,6 +882,9 @@
                                     </Grid>
                                 </Border>
                             </Grid>
+
+                            <!-- 本地文件批处理与增强搜索。 -->
+                            <fileWorkbench:FileWorkbenchView x:Name="FileWorkbenchView" Visibility="Collapsed" />
 
                             <!-- 快捷键页 -->
                             <Grid x:Name="ShortcutsView" Visibility="Collapsed" Margin="58,44">
