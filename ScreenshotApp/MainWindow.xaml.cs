@@ -135,7 +135,22 @@ public partial class MainWindow : Window
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
         UpdateMaximizeButton();
+        EnlargeImageConversionHintText(this);
         await RefreshHistoryAsync();
+    }
+
+    private static void EnlargeImageConversionHintText(DependencyObject parent)
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, index);
+            if (child is TextBlock textBlock && textBlock.Text is "体积小" or "质量高" or "按比例缩放，保留原图比例")
+            {
+                textBlock.FontSize = 12;
+            }
+
+            EnlargeImageConversionHintText(child);
+        }
     }
 
     private void NavButton_Checked(object sender, RoutedEventArgs e)
@@ -1024,7 +1039,16 @@ public partial class MainWindow : Window
         _imageConversionFiles.Clear();
         UpdateImageFileSummary();
         UpdateImagePreviews();
-        ImageConversionStatusText.Text = "已清空文件队列";
+        ImageConversionStatusText.Text = string.Empty;
+    }
+
+    private void ResetImageConversionSettings_Click(object sender, RoutedEventArgs e)
+    {
+        ImageFormatComboBox.SelectedIndex = 0;
+        ImageQualitySlider.Value = 88;
+        ImageScaleSlider.Value = 100;
+        ImageConversionStatusText.Text = string.Empty;
+        UpdateImageConversionControls();
     }
 
     private void SelectConverterOutputFolder_Click(object sender, RoutedEventArgs e)
