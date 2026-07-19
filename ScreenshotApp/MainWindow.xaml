@@ -878,8 +878,8 @@
                                         </Grid>
                                         <Border Height="1" Background="#55FFFFFF" />
                                         <Grid Height="72" Margin="22,0">
-                                            <StackPanel VerticalAlignment="Center"><TextBlock FontSize="15" Text="本地语音输入" /><TextBlock Margin="0,4,0,0" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}" Text="按一次开始，说完停顿或再次按下即可输入" /></StackPanel>
-                                            <Border HorizontalAlignment="Right" VerticalAlignment="Center" Padding="14,8" Background="#AFFFFFFF" BorderBrush="#CFFFFFFF" BorderThickness="1" CornerRadius="8"><TextBlock Foreground="#43617E" Text="Ctrl + Alt + Space" /></Border>
+                                            <StackPanel VerticalAlignment="Center"><TextBlock FontSize="15" Text="本地语音输入" /><TextBlock Margin="0,4,0,0" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}" Text="按右 Alt 开始，说完停顿或再次按下即可输入" /></StackPanel>
+                                            <Border HorizontalAlignment="Right" VerticalAlignment="Center" Padding="14,8" Background="#AFFFFFFF" BorderBrush="#CFFFFFFF" BorderThickness="1" CornerRadius="8"><TextBlock Foreground="#43617E" Text="右 Alt" /></Border>
                                         </Grid>
                                     </StackPanel>
                                 </Border>
@@ -910,7 +910,7 @@
                                         </Border>
                                         <Border Style="{StaticResource SettingCardStyle}">
                                         <Grid Height="84" Margin="20,0">
-                                            <StackPanel VerticalAlignment="Center"><TextBlock FontSize="15" Text="本地语音输入" /><TextBlock Margin="0,5,0,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="Ctrl + Alt + Space 唤起，语音不会上传网络" /><TextBlock x:Name="VoiceInputModelStatusText" Margin="0,4,0,0" FontSize="10" Foreground="#5E819F" /></StackPanel>
+                                            <StackPanel VerticalAlignment="Center"><TextBlock FontSize="15" Text="本地语音输入" /><TextBlock Margin="0,5,0,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="右 Alt 唤起，语音不会上传网络" /><TextBlock x:Name="VoiceInputModelStatusText" Margin="0,4,0,0" FontSize="10" Foreground="#5E819F" /></StackPanel>
                                             <CheckBox x:Name="VoiceInputEnabledCheckBox" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource SettingToggleStyle}" Click="VoiceInputEnabledCheckBox_Click" />
                                         </Grid>
                                         </Border>

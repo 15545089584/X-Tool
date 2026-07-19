@@ -288,7 +288,7 @@ public partial class MainWindow : Window
         }
         if (_preferences.VoiceInputEnabled && !_voiceInputHotKeyRegistered)
         {
-            Dispatcher.BeginInvoke(() => ShowToast("Ctrl + Alt + Space 已被其他程序占用"), DispatcherPriority.Loaded);
+            Dispatcher.BeginInvoke(() => ShowToast("右 Alt 已被其他程序占用"), DispatcherPriority.Loaded);
         }
     }
 
@@ -1066,8 +1066,8 @@ public partial class MainWindow : Window
         _voiceInputHotKeyRegistered = NativeMethods.RegisterHotKey(
             handle,
             NativeMethods.VoiceInputHotKeyId,
-            NativeMethods.ModControl | NativeMethods.ModAlt,
-            (uint)KeyInterop.VirtualKeyFromKey(Key.Space));
+            0,
+            NativeMethods.VirtualKeyRightAlt);
     }
 
     private async Task ToggleVoiceInputAsync()
@@ -1091,7 +1091,7 @@ public partial class MainWindow : Window
             _voiceInputCancellation?.Dispose();
             _voiceInputCancellation = new CancellationTokenSource();
             _voiceInputService.Start();
-            ShowVoiceInputOverlay("正在聆听…", "再次按 Ctrl + Alt + Space 结束");
+            ShowVoiceInputOverlay("正在聆听…", "再次按右 Alt 结束");
         }
         catch (Exception exception)
         {

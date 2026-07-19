@@ -9,10 +9,10 @@ internal static class NativeMethods
     internal const int VoiceInputHotKeyId = 0x4A5B;
     internal const int WmHotKey = 0x0312;
     internal const int WmClipboardUpdate = 0x031D;
-    internal const uint ModAlt = 0x0001;
     internal const uint ModControl = 0x0002;
     internal const uint ModShift = 0x0004;
     internal const uint SwpNoActivate = 0x0010;
+    internal const uint VirtualKeyRightAlt = 0xA5;
     internal const int HwndTopmost = -1;
     internal const uint MonitorDefaultToNearest = 0x00000002;
     internal const uint DibRgbColors = 0;
