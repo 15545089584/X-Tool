@@ -15,6 +15,13 @@ ScreenshotApp/Models/Translation/default/tokenizer.json
 ScreenshotApp/Models/Translation/default/manifest.json
 ScreenshotApp/Models/Translation/default/vocab.json
 
+# 中译英语言包与默认英译中语言包一致，仅随 Release/安装包资源分发。
+ScreenshotApp/Models/Translation/zh-en/*.onnx
+ScreenshotApp/Models/Translation/zh-en/*.spm
+ScreenshotApp/Models/Translation/zh-en/manifest.json
+ScreenshotApp/Models/Translation/zh-en/vocab.json
+ScreenshotApp/Models/Translation/zh-en/UPSTREAM-README.md
+
 # 离线语音输入模型作为 Release/安装包资源分发，单个权重文件不纳入普通 Git 仓库。
 ScreenshotApp/Models/VoiceInput/default/model.int8.onnx
 ScreenshotApp/Models/VoiceInput/default/test_wavs/

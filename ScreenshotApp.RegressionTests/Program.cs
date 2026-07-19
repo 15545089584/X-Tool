@@ -9,6 +9,7 @@ using SherpaOnnx;
 using ScreenshotApp;
 using ScreenshotApp.Capture;
 using ScreenshotApp.Ocr;
+using ScreenshotApp.Translation;
 
 const int Width = 720;
 const int FrameHeight = 520;
@@ -83,6 +84,7 @@ RunScreenColorSamplerCase();
 RunOcrTextLayoutCase();
 await RunOcrSmokeCase();
 RunVoiceInputModelSmokeCase();
+await RunChineseEnglishTranslationSmokeCase();
 RunSingleInstanceCase();
 RunNativeWindowAnimationStyleCase();
 
@@ -621,6 +623,42 @@ void RunVoiceInputModelSmokeCase()
     if (string.IsNullOrWhiteSpace(text))
     {
         failures.Add("SenseVoice 未能识别模型自带的中文测试音频。");
+    }
+}
+
+async Task RunChineseEnglishTranslationSmokeCase()
+{
+    var modelDirectory = Path.Combine(
+        Directory.GetCurrentDirectory(),
+        "ScreenshotApp",
+        "Models",
+        "Translation",
+        "zh-en");
+    var modelPaths = new TranslationModelPaths(
+        Path.Combine(modelDirectory, "encoder_model.onnx"),
+        Path.Combine(modelDirectory, "decoder_model.onnx"),
+        Path.Combine(modelDirectory, "source.spm"),
+        Path.Combine(modelDirectory, "target.spm"),
+        Path.Combine(modelDirectory, "vocab.json"),
+        Path.Combine(modelDirectory, "manifest.json"));
+    var engine = new OnnxTranslationEngine(modelPaths, "中译英", "opus-mt-zh-en-onnx-int8");
+    if (!engine.IsReady)
+    {
+        failures.Add("中译英离线语言包不完整。");
+        return;
+    }
+
+    var result = await engine.TranslateAsync(
+        new TranslationRequest("你好，欢迎使用 X-Tool。")
+        {
+            SourceLanguage = "zh-Hans",
+            TargetLanguage = "en"
+        },
+        CancellationToken.None);
+    Console.WriteLine($"中译英模型冒烟 | {result.Elapsed.TotalMilliseconds:F0} ms | {result.TranslatedText}");
+    if (string.IsNullOrWhiteSpace(result.TranslatedText) || !result.TranslatedText.Any(character => character is >= 'A' and <= 'Z' or >= 'a' and <= 'z'))
+    {
+        failures.Add($"中译英模型未输出预期英文文本，结果：{result.TranslatedText}");
     }
 }
 
