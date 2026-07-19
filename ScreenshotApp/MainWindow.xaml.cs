@@ -56,7 +56,6 @@ public partial class MainWindow : Window
     private IntPtr _voiceInputPasteTarget;
     private CancellationTokenSource? _voiceInputCancellation;
     private string _voiceInputCommittedText = string.Empty;
-    private string _voiceInputLastHypothesis = string.Empty;
     private readonly Queue<char> _voiceInputPendingCharacters = new();
     private readonly DispatcherTimer _voiceInputTypingTimer;
     private GlobalShortcut _screenshotShortcut;
@@ -1127,7 +1126,6 @@ public partial class MainWindow : Window
         _voiceInputCancellation?.Cancel();
         _voiceInputService.Cancel();
         _voiceInputCommittedText = string.Empty;
-        _voiceInputLastHypothesis = string.Empty;
         CloseVoiceInputOverlay();
         ShowToast("语音输入已取消");
     }
@@ -1153,7 +1151,6 @@ public partial class MainWindow : Window
             _voiceInputCancellation?.Dispose();
             _voiceInputCancellation = new CancellationTokenSource();
             _voiceInputCommittedText = string.Empty;
-            _voiceInputLastHypothesis = string.Empty;
             _voiceInputPendingCharacters.Clear();
             _voiceInputTypingTimer.Stop();
             _voiceInputService.Start();
@@ -1194,8 +1191,22 @@ public partial class MainWindow : Window
             return;
         }
 
-        var incrementalText = GetStableVoiceInputIncrement(hypothesis);
-        _voiceInputLastHypothesis = hypothesis;
+        // 气泡只是本地预览，不会提前写入外部窗口；直接跟随最新片段，避免稳定前缀在持续说话时停滞。
+        var commonLength = 0;
+        var limit = Math.Min(_voiceInputCommittedText.Length, hypothesis.Length);
+        while (commonLength < limit && _voiceInputCommittedText[commonLength] == hypothesis[commonLength])
+        {
+            commonLength++;
+        }
+
+        if (commonLength < _voiceInputCommittedText.Length)
+        {
+            _voiceInputCommittedText = _voiceInputCommittedText[..commonLength];
+            _voiceInputOverlay?.SetRecognizedText(_voiceInputCommittedText);
+        }
+
+        _voiceInputPendingCharacters.Clear();
+        var incrementalText = hypothesis[_voiceInputCommittedText.Length..];
         if (string.IsNullOrWhiteSpace(incrementalText))
         {
             return;
@@ -1235,7 +1246,6 @@ public partial class MainWindow : Window
             }
 
             _voiceInputOverlay?.SetRecognizedText(text);
-            _voiceInputLastHypothesis = text;
             if (!_preferences.VoiceInputPasteAutomatically || _voiceInputPasteTarget == IntPtr.Zero)
             {
                 ClipboardService.SetText(text);
@@ -1300,65 +1310,6 @@ public partial class MainWindow : Window
         }
 
         return true;
-    }
-
-    private string GetVoiceInputIncrement(string hypothesis)
-    {
-        if (hypothesis.StartsWith(_voiceInputCommittedText, StringComparison.Ordinal))
-        {
-            return hypothesis[_voiceInputCommittedText.Length..];
-        }
-
-        // 分段识别可能会回改最近几个字；已粘贴部分不能在任意第三方输入框中安全回删，
-        // 因此只提交连续且稳定的后缀，最终完整结果始终会写回剪贴板。
-        var commonLength = 0;
-        var limit = Math.Min(_voiceInputLastHypothesis.Length, hypothesis.Length);
-        while (commonLength < limit && _voiceInputLastHypothesis[commonLength] == hypothesis[commonLength])
-        {
-            commonLength++;
-        }
-
-        return commonLength > _voiceInputCommittedText.Length &&
-               hypothesis.StartsWith(_voiceInputCommittedText, StringComparison.Ordinal)
-            ? hypothesis[_voiceInputCommittedText.Length..commonLength]
-            : string.Empty;
-    }
-
-    private string GetStableVoiceInputIncrement(string hypothesis)
-    {
-        if (string.IsNullOrEmpty(_voiceInputLastHypothesis))
-        {
-            return string.Empty;
-        }
-
-        var commonLength = 0;
-        var limit = Math.Min(_voiceInputLastHypothesis.Length, hypothesis.Length);
-        while (commonLength < limit && _voiceInputLastHypothesis[commonLength] == hypothesis[commonLength])
-        {
-            commonLength++;
-        }
-
-        var stableText = hypothesis[..commonLength];
-        var queuedText = new string(_voiceInputPendingCharacters.ToArray());
-        var displayedOrQueuedText = _voiceInputCommittedText + queuedText;
-        if (stableText.StartsWith(displayedOrQueuedText, StringComparison.Ordinal))
-        {
-            return stableText[displayedOrQueuedText.Length..];
-        }
-
-        // 尚未打出的字符若被新结果回改，仅丢弃队列尾部；已输出内容不再闪回重写。
-        if (displayedOrQueuedText.StartsWith(stableText, StringComparison.Ordinal) && stableText.Length >= _voiceInputCommittedText.Length)
-        {
-            var retainedCount = stableText.Length - _voiceInputCommittedText.Length;
-            var retainedCharacters = _voiceInputPendingCharacters.Take(retainedCount).ToArray();
-            _voiceInputPendingCharacters.Clear();
-            foreach (var character in retainedCharacters)
-            {
-                _voiceInputPendingCharacters.Enqueue(character);
-            }
-        }
-
-        return string.Empty;
     }
 
     private void VoiceInputTypingTimer_Tick(object? sender, EventArgs e)
