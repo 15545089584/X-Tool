@@ -178,7 +178,8 @@
         </Style>
 
         <Style x:Key="ConverterSliderStyle" TargetType="Slider">
-            <Setter Property="Height" Value="24" />
+            <Setter Property="Height" Value="44" />
+            <Setter Property="Margin" Value="0,4" />
             <Setter Property="Foreground" Value="#4D7CFE" />
             <Setter Property="Background" Value="#C9D8E8F6" />
         </Style>
@@ -568,6 +569,14 @@
                                         </Border>
                                         <Grid Grid.Column="2">
                                             <Grid.RowDefinitions><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                            <Grid Panel.ZIndex="-1">
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="1.08*" /><ColumnDefinition Width="22" /><ColumnDefinition Width="0.92*" /></Grid.ColumnDefinitions>
+                                                <Grid Grid.Column="0">
+                                                    <Grid.RowDefinitions><RowDefinition Height="164" /><RowDefinition Height="12" /><RowDefinition Height="210" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                                    <Border Grid.Row="2" Background="#EFFFFFFF" CornerRadius="15" />
+                                                    <Border Grid.Row="4" Background="#EFFFFFFF" CornerRadius="15" />
+                                                </Grid>
+                                            </Grid>
                                             <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="1.08*" /><ColumnDefinition Width="22" /><ColumnDefinition Width="0.92*" /></Grid.ColumnDefinitions>
                                                 <Grid><Grid.RowDefinitions><RowDefinition Height="164" /><RowDefinition Height="12" /><RowDefinition Height="210" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                                                     <Border Padding="22" Background="#58ECF4FF" BorderBrush="#79A7D6FF" BorderThickness="1.5" CornerRadius="16"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="60" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><Border Width="60" Height="60" VerticalAlignment="Center" Background="#D7E7FF" CornerRadius="18"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="27" Foreground="#4D7CFE" Text="&#xE898;" /></Border><StackPanel Grid.Column="2" VerticalAlignment="Center"><TextBlock FontSize="16" FontWeight="SemiBold" Text="添加需要处理的图片" /><TextBlock x:Name="ImageFilesSummaryText" Margin="0,7,0,0" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}" Text="支持 PNG、JPEG、BMP、TIFF，可一次选择多张" /><TextBlock Margin="0,5,0,0" FontSize="10" Foreground="#8A9AAC" Text="转换结果会保存为新文件，不覆盖原文件" /></StackPanel><Button Grid.Column="3" Width="112" Height="46" VerticalAlignment="Center" Style="{StaticResource ConverterActionButtonStyle}" Click="SelectImageFiles_Click"><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="White" Text="选择图片" /></Button></Grid></Border>
@@ -578,7 +587,7 @@
                                             </Grid>
                                             <Grid Margin="0,176,0,0" Panel.ZIndex="5" VerticalAlignment="Top">
                                                 <Grid.ColumnDefinitions><ColumnDefinition Width="1.08*" /><ColumnDefinition Width="22" /><ColumnDefinition Width="0.92*" /></Grid.ColumnDefinitions>
-                                                <Border Height="29" Padding="14,0" Background="#EFFFFFFF" BorderBrush="#A5D4E7F5" BorderThickness="1" CornerRadius="8">
+                                                <Border Height="42" Padding="14,0" Background="#F9FFFFFF" BorderBrush="#A5D4E7F5" BorderThickness="1" CornerRadius="8">
                                                     <Grid VerticalAlignment="Center"><Grid.ColumnDefinitions><ColumnDefinition Width="1.15*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><TextBlock FontSize="13" FontWeight="SemiBold" Text="文件列表" /><TextBlock Grid.Column="1" HorizontalAlignment="Center" FontSize="10" Foreground="#7890A6" Text="文件名" /><TextBlock Grid.Column="2" HorizontalAlignment="Center" FontSize="10" Foreground="#7890A6" Text="格式" /><TextBlock Grid.Column="3" HorizontalAlignment="Center" FontSize="10" Foreground="#7890A6" Text="大小" /></Grid>
                                                 </Border>
                                             </Grid>
