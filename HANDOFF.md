@@ -98,7 +98,7 @@ git log -5 --oneline
 ### 本地语音输入
 
 - 使用 `org.k2fsa.sherpa.onnx` 1.13.4 与固定版 SenseVoice int8 模型，在本机完成录音与识别，不上传音频或文本。
-- 录音使用 NAudio 的 16 kHz 单声道输入；录音期间约每 1.2 秒对当前音频快照进行一次本地识别，连续两轮一致的新增文本会按约 34ms/字逐字插入原输入窗口，避免整段草稿闪回；再次按快捷键或录音达到 90 秒时结束，并再进行完整识别补全。也可在设置中改为仅复制。
+- 录音使用 NAudio 的 16 kHz 单声道输入；录音期间约每 1.2 秒对当前音频快照进行一次本地识别，连续两轮一致的新增文本会按约 34ms/字显示在收音条上方的彩虹气泡中，不再提前写入目标程序；再次按快捷键或录音达到 90 秒时结束，再将完整识别结果一次性粘贴到原输入窗口。按 Esc 会取消当前语音输入且不写入任何内容；也可在设置中改为仅复制。
 - 模型位置：`ScreenshotApp\Models\VoiceInput\default\`。权重单文件超过普通 GitHub 限制，已被 `.gitignore` 排除；发布安装包/Release 时必须带上 `model.int8.onnx`、`tokens.txt`、`LICENSE` 与 `XTOOL-MODEL-MANIFEST.txt`。
 - 关键文件：`ScreenshotApp\VoiceInput\VoiceInputService.cs`、`VoiceInputOverlayWindow.xaml(.cs)`、`MainWindow.xaml(.cs)`。
 

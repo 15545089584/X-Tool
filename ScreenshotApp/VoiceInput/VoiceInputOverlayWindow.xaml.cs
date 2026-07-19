@@ -25,6 +25,24 @@ public partial class VoiceInputOverlayWindow : Window
         // 极简收音浮窗不展示文字状态，保留接口供录音与识别流程统一调用。
     }
 
+    internal void AppendRecognizedText(char character)
+    {
+        RecognizedTextBlock.Text += character;
+        TextBubble.Visibility = Visibility.Visible;
+    }
+
+    internal void SetRecognizedText(string text)
+    {
+        RecognizedTextBlock.Text = text;
+        TextBubble.Visibility = string.IsNullOrWhiteSpace(text) ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    internal void ClearRecognizedText()
+    {
+        RecognizedTextBlock.Text = string.Empty;
+        TextBubble.Visibility = Visibility.Collapsed;
+    }
+
     internal void UpdateLevel(double level)
     {
         level = Math.Clamp(level, 0, 1);

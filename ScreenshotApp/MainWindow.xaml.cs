@@ -1081,12 +1081,15 @@ public partial class MainWindow : Window
 
         if (!_voiceInputShortcut.IsRightAlt)
         {
+            _voiceInputHotKeyMonitor = new RightAltHotKeyMonitor(listenRightAlt: false);
+            _voiceInputHotKeyMonitor.EscapePressed += VoiceInputHotKeyMonitor_EscapePressed;
             _voiceInputHotKeyRegistered = RegisterStandardShortcut(handle, NativeMethods.VoiceHotKeyId, _voiceInputShortcut);
             return;
         }
 
         _voiceInputHotKeyMonitor = new RightAltHotKeyMonitor();
         _voiceInputHotKeyMonitor.Pressed += VoiceInputHotKeyMonitor_Pressed;
+        _voiceInputHotKeyMonitor.EscapePressed += VoiceInputHotKeyMonitor_EscapePressed;
         _voiceInputHotKeyRegistered = _voiceInputHotKeyMonitor.IsInstalled;
         if (!_voiceInputHotKeyRegistered)
         {
@@ -1105,6 +1108,28 @@ public partial class MainWindow : Window
     private void VoiceInputHotKeyMonitor_Pressed(object? sender, EventArgs e)
     {
         Dispatcher.BeginInvoke(() => _ = ToggleVoiceInputAsync());
+    }
+
+    private void VoiceInputHotKeyMonitor_EscapePressed(object? sender, EventArgs e)
+    {
+        Dispatcher.BeginInvoke(CancelVoiceInput);
+    }
+
+    private void CancelVoiceInput()
+    {
+        if (!_voiceInputService.IsRecording)
+        {
+            return;
+        }
+
+        _voiceInputTypingTimer.Stop();
+        _voiceInputPendingCharacters.Clear();
+        _voiceInputCancellation?.Cancel();
+        _voiceInputService.Cancel();
+        _voiceInputCommittedText = string.Empty;
+        _voiceInputLastHypothesis = string.Empty;
+        CloseVoiceInputOverlay();
+        ShowToast("语音输入已取消");
     }
 
     private async Task ToggleVoiceInputAsync()
@@ -1133,6 +1158,7 @@ public partial class MainWindow : Window
             _voiceInputTypingTimer.Stop();
             _voiceInputService.Start();
             ShowVoiceInputOverlay("正在聆听…", "再次按右 Alt 结束");
+            _voiceInputOverlay?.ClearRecognizedText();
         }
         catch (Exception exception)
         {
@@ -1163,9 +1189,7 @@ public partial class MainWindow : Window
 
     private void CommitVoiceInputPartial(string hypothesis)
     {
-        if (!_voiceInputService.IsRecording ||
-            !_preferences.VoiceInputPasteAutomatically ||
-            _voiceInputPasteTarget == IntPtr.Zero)
+        if (!_voiceInputService.IsRecording)
         {
             return;
         }
@@ -1210,13 +1234,7 @@ public partial class MainWindow : Window
                 return;
             }
 
-            var incrementalText = GetVoiceInputIncrement(text);
-            var replacementLength = 0;
-            if (string.IsNullOrWhiteSpace(incrementalText) && !string.Equals(text, _voiceInputCommittedText, StringComparison.Ordinal))
-            {
-                incrementalText = text;
-                replacementLength = _voiceInputCommittedText.Length;
-            }
+            _voiceInputOverlay?.SetRecognizedText(text);
             _voiceInputLastHypothesis = text;
             if (!_preferences.VoiceInputPasteAutomatically || _voiceInputPasteTarget == IntPtr.Zero)
             {
@@ -1226,20 +1244,9 @@ public partial class MainWindow : Window
                 return;
             }
 
-            if (string.IsNullOrWhiteSpace(incrementalText))
+            if (await PasteVoiceInputTextAsync(text, showSuccess: true))
             {
-                ClipboardService.SetText(text);
-                _suppressClipboardCapture = true;
-                ShowToast("实时输入已完成，完整识别结果已复制");
-                return;
-            }
-
-            if (await PasteVoiceInputTextAsync(incrementalText, showSuccess: true, replacementLength))
-            {
-                _voiceInputCommittedText = replacementLength > 0
-                    ? incrementalText
-                    : _voiceInputCommittedText + incrementalText;
-                // 结束时剪贴板保留完整结果，而不是最后一个增量片段。
+                _voiceInputCommittedText = text;
                 ClipboardService.SetText(text);
                 _suppressClipboardCapture = true;
             }
@@ -1263,7 +1270,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private async Task<bool> PasteVoiceInputTextAsync(string text, bool showSuccess, int replacementLength = 0)
+    private async Task<bool> PasteVoiceInputTextAsync(string text, bool showSuccess)
     {
         ClipboardService.SetText(text);
         _suppressClipboardCapture = true;
@@ -1277,9 +1284,7 @@ public partial class MainWindow : Window
             }
         }
 
-        if (!activated ||
-            (replacementLength > 0 && !NativeMethods.SendBackspaces(replacementLength)) ||
-            !NativeMethods.SendPasteShortcut())
+        if (!activated || !NativeMethods.SendPasteShortcut())
         {
             if (showSuccess)
             {
@@ -1291,7 +1296,7 @@ public partial class MainWindow : Window
 
         if (showSuccess)
         {
-            ShowToast($"已识别 {_voiceInputCommittedText.Length + text.Length} 个字符并粘贴");
+            ShowToast($"已识别 {text.Length} 个字符并粘贴");
         }
 
         return true;
@@ -1364,23 +1369,9 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (!NativeMethods.IsWindowForeground(_voiceInputPasteTarget) &&
-            !NativeMethods.RestoreAndActivateWindow(_voiceInputPasteTarget))
-        {
-            _voiceInputPendingCharacters.Clear();
-            _voiceInputTypingTimer.Stop();
-            return;
-        }
-
         var character = _voiceInputPendingCharacters.Dequeue();
-        if (!NativeMethods.SendUnicodeCharacter(character))
-        {
-            _voiceInputPendingCharacters.Clear();
-            _voiceInputTypingTimer.Stop();
-            return;
-        }
-
         _voiceInputCommittedText += character;
+        _voiceInputOverlay?.AppendRecognizedText(character);
     }
 
     private void ShowVoiceInputOverlay(string title, string detail)

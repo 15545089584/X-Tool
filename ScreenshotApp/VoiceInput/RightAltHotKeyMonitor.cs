@@ -12,13 +12,17 @@ internal sealed class RightAltHotKeyMonitor : IDisposable
     private const int WmSysKeyUp = 0x0105;
     private const uint VkMenu = 0x12;
     private const uint VkRightMenu = 0xA5;
+    private const uint VkEscape = 0x1B;
     private const uint LlkhfExtended = 0x01;
     private readonly HookProcedure _procedure;
+    private readonly bool _listenRightAlt;
     private IntPtr _hook;
     private int _isRightAltDown;
+    private int _isEscapeDown;
 
-    internal RightAltHotKeyMonitor()
+    internal RightAltHotKeyMonitor(bool listenRightAlt = true)
     {
+        _listenRightAlt = listenRightAlt;
         _procedure = HookCallback;
         _hook = SetWindowsHookEx(WhKeyboardLl, _procedure, GetModuleHandle(null), 0);
     }
@@ -26,6 +30,7 @@ internal sealed class RightAltHotKeyMonitor : IDisposable
     internal bool IsInstalled => _hook != IntPtr.Zero;
 
     internal event EventHandler? Pressed;
+    internal event EventHandler? EscapePressed;
 
     public void Dispose()
     {
@@ -41,9 +46,21 @@ internal sealed class RightAltHotKeyMonitor : IDisposable
         if (code >= 0)
         {
             var hookData = Marshal.PtrToStructure<KeyboardLowLevelHookData>(data);
-            if (IsRightAlt(hookData))
+            var keyboardMessage = message.ToInt32();
+            if (hookData.VirtualKeyCode == VkEscape)
             {
-                var keyboardMessage = message.ToInt32();
+                if ((keyboardMessage == WmKeyDown || keyboardMessage == WmSysKeyDown) &&
+                    Interlocked.Exchange(ref _isEscapeDown, 1) == 0)
+                {
+                    EscapePressed?.Invoke(this, EventArgs.Empty);
+                }
+                else if (keyboardMessage == WmKeyUp || keyboardMessage == WmSysKeyUp)
+                {
+                    Interlocked.Exchange(ref _isEscapeDown, 0);
+                }
+            }
+            else if (_listenRightAlt && IsRightAlt(hookData))
+            {
                 if ((keyboardMessage == WmKeyDown || keyboardMessage == WmSysKeyDown) &&
                     Interlocked.Exchange(ref _isRightAltDown, 1) == 0)
                 {
