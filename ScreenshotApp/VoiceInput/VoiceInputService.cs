@@ -11,6 +11,7 @@ internal sealed class VoiceInputService : IDisposable
     // 长段口述由用户再次按右 Alt 完成；时长上限仅用于避免忘记结束时持续录音。
     private const int MaximumRecordingSeconds = 90;
     private readonly object _syncRoot = new();
+    private readonly SemaphoreSlim _recognitionGate = new(1, 1);
     private readonly List<float> _samples = new();
     private WaveInEvent? _waveIn;
     private OfflineRecognizer? _recognizer;
@@ -18,10 +19,13 @@ internal sealed class VoiceInputService : IDisposable
     private int _autoStopRequested;
     private double _peakRms;
     private string? _recordingError;
+    private CancellationTokenSource? _partialRecognitionCancellation;
+    private Task? _partialRecognitionTask;
 
     internal event EventHandler? AutoStopRequested;
     internal event Action<double>? SoundLevelChanged;
     internal event Action<string>? RecordingFaulted;
+    internal event Action<string>? PartialResultAvailable;
 
     internal bool IsRecording => _waveIn is not null;
 
@@ -76,6 +80,8 @@ internal sealed class VoiceInputService : IDisposable
         _waveIn.DataAvailable += WaveIn_DataAvailable;
         _waveIn.RecordingStopped += WaveIn_RecordingStopped;
         _waveIn.StartRecording();
+        _partialRecognitionCancellation = new CancellationTokenSource();
+        _partialRecognitionTask = RunPartialRecognitionAsync(_partialRecognitionCancellation.Token);
     }
 
     internal async Task<string> StopAndRecognizeAsync(CancellationToken cancellationToken)
@@ -87,6 +93,7 @@ internal sealed class VoiceInputService : IDisposable
         }
 
         _waveIn = null;
+        await StopPartialRecognitionAsync();
         waveIn.DataAvailable -= WaveIn_DataAvailable;
         waveIn.RecordingStopped -= WaveIn_RecordingStopped;
         waveIn.StopRecording();
@@ -110,11 +117,14 @@ internal sealed class VoiceInputService : IDisposable
             return string.Empty;
         }
 
-        return await Task.Run(() => Recognize(samples, cancellationToken), cancellationToken);
+        return await RecognizeAsync(samples, cancellationToken);
     }
 
     internal void Cancel()
     {
+        _partialRecognitionCancellation?.Cancel();
+        _partialRecognitionCancellation = null;
+        _partialRecognitionTask = null;
         var waveIn = _waveIn;
         _waveIn = null;
         if (waveIn is not null)
@@ -136,6 +146,7 @@ internal sealed class VoiceInputService : IDisposable
         Cancel();
         _recognizer?.Dispose();
         _recognizer = null;
+        _recognitionGate.Dispose();
     }
 
     private void WaveIn_DataAvailable(object? sender, WaveInEventArgs e)
@@ -189,6 +200,65 @@ internal sealed class VoiceInputService : IDisposable
 
         _recordingError = $"麦克风采集失败：{e.Exception.Message}";
         RecordingFaulted?.Invoke(_recordingError);
+    }
+
+    private async Task RunPartialRecognitionAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(1_200), cancellationToken);
+                float[] samples;
+                lock (_syncRoot)
+                {
+                    samples = _samples.ToArray();
+                }
+
+                if (samples.Length < SampleRate)
+                {
+                    continue;
+                }
+
+                var text = await RecognizeAsync(samples, cancellationToken);
+                if (!string.IsNullOrWhiteSpace(text) && !cancellationToken.IsCancellationRequested)
+                {
+                    PartialResultAvailable?.Invoke(text);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 停止录音时正常取消后台分段识别。
+        }
+    }
+
+    private async Task StopPartialRecognitionAsync()
+    {
+        var cancellation = _partialRecognitionCancellation;
+        var task = _partialRecognitionTask;
+        _partialRecognitionCancellation = null;
+        _partialRecognitionTask = null;
+        cancellation?.Cancel();
+        if (task is not null)
+        {
+            await task;
+        }
+
+        cancellation?.Dispose();
+    }
+
+    private async Task<string> RecognizeAsync(float[] samples, CancellationToken cancellationToken)
+    {
+        await _recognitionGate.WaitAsync(cancellationToken);
+        try
+        {
+            return await Task.Run(() => Recognize(samples, cancellationToken), cancellationToken);
+        }
+        finally
+        {
+            _recognitionGate.Release();
+        }
     }
 
     private string Recognize(float[] samples, CancellationToken cancellationToken)

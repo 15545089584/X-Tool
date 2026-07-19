@@ -54,6 +54,8 @@ public partial class MainWindow : Window
     private VoiceInputOverlayWindow? _voiceInputOverlay;
     private IntPtr _voiceInputPasteTarget;
     private CancellationTokenSource? _voiceInputCancellation;
+    private string _voiceInputCommittedText = string.Empty;
+    private string _voiceInputLastHypothesis = string.Empty;
 
     public MainWindow()
     {
@@ -68,6 +70,7 @@ public partial class MainWindow : Window
         _voiceInputService.AutoStopRequested += VoiceInputService_AutoStopRequested;
         _voiceInputService.SoundLevelChanged += VoiceInputService_SoundLevelChanged;
         _voiceInputService.RecordingFaulted += VoiceInputService_RecordingFaulted;
+        _voiceInputService.PartialResultAvailable += VoiceInputService_PartialResultAvailable;
         UpdateStorageLocationText();
         // 长截图需要连续拿到“此刻”的画面。每次重新创建桌面复制会话时，
         // 部分显卡驱动可能先返回上一帧，因此滚动采集优先使用同步的 GDI 帧，
@@ -1095,6 +1098,8 @@ public partial class MainWindow : Window
             _voiceInputCancellation?.Cancel();
             _voiceInputCancellation?.Dispose();
             _voiceInputCancellation = new CancellationTokenSource();
+            _voiceInputCommittedText = string.Empty;
+            _voiceInputLastHypothesis = string.Empty;
             _voiceInputService.Start();
             ShowVoiceInputOverlay("正在聆听…", "再次按右 Alt 结束");
         }
@@ -1120,6 +1125,33 @@ public partial class MainWindow : Window
         Dispatcher.BeginInvoke(() => ShowToast(message));
     }
 
+    private void VoiceInputService_PartialResultAvailable(string hypothesis)
+    {
+        Dispatcher.BeginInvoke(() => _ = CommitVoiceInputPartialAsync(hypothesis));
+    }
+
+    private async Task CommitVoiceInputPartialAsync(string hypothesis)
+    {
+        if (!_voiceInputService.IsRecording ||
+            !_preferences.VoiceInputPasteAutomatically ||
+            _voiceInputPasteTarget == IntPtr.Zero)
+        {
+            return;
+        }
+
+        var incrementalText = GetVoiceInputIncrement(hypothesis);
+        _voiceInputLastHypothesis = hypothesis;
+        if (string.IsNullOrWhiteSpace(incrementalText))
+        {
+            return;
+        }
+
+        if (await PasteVoiceInputTextAsync(incrementalText, showSuccess: false))
+        {
+            _voiceInputCommittedText += incrementalText;
+        }
+    }
+
     private async Task FinishVoiceInputAsync()
     {
         if (!_voiceInputService.IsRecording)
@@ -1143,31 +1175,30 @@ public partial class MainWindow : Window
                 return;
             }
 
-            ClipboardService.SetText(text);
-            _suppressClipboardCapture = true;
+            var incrementalText = GetVoiceInputIncrement(text);
+            _voiceInputLastHypothesis = text;
             if (!_preferences.VoiceInputPasteAutomatically || _voiceInputPasteTarget == IntPtr.Zero)
             {
+                ClipboardService.SetText(text);
+                _suppressClipboardCapture = true;
                 ShowToast("识别结果已复制到系统剪贴板");
                 return;
             }
 
-            var activated = NativeMethods.IsWindowForeground(_voiceInputPasteTarget);
-            for (var attempt = 0; attempt < 3 && !activated; attempt++)
+            if (string.IsNullOrWhiteSpace(incrementalText))
             {
-                activated = NativeMethods.RestoreAndActivateWindow(_voiceInputPasteTarget);
-                if (!activated)
-                {
-                    await Task.Delay(40);
-                }
+                ClipboardService.SetText(text);
+                _suppressClipboardCapture = true;
+                ShowToast("实时输入已完成，完整识别结果已复制");
+                return;
             }
 
-            if (!activated || !NativeMethods.SendPasteShortcut())
+            if (await PasteVoiceInputTextAsync(incrementalText, showSuccess: true))
             {
-                ShowToast("识别结果已复制，请手动粘贴");
-            }
-            else
-            {
-                ShowToast($"已识别 {text.Length} 个字符并粘贴");
+                _voiceInputCommittedText += incrementalText;
+                // 结束时剪贴板保留完整结果，而不是最后一个增量片段。
+                ClipboardService.SetText(text);
+                _suppressClipboardCapture = true;
             }
         }
         catch (OperationCanceledException)
@@ -1187,6 +1218,60 @@ public partial class MainWindow : Window
                 _voiceInputCancellation = null;
             }
         }
+    }
+
+    private async Task<bool> PasteVoiceInputTextAsync(string text, bool showSuccess)
+    {
+        ClipboardService.SetText(text);
+        _suppressClipboardCapture = true;
+        var activated = NativeMethods.IsWindowForeground(_voiceInputPasteTarget);
+        for (var attempt = 0; attempt < 3 && !activated; attempt++)
+        {
+            activated = NativeMethods.RestoreAndActivateWindow(_voiceInputPasteTarget);
+            if (!activated)
+            {
+                await Task.Delay(40);
+            }
+        }
+
+        if (!activated || !NativeMethods.SendPasteShortcut())
+        {
+            if (showSuccess)
+            {
+                ShowToast("识别结果已复制，请手动粘贴");
+            }
+
+            return false;
+        }
+
+        if (showSuccess)
+        {
+            ShowToast($"已识别 {_voiceInputCommittedText.Length + text.Length} 个字符并粘贴");
+        }
+
+        return true;
+    }
+
+    private string GetVoiceInputIncrement(string hypothesis)
+    {
+        if (hypothesis.StartsWith(_voiceInputCommittedText, StringComparison.Ordinal))
+        {
+            return hypothesis[_voiceInputCommittedText.Length..];
+        }
+
+        // 分段识别可能会回改最近几个字；已粘贴部分不能在任意第三方输入框中安全回删，
+        // 因此只提交连续且稳定的后缀，最终完整结果始终会写回剪贴板。
+        var commonLength = 0;
+        var limit = Math.Min(_voiceInputLastHypothesis.Length, hypothesis.Length);
+        while (commonLength < limit && _voiceInputLastHypothesis[commonLength] == hypothesis[commonLength])
+        {
+            commonLength++;
+        }
+
+        return commonLength > _voiceInputCommittedText.Length &&
+               hypothesis.StartsWith(_voiceInputCommittedText, StringComparison.Ordinal)
+            ? hypothesis[_voiceInputCommittedText.Length..commonLength]
+            : string.Empty;
     }
 
     private void ShowVoiceInputOverlay(string title, string detail)

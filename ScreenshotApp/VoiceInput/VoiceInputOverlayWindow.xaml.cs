@@ -32,8 +32,10 @@ public partial class VoiceInputOverlayWindow : Window
         for (var index = 0; index < _waveBars.Length; index++)
         {
             var distance = Math.Abs(index - center) / center;
-            var emphasis = 0.35 + (1 - distance) * 0.65;
-            _waveBars[index].Height = 3 + level * (8 + emphasis * 21);
+            // 中央条承载主音量，左右按平滑曲线递减，避免整排等高。
+            var centerWeight = Math.Pow(1 - distance, 0.75);
+            var barLevel = level * (0.18 + centerWeight * 0.82);
+            _waveBars[index].Height = 3 + barLevel * 28;
         }
     }
 }
