@@ -75,7 +75,7 @@ internal sealed class MediaConversionService
 
     public string AvailabilityMessage => IsAvailable
         ? "FFmpeg 转换引擎已就绪"
-        : "未检测到 FFmpeg，请将 ffmpeg.exe 与 ffprobe.exe 放入 tools\\ffmpeg";
+        : "随附的 FFmpeg 引擎文件不完整，请修复或重新安装 X-Tool";
 
     public async Task<MediaProbeInfo> ProbeAsync(string filePath, CancellationToken cancellationToken = default)
     {

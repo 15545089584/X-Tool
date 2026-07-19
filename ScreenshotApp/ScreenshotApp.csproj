@@ -42,6 +42,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- 随程序发布经校验的 FFmpeg 命令行引擎；运行时优先从 tools\ffmpeg 查找。 -->
+    <Content Include="tools\ffmpeg\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>tools\ffmpeg\%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
+    </Content>
     <!-- 默认 OCR 模型固定版本随程序发布，不在用户电脑现场转换。 -->
     <Content Include="Models\Ocr\default\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

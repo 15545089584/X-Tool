@@ -169,7 +169,7 @@ git log -5 --oneline
 - `ScreenshotApp\MainWindow.xaml(.cs)`（图片处理页仍在主窗口内）
 - `ScreenshotApp\Converters\ImageConversionService.cs`
 
-### 2. 音频处理（已实现，待装引擎实测）
+### 2. 音频处理（已实现）
 
 输入：MP3、WAV、M4A、AAC、FLAC、OGG、OPUS、WMA。
 
@@ -223,13 +223,15 @@ git log -5 --oneline
 - 日志：`%LocalAppData%\X-Tool\Logs\media-conversion.log`。
 - 服务层与页面层分离，后续可扩展随包引擎、GPU 编码、批量队列和任务调度。
 
-当前开发机尚未部署 FFmpeg，因此音视频真实转码链路尚未端到端验证。页面会提示将 `ffmpeg.exe` 和 `ffprobe.exe` 放入 `tools\ffmpeg`。发布前必须决定：
+项目现已随 Release 包直接分发固定版本的 Windows x64 FFmpeg 引擎：
 
-1. 随安装包分发固定版本；或
-2. 首次使用时下载可选组件；或
-3. 仅检测用户本机安装。
+- 位置：`ScreenshotApp\tools\ffmpeg\ffmpeg.exe`、`ScreenshotApp\tools\ffmpeg\ffprobe.exe`。
+- 版本：FFmpeg 8.1.2 Essentials Build（Gyan.Dev），GPLv3，归档 SHA-256 为 `E25B682664025D49034C981AFB4BAE36238A40F29A3CC1C713AD9A8B5B3528F6`。
+- 构建文件约 194 MB，仅保留运行所需的 `ffmpeg.exe`、`ffprobe.exe`；许可证与构建配置位于 `tools\ffmpeg\LICENSES`。
+- Release 构建会自动复制该目录。正常安装无需下载或解压；若文件被删除，页面提示修复或重新安装 X-Tool。
+- 已用短 WAV/MP4 实测探测及 MP3、HEVC、Opus、GIF 输出。仍应在发布前补齐不同来源、较长媒体和取消流程的人工回归。
 
-同时核对 FFmpeg 构建版本、编解码器覆盖、许可证和安装包体积。
+发布到 GitHub 前，必须将项目许可证确定为 GPLv3，并在 Release 中提供与内置二进制精确对应的 FFmpeg 及启用外部库源码、构建配置与许可证材料。详见根目录 `THIRD-PARTY-NOTICES.md`。
 
 ## 七、关键代码地图
 
@@ -255,12 +257,11 @@ git log -5 --oneline
 
 ## 八、当前已知限制与建议顺序
 
-1. **音视频端到端验证**：当前机器没有 FFmpeg。部署引擎后，用短 MP3/WAV/MP4/MOV 分别验证探测、进度、取消、输出与日志。
-2. **视频页视觉统一**：参照最新音频页，将下拉框、模式按钮、高级设置、文件列表和底部按钮统一为毛玻璃风格。
+1. **音视频人工回归**：已内置 FFmpeg；发布前用短 MP3/WAV/MP4/MOV 分别验证探测、进度、取消、输出与日志。
+2. **FFmpeg 源码发布材料**：GitHub Release 必须同步发布与内置二进制一致的源码、构建配置和许可证材料。
 3. **图片预览反馈增强**：预览已实时生成，但尺寸/质量变化不总是肉眼明显；可显示实际输出像素与预计大小。
-4. **FFmpeg 发布方案**：决定随包、按需下载还是仅本机检测，并记录版本与许可。
-5. **配置目录迁移**：`%LocalAppData%\JieYing` 是遗留目录，只能在有兼容迁移方案时更名。
-6. **回归保护**：继续确保贴图、截图辅助窗、录像边框和控制条不进入捕获画面。
+4. **配置目录迁移**：`%LocalAppData%\JieYing` 是遗留目录，只能在有兼容迁移方案时更名。
+5. **回归保护**：继续确保贴图、截图辅助窗、录像边框和控制条不进入捕获画面。
 
 ## 九、最近关键提交
 
