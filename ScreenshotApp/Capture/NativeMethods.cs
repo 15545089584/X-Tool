@@ -28,6 +28,7 @@ internal static class NativeMethods
     private const uint InputKeyboard = 1;
     private const uint MouseEventWheel = 0x0800;
     private const uint KeyEventKeyUp = 0x0002;
+    private const uint KeyEventUnicode = 0x0004;
     private const ushort VirtualKeyControl = 0x11;
     private const ushort VirtualKeyV = 0x56;
     private const ushort VirtualKeyBack = 0x08;
@@ -412,6 +413,16 @@ internal static class NativeMethods
             };
         }
 
+        return SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<Input>()) == inputs.Length;
+    }
+
+    internal static bool SendUnicodeCharacter(char character)
+    {
+        var inputs = new[]
+        {
+            new Input { Type = InputKeyboard, Data = new InputUnion { Keyboard = new KeyboardInput { ScanCode = character, Flags = KeyEventUnicode } } },
+            new Input { Type = InputKeyboard, Data = new InputUnion { Keyboard = new KeyboardInput { ScanCode = character, Flags = KeyEventUnicode | KeyEventKeyUp } } }
+        };
         return SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<Input>()) == inputs.Length;
     }
 

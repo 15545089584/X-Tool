@@ -56,6 +56,8 @@ public partial class MainWindow : Window
     private CancellationTokenSource? _voiceInputCancellation;
     private string _voiceInputCommittedText = string.Empty;
     private string _voiceInputLastHypothesis = string.Empty;
+    private readonly Queue<char> _voiceInputPendingCharacters = new();
+    private readonly DispatcherTimer _voiceInputTypingTimer;
 
     public MainWindow()
     {
@@ -96,6 +98,11 @@ public partial class MainWindow : Window
             _toastTimer.Stop();
             ToastBorder.Visibility = Visibility.Collapsed;
         };
+        _voiceInputTypingTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(34)
+        };
+        _voiceInputTypingTimer.Tick += VoiceInputTypingTimer_Tick;
 
         SourceInitialized += MainWindow_SourceInitialized;
         Loaded += MainWindow_Loaded;
@@ -1100,6 +1107,8 @@ public partial class MainWindow : Window
             _voiceInputCancellation = new CancellationTokenSource();
             _voiceInputCommittedText = string.Empty;
             _voiceInputLastHypothesis = string.Empty;
+            _voiceInputPendingCharacters.Clear();
+            _voiceInputTypingTimer.Stop();
             _voiceInputService.Start();
             ShowVoiceInputOverlay("正在聆听…", "再次按右 Alt 结束");
         }
@@ -1127,10 +1136,10 @@ public partial class MainWindow : Window
 
     private void VoiceInputService_PartialResultAvailable(string hypothesis)
     {
-        Dispatcher.BeginInvoke(() => _ = CommitVoiceInputPartialAsync(hypothesis));
+        Dispatcher.BeginInvoke(() => CommitVoiceInputPartial(hypothesis));
     }
 
-    private async Task CommitVoiceInputPartialAsync(string hypothesis)
+    private void CommitVoiceInputPartial(string hypothesis)
     {
         if (!_voiceInputService.IsRecording ||
             !_preferences.VoiceInputPasteAutomatically ||
@@ -1139,27 +1148,19 @@ public partial class MainWindow : Window
             return;
         }
 
-        var incrementalText = GetVoiceInputIncrement(hypothesis);
-        var replacementLength = 0;
-        if (string.IsNullOrWhiteSpace(incrementalText) && !string.Equals(hypothesis, _voiceInputCommittedText, StringComparison.Ordinal))
-        {
-            // 离线模型在音频尚未完整时可能回改开头。实时阶段允许替换 X-Tool 自己刚插入的文本，
-            // 比“前缀不同便永久停更”更符合连续口述的预期。
-            incrementalText = hypothesis;
-            replacementLength = _voiceInputCommittedText.Length;
-        }
+        var incrementalText = GetStableVoiceInputIncrement(hypothesis);
         _voiceInputLastHypothesis = hypothesis;
         if (string.IsNullOrWhiteSpace(incrementalText))
         {
             return;
         }
 
-        if (await PasteVoiceInputTextAsync(incrementalText, showSuccess: false, replacementLength))
+        foreach (var character in incrementalText)
         {
-            _voiceInputCommittedText = replacementLength > 0
-                ? incrementalText
-                : _voiceInputCommittedText + incrementalText;
+            _voiceInputPendingCharacters.Enqueue(character);
         }
+
+        _voiceInputTypingTimer.Start();
     }
 
     private async Task FinishVoiceInputAsync()
@@ -1177,6 +1178,8 @@ public partial class MainWindow : Window
 
         try
         {
+            _voiceInputTypingTimer.Stop();
+            _voiceInputPendingCharacters.Clear();
             ShowVoiceInputOverlay("正在识别…", "所有音频仅在本机内存中处理");
             var text = await _voiceInputService.StopAndRecognizeAsync(cancellation.Token);
             if (string.IsNullOrWhiteSpace(text))
@@ -1292,6 +1295,70 @@ public partial class MainWindow : Window
                hypothesis.StartsWith(_voiceInputCommittedText, StringComparison.Ordinal)
             ? hypothesis[_voiceInputCommittedText.Length..commonLength]
             : string.Empty;
+    }
+
+    private string GetStableVoiceInputIncrement(string hypothesis)
+    {
+        if (string.IsNullOrEmpty(_voiceInputLastHypothesis))
+        {
+            return string.Empty;
+        }
+
+        var commonLength = 0;
+        var limit = Math.Min(_voiceInputLastHypothesis.Length, hypothesis.Length);
+        while (commonLength < limit && _voiceInputLastHypothesis[commonLength] == hypothesis[commonLength])
+        {
+            commonLength++;
+        }
+
+        var stableText = hypothesis[..commonLength];
+        var queuedText = new string(_voiceInputPendingCharacters.ToArray());
+        var displayedOrQueuedText = _voiceInputCommittedText + queuedText;
+        if (stableText.StartsWith(displayedOrQueuedText, StringComparison.Ordinal))
+        {
+            return stableText[displayedOrQueuedText.Length..];
+        }
+
+        // 尚未打出的字符若被新结果回改，仅丢弃队列尾部；已输出内容不再闪回重写。
+        if (displayedOrQueuedText.StartsWith(stableText, StringComparison.Ordinal) && stableText.Length >= _voiceInputCommittedText.Length)
+        {
+            var retainedCount = stableText.Length - _voiceInputCommittedText.Length;
+            var retainedCharacters = _voiceInputPendingCharacters.Take(retainedCount).ToArray();
+            _voiceInputPendingCharacters.Clear();
+            foreach (var character in retainedCharacters)
+            {
+                _voiceInputPendingCharacters.Enqueue(character);
+            }
+        }
+
+        return string.Empty;
+    }
+
+    private void VoiceInputTypingTimer_Tick(object? sender, EventArgs e)
+    {
+        if (_voiceInputPendingCharacters.Count == 0)
+        {
+            _voiceInputTypingTimer.Stop();
+            return;
+        }
+
+        if (!NativeMethods.IsWindowForeground(_voiceInputPasteTarget) &&
+            !NativeMethods.RestoreAndActivateWindow(_voiceInputPasteTarget))
+        {
+            _voiceInputPendingCharacters.Clear();
+            _voiceInputTypingTimer.Stop();
+            return;
+        }
+
+        var character = _voiceInputPendingCharacters.Dequeue();
+        if (!NativeMethods.SendUnicodeCharacter(character))
+        {
+            _voiceInputPendingCharacters.Clear();
+            _voiceInputTypingTimer.Stop();
+            return;
+        }
+
+        _voiceInputCommittedText += character;
     }
 
     private void ShowVoiceInputOverlay(string title, string detail)
