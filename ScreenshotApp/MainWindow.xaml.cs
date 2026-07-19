@@ -64,6 +64,7 @@ public partial class MainWindow : Window
         HistoryItemsControl.ItemsSource = _historyItems;
         TextHistoryItemsControl.ItemsSource = _textHistoryItems;
         ImageFileList.ItemsSource = _imageConversionFiles;
+        ImageFileList.ItemContainerStyle.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty, HorizontalAlignment.Stretch));
         ConverterOutputFolderText.Text = _preferences.ConverterDirectory;
         UpdateImageConversionControls();
 
