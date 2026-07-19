@@ -42,6 +42,7 @@ public partial class MainWindow : Window
     private bool _hotKeyRegistered;
     private bool _clipboardHotKeyRegistered;
     private bool _voiceInputHotKeyRegistered;
+    private RightAltHotKeyMonitor? _voiceInputHotKeyMonitor;
     private bool _clipboardListenerRegistered;
     private bool _captureInProgress;
     private bool _historyRefreshInProgress;
@@ -307,10 +308,9 @@ public partial class MainWindow : Window
         {
             NativeMethods.UnregisterHotKey(_windowSource.Handle, NativeMethods.ClipboardHotKeyId);
         }
-        if (_voiceInputHotKeyRegistered)
-        {
-            NativeMethods.UnregisterHotKey(_windowSource.Handle, NativeMethods.VoiceInputHotKeyId);
-        }
+        _voiceInputHotKeyMonitor?.Dispose();
+        _voiceInputHotKeyMonitor = null;
+        _voiceInputHotKeyRegistered = false;
         if (_clipboardListenerRegistered)
         {
             NativeMethods.RemoveClipboardFormatListener(_windowSource.Handle);
@@ -387,11 +387,6 @@ public partial class MainWindow : Window
         {
             handled = true;
             _ = ShowClipboardPickerAsync();
-        }
-        else if (message == NativeMethods.WmHotKey && wParam.ToInt32() == NativeMethods.VoiceInputHotKeyId)
-        {
-            handled = true;
-            _ = ToggleVoiceInputAsync();
         }
         return IntPtr.Zero;
     }
@@ -1063,11 +1058,19 @@ public partial class MainWindow : Window
             return;
         }
 
-        _voiceInputHotKeyRegistered = NativeMethods.RegisterHotKey(
-            handle,
-            NativeMethods.VoiceInputHotKeyId,
-            0,
-            NativeMethods.VirtualKeyRightAlt);
+        _voiceInputHotKeyMonitor = new RightAltHotKeyMonitor();
+        _voiceInputHotKeyMonitor.Pressed += VoiceInputHotKeyMonitor_Pressed;
+        _voiceInputHotKeyRegistered = _voiceInputHotKeyMonitor.IsInstalled;
+        if (!_voiceInputHotKeyRegistered)
+        {
+            _voiceInputHotKeyMonitor.Dispose();
+            _voiceInputHotKeyMonitor = null;
+        }
+    }
+
+    private void VoiceInputHotKeyMonitor_Pressed(object? sender, EventArgs e)
+    {
+        Dispatcher.BeginInvoke(() => _ = ToggleVoiceInputAsync());
     }
 
     private async Task ToggleVoiceInputAsync()
@@ -1202,11 +1205,9 @@ public partial class MainWindow : Window
         {
             _voiceInputService.Cancel();
             CloseVoiceInputOverlay();
-            if (_voiceInputHotKeyRegistered && _windowSource is not null)
-            {
-                NativeMethods.UnregisterHotKey(_windowSource.Handle, NativeMethods.VoiceInputHotKeyId);
-                _voiceInputHotKeyRegistered = false;
-            }
+            _voiceInputHotKeyMonitor?.Dispose();
+            _voiceInputHotKeyMonitor = null;
+            _voiceInputHotKeyRegistered = false;
             return;
         }
 
