@@ -174,7 +174,7 @@ public partial class MainWindow : Window
                     originalHeader.Visibility = Visibility.Collapsed;
                 }
 
-                var columns = new Grid { Margin = new Thickness(60, 0, 40, 0) };
+                var columns = new Grid { Margin = new Thickness(60, 0, 20, 0) };
                 columns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                 columns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(42) });
                 columns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(54) });
