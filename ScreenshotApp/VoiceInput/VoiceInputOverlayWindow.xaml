@@ -1,16 +1,16 @@
 <Window x:Class="ScreenshotApp.VoiceInput.VoiceInputOverlayWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Width="336" Height="126" WindowStyle="None" ResizeMode="NoResize" ShowInTaskbar="False"
+        MinWidth="184" MaxWidth="440" MaxHeight="300" SizeToContent="WidthAndHeight" WindowStyle="None" ResizeMode="NoResize" ShowInTaskbar="False"
         AllowsTransparency="True" Background="Transparent" Topmost="True">
-    <Grid>
-        <Border x:Name="TextBubble" Margin="16,0,16,57" Padding="16,10" Visibility="Collapsed" BorderThickness="1" CornerRadius="18">
-            <Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#E8FFFFFF" Offset="0" /><GradientStop Color="#E7F7F2FF" Offset="0.5" /><GradientStop Color="#E9FFF3FC" Offset="1" /></LinearGradientBrush></Border.Background>
-            <Border.BorderBrush><LinearGradientBrush StartPoint="0,0" EndPoint="1,0"><GradientStop Color="#C69C8CFF" Offset="0" /><GradientStop Color="#C466D8FF" Offset="0.28" /><GradientStop Color="#C45DE9D7" Offset="0.52" /><GradientStop Color="#C4F5D765" Offset="0.75" /><GradientStop Color="#C4FF9D8E" Offset="1" /></LinearGradientBrush></Border.BorderBrush>
-            <Border.Effect><DropShadowEffect BlurRadius="16" ShadowDepth="4" Direction="270" Opacity="0.14" Color="#334B6A" /></Border.Effect>
-            <TextBlock x:Name="RecognizedTextBlock" FontSize="14" Foreground="#334A65" TextWrapping="Wrap" MaxHeight="44" TextTrimming="WordEllipsis" />
+    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Bottom">
+        <Border x:Name="TextBubble" Margin="0,0,0,28" Padding="17,11" Visibility="Collapsed" BorderThickness="2" CornerRadius="19" MaxWidth="420">
+            <Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#F2E8E2FF" Offset="0" /><GradientStop Color="#F1E7FFF8" Offset="0.34" /><GradientStop Color="#F1E2FFF2" Offset="0.67" /><GradientStop Color="#F3FFF4D8" Offset="1" /></LinearGradientBrush></Border.Background>
+            <Border.BorderBrush><LinearGradientBrush StartPoint="0,0" EndPoint="1,0"><GradientStop Color="#7E735CFF" Offset="0" /><GradientStop Color="#A95F8FFF" Offset="0.22" /><GradientStop Color="#B24EE4D0" Offset="0.44" /><GradientStop Color="#A94BD8FF" Offset="0.62" /><GradientStop Color="#9FD8E64D" Offset="0.80" /><GradientStop Color="#95FF936E" Offset="1" /></LinearGradientBrush></Border.BorderBrush>
+            <Border.Effect><DropShadowEffect BlurRadius="18" ShadowDepth="5" Direction="270" Opacity="0.20" Color="#334B6A" /></Border.Effect>
+            <TextBlock x:Name="RecognizedTextBlock" MaxWidth="384" FontSize="14" Foreground="#334A65" TextWrapping="Wrap" />
         </Border>
-        <Border Margin="76,68,76,8" Padding="7" Background="#D5F6F9FF" BorderBrush="#CBFFFFFF" BorderThickness="1" CornerRadius="25">
+        <Border Width="184" Height="50" HorizontalAlignment="Center" Padding="7" Background="#D5F6F9FF" BorderBrush="#CBFFFFFF" BorderThickness="1" CornerRadius="25">
             <Border.Effect><DropShadowEffect BlurRadius="18" ShadowDepth="5" Direction="270" Opacity="0.16" Color="#314A6D" /></Border.Effect>
             <Border Padding="9,4" Background="#D5425368" BorderBrush="#58FFFFFF" BorderThickness="1" CornerRadius="17">
                 <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -19,5 +19,5 @@
                 </Grid>
             </Border>
         </Border>
-    </Grid>
+    </StackPanel>
 </Window>

@@ -1380,13 +1380,24 @@ public partial class MainWindow : Window
         {
             _voiceInputOverlay = new VoiceInputOverlayWindow();
             _voiceInputOverlay.Closed += (_, _) => _voiceInputOverlay = null;
-            var workArea = SystemParameters.WorkArea;
-            _voiceInputOverlay.Left = workArea.Left + (workArea.Width - _voiceInputOverlay.Width) / 2;
-            _voiceInputOverlay.Top = workArea.Bottom - _voiceInputOverlay.Height - 28;
+            _voiceInputOverlay.SizeChanged += (_, _) => PositionVoiceInputOverlay();
             _voiceInputOverlay.Show();
+            Dispatcher.BeginInvoke(PositionVoiceInputOverlay, DispatcherPriority.Loaded);
         }
 
         _voiceInputOverlay.UpdateStatus(title, detail);
+    }
+
+    private void PositionVoiceInputOverlay()
+    {
+        if (_voiceInputOverlay is null || !_voiceInputOverlay.IsVisible)
+        {
+            return;
+        }
+
+        var workArea = SystemParameters.WorkArea;
+        _voiceInputOverlay.Left = workArea.Left + (workArea.Width - _voiceInputOverlay.ActualWidth) / 2;
+        _voiceInputOverlay.Top = workArea.Bottom - _voiceInputOverlay.ActualHeight - 28;
     }
 
     private void CloseVoiceInputOverlay()
