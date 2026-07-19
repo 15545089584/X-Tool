@@ -181,7 +181,21 @@
             <Setter Property="Height" Value="44" />
             <Setter Property="Margin" Value="0,4" />
             <Setter Property="Foreground" Value="#4D7CFE" />
-            <Setter Property="Background" Value="#C9D8E8F6" />
+            <Setter Property="Background" Value="#D9E5EFF8" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Slider">
+                        <Grid Height="24" VerticalAlignment="Center">
+                            <Border Height="6" VerticalAlignment="Center" Background="#D9E5EFF8" BorderBrush="#B8D2E6F4" BorderThickness="1" CornerRadius="3" />
+                            <Track x:Name="PART_Track" VerticalAlignment="Center">
+                                <Track.DecreaseRepeatButton><RepeatButton IsTabStop="False" Background="Transparent" BorderThickness="0" Opacity="0" /></Track.DecreaseRepeatButton>
+                                <Track.Thumb><Thumb Width="18" Height="18"><Thumb.Template><ControlTemplate TargetType="Thumb"><Border Background="#F7FCFFFF" BorderBrush="#77A7D6FF" BorderThickness="2" CornerRadius="9"><Border.Effect><DropShadowEffect BlurRadius="8" ShadowDepth="1" Direction="270" Opacity="0.18" Color="#416D9B" /></Border.Effect></Border></ControlTemplate></Thumb.Template></Thumb></Track.Thumb>
+                                <Track.IncreaseRepeatButton><RepeatButton IsTabStop="False" Background="Transparent" BorderThickness="0" Opacity="0" /></Track.IncreaseRepeatButton>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <Style x:Key="StorageHeaderToggleStyle" TargetType="ToggleButton">
@@ -585,10 +599,10 @@
                                                 </Grid>
                                                 <Border Grid.Column="2" Padding="22" Background="#C8FFFFFF" BorderBrush="#E8FFFFFF" BorderThickness="1" CornerRadius="18"><Border.Effect><DropShadowEffect BlurRadius="18" ShadowDepth="4" Direction="270" Opacity="0.10" Color="#4D6D90" /></Border.Effect><Grid><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /></Grid.RowDefinitions><TextBlock FontSize="16" FontWeight="SemiBold" Text="处理设置" /><Border Grid.Row="2" Padding="12" Background="#46EAF3FF" BorderBrush="#A5CFE6F8" BorderThickness="1" CornerRadius="12"><StackPanel><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#526F8B" Text="输出格式" /><ComboBox x:Name="ImageFormatComboBox" Margin="0,7,0,0" Style="{StaticResource ConverterComboBoxStyle}" SelectedIndex="0" SelectionChanged="ImageFormatComboBox_SelectionChanged"><ComboBoxItem Tag="Png">PNG · 无损</ComboBoxItem><ComboBoxItem Tag="Jpeg">JPEG · 体积更小</ComboBoxItem><ComboBoxItem Tag="Bmp">BMP · 位图</ComboBoxItem><ComboBoxItem Tag="Tiff">TIFF · 高保真</ComboBoxItem></ComboBox></StackPanel></Border><Border Grid.Row="4" Padding="12" Background="#46EAF3FF" BorderBrush="#A5CFE6F8" BorderThickness="1" CornerRadius="12"><StackPanel><Grid><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#526F8B" Text="压缩质量" /><TextBlock x:Name="ImageQualityValueText" HorizontalAlignment="Right" FontSize="12" FontWeight="SemiBold" Foreground="#507AB3" /></Grid><Slider x:Name="ImageQualitySlider" Style="{StaticResource ConverterSliderStyle}" Minimum="20" Maximum="100" Value="88" TickFrequency="10" IsSnapToTickEnabled="False" ValueChanged="ImageQualitySlider_ValueChanged" /><Grid><TextBlock FontSize="10" Foreground="#8A9AAC" Text="体积小" /><TextBlock HorizontalAlignment="Right" FontSize="10" Foreground="#8A9AAC" Text="质量高" /></Grid></StackPanel></Border><Border Grid.Row="6" Padding="12" Background="#46EAF3FF" BorderBrush="#A5CFE6F8" BorderThickness="1" CornerRadius="12"><StackPanel><Grid><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#526F8B" Text="输出尺寸" /><TextBlock x:Name="ImageScaleValueText" HorizontalAlignment="Right" FontSize="12" FontWeight="SemiBold" Foreground="#507AB3" /></Grid><Slider x:Name="ImageScaleSlider" Style="{StaticResource ConverterSliderStyle}" Minimum="10" Maximum="200" Value="100" TickFrequency="10" IsSnapToTickEnabled="False" ValueChanged="ImageScaleSlider_ValueChanged" /><TextBlock FontSize="10" Foreground="#8A9AAC" Text="按比例缩放，保留原图比例" /></StackPanel></Border><Border Grid.Row="8" Padding="12" Background="#5BFFFFFF" BorderBrush="#A5CFE6F8" BorderThickness="1" CornerRadius="12"><Grid><StackPanel><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#526F8B" Text="输出位置" /><TextBlock x:Name="ConverterOutputFolderText" Margin="0,6,0,0" FontSize="11" Foreground="#52708C" TextTrimming="CharacterEllipsis" /></StackPanel><Button HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource ConverterSecondaryButtonStyle}" Content="浏览" Click="SelectConverterOutputFolder_Click" /></Grid></Border></Grid></Border>
                                             </Grid>
-                                            <Grid Margin="0,176,0,0" Panel.ZIndex="5" VerticalAlignment="Top">
+                                            <Grid Margin="0,398,0,0" Panel.ZIndex="5" VerticalAlignment="Top" IsHitTestVisible="False">
                                                 <Grid.ColumnDefinitions><ColumnDefinition Width="1.08*" /><ColumnDefinition Width="22" /><ColumnDefinition Width="0.92*" /></Grid.ColumnDefinitions>
-                                                <Border Height="42" Padding="14,0" Background="#F9FFFFFF" BorderBrush="#A5D4E7F5" BorderThickness="1" CornerRadius="8">
-                                                    <Grid VerticalAlignment="Center"><Grid.ColumnDefinitions><ColumnDefinition Width="1.15*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><TextBlock FontSize="13" FontWeight="SemiBold" Text="文件列表" /><TextBlock Grid.Column="1" HorizontalAlignment="Center" FontSize="10" Foreground="#7890A6" Text="文件名" /><TextBlock Grid.Column="2" HorizontalAlignment="Center" FontSize="10" Foreground="#7890A6" Text="格式" /><TextBlock Grid.Column="3" HorizontalAlignment="Center" FontSize="10" Foreground="#7890A6" Text="大小" /></Grid>
+                                                <Border Grid.Column="0" Height="38" Background="#F9FFFFFF" CornerRadius="15,15,0,0">
+                                                    <TextBlock Margin="12,9,0,0" FontSize="13" FontWeight="SemiBold" Text="预览对比" />
                                                 </Border>
                                             </Grid>
                                             <Grid Width="420" Margin="0,0,18,18" HorizontalAlignment="Right" VerticalAlignment="Bottom">
