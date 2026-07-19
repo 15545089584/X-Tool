@@ -1,99 +1,299 @@
-# 截影（X-Tool）开发交接文档
+# X-Tool 开发交接文档
 
-更新时间：2026-07-18  
-项目目录：`D:\Claude Code\X-Tool`  
-当前分支：`main`  
-当前基线提交：`507cec9 为录制历史生成视频封面`
+更新时间：2026-07-19
 
-## 一、运行与提交约定
+项目目录：`D:\Claude Code\X-Tool`
 
-- 程序入口：`ScreenshotApp\bin\Release\net6.0-windows\JieYing.exe`。
-- 构建命令：`dotnet build ScreenshotApp\ScreenshotApp.csproj -c Release`。
-- 当前程序通常会锁定 Release 可执行文件；重新构建前先关闭 `JieYing.exe` 进程。
-- 大范围功能改动完成并通过构建后，创建中文本地 Git 提交；只有用户明确要求时才推送远端。
-- 源文件使用 UTF-8，代码注释使用中文。
+技术栈：WPF / C# / .NET 6（`net6.0-windows`）
 
-## 二、当前已完成能力
+当前分支：`main`
 
-### 截图与长截图
+当前功能代码基线：`8703c04 优化音频转换页面样式与信息布局`（其后仅有本交接文档更新）
 
-- 唯一全局热键：`Ctrl + Shift + A`。
-- 普通截图支持框选、八方向调整选区、涂鸦、矩形、取色器、OCR、离线英译中、长截图入口、录像入口。
-- 长截图由普通截图工具栏的“长截图”进入，使用当前已框选区域，手动滚动并处理重复帧与回滚。
-- 截图和长截图默认复制到剪贴板并保存至 `E:\截影\Screenshots`。
+> 本文档以当前代码为准。旧名称“截影 / JieYing”只可能残留在部分内部命名和本机配置目录中，不再代表当前产品定位。
 
-### OCR 与离线翻译
+## 一、必须遵守的开发约定
 
-- OCR：PaddleOCR ONNX + ONNX Runtime CPU，本机处理。
+### 文件与代码
+
+- 所有文件读写保持 UTF-8；PowerShell 读取中文前先执行 `chcp 65001`，并使用 `Get-Content -Encoding UTF8`。
+- 不使用 `sed` / `awk` 修改含中文文件，优先使用 `apply_patch`。
+- 代码注释使用中文。
+- 工作区可能存在用户自己的改动；只修改任务相关文件，不覆盖或清理无关内容。
+
+### 构建与启动
+
+正式项目：`ScreenshotApp\ScreenshotApp.csproj`。
+
+```powershell
+Set-Location 'D:\Claude Code\X-Tool'
+Get-Process XTool,JieYing -ErrorAction SilentlyContinue | Stop-Process -Force
+dotnet build .\ScreenshotApp\ScreenshotApp.csproj -c Release
+Start-Process '.\ScreenshotApp\bin\Release\net6.0-windows\XTool.exe'
+```
+
+- 当前程序集名与正式可执行文件均为 `XTool` / `XTool.exe`。
+- 构建前必须关闭正在运行的新版或旧版进程，否则 Release 文件可能被锁定。
+- 完成功能后应做与风险相称的手动验证；较大且已验证的改动创建中文本地 Git 提交。
+- 未经用户明确要求，不得推送 GitHub。
+- 当前未跟踪目录 `ClipboardDiagnostics/` 是临时诊断程序，不属于正式产品，必须保持未提交状态。
+
+### Git 检查
+
+开始与结束时都执行：
+
+```powershell
+git status --short
+git log -5 --oneline
+```
+
+提交时只暂存本次任务文件，禁止使用会误收 `ClipboardDiagnostics/` 的宽泛暂存方式。
+
+## 二、当前产品定位与主导航
+
+产品已由单一截图工具扩展为桌面效率工具箱 **X-Tool**。
+
+当前一级导航：
+
+1. 首页
+2. 屏幕工作台
+3. 转换器工作台
+4. 快捷键
+5. 设置
+
+剪贴板不再是一级侧栏项，而是屏幕工作台的组成部分；首页与屏幕工作台均可进入剪贴板。
+
+全局快捷键：
+
+- `Ctrl + Shift + A`：启动普通截图。
+- `Ctrl + Shift + V`：不唤起主窗口，打开剪贴板快速选择浮窗。
+
+## 三、屏幕工作台现状
+
+### 截图与标注
+
+- 普通截图支持框选、八方向调整、涂鸦、形状、箭头、直线、颜色与线宽共享设置、取色、文字提取、翻译、长截图、录像和贴图。
+- 标注工具栏与各级面板采用当前浅色毛玻璃设计。
+- 普通截图、长截图、文字提取、翻译和屏幕录制均可在剪贴板页面分类查看。
+
+### 贴图
+
+- 普通截图工具栏已有“贴图”按钮，不再是待开发功能。
+- 当前选区可生成独立、可拖动贴图窗口，支持同时存在多个窗口。
+- 每个贴图右上角有关闭与图钉按钮。
+- 设置页提供“贴图默认置顶”；代码默认值为 `true`，单个贴图仍可临时切换置顶状态。
+- 贴图及截图/录像辅助窗口使用 `WdaExcludeFromCapture`，不进入后续截图或录像画面。
+- 关键文件：`ScreenshotApp\Sticker\StickerWindow.cs`、`ScreenshotApp\Capture\SelectionOverlayWindow.xaml(.cs)`。
+
+### OCR、翻译与录像
+
+- OCR：本地 ONNX 推理。
 - 翻译：本地 ONNX 英译中模型。
-- OCR 与翻译结果会分别保存至：
-  - `E:\截影\History\文字提取`
-  - `E:\截影\History\翻译`
+- 录像：Media Foundation H.264 MP4，WASAPI 音频采集；包含倒计时、区域边框、控制条与视频封面。
+- 相关辅助窗口均需继续保持排除捕获能力。
 
-### 屏幕录像
+## 四、剪贴板现状
 
-- 入口：普通截图框选后，工具栏“录像”。
-- 二级面板位于工具栏下方，横向显示“电脑声音”“麦克风”“开始录像”。
-- 视频：Media Foundation H.264 MP4；声音：WASAPI 采集并混音为 AAC。
-- 文件目录：`E:\截影\Recordings`。
-- 每次新录像会写入首帧封面：`E:\截影\Recordings\Covers\同名视频.png`，历史记录优先读取该封面。
-- 开始录制前有 3 秒倒计时；录制期间显示红色区域边框和控制条，辅助窗口通过 `WdaExcludeFromCapture` 排除在录制画面外。
-- 最近已修复：视频画面上下颠倒、区域边框高 DPI 裁切、控制条时间对齐。建议后续仍手动录制一段短视频，确认边框完整且不写入 MP4。
+### 保存与分类
 
-### 历史记录与主界面
+- 监听 Windows 剪贴板更新，将非 X-Tool 产生的文字或图片保存为“外部复制”。
+- 应用写入剪贴板时附加 `X-Tool.InternalClipboard` 标记，避免重复归类为外部复制。
+- 剪贴板页面分类包括：全部、普通截图、长截图、文字提取、翻译、屏幕录制、外部复制。
+- 快速浮窗分类包括：全部、图片、文字、翻译、文本提取、外部复制；按时间倒序展示。
+- 浮窗使用非激活显示以尽量保留原输入窗口焦点，选择记录后写入系统剪贴板并向原窗口发送粘贴操作。
 
-- 左侧一级导航：截图、首页、历史记录、快捷键、设置。
-- 已移除冗余的固定二级侧栏和主内容顶部无功能按钮。
-- 历史记录支持筛选：普通截图、长截图、文字提取、翻译、屏幕录制。
-- 图片和录像使用缩略图卡片；文字提取、翻译采用满宽横条，展示摘要、时间、字符数，点击使用系统默认程序打开完整文本。
-- 旧录像没有首帧封面时使用图标兜底；新录像自动生成封面。
+### 已解决的粘贴问题
 
-## 三、关键代码位置
+- 最终仍采用标准 Windows 系统剪贴板链路，没有改用高风险的进程注入方案。
+- `ClipboardService` 使用 WinForms `SetDataObject(..., true, 3, 25)`：最多 3 次、每次间隔 25 ms，用于避开 Explorer 等程序的正常短锁。
+- 文字和图片均已实际验证可以粘贴。
+- `ClipboardDiagnostics/` 仅用于当时定位占用窗口；诊断代码不进入正式提交。
 
-| 模块 | 文件 |
+关键文件：
+
+- `ScreenshotApp\Clipboard\ClipboardService.cs`
+- `ScreenshotApp\Clipboard\ClipboardPickerWindow.xaml(.cs)`
+- `ScreenshotApp\History\ScreenshotHistoryStore.cs`
+- `ScreenshotApp\MainWindow.xaml(.cs)`
+
+## 五、设置与存储位置
+
+设置页当前提供：
+
+- 截图后自动复制
+- 保存截图历史
+- 贴图默认置顶
+- 可展开的分类存储位置
+
+默认目录：
+
+| 分类 | 默认位置 |
 | --- | --- |
-| 主流程、热键、历史筛选 | `ScreenshotApp\MainWindow.xaml.cs` |
-| 主界面与历史页样式 | `ScreenshotApp\MainWindow.xaml` |
-| 普通截图选区与工具栏 | `ScreenshotApp\Capture\SelectionOverlayWindow.xaml(.cs)` |
-| 长截图逻辑 | `ScreenshotApp\Capture\ScrollCaptureService.cs` |
-| 历史保存与加载 | `ScreenshotApp\History\ScreenshotHistoryStore.cs` |
-| 录像服务/编码/音频/封面 | `ScreenshotApp\Recording\ScreenRecordingService.cs` |
-| 录像区域框、倒计时、控制条 | `ScreenshotApp\Recording\ScreenRecording*Window.cs` |
+| 截图 | `E:\截影\Screenshots` |
+| 长截图 | `E:\截影\LongScreenshots` |
+| 文字提取 | `E:\截影\History\文字提取` |
+| 翻译 | `E:\截影\History\翻译` |
+| 屏幕录制 | `E:\截影\Recordings` |
+| 外部复制 | `E:\截影\Clipboard` |
 
-## 四、下一步：贴图功能（待实现）
+- 转换器不保存固定目录；图片、音频和视频任务都由用户每次手动选择输出位置。
+- 偏好文件当前仍保存在 `%LocalAppData%\JieYing\preferences.json`。这是兼容旧版本的内部遗留命名，若以后迁移到 `X-Tool`，必须设计兼容迁移，不能直接改路径导致用户设置丢失。
 
-### 目标交互
+## 六、转换器工作台现状
 
-1. 用户完成普通截图框选后，在工具栏新增“贴图”。
-2. 点击后，将当前选区图像作为独立的可拖动图片显示在桌面上。
-3. 图片右上角提供：
-   - `×`：关闭该贴图。
-   - `图钉`：切换是否置顶；置顶时始终位于其他窗口之上。
-4. 支持同时存在多个贴图。
+转换器工作台拥有独立的竖向二级工具栏，目前包含图片、音频和视频三个图标入口。顶部始终保留“转换器工作台”标题与介绍；选择工具只替换右侧工作区。
 
-### 推荐技术方案
+### 1. 图片处理（已可用）
 
-- 新建 `ScreenshotApp\Sticker\StickerWindow.cs`，使用无边框、透明背景的 WPF `Window`。
-- 输入图片直接复用 `SelectionOverlayWindow.CreateSelectionBitmap(...)` 或在普通截图确认前传递已经冻结的 `BitmapSource`，避免二次截屏。
-- 窗口主体使用 `Border + Image + 顶部悬浮操作区`：
-  - 图片区域拖动时调用 `DragMove()` 或使用 Pointer/Mouse 逻辑移动窗口。
-  - 关闭按钮调用 `Close()`。
-  - 图钉按钮切换 `Topmost` 并切换视觉状态。
-- 建议默认 `Topmost = false`，只有用户点图钉后才置顶。
-- 对贴图窗口调用 `NativeMethods.SetWindowDisplayAffinity(handle, NativeMethods.WdaExcludeFromCapture)`，避免之后截图或录像把贴图本身录进去。
-- 第一版不要持久化贴图；后续可扩展缩放、透明度、锁定位置、贴图列表与重启恢复。
+支持输入/输出：PNG、JPEG、BMP、TIFF。
 
-### 边界说明
+能力：
 
-- “窗口始终最上层”可由标准 `Topmost` 稳定实现。
-- 如果需求变为“固定在桌面底层、位于所有应用窗口下方”，则需与 Windows `WorkerW` 桌面层交互，兼容性和多显示器行为明显更复杂，不建议作为第一版目标。
+- 多文件选择与队列展示。
+- 格式转换。
+- JPEG 压缩质量调整。
+- 按比例缩放。
+- 每次任务手动选择输出目录。
+- 转换前后预览。
 
-## 五、最近提交
+预览不是静态占位图：
 
-- `507cec9` 为录制历史生成视频封面
-- `faaff9c` 修正录制区域标识与控制条对齐
-- `d258441` 修复录制画面方向并增加倒计时提示
-- `6207da6` 优化文本历史记录展示
-- `396533c` 扩展统一历史记录分类
-- `6194622` 优化录像设置面板并接入本地音频录制
+- 输出格式、质量、缩放滑杆变化都会进入 `UpdateImageConversionControls()`。
+- 该方法调用 `UpdateImagePreviews()`。
+- `ImageConversionService.CreatePreview()` 会按当前格式、缩放比例和 JPEG 质量重新生成“处理后”预览。
 
+注意：预览框使用固定视口，改变尺寸时画面仍会填充相同区域；JPEG 高质量区间的视觉差异也可能很小，因此用户可能误以为没有刷新。后续可增加像素尺寸、预计体积或刷新状态，使变化更明确。
+
+关键文件：
+
+- `ScreenshotApp\MainWindow.xaml(.cs)`（图片处理页仍在主窗口内）
+- `ScreenshotApp\Converters\ImageConversionService.cs`
+
+### 2. 音频处理（已实现，待装引擎实测）
+
+输入：MP3、WAV、M4A、AAC、FLAC、OGG、OPUS、WMA。
+
+输出：MP3、WAV、M4A、FLAC、OGG、OPUS。
+
+已实现：
+
+- 拖放/多文件选择。
+- 文件名、格式、大小、时长、编码、状态列。
+- ffprobe 获取媒体信息。
+- 音质预设：高质量 320 kbps、标准 192 kbps、小文件 128 kbps、语音 64 kbps。
+- 预设切换会动态更新说明文字。
+- 高级设置：比特率、采样率、声道、保留元数据。
+- 异步队列、实时进度、取消、失败原因、打开输出目录。
+- 最新音频页已统一毛玻璃下拉框、展开卡、复选框和主按钮样式。
+
+关键文件：`ScreenshotApp\Converters\AudioConverterView.xaml(.cs)`。
+
+### 3. 视频处理（已实现基础功能，UI 待继续统一）
+
+输入：MP4、MOV、MKV、AVI、WebM、FLV、WMV。
+
+输出：MP4、MOV、MKV、WebM、GIF；提取音频可输出 MP3、M4A、WAV。
+
+已实现：
+
+- 视频格式转换与压缩。
+- 提取音频。
+- 视频转 GIF，可设置时间范围、FPS 与宽度。
+- 分辨率、FPS、编码、时长、大小探测。
+- 编码、码率、宽度等参数。
+- 异步队列、实时进度、取消、失败原因、打开输出目录。
+
+关键文件：`ScreenshotApp\Converters\VideoConverterView.xaml(.cs)`。
+
+当前视频页功能逻辑已接通，但视觉控件尚未全面达到最新音频页的统一程度。下一轮适合先按音频页的控件资源和排版继续打磨视频页。
+
+### 4. FFmpeg 引擎
+
+统一入口：`ScreenshotApp\Converters\MediaConversionService.cs`。
+
+查找顺序覆盖应用目录下 `tools\ffmpeg`、应用基础目录、当前工作目录及系统 `PATH`。必须同时找到 `ffmpeg.exe` 与 `ffprobe.exe` 才视为可用。
+
+已实现：
+
+- ffprobe JSON 解析。
+- FFmpeg 异步执行，不阻塞 UI。
+- `-progress pipe:1` 实时进度解析。
+- CancellationToken 取消并终止进程树。
+- 转换失败原因回传。
+- 日志：`%LocalAppData%\X-Tool\Logs\media-conversion.log`。
+- 服务层与页面层分离，后续可扩展随包引擎、GPU 编码、批量队列和任务调度。
+
+当前开发机尚未部署 FFmpeg，因此音视频真实转码链路尚未端到端验证。页面会提示将 `ffmpeg.exe` 和 `ffprobe.exe` 放入 `tools\ffmpeg`。发布前必须决定：
+
+1. 随安装包分发固定版本；或
+2. 首次使用时下载可选组件；或
+3. 仅检测用户本机安装。
+
+同时核对 FFmpeg 构建版本、编解码器覆盖、许可证和安装包体积。
+
+## 七、关键代码地图
+
+| 模块 | 位置 |
+| --- | --- |
+| 主导航、快捷键、历史、图片转换 | `ScreenshotApp\MainWindow.xaml(.cs)` |
+| 用户设置 | `ScreenshotApp\Settings\AppPreferences.cs` |
+| 普通截图与标注工具栏 | `ScreenshotApp\Capture\SelectionOverlayWindow.xaml(.cs)` |
+| 长截图 | `ScreenshotApp\Capture\ScrollCaptureService.cs` 及相关窗口 |
+| 贴图 | `ScreenshotApp\Sticker\StickerWindow.cs` |
+| 剪贴板服务与浮窗 | `ScreenshotApp\Clipboard\` |
+| 历史/剪贴板持久化 | `ScreenshotApp\History\` |
+| OCR | `ScreenshotApp\Ocr\` |
+| 翻译 | `ScreenshotApp\Translation\` |
+| 屏幕录像 | `ScreenshotApp\Recording\` |
+| 转换器二级导航 | `ScreenshotApp\Converters\ConverterToolRail.xaml(.cs)` |
+| 图片转换引擎 | `ScreenshotApp\Converters\ImageConversionService.cs` |
+| 音频页面 | `ScreenshotApp\Converters\AudioConverterView.xaml(.cs)` |
+| 视频页面 | `ScreenshotApp\Converters\VideoConverterView.xaml(.cs)` |
+| FFmpeg/ffprobe 服务 | `ScreenshotApp\Converters\MediaConversionService.cs` |
+| 音视频队列模型 | `ScreenshotApp\Converters\MediaQueueItem.cs` |
+| Win32 接口 | `ScreenshotApp\Capture\NativeMethods.cs` |
+
+## 八、当前已知限制与建议顺序
+
+1. **音视频端到端验证**：当前机器没有 FFmpeg。部署引擎后，用短 MP3/WAV/MP4/MOV 分别验证探测、进度、取消、输出与日志。
+2. **视频页视觉统一**：参照最新音频页，将下拉框、模式按钮、高级设置、文件列表和底部按钮统一为毛玻璃风格。
+3. **图片预览反馈增强**：预览已实时生成，但尺寸/质量变化不总是肉眼明显；可显示实际输出像素与预计大小。
+4. **FFmpeg 发布方案**：决定随包、按需下载还是仅本机检测，并记录版本与许可。
+5. **配置目录迁移**：`%LocalAppData%\JieYing` 是遗留目录，只能在有兼容迁移方案时更名。
+6. **回归保护**：继续确保贴图、截图辅助窗、录像边框和控制条不进入捕获画面。
+
+## 九、最近关键提交
+
+- `8703c04` 优化音频转换页面样式与信息布局
+- `afad7a7` 新增音视频转换工作台
+- `99c0938` 更新 X-Tool 桌面图标
+- `c45200b` 校正图片列表格式与大小表头位置
+- `b6780ea` 修正图片处理表头与预览反馈
+- `0a45acd` 实现图片处理实时预览与列对齐
+- `8d7d64a` 新增转换器工作台与图片处理
+- `6bf7d07` 修正剪贴板分类配色映射
+- `d1e366a` 修复剪贴板粘贴与分类展示
+- `cc788dd` 新增剪贴板管理与快捷粘贴
+- `0453065` 新增普通截图贴图功能
+
+## 十、新窗口开始前检查清单
+
+1. 完整阅读本文件。
+2. 执行 `git status --short`，确认基线和用户未提交内容。
+3. 保留 `ClipboardDiagnostics/` 未跟踪且不提交。
+4. 检查是否已有 `XTool.exe` 进程；构建前关闭。
+5. 只处理新任务涉及的文件。
+6. Release 构建通过后启动新版，进行实际 UI/功能验证。
+7. 创建中文本地提交；不推送远端，除非用户明确要求。
+
+## 十一、可直接用于新窗口的提示词
+
+```text
+请继续开发 D:\Claude Code\X-Tool 的 X-Tool WPF 项目。
+
+先完整阅读项目根目录 HANDOFF.md，并严格遵循其中记录的当前基线、UTF-8 文件处理要求、构建与启动方式、提交约定、工作区保护规则和各模块现状。当前 main 分支应至少包含功能代码基线 8703c04，其后可能只有交接文档提交。开始前先执行 git status --short；ClipboardDiagnostics/ 是未跟踪的临时诊断目录，必须保留且不得提交。未经我明确要求不要推送 GitHub。
+
+当前任务：继续完善转换器工作台。先核对最新音频处理页的实际显示，再参照音频页和图片页现有毛玻璃设计语言，统一视频处理页的文件拖入区、文件列表列布局、模式选择、输出格式下拉框、质量/高级参数卡片、输出目录和底部操作按钮。不得破坏现有转换、压缩、提取音频、视频转 GIF、实时进度、取消、失败原因和日志逻辑。同时确认 FFmpeg 缺失时提示清晰；如果本机仍没有 ffmpeg.exe/ffprobe.exe，不要伪造端到端测试结果，只完成可验证的 UI 与非引擎逻辑测试，并在交付时明确说明。
+
+完成后关闭旧进程，构建 Release，启动 ScreenshotApp\bin\Release\net6.0-windows\XTool.exe 验证新版，然后创建中文本地 Git 提交。不要提交 ClipboardDiagnostics/，不要推送远端。
+```
