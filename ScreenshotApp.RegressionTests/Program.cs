@@ -675,10 +675,12 @@ void RunFileWorkbenchPlanningCase()
         new FileWorkbenchItem(Path.Combine(root, "IMG_002.jpg"), "IMG_002.jpg", ".jpg", 2048, DateTime.Now)
     };
     var renamed = FileWorkbenchService.CreatePlans(files, FileBatchOperation.Rename, "旅行照片", 1, 3, string.Empty, string.Empty);
+    var clampedDigits = FileWorkbenchService.CreatePlans(files, FileBatchOperation.Rename, "旅行照片", 1, 356, string.Empty, string.Empty);
     var classified = FileWorkbenchService.CreatePlans(files, FileBatchOperation.Classify, string.Empty, 1, 3, string.Empty, Path.Combine(root, "分类"));
     Console.WriteLine($"文件工作台规划 | {renamed[0].SourceName} -> {Path.GetFileName(renamed[0].DestinationPath)} | 分类 {classified[0].DestinationText}");
     if (!renamed[0].DestinationPath.EndsWith("旅行照片_001.jpg", StringComparison.Ordinal) ||
         !renamed[1].DestinationPath.EndsWith("旅行照片_002.jpg", StringComparison.Ordinal) ||
+        !clampedDigits[0].DestinationPath.EndsWith("旅行照片_000001.jpg", StringComparison.Ordinal) ||
         !classified[0].DestinationPath.Contains($"{Path.DirectorySeparatorChar}图片{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
     {
         failures.Add("文件工作台未能生成预期的重命名或分类操作预览。");

@@ -58,6 +58,8 @@ internal static class FileWorkbenchService
         string destinationDirectory)
     {
         var orderedItems = items.OrderBy(item => item.FullPath, StringComparer.OrdinalIgnoreCase).ToArray();
+        // 服务层同样限制补零位数，避免绕过界面调用时生成超长文件名。
+        numberDigits = Math.Clamp(numberDigits, 1, 6);
         var destinations = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var plans = new List<FileOperationPlan>(orderedItems.Length);
         for (var index = 0; index < orderedItems.Length; index++)

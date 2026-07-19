@@ -104,10 +104,16 @@ public partial class FileWorkbenchView : UserControl
             if (!Directory.Exists(destination)) { BatchStatusText.Text = "请先选择有效目标文件夹"; return; }
         }
         if (operation == FileBatchOperation.Rename && string.IsNullOrWhiteSpace(RenamePrefixTextBox.Text)) { BatchStatusText.Text = "请填写命名前缀"; return; }
+        var numberDigits = 3;
+        if (operation == FileBatchOperation.Rename && !TryParseNumberDigits(NumberDigitsTextBox.Text, out numberDigits))
+        {
+            BatchStatusText.Text = "编号位数请输入 1-6；例如 3 会生成 001、002。";
+            return;
+        }
         try
         {
             _plans.Clear();
-            foreach (var plan in FileWorkbenchService.CreatePlans(targets, operation, RenamePrefixTextBox.Text.Trim(), ParsePositiveInt(StartNumberTextBox.Text, 1), ParsePositiveInt(NumberDigitsTextBox.Text, 3), NewExtensionTextBox.Text, destination)) _plans.Add(plan);
+            foreach (var plan in FileWorkbenchService.CreatePlans(targets, operation, RenamePrefixTextBox.Text.Trim(), ParsePositiveInt(StartNumberTextBox.Text, 1), numberDigits, NewExtensionTextBox.Text, destination)) _plans.Add(plan);
             BatchStatusText.Text = $"已生成 {_plans.Count} 项预览；确认后才会修改文件";
         }
         catch (Exception exception) { BatchStatusText.Text = $"无法生成预览：{exception.Message}"; }
@@ -127,5 +133,6 @@ public partial class FileWorkbenchView : UserControl
     private FileBatchOperation SelectedOperation => Enum.TryParse<FileBatchOperation>((BatchOperationComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString(), out var operation) ? operation : FileBatchOperation.Rename;
     private static double? ParseSize(string text) => double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) && value >= 0 ? value : null;
     private static int ParsePositiveInt(string text, int fallback) => int.TryParse(text, out var value) && value > 0 ? value : fallback;
+    private static bool TryParseNumberDigits(string text, out int value) => int.TryParse(text, out value) && value is >= 1 and <= 6;
     private void SourceFolderTextBox_TextChanged(object sender, TextChangedEventArgs e) { if (SearchSummaryText is not null && !Directory.Exists(SourceFolderTextBox.Text ?? string.Empty)) SearchSummaryText.Text = "请选择有效文件夹"; }
 }
