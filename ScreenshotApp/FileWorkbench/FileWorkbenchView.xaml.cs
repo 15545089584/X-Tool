@@ -20,7 +20,7 @@ public partial class FileWorkbenchView : UserControl
         InitializeComponent();
         FileResultsListBox.ItemsSource = _items;
         PreviewListBox.ItemsSource = _plans;
-        UpdateOperationControls();
+        Loaded += (_, _) => UpdateOperationControls();
     }
 
     private void SelectSourceFolder_Click(object sender, RoutedEventArgs e)
@@ -73,6 +73,12 @@ public partial class FileWorkbenchView : UserControl
 
     private void UpdateOperationControls()
     {
+        if (!IsLoaded || RenamePrefixTextBox is null || RenameNumberRow is null ||
+            NewExtensionTextBox is null || DestinationRow is null)
+        {
+            return;
+        }
+
         var operation = SelectedOperation;
         RenamePrefixTextBox.Visibility = operation == FileBatchOperation.Rename ? Visibility.Visible : Visibility.Collapsed;
         RenameNumberRow.Visibility = operation == FileBatchOperation.Rename ? Visibility.Visible : Visibility.Collapsed;
