@@ -131,6 +131,31 @@
             </Setter>
         </Style>
 
+        <!-- 快捷键值使用紧凑的半透明圆角玻璃按钮，保持可点击语义。 -->
+        <Style x:Key="ShortcutValueButtonStyle" TargetType="Button">
+            <Setter Property="MinWidth" Value="138" />
+            <Setter Property="Height" Value="38" />
+            <Setter Property="Padding" Value="16,0" />
+            <Setter Property="Foreground" Value="#3F5F7E" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root" Background="#7EFFFFFF" BorderBrush="#A9D4EAF8" BorderThickness="1" CornerRadius="12">
+                            <Border.Effect><DropShadowEffect BlurRadius="10" ShadowDepth="2" Direction="270" Opacity="0.08" Color="#466785" /></Border.Effect>
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Background" Value="#C7EAF5FF" /><Setter TargetName="Root" Property="BorderBrush" Value="#6FAEF5" /></Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Root" Property="BorderBrush" Value="#548FFF" /><Setter TargetName="Root" Property="BorderThickness" Value="1.5" /></Trigger>
+                            <Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.74" /></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- 转换器页面使用更明确的操作层级，不与屏幕工作台复用能力卡布局。 -->
         <Style x:Key="ConverterActionButtonStyle" TargetType="Button">
             <Setter Property="Height" Value="44" />
@@ -864,21 +889,19 @@
                                     <StackPanel>
                                         <Grid Height="72" Margin="22,0">
                                             <TextBlock VerticalAlignment="Center" FontSize="15" Text="截图" />
-                                            <Button x:Name="ScreenshotShortcutButton" HorizontalAlignment="Right" VerticalAlignment="Center" Padding="14,8"
-                                                    Background="#AFFFFFFF" BorderBrush="#CFFFFFFF" BorderThickness="1"
+                                            <Button x:Name="ScreenshotShortcutButton" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource ShortcutValueButtonStyle}"
                                                     Click="ShortcutButton_Click" PreviewKeyDown="ShortcutButton_PreviewKeyDown" Tag="Screenshot" />
                                         </Grid>
                                         <Border Height="1" Background="#55FFFFFF" />
                                         <Grid Height="72" Margin="22,0">
                                             <TextBlock VerticalAlignment="Center" FontSize="15" Text="剪贴板选择粘贴" />
-                                            <Button x:Name="ClipboardShortcutButton" HorizontalAlignment="Right" VerticalAlignment="Center" Padding="14,8"
-                                                    Background="#AFFFFFFF" BorderBrush="#CFFFFFFF" BorderThickness="1"
+                                            <Button x:Name="ClipboardShortcutButton" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource ShortcutValueButtonStyle}"
                                                     Click="ShortcutButton_Click" PreviewKeyDown="ShortcutButton_PreviewKeyDown" Tag="Clipboard" />
                                         </Grid>
                                         <Border Height="1" Background="#55FFFFFF" />
                                         <Grid Height="72" Margin="22,0">
-                                            <StackPanel VerticalAlignment="Center"><TextBlock FontSize="15" Text="本地语音输入" /><TextBlock Margin="0,4,0,0" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}" Text="按右 Alt 或自定义组合键开始、结束语音输入" /></StackPanel>
-                                            <Button x:Name="VoiceShortcutButton" HorizontalAlignment="Right" VerticalAlignment="Center" Padding="14,8" Background="#AFFFFFFF" BorderBrush="#CFFFFFFF" BorderThickness="1" Click="ShortcutButton_Click" PreviewKeyDown="ShortcutButton_PreviewKeyDown" Tag="Voice" />
+                                            <TextBlock VerticalAlignment="Center" FontSize="15" Text="本地语音输入" />
+                                            <Button x:Name="VoiceShortcutButton" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource ShortcutValueButtonStyle}" Click="ShortcutButton_Click" PreviewKeyDown="ShortcutButton_PreviewKeyDown" Tag="Voice" />
                                         </Grid>
                                         <TextBlock x:Name="ShortcutCaptureStatusText" Margin="22,0,22,16" FontSize="11" Foreground="#5E819F" Text="提示：Windows 无法枚举未注册全局热键的第三方键盘钩子，X-Tool 会验证可注册的系统级冲突。" TextWrapping="Wrap" />
                                     </StackPanel>
