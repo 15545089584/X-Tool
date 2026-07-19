@@ -61,6 +61,11 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <TargetPath>models\translation\default\%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
     </Content>
+    <!-- 可选的中译英语言包：文件存在时随 Release 一起发布；未安装时界面会明确提示。 -->
+    <Content Include="Models\Translation\zh-en\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>models\translation\zh-en\%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
+    </Content>
     <!-- 固定版中文离线语音输入模型与语音端点检测模型随程序发布。 -->
     <Content Include="Models\VoiceInput\default\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

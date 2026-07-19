@@ -8,10 +8,14 @@ namespace ScreenshotApp.Translation;
 internal static class TranslationEngineProvider
 {
     private static readonly Lazy<ITranslationEngine> DefaultEngine = new(
-        () => new OnnxTranslationEngine(TranslationModelPaths.CreateDefault()),
+        () => new OnnxTranslationEngine(TranslationModelPaths.CreateDefault(), "英译中", "opus-mt-en-zh-onnx-int8"),
+        LazyThreadSafetyMode.ExecutionAndPublication);
+    private static readonly Lazy<ITranslationEngine> ChineseToEnglishEngine = new(
+        () => new OnnxTranslationEngine(TranslationModelPaths.CreateChineseToEnglish(), "中译英", "opus-mt-zh-en-onnx-int8"),
         LazyThreadSafetyMode.ExecutionAndPublication);
 
     internal static ITranslationEngine Default => DefaultEngine.Value;
+    internal static ITranslationEngine ChineseToEnglish => ChineseToEnglishEngine.Value;
 }
 
 /// <summary>
@@ -37,24 +41,40 @@ internal sealed record TranslationModelPaths(
             Path.Combine(root, "vocab.json"),
             Path.Combine(root, "manifest.json"));
     }
+
+    internal static TranslationModelPaths CreateChineseToEnglish()
+    {
+        var root = Path.Combine(AppContext.BaseDirectory, "models", "translation", "zh-en");
+        return new TranslationModelPaths(
+            Path.Combine(root, "encoder_model.onnx"),
+            Path.Combine(root, "decoder_model.onnx"),
+            Path.Combine(root, "source.spm"),
+            Path.Combine(root, "target.spm"),
+            Path.Combine(root, "vocab.json"),
+            Path.Combine(root, "manifest.json"));
+    }
 }
 
 internal sealed class OnnxTranslationEngine : ITranslationEngine
 {
     private readonly TranslationModelPaths _paths;
+    private readonly string _languageDescription;
+    private readonly string _modelVersion;
     private readonly Lazy<ModelSessions> _sessions;
 
-    internal OnnxTranslationEngine(TranslationModelPaths paths)
+    internal OnnxTranslationEngine(TranslationModelPaths paths, string languageDescription, string modelVersion)
     {
         _paths = paths;
+        _languageDescription = languageDescription;
+        _modelVersion = modelVersion;
         _sessions = new Lazy<ModelSessions>(CreateSessions, LazyThreadSafetyMode.ExecutionAndPublication);
     }
 
     public bool IsReady => RequiredFiles.All(File.Exists);
 
     public string UnavailableReason => IsReady
-        ? "离线英译中模型已就绪。"
-        : "离线英译中模型尚未安装。该功能不会上传截图或文字；模型安装完成后即可断网使用。";
+        ? $"离线{_languageDescription}模型已就绪。"
+        : $"离线{_languageDescription}模型尚未安装。该功能不会上传文字；模型安装完成后即可断网使用。";
 
     public Task<TranslationResult> TranslateAsync(
         TranslationRequest request,
@@ -97,7 +117,7 @@ internal sealed class OnnxTranslationEngine : ITranslationEngine
         var sourceText = TranslationTextPreprocessor.Normalize(request.SourceText);
         if (sourceText.Length == 0)
         {
-            return new TranslationResult(sourceText, string.Empty, TimeSpan.Zero, "opus-mt-en-zh-onnx-int8");
+            return new TranslationResult(sourceText, string.Empty, TimeSpan.Zero, _modelVersion);
         }
 
         var stopwatch = Stopwatch.StartNew();
@@ -105,7 +125,7 @@ internal sealed class OnnxTranslationEngine : ITranslationEngine
         var units = SplitIntoUnits(sourceText, sessions.Tokenizer).ToArray();
         if (units.Length == 0)
         {
-            return new TranslationResult(sourceText, string.Empty, stopwatch.Elapsed, "opus-mt-en-zh-onnx-int8");
+            return new TranslationResult(sourceText, string.Empty, stopwatch.Elapsed, _modelVersion);
         }
 
         var translatedUnits = new List<string>(units.Length);
@@ -123,7 +143,7 @@ internal sealed class OnnxTranslationEngine : ITranslationEngine
             sourceText,
             string.Join(Environment.NewLine, translatedUnits),
             stopwatch.Elapsed,
-            "opus-mt-en-zh-onnx-int8");
+            _modelVersion);
     }
 
     /// <summary>
@@ -136,13 +156,13 @@ internal sealed class OnnxTranslationEngine : ITranslationEngine
         var sentenceStart = 0;
         for (var index = 0; index < sourceText.Length; index++)
         {
-            if (sourceText[index] is not ('.' or '!' or '?' or '\n'))
+            if (sourceText[index] is not ('.' or '!' or '?' or '。' or '！' or '？' or '\n'))
             {
                 continue;
             }
 
             var sentenceEnd = index + 1;
-            if (sourceText[index] != '\n' &&
+            if (sourceText[index] is not ('\n' or '。' or '！' or '？') &&
                 sentenceEnd < sourceText.Length &&
                 !char.IsWhiteSpace(sourceText[sentenceEnd]))
             {

@@ -1,14 +1,21 @@
 <Window x:Class="ScreenshotApp.VoiceInput.VoiceInputOverlayWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        MinWidth="184" MaxWidth="440" MaxHeight="300" SizeToContent="WidthAndHeight" WindowStyle="None" ResizeMode="NoResize" ShowInTaskbar="False"
+        Width="184" MaxHeight="420" SizeToContent="Height" WindowStyle="None" ResizeMode="NoResize" ShowInTaskbar="False"
         AllowsTransparency="True" Background="Transparent" Topmost="True">
     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Bottom">
-        <Border x:Name="TextBubble" Margin="0,0,0,28" Padding="17,11" Visibility="Collapsed" BorderThickness="2" CornerRadius="19" MaxWidth="420">
-            <Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#F2E8E2FF" Offset="0" /><GradientStop Color="#F1E7FFF8" Offset="0.34" /><GradientStop Color="#F1E2FFF2" Offset="0.67" /><GradientStop Color="#F3FFF4D8" Offset="1" /></LinearGradientBrush></Border.Background>
-            <Border.BorderBrush><LinearGradientBrush StartPoint="0,0" EndPoint="1,0"><GradientStop Color="#7E735CFF" Offset="0" /><GradientStop Color="#A95F8FFF" Offset="0.22" /><GradientStop Color="#B24EE4D0" Offset="0.44" /><GradientStop Color="#A94BD8FF" Offset="0.62" /><GradientStop Color="#9FD8E64D" Offset="0.80" /><GradientStop Color="#95FF936E" Offset="1" /></LinearGradientBrush></Border.BorderBrush>
+        <Border x:Name="TextBubble" Margin="0,0,0,28" Padding="17,11" HorizontalAlignment="Center" Visibility="Collapsed" BorderThickness="2" CornerRadius="19" MaxWidth="184">
+            <Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#F5F2FFFF" Offset="0" /><GradientStop Color="#F1EBFFF8" Offset="0.45" /><GradientStop Color="#EDFFF6F0" Offset="1" /></LinearGradientBrush></Border.Background>
+            <Border.BorderBrush><LinearGradientBrush StartPoint="0,0" EndPoint="1,0"><GradientStop Color="#7A7CFFFF" Offset="0" /><GradientStop Color="#50D7FFFF" Offset="0.23" /><GradientStop Color="#70EDA3FF" Offset="0.43" /><GradientStop Color="#F2E965FF" Offset="0.60" /><GradientStop Color="#FF8E82FF" Offset="0.78" /><GradientStop Color="#CE7EFFFF" Offset="1" /></LinearGradientBrush></Border.BorderBrush>
             <Border.Effect><DropShadowEffect BlurRadius="18" ShadowDepth="5" Direction="270" Opacity="0.20" Color="#334B6A" /></Border.Effect>
-            <TextBlock x:Name="RecognizedTextBlock" MaxWidth="384" FontSize="14" Foreground="#334A65" TextWrapping="Wrap" />
+            <TextBlock x:Name="RecognizedTextBlock" MaxWidth="146" FontSize="14" Foreground="#334A65" TextWrapping="Wrap" />
+        </Border>
+        <TextBlock x:Name="TranslationArrow" Margin="0,0,0,8" HorizontalAlignment="Center" Visibility="Collapsed" FontSize="18" FontWeight="SemiBold" Foreground="#A75FE5" Text="↓" />
+        <Border x:Name="TranslatedTextBubble" Margin="0,0,0,28" Padding="17,11" HorizontalAlignment="Center" Visibility="Collapsed" BorderThickness="2" CornerRadius="19" MaxWidth="184">
+            <Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#F5F2FFFF" Offset="0" /><GradientStop Color="#E9F5FFF8" Offset="0.48" /><GradientStop Color="#F5EEFFF0" Offset="1" /></LinearGradientBrush></Border.Background>
+            <Border.BorderBrush><LinearGradientBrush StartPoint="0,0" EndPoint="1,0"><GradientStop Color="#5FCFFAFF" Offset="0" /><GradientStop Color="#78E3B1FF" Offset="0.28" /><GradientStop Color="#F3E968FF" Offset="0.52" /><GradientStop Color="#FF9879FF" Offset="0.74" /><GradientStop Color="#B87FFFFF" Offset="1" /></LinearGradientBrush></Border.BorderBrush>
+            <Border.Effect><DropShadowEffect BlurRadius="18" ShadowDepth="5" Direction="270" Opacity="0.20" Color="#334B6A" /></Border.Effect>
+            <TextBlock x:Name="TranslatedTextBlock" MaxWidth="146" FontSize="14" Foreground="#334A65" TextWrapping="Wrap" />
         </Border>
         <Border Width="184" Height="50" HorizontalAlignment="Center" Padding="7" Background="#D5F6F9FF" BorderBrush="#CBFFFFFF" BorderThickness="1" CornerRadius="25">
             <Border.Effect><DropShadowEffect BlurRadius="18" ShadowDepth="5" Direction="270" Opacity="0.16" Color="#314A6D" /></Border.Effect>

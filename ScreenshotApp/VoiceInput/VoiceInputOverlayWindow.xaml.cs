@@ -37,10 +37,28 @@ public partial class VoiceInputOverlayWindow : Window
         TextBubble.Visibility = string.IsNullOrWhiteSpace(text) ? Visibility.Collapsed : Visibility.Visible;
     }
 
+    internal void SetTranslationPreview(string sourceText, string translatedText)
+    {
+        SetRecognizedText(sourceText);
+        TextBubble.Margin = new Thickness(0, 0, 0, 8);
+        TranslatedTextBlock.Text = translatedText;
+        TranslationArrow.Visibility = Visibility.Visible;
+        TranslatedTextBubble.Visibility = Visibility.Visible;
+    }
+
+    internal void ClearTranslationPreview()
+    {
+        TranslatedTextBlock.Text = string.Empty;
+        TranslationArrow.Visibility = Visibility.Collapsed;
+        TranslatedTextBubble.Visibility = Visibility.Collapsed;
+        TextBubble.Margin = new Thickness(0, 0, 0, 28);
+    }
+
     internal void ClearRecognizedText()
     {
         RecognizedTextBlock.Text = string.Empty;
         TextBubble.Visibility = Visibility.Collapsed;
+        ClearTranslationPreview();
     }
 
     internal void UpdateLevel(double level)

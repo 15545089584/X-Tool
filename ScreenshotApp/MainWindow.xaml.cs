@@ -18,6 +18,7 @@ using ScreenshotApp.History;
 using ScreenshotApp.Recording;
 using ScreenshotApp.Settings;
 using ScreenshotApp.Shortcuts;
+using ScreenshotApp.Translation;
 using ScreenshotApp.VoiceInput;
 
 namespace ScreenshotApp;
@@ -56,6 +57,9 @@ public partial class MainWindow : Window
     private IntPtr _voiceInputPasteTarget;
     private CancellationTokenSource? _voiceInputCancellation;
     private string _voiceInputCommittedText = string.Empty;
+    private CancellationTokenSource? _voiceTranslationCancellation;
+    private bool _voiceTranslationPreviewActive;
+    private string _voiceInputTranslatedText = string.Empty;
     private GlobalShortcut _screenshotShortcut;
     private GlobalShortcut _clipboardShortcut;
     private GlobalShortcut _voiceInputShortcut;
@@ -1075,6 +1079,7 @@ public partial class MainWindow : Window
         {
             _voiceInputHotKeyMonitor = new RightAltHotKeyMonitor(listenRightAlt: false);
             _voiceInputHotKeyMonitor.EscapePressed += VoiceInputHotKeyMonitor_EscapePressed;
+            _voiceInputHotKeyMonitor.PPressed += VoiceInputHotKeyMonitor_PPressed;
             _voiceInputHotKeyRegistered = RegisterStandardShortcut(handle, NativeMethods.VoiceHotKeyId, _voiceInputShortcut);
             return;
         }
@@ -1082,6 +1087,7 @@ public partial class MainWindow : Window
         _voiceInputHotKeyMonitor = new RightAltHotKeyMonitor();
         _voiceInputHotKeyMonitor.Pressed += VoiceInputHotKeyMonitor_Pressed;
         _voiceInputHotKeyMonitor.EscapePressed += VoiceInputHotKeyMonitor_EscapePressed;
+        _voiceInputHotKeyMonitor.PPressed += VoiceInputHotKeyMonitor_PPressed;
         _voiceInputHotKeyRegistered = _voiceInputHotKeyMonitor.IsInstalled;
         if (!_voiceInputHotKeyRegistered)
         {
@@ -1107,6 +1113,11 @@ public partial class MainWindow : Window
         Dispatcher.BeginInvoke(CancelVoiceInput);
     }
 
+    private void VoiceInputHotKeyMonitor_PPressed(object? sender, EventArgs e)
+    {
+        Dispatcher.BeginInvoke(() => _ = StartVoiceTranslationPreviewAsync());
+    }
+
     private void CancelVoiceInput()
     {
         if (!_voiceInputService.IsRecording)
@@ -1114,7 +1125,19 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (_voiceTranslationPreviewActive)
+        {
+            _voiceTranslationPreviewActive = false;
+            _voiceInputTranslatedText = string.Empty;
+            CancelVoiceTranslation();
+            _voiceInputOverlay?.ClearTranslationPreview();
+            _voiceInputOverlay?.SetRecognizedText(_voiceInputCommittedText);
+            ShowToast("已返回中文输入；再次按 Esc 将取消语音输入");
+            return;
+        }
+
         _voiceInputCancellation?.Cancel();
+        CancelVoiceTranslation();
         _voiceInputService.Cancel();
         _voiceInputCommittedText = string.Empty;
         CloseVoiceInputOverlay();
@@ -1142,6 +1165,8 @@ public partial class MainWindow : Window
             _voiceInputCancellation?.Dispose();
             _voiceInputCancellation = new CancellationTokenSource();
             _voiceInputCommittedText = string.Empty;
+            _voiceInputTranslatedText = string.Empty;
+            _voiceTranslationPreviewActive = false;
             _voiceInputService.Start();
             ShowVoiceInputOverlay("正在聆听…", "再次按右 Alt 结束");
             _voiceInputOverlay?.ClearRecognizedText();
@@ -1182,7 +1207,100 @@ public partial class MainWindow : Window
 
         // 气泡属于 X-Tool 自己的预览界面，可直接替换为最新片段，避免队列回改时出现缩回和重打。
         _voiceInputCommittedText = hypothesis;
-        _voiceInputOverlay?.SetRecognizedText(hypothesis);
+        if (_voiceTranslationPreviewActive)
+        {
+            _ = RefreshVoiceTranslationPreviewAsync(hypothesis);
+        }
+        else
+        {
+            _voiceInputOverlay?.SetRecognizedText(hypothesis);
+        }
+    }
+
+    private async Task StartVoiceTranslationPreviewAsync()
+    {
+        if (!_voiceInputService.IsRecording)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_voiceInputCommittedText))
+        {
+            ShowToast("请先说出需要翻译的中文内容");
+            return;
+        }
+
+        if (!TranslationEngineProvider.ChineseToEnglish.IsReady)
+        {
+            ShowToast("中译英离线模型未安装，暂不能启用英文输入预览");
+            return;
+        }
+
+        _voiceTranslationPreviewActive = true;
+        await RefreshVoiceTranslationPreviewAsync(_voiceInputCommittedText);
+    }
+
+    private async Task RefreshVoiceTranslationPreviewAsync(string sourceText)
+    {
+        if (!_voiceTranslationPreviewActive || string.IsNullOrWhiteSpace(sourceText))
+        {
+            return;
+        }
+
+        var previous = _voiceTranslationCancellation;
+        previous?.Cancel();
+        var cancellation = new CancellationTokenSource();
+        _voiceTranslationCancellation = cancellation;
+        try
+        {
+            var result = await TranslationEngineProvider.ChineseToEnglish.TranslateAsync(
+                new TranslationRequest(sourceText)
+                {
+                    SourceLanguage = "zh-Hans",
+                    TargetLanguage = "en"
+                },
+                cancellation.Token);
+            if (cancellation.IsCancellationRequested || !_voiceTranslationPreviewActive ||
+                !_voiceInputService.IsRecording || !string.Equals(sourceText, _voiceInputCommittedText, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _voiceInputTranslatedText = result.TranslatedText.Trim();
+            if (string.IsNullOrWhiteSpace(_voiceInputTranslatedText))
+            {
+                ShowToast("未能生成英文翻译，请继续说话后重试");
+                return;
+            }
+
+            _voiceInputOverlay?.SetTranslationPreview(sourceText, _voiceInputTranslatedText);
+        }
+        catch (OperationCanceledException)
+        {
+            // 新的识别片段会替换旧翻译；取消时无需提示。
+        }
+        catch (Exception exception)
+        {
+            if (_voiceTranslationPreviewActive)
+            {
+                ShowToast($"中译英失败：{exception.Message}");
+            }
+        }
+        finally
+        {
+            if (ReferenceEquals(_voiceTranslationCancellation, cancellation))
+            {
+                _voiceTranslationCancellation = null;
+            }
+
+            cancellation.Dispose();
+        }
+    }
+
+    private void CancelVoiceTranslation()
+    {
+        _voiceTranslationCancellation?.Cancel();
+        _voiceTranslationCancellation = null;
     }
 
     private async Task FinishVoiceInputAsync()
@@ -1212,19 +1330,35 @@ public partial class MainWindow : Window
                 }
             }
 
-            _voiceInputOverlay?.SetRecognizedText(text);
+            var outputText = text;
+            if (_voiceTranslationPreviewActive)
+            {
+                await RefreshVoiceTranslationPreviewAsync(text);
+                if (string.IsNullOrWhiteSpace(_voiceInputTranslatedText))
+                {
+                    ShowToast("英文翻译尚未完成，未执行粘贴");
+                    return;
+                }
+
+                outputText = _voiceInputTranslatedText;
+                _voiceInputOverlay?.SetTranslationPreview(text, outputText);
+            }
+            else
+            {
+                _voiceInputOverlay?.SetRecognizedText(text);
+            }
             if (!_preferences.VoiceInputPasteAutomatically || _voiceInputPasteTarget == IntPtr.Zero)
             {
-                ClipboardService.SetText(text);
+                ClipboardService.SetText(outputText);
                 _suppressClipboardCapture = true;
                 ShowToast("识别结果已复制到系统剪贴板");
                 return;
             }
 
-            if (await PasteVoiceInputTextAsync(text, showSuccess: true))
+            if (await PasteVoiceInputTextAsync(outputText, showSuccess: true))
             {
-                _voiceInputCommittedText = text;
-                ClipboardService.SetText(text);
+                _voiceInputCommittedText = outputText;
+                ClipboardService.SetText(outputText);
                 _suppressClipboardCapture = true;
             }
         }
@@ -1238,6 +1372,8 @@ public partial class MainWindow : Window
         }
         finally
         {
+            CancelVoiceTranslation();
+            _voiceTranslationPreviewActive = false;
             CloseVoiceInputOverlay();
             cancellation.Dispose();
             if (ReferenceEquals(_voiceInputCancellation, cancellation))
