@@ -1249,8 +1249,16 @@ public partial class MainWindow : Window
 
     private async Task<bool> PasteVoiceInputTextAsync(string text, bool showSuccess)
     {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
         ClipboardService.SetText(text);
         _suppressClipboardCapture = true;
+        // 剪贴板拥有者切换和目标窗口的输入控件恢复都需要短暂稳定时间，
+        // 否则少数应用会收到 Ctrl+V 却仍读取到上一份或空剪贴板内容。
+        await Task.Delay(75);
         var activated = NativeMethods.IsWindowForeground(_voiceInputPasteTarget);
         for (var attempt = 0; attempt < 3 && !activated; attempt++)
         {
@@ -1261,7 +1269,28 @@ public partial class MainWindow : Window
             }
         }
 
-        if (!activated || !NativeMethods.SendPasteShortcut())
+        if (!activated)
+        {
+            if (showSuccess)
+            {
+                ShowToast("识别结果已复制，请手动粘贴");
+            }
+
+            return false;
+        }
+
+        await Task.Delay(70);
+        var pasted = false;
+        for (var attempt = 0; attempt < 3 && !pasted; attempt++)
+        {
+            pasted = NativeMethods.SendPasteShortcut();
+            if (!pasted)
+            {
+                await Task.Delay(45);
+            }
+        }
+
+        if (!pasted)
         {
             if (showSuccess)
             {
