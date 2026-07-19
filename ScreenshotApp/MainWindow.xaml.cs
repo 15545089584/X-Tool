@@ -208,6 +208,10 @@ public partial class MainWindow : Window
         ScreenWorkbenchView.Visibility = page == "ScreenWorkbench" ? Visibility.Visible : Visibility.Collapsed;
         ConverterWorkbenchView.Visibility = page == "ConverterWorkbench" ? Visibility.Visible : Visibility.Collapsed;
         ImageConverterView.Visibility = page == "ImageConverter" ? Visibility.Visible : Visibility.Collapsed;
+        if (page == "ImageConverter")
+        {
+            Dispatcher.BeginInvoke(new Action(() => NormalizeImageConverterLabels(ImageConverterView)), DispatcherPriority.Loaded);
+        }
         HistoryView.Visibility = page == "History" ? Visibility.Visible : Visibility.Collapsed;
         ShortcutsView.Visibility = page == "Shortcuts" ? Visibility.Visible : Visibility.Collapsed;
         SettingsView.Visibility = page == "Settings" ? Visibility.Visible : Visibility.Collapsed;
@@ -1197,7 +1201,7 @@ public partial class MainWindow : Window
                 _preferences.ConverterDirectory,
                 progress);
             ImageConversionStatusText.Text = result.Failed == 0
-                ? $"已完成 {result.Succeeded} 张图片，可在输出目录中查看。"
+                ? string.Empty
                 : $"已完成 {result.Succeeded} 张，失败 {result.Failed} 张。{result.Errors.FirstOrDefault()}";
             ShowToast(result.Failed == 0 ? "图片处理完成" : "部分图片处理失败");
         }
