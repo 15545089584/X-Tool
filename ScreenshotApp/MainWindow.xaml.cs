@@ -174,12 +174,12 @@ public partial class MainWindow : Window
                     originalHeader.Visibility = Visibility.Collapsed;
                 }
 
-                var columns = new Grid { Margin = new Thickness(60, 0, 0, 0) };
+                var columns = new Grid { Margin = new Thickness(60, 0, 40, 0) };
                 columns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                 columns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(42) });
                 columns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(54) });
                 columns.Children.Add(new TextBlock { Text = "文件名", VerticalAlignment = VerticalAlignment.Center, FontSize = 11, Foreground = new SolidColorBrush(Color.FromRgb(120, 144, 166)) });
-                var format = new TextBlock { Text = "格式", HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, FontSize = 11, Foreground = new SolidColorBrush(Color.FromRgb(120, 144, 166)) };
+                var format = new TextBlock { Text = "格式", Margin = new Thickness(20, 0, 0, 0), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, FontSize = 11, Foreground = new SolidColorBrush(Color.FromRgb(120, 144, 166)) };
                 Grid.SetColumn(format, 1);
                 columns.Children.Add(format);
                 var size = new TextBlock { Text = "大小", HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center, FontSize = 11, Foreground = new SolidColorBrush(Color.FromRgb(120, 144, 166)) };
