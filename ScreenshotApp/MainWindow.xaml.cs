@@ -1179,12 +1179,9 @@ public partial class MainWindow : Window
         {
             _voiceInputOverlay = new VoiceInputOverlayWindow();
             _voiceInputOverlay.Closed += (_, _) => _voiceInputOverlay = null;
-            if (NativeMethods.GetCursorPos(out var cursor))
-            {
-                var workArea = SystemParameters.WorkArea;
-                _voiceInputOverlay.Left = Math.Clamp(cursor.X - _voiceInputOverlay.Width / 2, workArea.Left + 8, workArea.Right - _voiceInputOverlay.Width - 8);
-                _voiceInputOverlay.Top = Math.Clamp(cursor.Y - 96, workArea.Top + 8, workArea.Bottom - _voiceInputOverlay.Height - 8);
-            }
+            var workArea = SystemParameters.WorkArea;
+            _voiceInputOverlay.Left = workArea.Left + (workArea.Width - _voiceInputOverlay.Width) / 2;
+            _voiceInputOverlay.Top = workArea.Bottom - _voiceInputOverlay.Height - 28;
             _voiceInputOverlay.Show();
         }
 

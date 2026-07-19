@@ -14,7 +14,6 @@ public partial class VoiceInputOverlayWindow : Window
 
     internal void UpdateStatus(string title, string detail)
     {
-        TitleText.Text = title;
-        DetailText.Text = detail;
+        // 极简收音浮窗不展示文字状态，保留接口供录音与识别流程统一调用。
     }
 }
