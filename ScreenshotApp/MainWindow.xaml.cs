@@ -56,8 +56,6 @@ public partial class MainWindow : Window
     private IntPtr _voiceInputPasteTarget;
     private CancellationTokenSource? _voiceInputCancellation;
     private string _voiceInputCommittedText = string.Empty;
-    private readonly Queue<char> _voiceInputPendingCharacters = new();
-    private readonly DispatcherTimer _voiceInputTypingTimer;
     private GlobalShortcut _screenshotShortcut;
     private GlobalShortcut _clipboardShortcut;
     private GlobalShortcut _voiceInputShortcut;
@@ -105,11 +103,6 @@ public partial class MainWindow : Window
             _toastTimer.Stop();
             ToastBorder.Visibility = Visibility.Collapsed;
         };
-        _voiceInputTypingTimer = new DispatcherTimer
-        {
-            Interval = TimeSpan.FromMilliseconds(34)
-        };
-        _voiceInputTypingTimer.Tick += VoiceInputTypingTimer_Tick;
         UpdateShortcutButtons();
 
         SourceInitialized += MainWindow_SourceInitialized;
@@ -1121,8 +1114,6 @@ public partial class MainWindow : Window
             return;
         }
 
-        _voiceInputTypingTimer.Stop();
-        _voiceInputPendingCharacters.Clear();
         _voiceInputCancellation?.Cancel();
         _voiceInputService.Cancel();
         _voiceInputCommittedText = string.Empty;
@@ -1151,8 +1142,6 @@ public partial class MainWindow : Window
             _voiceInputCancellation?.Dispose();
             _voiceInputCancellation = new CancellationTokenSource();
             _voiceInputCommittedText = string.Empty;
-            _voiceInputPendingCharacters.Clear();
-            _voiceInputTypingTimer.Stop();
             _voiceInputService.Start();
             ShowVoiceInputOverlay("正在聆听…", "再次按右 Alt 结束");
             _voiceInputOverlay?.ClearRecognizedText();
@@ -1191,33 +1180,9 @@ public partial class MainWindow : Window
             return;
         }
 
-        // 气泡只是本地预览，不会提前写入外部窗口；直接跟随最新片段，避免稳定前缀在持续说话时停滞。
-        var commonLength = 0;
-        var limit = Math.Min(_voiceInputCommittedText.Length, hypothesis.Length);
-        while (commonLength < limit && _voiceInputCommittedText[commonLength] == hypothesis[commonLength])
-        {
-            commonLength++;
-        }
-
-        if (commonLength < _voiceInputCommittedText.Length)
-        {
-            _voiceInputCommittedText = _voiceInputCommittedText[..commonLength];
-            _voiceInputOverlay?.SetRecognizedText(_voiceInputCommittedText);
-        }
-
-        _voiceInputPendingCharacters.Clear();
-        var incrementalText = hypothesis[_voiceInputCommittedText.Length..];
-        if (string.IsNullOrWhiteSpace(incrementalText))
-        {
-            return;
-        }
-
-        foreach (var character in incrementalText)
-        {
-            _voiceInputPendingCharacters.Enqueue(character);
-        }
-
-        _voiceInputTypingTimer.Start();
+        // 气泡属于 X-Tool 自己的预览界面，可直接替换为最新片段，避免队列回改时出现缩回和重打。
+        _voiceInputCommittedText = hypothesis;
+        _voiceInputOverlay?.SetRecognizedText(hypothesis);
     }
 
     private async Task FinishVoiceInputAsync()
@@ -1235,14 +1200,16 @@ public partial class MainWindow : Window
 
         try
         {
-            _voiceInputTypingTimer.Stop();
-            _voiceInputPendingCharacters.Clear();
             ShowVoiceInputOverlay("正在识别…", "所有音频仅在本机内存中处理");
             var text = await _voiceInputService.StopAndRecognizeAsync(cancellation.Token);
             if (string.IsNullOrWhiteSpace(text))
             {
-                ShowToast($"未识别到文字（{_voiceInputService.CaptureDiagnostics}）。请检查系统麦克风权限和输入设备。");
-                return;
+                text = _voiceInputCommittedText;
+                if (string.IsNullOrWhiteSpace(text))
+                {
+                    ShowToast($"未识别到文字（{_voiceInputService.CaptureDiagnostics}）。请检查系统麦克风权限和输入设备。");
+                    return;
+                }
             }
 
             _voiceInputOverlay?.SetRecognizedText(text);
@@ -1310,19 +1277,6 @@ public partial class MainWindow : Window
         }
 
         return true;
-    }
-
-    private void VoiceInputTypingTimer_Tick(object? sender, EventArgs e)
-    {
-        if (_voiceInputPendingCharacters.Count == 0)
-        {
-            _voiceInputTypingTimer.Stop();
-            return;
-        }
-
-        var character = _voiceInputPendingCharacters.Dequeue();
-        _voiceInputCommittedText += character;
-        _voiceInputOverlay?.AppendRecognizedText(character);
     }
 
     private void ShowVoiceInputOverlay(string title, string detail)
