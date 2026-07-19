@@ -25,6 +25,8 @@ internal sealed class MediaQueueItem : INotifyPropertyChanged
     public string FileSize { get; }
     public string DurationDisplay { get; private set; } = "--:--";
     public string CodecDisplay { get; private set; } = "--";
+    public string ResolutionDisplay { get; private set; } = "--";
+    public string FrameRateDisplay { get; private set; } = "--";
     public MediaProbeInfo? Probe { get; private set; }
 
     public string Status
@@ -51,8 +53,16 @@ internal sealed class MediaQueueItem : INotifyPropertyChanged
         Status = "等待转换";
         DurationDisplay = FormatDuration(probe.Duration);
         CodecDisplay = string.IsNullOrWhiteSpace(probe.Codec) ? "未知" : probe.Codec;
+        ResolutionDisplay = isVideo && probe.Width > 0 && probe.Height > 0
+            ? $"{probe.Width} × {probe.Height}"
+            : "--";
+        FrameRateDisplay = isVideo && probe.FramesPerSecond > 0
+            ? $"{probe.FramesPerSecond:0.##} FPS"
+            : "--";
         OnPropertyChanged(nameof(DurationDisplay));
         OnPropertyChanged(nameof(CodecDisplay));
+        OnPropertyChanged(nameof(ResolutionDisplay));
+        OnPropertyChanged(nameof(FrameRateDisplay));
         Details = isVideo
             ? $"{probe.Width} × {probe.Height} · {probe.FramesPerSecond:0.##} FPS · {probe.Codec} · {FormatDuration(probe.Duration)}"
             : $"{FormatDuration(probe.Duration)} · {probe.Codec} · {probe.SampleRate} Hz · {FormatChannels(probe.Channels)}";

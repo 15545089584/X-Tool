@@ -113,7 +113,7 @@ public partial class VideoConverterView : UserControl
 
         OutputFormatCombo.SelectedIndex = 0;
         QualityCombo.IsEnabled = mode is VideoOperation.Convert or VideoOperation.Compress;
-        VideoAdvancedCard.Visibility = mode is VideoOperation.Convert or VideoOperation.Compress or VideoOperation.Gif
+        VideoAdvancedExpander.Visibility = mode is VideoOperation.Convert or VideoOperation.Compress or VideoOperation.Gif
             ? Visibility.Visible
             : Visibility.Collapsed;
         GifSettingsCard.Visibility = mode == VideoOperation.Gif ? Visibility.Visible : Visibility.Collapsed;
