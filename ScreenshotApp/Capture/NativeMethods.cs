@@ -30,6 +30,7 @@ internal static class NativeMethods
     private const uint KeyEventKeyUp = 0x0002;
     private const ushort VirtualKeyControl = 0x11;
     private const ushort VirtualKeyV = 0x56;
+    private const ushort VirtualKeyBack = 0x08;
     private const uint GetAncestorRoot = 2;
     private const int RgnDiff = 4;
     private const int SwRestore = 9;
@@ -386,6 +387,31 @@ internal static class NativeMethods
             new Input { Type = InputKeyboard, Data = new InputUnion { Keyboard = new KeyboardInput { VirtualKey = VirtualKeyV, Flags = KeyEventKeyUp } } },
             new Input { Type = InputKeyboard, Data = new InputUnion { Keyboard = new KeyboardInput { VirtualKey = VirtualKeyControl, Flags = KeyEventKeyUp } } }
         };
+        return SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<Input>()) == inputs.Length;
+    }
+
+    internal static bool SendBackspaces(int count)
+    {
+        if (count <= 0)
+        {
+            return true;
+        }
+
+        var inputs = new Input[count * 2];
+        for (var index = 0; index < count; index++)
+        {
+            inputs[index * 2] = new Input
+            {
+                Type = InputKeyboard,
+                Data = new InputUnion { Keyboard = new KeyboardInput { VirtualKey = VirtualKeyBack } }
+            };
+            inputs[index * 2 + 1] = new Input
+            {
+                Type = InputKeyboard,
+                Data = new InputUnion { Keyboard = new KeyboardInput { VirtualKey = VirtualKeyBack, Flags = KeyEventKeyUp } }
+            };
+        }
+
         return SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<Input>()) == inputs.Length;
     }
 

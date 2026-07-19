@@ -1140,15 +1140,25 @@ public partial class MainWindow : Window
         }
 
         var incrementalText = GetVoiceInputIncrement(hypothesis);
+        var replacementLength = 0;
+        if (string.IsNullOrWhiteSpace(incrementalText) && !string.Equals(hypothesis, _voiceInputCommittedText, StringComparison.Ordinal))
+        {
+            // 离线模型在音频尚未完整时可能回改开头。实时阶段允许替换 X-Tool 自己刚插入的文本，
+            // 比“前缀不同便永久停更”更符合连续口述的预期。
+            incrementalText = hypothesis;
+            replacementLength = _voiceInputCommittedText.Length;
+        }
         _voiceInputLastHypothesis = hypothesis;
         if (string.IsNullOrWhiteSpace(incrementalText))
         {
             return;
         }
 
-        if (await PasteVoiceInputTextAsync(incrementalText, showSuccess: false))
+        if (await PasteVoiceInputTextAsync(incrementalText, showSuccess: false, replacementLength))
         {
-            _voiceInputCommittedText += incrementalText;
+            _voiceInputCommittedText = replacementLength > 0
+                ? incrementalText
+                : _voiceInputCommittedText + incrementalText;
         }
     }
 
@@ -1176,6 +1186,12 @@ public partial class MainWindow : Window
             }
 
             var incrementalText = GetVoiceInputIncrement(text);
+            var replacementLength = 0;
+            if (string.IsNullOrWhiteSpace(incrementalText) && !string.Equals(text, _voiceInputCommittedText, StringComparison.Ordinal))
+            {
+                incrementalText = text;
+                replacementLength = _voiceInputCommittedText.Length;
+            }
             _voiceInputLastHypothesis = text;
             if (!_preferences.VoiceInputPasteAutomatically || _voiceInputPasteTarget == IntPtr.Zero)
             {
@@ -1193,9 +1209,11 @@ public partial class MainWindow : Window
                 return;
             }
 
-            if (await PasteVoiceInputTextAsync(incrementalText, showSuccess: true))
+            if (await PasteVoiceInputTextAsync(incrementalText, showSuccess: true, replacementLength))
             {
-                _voiceInputCommittedText += incrementalText;
+                _voiceInputCommittedText = replacementLength > 0
+                    ? incrementalText
+                    : _voiceInputCommittedText + incrementalText;
                 // 结束时剪贴板保留完整结果，而不是最后一个增量片段。
                 ClipboardService.SetText(text);
                 _suppressClipboardCapture = true;
@@ -1220,7 +1238,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private async Task<bool> PasteVoiceInputTextAsync(string text, bool showSuccess)
+    private async Task<bool> PasteVoiceInputTextAsync(string text, bool showSuccess, int replacementLength = 0)
     {
         ClipboardService.SetText(text);
         _suppressClipboardCapture = true;
@@ -1234,7 +1252,9 @@ public partial class MainWindow : Window
             }
         }
 
-        if (!activated || !NativeMethods.SendPasteShortcut())
+        if (!activated ||
+            (replacementLength > 0 && !NativeMethods.SendBackspaces(replacementLength)) ||
+            !NativeMethods.SendPasteShortcut())
         {
             if (showSuccess)
             {
