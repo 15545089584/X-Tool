@@ -112,13 +112,19 @@ public partial class VideoConverterView : UserControl
         }
 
         OutputFormatCombo.SelectedIndex = 0;
-        QualityCombo.IsEnabled = mode is VideoOperation.Convert or VideoOperation.Compress;
-        VideoAdvancedExpander.Visibility = mode is VideoOperation.Convert or VideoOperation.Compress or VideoOperation.Gif
+        QualityCombo.IsEnabled = mode == VideoOperation.Convert;
+        VideoAdvancedExpander.Visibility = mode is VideoOperation.Convert or VideoOperation.Gif
             ? Visibility.Visible
             : Visibility.Collapsed;
         GifSettingsCard.Visibility = mode == VideoOperation.Gif ? Visibility.Visible : Visibility.Collapsed;
         CodecCombo.IsEnabled = mode != VideoOperation.Gif;
         VideoBitRateText.IsEnabled = mode != VideoOperation.Gif;
+        ModeHintText.Text = mode switch
+        {
+            VideoOperation.ExtractAudio => "仅保留音轨并输出为音频文件，不重新编码视频。",
+            VideoOperation.Gif => "按时间范围、FPS 与输出宽度生成循环 GIF。",
+            _ => "可通过质量、分辨率、编码格式与可选码率控制输出体积。"
+        };
     }
 
     private void BrowseOutput_Click(object sender, RoutedEventArgs e)
@@ -261,7 +267,6 @@ public partial class VideoConverterView : UserControl
 
     private VideoOperation GetOperation() => ExtractModeRadio?.IsChecked == true ? VideoOperation.ExtractAudio
         : GifModeRadio?.IsChecked == true ? VideoOperation.Gif
-        : CompressModeRadio?.IsChecked == true ? VideoOperation.Compress
         : VideoOperation.Convert;
 
     private static TimeSpan? ParseOptionalTime(string text, string label)

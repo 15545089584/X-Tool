@@ -433,7 +433,8 @@ void RunAnnotationRenderCase()
             new[] { new System.Windows.Point(10, 10), new System.Windows.Point(70, 10) },
             System.Windows.Media.Color.FromRgb(255, 77, 94),
             4),
-        new RectangleScreenshotAnnotation(
+        new ShapeScreenshotAnnotation(
+            AnnotationShape.Rectangle,
             new Rect(20, 30, 80, 40),
             System.Windows.Media.Color.FromRgb(62, 139, 255),
             3)

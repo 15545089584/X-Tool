@@ -40,7 +40,6 @@ internal sealed record AudioConversionOptions(
 internal enum VideoOperation
 {
     Convert,
-    Compress,
     ExtractAudio,
     Gif
 }
