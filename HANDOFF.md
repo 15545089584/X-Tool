@@ -233,6 +233,24 @@ git log -5 --oneline
 
 发布到 GitHub 前，必须将项目许可证确定为 GPLv3，并在 Release 中提供与内置二进制精确对应的 FFmpeg 及启用外部库源码、构建配置与许可证材料。详见根目录 `THIRD-PARTY-NOTICES.md`。
 
+### 5. 转 PDF（已实现基础功能）
+
+入口：转换器工作台左侧第四个“转 PDF”图标，页面为
+`ScreenshotApp\\Converters\\PdfConverterView.xaml(.cs)`。
+
+已实现：
+
+- 输入：PNG/JPG/JPEG/BMP/GIF/TIFF/WebP、已有 PDF、Word、Excel、PowerPoint、ODF 文档。
+- 图片与已有 PDF 由 X-Tool 在本地生成或合并，不依赖办公软件。
+- 输出支持按队列合并为一个 PDF，或按文件分别输出；同名输出会自动避让。
+- 办公文档依次尝试 Microsoft Office COM、WPS COM、LibreOffice 无界面转换。
+- 页面显示三类引擎的实时检测状态；若三者均缺失，仍允许图片/PDF 工作，并明确提示安装 LibreOffice 后再转换办公文档，不提供下载入口。
+- 失败原因显示在队列对应文件项，取消会停止后续项目；LibreOffice 运行中的进程可被取消。
+
+依赖：NuGet `PDFsharp` 6.2.4（MIT），已记录在根目录 `THIRD-PARTY-NOTICES.md`。
+
+当前本机验证：Release 构建通过，PDF 页面与 Office/WPS/LibreOffice 检测提示已实际显示；本机检测到 Office，未检测到 WPS、LibreOffice。尚未在本机以真实办公文件完成 Office/WPS/LibreOffice 端到端导出，后续应分别补测 Word、Excel、PowerPoint 与 LibreOffice 回退。
+
 ## 七、关键代码地图
 
 | 模块 | 位置 |
@@ -253,6 +271,8 @@ git log -5 --oneline
 | 视频页面 | `ScreenshotApp\Converters\VideoConverterView.xaml(.cs)` |
 | FFmpeg/ffprobe 服务 | `ScreenshotApp\Converters\MediaConversionService.cs` |
 | 音视频队列模型 | `ScreenshotApp\Converters\MediaQueueItem.cs` |
+| PDF 页面与任务队列 | `ScreenshotApp\Converters\PdfConverterView.xaml(.cs)`、`PdfQueueItem.cs` |
+| PDF 转换与引擎回退 | `ScreenshotApp\Converters\PdfConversionService.cs` |
 | Win32 接口 | `ScreenshotApp\Capture\NativeMethods.cs` |
 
 ## 八、当前已知限制与建议顺序
@@ -262,6 +282,7 @@ git log -5 --oneline
 3. **图片预览反馈增强**：预览已实时生成，但尺寸/质量变化不总是肉眼明显；可显示实际输出像素与预计大小。
 4. **配置目录迁移**：`%LocalAppData%\JieYing` 是遗留目录，只能在有兼容迁移方案时更名。
 5. **回归保护**：继续确保贴图、截图辅助窗、录像边框和控制条不进入捕获画面。
+6. **转 PDF 人工回归**：分别验证图片合并、已有 PDF 合并、Word/Excel/PowerPoint 的 Office 导出，以及未装 Office/WPS 时 LibreOffice 回退和缺失提示。
 
 ## 九、最近关键提交
 

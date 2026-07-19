@@ -28,6 +28,8 @@
     <PackageReference Include="OpenCvSharp4.Windows" Version="4.11.0.20250507" />
     <PackageReference Include="Vortice.Direct3D11" Version="2.4.2" />
     <PackageReference Include="Vortice.MediaFoundation" Version="2.4.2" />
+    <!-- 图片与已有 PDF 的本地生成、合并采用 MIT 许可的 PDFsharp。 -->
+    <PackageReference Include="PDFsharp" Version="6.2.4" />
   </ItemGroup>
 
   <ItemGroup>

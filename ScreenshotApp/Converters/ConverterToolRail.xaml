@@ -12,6 +12,7 @@
             <Button x:Name="ImageButton" Style="{StaticResource ToolButton}" Tag="Image" ToolTip="图片处理" Click="ToolButton_Click"><Border Width="34" Height="34" Background="#D6E5FF" CornerRadius="10"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="#4D7CFE" Text="&#xEB9F;" /></Border></Button>
             <Button x:Name="AudioButton" Style="{StaticResource ToolButton}" Tag="Audio" ToolTip="音频处理" Click="ToolButton_Click"><Border Width="34" Height="34" Background="#DDF5EC" CornerRadius="10"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="#36A978" Text="&#xE8D6;" /></Border></Button>
             <Button x:Name="VideoButton" Style="{StaticResource ToolButton}" Tag="Video" ToolTip="视频处理" Click="ToolButton_Click"><Border Width="34" Height="34" Background="#ECE4FF" CornerRadius="10"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="#7B61D8" Text="&#xE714;" /></Border></Button>
+            <Button x:Name="PdfButton" Style="{StaticResource ToolButton}" Tag="Pdf" ToolTip="转 PDF" Click="ToolButton_Click"><Border Width="34" Height="34" Background="#FFE9DE" CornerRadius="10"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="#D8754E" Text="&#xEA90;" /></Border></Button>
         </StackPanel>
     </Border>
 </UserControl>

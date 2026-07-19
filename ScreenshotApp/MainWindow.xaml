@@ -636,6 +636,20 @@
                                 </Grid>
                             </Grid>
 
+                            <!-- 转 PDF：图片由工具本地生成，办公文档按 Office、WPS、LibreOffice 顺序调用。 -->
+                            <Grid x:Name="PdfConverterView" Visibility="Collapsed" Margin="44,42,52,38">
+                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="20" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                <StackPanel>
+                                    <TextBlock FontSize="30" FontWeight="SemiBold" Text="转换器工作台" />
+                                    <TextBlock Margin="0,9,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}" Text="将常用内容处理成适合保存、分享和继续使用的格式" />
+                                </StackPanel>
+                                <Grid Grid.Row="2">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="76" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                    <converters:ConverterToolRail SelectedTool="Pdf" ToolRequested="ConverterToolRail_ToolRequested" />
+                                    <converters:PdfConverterView Grid.Column="2" />
+                                </Grid>
+                            </Grid>
+
                             <!-- 统一剪贴板页：屏幕工作台内容与外部复制内容统一回看。 -->
                             <Grid x:Name="HistoryView" Visibility="Collapsed" Margin="58,32,48,38">
                                 <Grid.RowDefinitions>

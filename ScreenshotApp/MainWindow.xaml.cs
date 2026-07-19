@@ -211,6 +211,7 @@ public partial class MainWindow : Window
         ImageConverterView.Visibility = page == "ImageConverter" ? Visibility.Visible : Visibility.Collapsed;
         AudioConverterView.Visibility = page == "AudioConverter" ? Visibility.Visible : Visibility.Collapsed;
         VideoConverterView.Visibility = page == "VideoConverter" ? Visibility.Visible : Visibility.Collapsed;
+        PdfConverterView.Visibility = page == "PdfConverter" ? Visibility.Visible : Visibility.Collapsed;
         if (page == "ImageConverter")
         {
             Dispatcher.BeginInvoke(new Action(() => NormalizeImageConverterLabels(ImageConverterView)), DispatcherPriority.Loaded);
@@ -1053,6 +1054,7 @@ public partial class MainWindow : Window
         {
             "Audio" => "AudioConverter",
             "Video" => "VideoConverter",
+            "Pdf" => "PdfConverter",
             _ => "ImageConverter"
         });
     }

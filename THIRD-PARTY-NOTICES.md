@@ -13,3 +13,10 @@
 随附二进制的许可证全文与构建配置位于
 `ScreenshotApp/tools/ffmpeg/LICENSES/`。公开发布前，必须在 GitHub Release 中提供与
 该二进制完全对应的 FFmpeg 及其启用外部库的源码、构建配置和许可证材料。
+
+## PDFsharp 6.2.4
+
+- 用途：转 PDF 功能中的图片 PDF 生成、已有 PDF 合并与页面导入。
+- 引用方式：NuGet `PDFsharp` 6.2.4。
+- 许可证：MIT License。
+- 项目与许可证：<https://www.nuget.org/packages/PDFsharp/6.2.4>。
