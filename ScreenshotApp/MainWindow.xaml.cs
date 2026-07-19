@@ -1033,29 +1033,10 @@ public partial class MainWindow : Window
 
             if (_clipboardPasteTarget != IntPtr.Zero)
             {
-                // 剪贴板浮窗为非激活窗口时，外部输入框会持续保持焦点，直接发送粘贴即可。
-                var activated = NativeMethods.IsWindowForeground(_clipboardPasteTarget);
-                var focusRestored = false;
-                for (var attempt = 0; attempt < 3 && !activated; attempt++)
-                {
-                    activated = NativeMethods.RestoreAndActivateWindow(_clipboardPasteTarget);
-                    focusRestored |= activated;
-                    if (!activated)
-                    {
-                        await Task.Delay(40);
-                    }
-                }
-
-                if (!activated)
+                if (!await EnsurePasteTargetReadyAsync(_clipboardPasteTarget))
                 {
                     ShowToast("无法恢复原输入窗口，内容已复制到系统剪贴板");
                     return;
-                }
-
-                if (focusRestored)
-                {
-                    // 仅在刚恢复外部窗口时留出一帧时间让其内部控件重新接收输入。
-                    await Task.Delay(35);
                 }
 
                 if (!NativeMethods.SendPasteShortcut())
@@ -1400,20 +1381,7 @@ public partial class MainWindow : Window
 
             return false;
         }
-        // 剪贴板拥有者切换和目标窗口的输入控件恢复都需要短暂稳定时间，
-        // 否则少数应用会收到 Ctrl+V 却仍读取到上一份或空剪贴板内容。
-        await Task.Delay(75);
-        var activated = NativeMethods.IsWindowForeground(_voiceInputPasteTarget);
-        for (var attempt = 0; attempt < 3 && !activated; attempt++)
-        {
-            activated = NativeMethods.RestoreAndActivateWindow(_voiceInputPasteTarget);
-            if (!activated)
-            {
-                await Task.Delay(40);
-            }
-        }
-
-        if (!activated)
+        if (!await EnsurePasteTargetReadyAsync(_voiceInputPasteTarget))
         {
             if (showSuccess)
             {
@@ -1423,7 +1391,6 @@ public partial class MainWindow : Window
             return false;
         }
 
-        await Task.Delay(90);
         // 部分剪贴板管理器会短暂改写内容；发送 Ctrl+V 前再次确认仍是本次识别结果。
         if (!ClipboardMatchesVoiceInputText(text) && !await SetVoiceInputClipboardTextAsync(text))
         {
@@ -1435,17 +1402,8 @@ public partial class MainWindow : Window
             return false;
         }
 
-        var pasted = false;
-        for (var attempt = 0; attempt < 3 && !pasted; attempt++)
-        {
-            pasted = NativeMethods.SendPasteShortcut();
-            if (!pasted)
-            {
-                await Task.Delay(45);
-            }
-        }
-
-        if (!pasted)
+        // 与剪贴板快速粘贴保持一致：只发送一次，避免少数应用收到重复输入。
+        if (!NativeMethods.SendPasteShortcut())
         {
             if (showSuccess)
             {
@@ -1461,6 +1419,29 @@ public partial class MainWindow : Window
         }
 
         return true;
+    }
+
+    private static async Task<bool> EnsurePasteTargetReadyAsync(IntPtr target)
+    {
+        var activated = NativeMethods.IsWindowForeground(target);
+        var focusRestored = false;
+        for (var attempt = 0; attempt < 3 && !activated; attempt++)
+        {
+            activated = NativeMethods.RestoreAndActivateWindow(target);
+            focusRestored |= activated;
+            if (!activated)
+            {
+                await Task.Delay(40);
+            }
+        }
+
+        if (focusRestored)
+        {
+            // 仅在刚恢复外部窗口时留出一帧时间让其内部控件重新接收输入。
+            await Task.Delay(35);
+        }
+
+        return activated;
     }
 
     private async Task<bool> SetVoiceInputClipboardTextAsync(string text)
