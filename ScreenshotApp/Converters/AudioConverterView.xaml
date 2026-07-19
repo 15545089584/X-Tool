@@ -169,10 +169,10 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid>
-        <Grid.ColumnDefinitions><ColumnDefinition Width="1.08*" /><ColumnDefinition Width="20" /><ColumnDefinition Width="0.92*" /></Grid.ColumnDefinitions>
-
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
         <Grid>
+            <Grid.RowDefinitions><RowDefinition Height="390" /><RowDefinition Height="12" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+        <Grid Grid.Row="0">
             <Grid.RowDefinitions><RowDefinition Height="150" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
             <Border Padding="22" Background="#66EEF5FF" BorderBrush="#8EBEDCF5" BorderThickness="1.5" CornerRadius="17">
                 <Grid>
@@ -226,7 +226,7 @@
             </Border>
         </Grid>
 
-        <Border Grid.Column="2" Padding="20" Background="#D8FFFFFF" BorderBrush="#E9FFFFFF" BorderThickness="1" CornerRadius="18">
+        <Border Grid.Row="2" Padding="20" Background="#D8FFFFFF" BorderBrush="#E9FFFFFF" BorderThickness="1" CornerRadius="18">
             <Grid>
                 <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                 <Grid>
@@ -289,5 +289,6 @@
                 </Grid>
             </Grid>
         </Border>
-    </Grid>
+        </Grid>
+    </ScrollViewer>
 </UserControl>

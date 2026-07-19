@@ -25,9 +25,10 @@
         <Style x:Key="GlassExpander" TargetType="Expander"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Expander"><StackPanel><ToggleButton x:Name="HeaderButton" IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" Background="Transparent" BorderThickness="0" Cursor="Hand"><ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><Border x:Name="HeaderRoot" Padding="12,10" Background="#75F7FBFF" BorderBrush="#B8D8EAF8" BorderThickness="1" CornerRadius="11"><Grid><ContentPresenter VerticalAlignment="Center" /><TextBlock x:Name="Arrow" HorizontalAlignment="Right" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#5C7C9B" Text="&#xE70D;" /></Grid></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="HeaderRoot" Property="Background" Value="#C9ECF5FF" /></Trigger><Trigger Property="IsChecked" Value="True"><Setter TargetName="Arrow" Property="Text" Value="&#xE70E;" /><Setter TargetName="HeaderRoot" Property="Background" Value="#B8E7F1FF" /></Trigger></ControlTemplate.Triggers></ControlTemplate></ToggleButton.Template><ContentPresenter Content="{TemplateBinding Header}" /></ToggleButton><ContentPresenter x:Name="ExpandContent" Margin="0,8,0,0" ContentSource="Content" Visibility="Collapsed" /></StackPanel><ControlTemplate.Triggers><Trigger Property="IsExpanded" Value="True"><Setter TargetName="ExpandContent" Property="Visibility" Value="Visible" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
     </UserControl.Resources>
 
-    <Grid>
-        <Grid.ColumnDefinitions><ColumnDefinition Width="1.08*" /><ColumnDefinition Width="20" /><ColumnDefinition Width="0.92*" /></Grid.ColumnDefinitions>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
         <Grid>
+            <Grid.RowDefinitions><RowDefinition Height="390" /><RowDefinition Height="12" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+        <Grid Grid.Row="0">
             <Grid.RowDefinitions><RowDefinition Height="150" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
             <Border Padding="22" Background="#62F0F3FF" BorderBrush="#9BBFE1F3" BorderThickness="1.5" CornerRadius="17">
                 <Grid>
@@ -53,7 +54,7 @@
             </Border>
         </Grid>
 
-        <Border Grid.Column="2" Padding="20" Background="#D8FFFFFF" BorderBrush="#E9FFFFFF" BorderThickness="1" CornerRadius="18">
+        <Border Grid.Row="2" Padding="20" Background="#D8FFFFFF" BorderBrush="#E9FFFFFF" BorderThickness="1" CornerRadius="18">
             <ScrollViewer VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
                 <Grid>
                     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
@@ -100,5 +101,6 @@
                 </Grid>
             </ScrollViewer>
         </Border>
-    </Grid>
+        </Grid>
+    </ScrollViewer>
 </UserControl>
