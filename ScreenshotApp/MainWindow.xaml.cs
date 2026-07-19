@@ -1093,9 +1093,20 @@ public partial class MainWindow : Window
 
     private void UpdateImagePreviews()
     {
-        var thumbnail = _imageConversionFiles.FirstOrDefault()?.Thumbnail;
-        ImagePreviewBefore.Source = thumbnail;
-        ImagePreviewAfter.Source = thumbnail;
+        var firstFile = _imageConversionFiles.FirstOrDefault();
+        if (firstFile is null)
+        {
+            ImagePreviewBefore.Source = null;
+            ImagePreviewAfter.Source = null;
+            return;
+        }
+
+        ImagePreviewBefore.Source = ImageConversionService.CreatePreview(firstFile.FilePath, ImageOutputFormat.Png, 100, 100);
+        ImagePreviewAfter.Source = ImageConversionService.CreatePreview(
+            firstFile.FilePath,
+            GetSelectedImageFormat(),
+            (int)Math.Round(ImageScaleSlider.Value),
+            (int)Math.Round(ImageQualitySlider.Value));
     }
 
     private void UpdateImageConversionControls()
@@ -1109,6 +1120,7 @@ public partial class MainWindow : Window
         ImageQualitySlider.IsEnabled = isJpeg;
         ImageQualityValueText.Text = isJpeg ? $"{Math.Round(ImageQualitySlider.Value)}%" : "仅 JPEG";
         ImageScaleValueText.Text = $"{Math.Round(ImageScaleSlider.Value)}%";
+        UpdateImagePreviews();
     }
 
     private ImageOutputFormat GetSelectedImageFormat()

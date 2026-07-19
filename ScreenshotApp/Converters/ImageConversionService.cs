@@ -7,6 +7,54 @@ namespace ScreenshotApp.Converters;
 /// <summary>图片处理工作台的本地编码器，仅处理用户主动选择的文件并始终生成新文件。</summary>
 internal static class ImageConversionService
 {
+    internal static BitmapSource? CreatePreview(string inputPath, ImageOutputFormat outputFormat, int scalePercent, int jpegQuality)
+    {
+        try
+        {
+            var image = new BitmapImage();
+            image.BeginInit();
+            image.UriSource = new Uri(inputPath, UriKind.Absolute);
+            image.DecodePixelWidth = 640;
+            image.CacheOption = BitmapCacheOption.OnLoad;
+            image.EndInit();
+            image.Freeze();
+
+            var targetWidth = Math.Max(1, (int)Math.Round(image.PixelWidth * Math.Clamp(scalePercent, 10, 200) / 100d));
+            var targetHeight = Math.Max(1, (int)Math.Round(image.PixelHeight * Math.Clamp(scalePercent, 10, 200) / 100d));
+            var visual = new DrawingVisual();
+            using (var drawing = visual.RenderOpen())
+            {
+                if (outputFormat == ImageOutputFormat.Jpeg)
+                {
+                    drawing.DrawRectangle(Brushes.White, null, new System.Windows.Rect(0, 0, targetWidth, targetHeight));
+                }
+
+                drawing.DrawImage(image, new System.Windows.Rect(0, 0, targetWidth, targetHeight));
+            }
+
+            var rendered = new RenderTargetBitmap(targetWidth, targetHeight, 96, 96, PixelFormats.Pbgra32);
+            rendered.Render(visual);
+            rendered.Freeze();
+            if (outputFormat != ImageOutputFormat.Jpeg)
+            {
+                return rendered;
+            }
+
+            var stream = new MemoryStream();
+            var encoder = new JpegBitmapEncoder { QualityLevel = Math.Clamp(jpegQuality, 20, 100) };
+            encoder.Frames.Add(BitmapFrame.Create(rendered));
+            encoder.Save(stream);
+            stream.Position = 0;
+            var decoded = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad).Frames[0];
+            decoded.Freeze();
+            return decoded;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     internal static Task<ImageConversionResult> ConvertAsync(
         IReadOnlyCollection<string> inputPaths,
         ImageOutputFormat outputFormat,
