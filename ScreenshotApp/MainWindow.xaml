@@ -611,11 +611,14 @@
                                                     <Grid Margin="14,0"><Grid.ColumnDefinitions><ColumnDefinition Width="1.15*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><TextBlock VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold" Text="文件列表" /><TextBlock Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="11" Foreground="#7890A6" Text="文件名" /><TextBlock Grid.Column="2" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="11" Foreground="#7890A6" Text="格式" /><TextBlock Grid.Column="3" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="11" Foreground="#7890A6" Text="大小" /></Grid>
                                                 </Border>
                                             </Grid>
-                                            <Grid Width="570" Margin="0,0,18,18" HorizontalAlignment="Right" VerticalAlignment="Bottom">
-                                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="12" /><ColumnDefinition Width="*" /><ColumnDefinition Width="12" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                                                <Button Height="46" Style="{StaticResource ConverterSecondaryButtonStyle}" Content="清空列表" Click="ClearImageFileList_Click" />
-                                                <Button Grid.Column="2" Height="46" Style="{StaticResource ConverterSecondaryButtonStyle}" Content="重置参数" Click="ResetImageConversionSettings_Click" />
-                                                <Button x:Name="StartImageConversionButton" Grid.Column="4" Height="46" Style="{StaticResource ConverterActionButtonStyle}" Content="开始处理" Click="StartImageConversion_Click" />
+                                            <Grid Margin="0,0,0,18" Panel.ZIndex="6" VerticalAlignment="Bottom">
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="1.08*" /><ColumnDefinition Width="22" /><ColumnDefinition Width="0.92*" /></Grid.ColumnDefinitions>
+                                                <Grid Grid.Column="2" Margin="22,0">
+                                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="12" /><ColumnDefinition Width="*" /><ColumnDefinition Width="12" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                                    <Button Height="46" Style="{StaticResource ConverterSecondaryButtonStyle}" Content="清空列表" Click="ClearImageFileList_Click" />
+                                                    <Button Grid.Column="2" Height="46" Style="{StaticResource ConverterSecondaryButtonStyle}" Content="重置参数" Click="ResetImageConversionSettings_Click" />
+                                                    <Button x:Name="StartImageConversionButton" Grid.Column="4" Height="46" Style="{StaticResource ConverterActionButtonStyle}" Click="StartImageConversion_Click"><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="White" Text="开始处理" /></Button>
+                                                </Grid>
                                             </Grid>
                                             <TextBlock x:Name="ImageConversionStatusText" Margin="18,0,456,22" VerticalAlignment="Bottom" FontSize="12" Foreground="#5C7894" TextWrapping="Wrap" />
                                         </Grid>
