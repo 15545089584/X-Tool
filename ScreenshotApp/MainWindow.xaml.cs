@@ -1106,6 +1106,7 @@ public partial class MainWindow : Window
             return;
         }
 
+        StartImageConversionButton.IsEnabled = false;
         ImageConversionStatusText.Text = "正在准备本地转换…";
         try
         {
@@ -1126,6 +1127,10 @@ public partial class MainWindow : Window
         {
             ImageConversionStatusText.Text = $"处理失败：{exception.Message}";
             ShowToast("图片处理失败");
+        }
+        finally
+        {
+            StartImageConversionButton.IsEnabled = true;
         }
     }
 
