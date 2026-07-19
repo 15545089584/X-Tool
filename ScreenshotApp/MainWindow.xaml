@@ -605,12 +605,6 @@
                                                     <TextBlock Margin="12,9,0,0" FontSize="13" FontWeight="SemiBold" Text="预览对比" />
                                                 </Border>
                                             </Grid>
-                                            <Grid Margin="0,176,0,0" Panel.ZIndex="5" VerticalAlignment="Top" IsHitTestVisible="False">
-                                                <Grid.ColumnDefinitions><ColumnDefinition Width="1.08*" /><ColumnDefinition Width="22" /><ColumnDefinition Width="0.92*" /></Grid.ColumnDefinitions>
-                                                <Border Grid.Column="0" Height="42" Background="#F9FFFFFF" CornerRadius="15,15,0,0">
-                                                    <Grid Margin="14,0"><Grid.ColumnDefinitions><ColumnDefinition Width="60" /><ColumnDefinition Width="*" /><ColumnDefinition Width="42" /><ColumnDefinition Width="54" /></Grid.ColumnDefinitions><TextBlock VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold" Text="文件列表" /><TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="11" Foreground="#7890A6" Text="文件名" /><TextBlock Grid.Column="2" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="11" Foreground="#7890A6" Text="格式" /><TextBlock Grid.Column="3" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" Foreground="#7890A6" Text="大小" /></Grid>
-                                                </Border>
-                                            </Grid>
                                             <Grid Margin="0,0,0,18" Panel.ZIndex="6" VerticalAlignment="Bottom">
                                                 <Grid.ColumnDefinitions><ColumnDefinition Width="1.08*" /><ColumnDefinition Width="22" /><ColumnDefinition Width="0.92*" /></Grid.ColumnDefinitions>
                                                 <Grid Grid.Column="2" Margin="22,0">

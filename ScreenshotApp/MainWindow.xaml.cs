@@ -136,6 +136,7 @@ public partial class MainWindow : Window
     {
         UpdateMaximizeButton();
         EnlargeImageConversionHintText(this);
+        NormalizeImageConverterLabels(this);
         await RefreshHistoryAsync();
     }
 
@@ -150,6 +151,43 @@ public partial class MainWindow : Window
             }
 
             EnlargeImageConversionHintText(child);
+        }
+    }
+
+    private static void NormalizeImageConverterLabels(DependencyObject parent)
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, index);
+            if (child is TextBlock textBlock && textBlock.Text.StartsWith("预览对比", StringComparison.Ordinal))
+            {
+                textBlock.Text = "预览对比";
+            }
+
+            if (child is TextBlock fileListText && fileListText.Text == "文件列表" && VisualTreeHelper.GetParent(fileListText) is Grid headerGrid && headerGrid.Tag is null)
+            {
+                headerGrid.Tag = "已调整文件列表表头";
+                var originalHeader = headerGrid.Children.OfType<StackPanel>().FirstOrDefault();
+                if (originalHeader is not null)
+                {
+                    originalHeader.Visibility = Visibility.Collapsed;
+                }
+
+                var columns = new Grid { Margin = new Thickness(60, 0, 0, 0) };
+                columns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                columns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(42) });
+                columns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(54) });
+                columns.Children.Add(new TextBlock { Text = "文件名", VerticalAlignment = VerticalAlignment.Center, FontSize = 11, Foreground = new SolidColorBrush(Color.FromRgb(120, 144, 166)) });
+                var format = new TextBlock { Text = "格式", HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, FontSize = 11, Foreground = new SolidColorBrush(Color.FromRgb(120, 144, 166)) };
+                Grid.SetColumn(format, 1);
+                columns.Children.Add(format);
+                var size = new TextBlock { Text = "大小", HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center, FontSize = 11, Foreground = new SolidColorBrush(Color.FromRgb(120, 144, 166)) };
+                Grid.SetColumn(size, 2);
+                columns.Children.Add(size);
+                headerGrid.Children.Add(columns);
+            }
+
+            NormalizeImageConverterLabels(child);
         }
     }
 
@@ -1107,6 +1145,9 @@ public partial class MainWindow : Window
             GetSelectedImageFormat(),
             (int)Math.Round(ImageScaleSlider.Value),
             (int)Math.Round(ImageQualitySlider.Value));
+        var previewScale = Math.Clamp(ImageScaleSlider.Value, 10, 100) / 100d;
+        ImagePreviewAfter.RenderTransformOrigin = new Point(0.5, 0.5);
+        ImagePreviewAfter.RenderTransform = new ScaleTransform(previewScale, previewScale);
     }
 
     private void UpdateImageConversionControls()
