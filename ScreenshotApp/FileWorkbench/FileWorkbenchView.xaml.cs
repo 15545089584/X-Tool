@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
-using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -14,6 +13,7 @@ public partial class FileWorkbenchView : UserControl
     private readonly ObservableCollection<FileWorkbenchItem> _items = new();
     private readonly ObservableCollection<FileOperationPlan> _plans = new();
     private CancellationTokenSource? _searchCancellation;
+    private bool _sortAscending = true;
 
     public FileWorkbenchView()
     {
@@ -54,10 +54,9 @@ public partial class FileWorkbenchView : UserControl
             DateTime? modifiedAfter = int.TryParse(days, out var value) ? DateTime.Now.AddDays(-value) : null;
             // 必须在 UI 线程先读取筛选条件；后台扫描不能直接访问 WPF 控件。
             var keyword = KeywordTextBox.Text.Trim();
-            var minimumSize = ParseSize(MinimumSizeTextBox.Text);
-            var maximumSize = ParseSize(MaximumSizeTextBox.Text);
+            var sortField = SelectedSortField;
             var results = await Task.Run(
-                () => FileWorkbenchService.Search(root, keyword, type, minimumSize, maximumSize, modifiedAfter, cancellation.Token),
+                () => FileWorkbenchService.Search(root, keyword, type, modifiedAfter, sortField, _sortAscending, cancellation.Token),
                 cancellation.Token);
             if (cancellation.IsCancellationRequested) return;
             _items.Clear(); foreach (var item in results) _items.Add(item);
@@ -76,6 +75,19 @@ public partial class FileWorkbenchView : UserControl
     }
 
     private void BatchOperationComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateOperationControls();
+
+    private void SortFieldComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (IsLoaded && Directory.Exists(SourceFolderTextBox.Text)) _ = SearchAsync();
+    }
+
+    private void SortDirectionButton_Click(object sender, RoutedEventArgs e)
+    {
+        _sortAscending = !_sortAscending;
+        SortDirectionButton.Content = _sortAscending ? "↑" : "↓";
+        SortDirectionButton.ToolTip = _sortAscending ? "当前从小到大，点击改为从大到小" : "当前从大到小，点击改为从小到大";
+        if (Directory.Exists(SourceFolderTextBox.Text)) _ = SearchAsync();
+    }
 
     private void UpdateOperationControls()
     {
@@ -131,7 +143,7 @@ public partial class FileWorkbenchView : UserControl
     }
 
     private FileBatchOperation SelectedOperation => Enum.TryParse<FileBatchOperation>((BatchOperationComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString(), out var operation) ? operation : FileBatchOperation.Rename;
-    private static double? ParseSize(string text) => double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) && value >= 0 ? value : null;
+    private FileSortField SelectedSortField => Enum.TryParse<FileSortField>((SortFieldComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString(), out var field) ? field : FileSortField.Name;
     private static int ParsePositiveInt(string text, int fallback) => int.TryParse(text, out var value) && value > 0 ? value : fallback;
     private static bool TryParseNumberDigits(string text, out int value) => int.TryParse(text, out value) && value is >= 1 and <= 6;
     private void SourceFolderTextBox_TextChanged(object sender, TextChangedEventArgs e) { if (SearchSummaryText is not null && !Directory.Exists(SourceFolderTextBox.Text ?? string.Empty)) SearchSummaryText.Text = "请选择有效文件夹"; }

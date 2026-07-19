@@ -10,9 +10,9 @@ internal static class FileWorkbenchService
         string rootDirectory,
         string keyword,
         string typeFilter,
-        double? minimumSizeMiB,
-        double? maximumSizeMiB,
         DateTime? modifiedAfter,
+        FileSortField sortField,
+        bool sortAscending,
         CancellationToken cancellationToken)
     {
         var results = new List<FileWorkbenchItem>();
@@ -28,7 +28,7 @@ internal static class FileWorkbenchService
             try
             {
                 var info = new FileInfo(path);
-                if (!Matches(info, keyword, typeFilter, minimumSizeMiB, maximumSizeMiB, modifiedAfter))
+                if (!Matches(info, keyword, typeFilter, modifiedAfter))
                 {
                     continue;
                 }
@@ -45,7 +45,7 @@ internal static class FileWorkbenchService
             }
         }
 
-        return results.OrderByDescending(item => item.ModifiedAt).ToArray();
+        return OrderResults(results, sortField, sortAscending).ToArray();
     }
 
     internal static IReadOnlyList<FileOperationPlan> CreatePlans(
@@ -112,7 +112,7 @@ internal static class FileWorkbenchService
         return new FileBatchExecutionResult(completed, failures);
     }
 
-    private static bool Matches(FileInfo info, string keyword, string typeFilter, double? minimumSizeMiB, double? maximumSizeMiB, DateTime? modifiedAfter)
+    private static bool Matches(FileInfo info, string keyword, string typeFilter, DateTime? modifiedAfter)
     {
         if (!string.IsNullOrWhiteSpace(keyword) && !info.Name.Contains(keyword, StringComparison.OrdinalIgnoreCase))
         {
@@ -125,14 +125,20 @@ internal static class FileWorkbenchService
             return false;
         }
 
-        var sizeMiB = info.Length / 1024d / 1024d;
-        if (minimumSizeMiB is not null && sizeMiB < minimumSizeMiB ||
-            maximumSizeMiB is not null && sizeMiB > maximumSizeMiB)
-        {
-            return false;
-        }
-
         return modifiedAfter is null || info.LastWriteTime >= modifiedAfter.Value;
+    }
+
+    private static IOrderedEnumerable<FileWorkbenchItem> OrderResults(IEnumerable<FileWorkbenchItem> items, FileSortField field, bool ascending)
+    {
+        return (field, ascending) switch
+        {
+            (FileSortField.Name, true) => items.OrderBy(item => item.FileName, StringComparer.OrdinalIgnoreCase),
+            (FileSortField.Name, false) => items.OrderByDescending(item => item.FileName, StringComparer.OrdinalIgnoreCase),
+            (FileSortField.Size, true) => items.OrderBy(item => item.Size).ThenBy(item => item.FileName, StringComparer.OrdinalIgnoreCase),
+            (FileSortField.Size, false) => items.OrderByDescending(item => item.Size).ThenBy(item => item.FileName, StringComparer.OrdinalIgnoreCase),
+            (FileSortField.Modified, true) => items.OrderBy(item => item.ModifiedAt).ThenBy(item => item.FileName, StringComparer.OrdinalIgnoreCase),
+            _ => items.OrderByDescending(item => item.ModifiedAt).ThenBy(item => item.FileName, StringComparer.OrdinalIgnoreCase)
+        };
     }
 
     internal static string GetCategory(string extension)
@@ -179,6 +185,13 @@ internal enum FileBatchOperation
     ChangeExtension,
     Classify,
     Move
+}
+
+internal enum FileSortField
+{
+    Name,
+    Size,
+    Modified
 }
 
 public sealed record FileWorkbenchItem(string FullPath, string FileName, string Extension, long Size, DateTime ModifiedAt)
