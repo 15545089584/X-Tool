@@ -23,6 +23,8 @@ internal sealed class MediaQueueItem : INotifyPropertyChanged
     public string FileName { get; }
     public string Format { get; }
     public string FileSize { get; }
+    public string DurationDisplay { get; private set; } = "--:--";
+    public string CodecDisplay { get; private set; } = "--";
     public MediaProbeInfo? Probe { get; private set; }
 
     public string Status
@@ -47,6 +49,10 @@ internal sealed class MediaQueueItem : INotifyPropertyChanged
     {
         Probe = probe;
         Status = "等待转换";
+        DurationDisplay = FormatDuration(probe.Duration);
+        CodecDisplay = string.IsNullOrWhiteSpace(probe.Codec) ? "未知" : probe.Codec;
+        OnPropertyChanged(nameof(DurationDisplay));
+        OnPropertyChanged(nameof(CodecDisplay));
         Details = isVideo
             ? $"{probe.Width} × {probe.Height} · {probe.FramesPerSecond:0.##} FPS · {probe.Codec} · {FormatDuration(probe.Duration)}"
             : $"{FormatDuration(probe.Duration)} · {probe.Codec} · {probe.SampleRate} Hz · {FormatChannels(probe.Channels)}";
@@ -60,6 +66,9 @@ internal sealed class MediaQueueItem : INotifyPropertyChanged
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
+    private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+
     private void SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
     {
         if (EqualityComparer<T>.Default.Equals(field, value))
@@ -68,7 +77,7 @@ internal sealed class MediaQueueItem : INotifyPropertyChanged
         }
 
         field = value;
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        OnPropertyChanged(propertyName);
     }
 
     private static string FormatChannels(int channels) => channels switch

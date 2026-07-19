@@ -35,11 +35,55 @@
             <Setter Property="FontWeight" Value="SemiBold" />
         </Style>
         <Style x:Key="GlassCombo" TargetType="ComboBox">
-            <Setter Property="Height" Value="40" />
-            <Setter Property="Padding" Value="12,0" />
-            <Setter Property="Background" Value="#A8FFFFFF" />
-            <Setter Property="BorderBrush" Value="#B7D7EAF8" />
+            <Setter Property="Height" Value="44" />
+            <Setter Property="Background" Value="#BFFFFFFF" />
+            <Setter Property="BorderBrush" Value="#ABCBE7F8" />
             <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="#405D78" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="ItemContainerStyle">
+                <Setter.Value>
+                    <Style TargetType="ComboBoxItem">
+                        <Setter Property="Padding" Value="13,10" />
+                        <Setter Property="Background" Value="Transparent" />
+                        <Setter Property="Foreground" Value="#405D78" />
+                        <Style.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#DCEBFF" /></Trigger>
+                            <Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="#CEE0FF" /></Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <ToggleButton x:Name="ToggleButton" Background="Transparent" BorderThickness="0" ClickMode="Press" IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border x:Name="ComboRoot" Background="#BFFFFFFF" BorderBrush="#ABCBE7F8" BorderThickness="1" CornerRadius="11">
+                                            <Grid>
+                                                <ContentPresenter Margin="13,0,40,0" VerticalAlignment="Center" Content="{Binding SelectionBoxItem, RelativeSource={RelativeSource AncestorType=ComboBox}}" />
+                                                <TextBlock Margin="0,0,14,0" HorizontalAlignment="Right" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#6082A7" Text="&#xE70D;" />
+                                            </Grid>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ComboRoot" Property="Background" Value="#EAF3FF" /></Trigger>
+                                            <Trigger Property="IsChecked" Value="True"><Setter TargetName="ComboRoot" Property="Background" Value="#DCEBFF" /></Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                            <Popup x:Name="PART_Popup" AllowsTransparency="True" Focusable="False" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" PopupAnimation="Fade">
+                                <Border Width="{Binding ActualWidth, ElementName=ToggleButton}" Margin="0,5,0,0" Padding="5" Background="#F4FBFFFF" BorderBrush="#B5D1E9FA" BorderThickness="1" CornerRadius="11">
+                                    <Border.Effect><DropShadowEffect BlurRadius="14" ShadowDepth="3" Direction="270" Opacity="0.16" Color="#456886" /></Border.Effect>
+                                    <ScrollViewer MaxHeight="190" CanContentScroll="True"><StackPanel IsItemsHost="True" /></ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
         <Style x:Key="ModeRadio" TargetType="RadioButton">
             <Setter Property="Margin" Value="0,0,8,0" />
@@ -67,6 +111,48 @@
             <Setter Property="Foreground" Value="#5B86FF" />
             <Setter Property="BorderThickness" Value="0" />
         </Style>
+        <Style x:Key="GlassExpander" TargetType="Expander">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Expander">
+                        <StackPanel>
+                            <ToggleButton x:Name="HeaderButton" IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" Background="Transparent" BorderThickness="0" Cursor="Hand">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border x:Name="HeaderRoot" Padding="12,10" Background="#75F7FBFF" BorderBrush="#B8D8EAF8" BorderThickness="1" CornerRadius="11">
+                                            <Grid>
+                                                <ContentPresenter VerticalAlignment="Center" />
+                                                <TextBlock x:Name="Arrow" HorizontalAlignment="Right" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#5C7C9B" Text="&#xE70D;" />
+                                            </Grid>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="HeaderRoot" Property="Background" Value="#C9ECF5FF" /></Trigger>
+                                            <Trigger Property="IsChecked" Value="True"><Setter TargetName="Arrow" Property="Text" Value="&#xE70E;" /><Setter TargetName="HeaderRoot" Property="Background" Value="#B8E7F1FF" /></Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                                <ContentPresenter Content="{TemplateBinding Header}" />
+                            </ToggleButton>
+                            <ContentPresenter x:Name="ExpandContent" Margin="0,8,0,0" ContentSource="Content" Visibility="Collapsed" />
+                        </StackPanel>
+                        <ControlTemplate.Triggers><Trigger Property="IsExpanded" Value="True"><Setter TargetName="ExpandContent" Property="Visibility" Value="Visible" /></Trigger></ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="GlassCheckBox" TargetType="CheckBox">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Border x:Name="CheckRoot" Padding="11,9" Background="#9AFFFFFF" BorderBrush="#B7D7EAF8" BorderThickness="1" CornerRadius="10">
+                            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="22" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><Border x:Name="Box" Width="17" Height="17" HorizontalAlignment="Left" Background="#EAF2F9" BorderBrush="#94B8D5EA" BorderThickness="1" CornerRadius="5"><TextBlock x:Name="Check" HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="10" Foreground="White" Text="&#xE73E;" Visibility="Collapsed" /></Border><ContentPresenter Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center" /></Grid>
+                        </Border>
+                        <ControlTemplate.Triggers><Trigger Property="IsChecked" Value="True"><Setter TargetName="Box" Property="Background" Value="#4D7CFE" /><Setter TargetName="Box" Property="BorderBrush" Value="#4D7CFE" /><Setter TargetName="Check" Property="Visibility" Value="Visible" /></Trigger><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="CheckRoot" Property="Background" Value="#D8FFFFFF" /></Trigger></ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
 
     <Grid>
@@ -85,33 +171,38 @@
                         <TextBlock Margin="0,7,0,0" FontSize="11" Foreground="{StaticResource MutedBrush}" Text="MP3、WAV、M4A、AAC、FLAC、OGG、OPUS、WMA" />
                         <TextBlock Margin="0,5,0,0" FontSize="10" Foreground="#8A9AAC" Text="支持多文件队列，原文件不会被覆盖" />
                     </StackPanel>
-                    <Button Grid.Column="3" Width="108" Style="{StaticResource PrimaryButton}" Click="SelectFiles_Click" Content="选择音频" />
+                    <Button Grid.Column="3" Width="128" Height="48" Style="{StaticResource PrimaryButton}" Click="SelectFiles_Click"><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="White" Text="选择音频" /></Button>
                 </Grid>
             </Border>
 
             <Border Grid.Row="2" Padding="16" Background="#D8FFFFFF" BorderBrush="#E7FFFFFF" BorderThickness="1" CornerRadius="17">
                 <Grid>
                     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-                    <Grid>
+                    <Grid Margin="12,0">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="88" /><ColumnDefinition Width="2.1*" /><ColumnDefinition Width="0.65*" /><ColumnDefinition Width="0.8*" /><ColumnDefinition Width="0.75*" /><ColumnDefinition Width="0.9*" /><ColumnDefinition Width="0.85*" /></Grid.ColumnDefinitions>
                         <TextBlock FontSize="15" FontWeight="SemiBold" Text="文件列表" />
-                        <TextBlock HorizontalAlignment="Right" FontSize="11" Foreground="{StaticResource MutedBrush}" Text="文件名 · 格式 · 大小 · 时长 · 编码 · 状态" />
+                        <TextBlock Grid.Column="1" HorizontalAlignment="Left" FontSize="10" Foreground="{StaticResource MutedBrush}" Text="文件名" />
+                        <TextBlock Grid.Column="2" HorizontalAlignment="Center" FontSize="10" Foreground="{StaticResource MutedBrush}" Text="格式" />
+                        <TextBlock Grid.Column="3" HorizontalAlignment="Center" FontSize="10" Foreground="{StaticResource MutedBrush}" Text="大小" />
+                        <TextBlock Grid.Column="4" HorizontalAlignment="Center" FontSize="10" Foreground="{StaticResource MutedBrush}" Text="时长" />
+                        <TextBlock Grid.Column="5" HorizontalAlignment="Center" FontSize="10" Foreground="{StaticResource MutedBrush}" Text="编码" />
+                        <TextBlock Grid.Column="6" HorizontalAlignment="Center" FontSize="10" Foreground="{StaticResource MutedBrush}" Text="状态" />
                     </Grid>
                     <ListBox x:Name="FileList" Grid.Row="2" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                         <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Margin" Value="0,0,0,8" /><Setter Property="Background" Value="Transparent" /></Style></ListBox.ItemContainerStyle>
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <Border Padding="12" Background="#79F4F9FF" BorderBrush="#A6D6E7F6" BorderThickness="1" CornerRadius="11">
+                                <Border Padding="12,11" Background="#79F4F9FF" BorderBrush="#A6D6E7F6" BorderThickness="1" CornerRadius="11">
                                     <Grid>
-                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="130" /></Grid.ColumnDefinitions>
-                                        <StackPanel>
-                                            <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#304A63" Text="{Binding FileName}" TextTrimming="CharacterEllipsis" />
-                                            <TextBlock Margin="0,5,0,0" FontSize="10" Foreground="#71869B" Text="{Binding Details}" TextTrimming="CharacterEllipsis" />
-                                            <ProgressBar Margin="0,9,0,0" Style="{StaticResource GlassProgress}" Maximum="100" Value="{Binding Progress}" />
-                                        </StackPanel>
-                                        <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center">
-                                            <TextBlock HorizontalAlignment="Right" FontSize="10" Foreground="#5279A4"><Run Text="{Binding Format}" /><Run Text="  ·  " /><Run Text="{Binding FileSize}" /></TextBlock>
-                                            <TextBlock Margin="0,5,0,0" HorizontalAlignment="Right" FontSize="11" FontWeight="SemiBold" Foreground="#4D7CFE" Text="{Binding Status}" />
-                                        </StackPanel>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="88" /><ColumnDefinition Width="2.1*" /><ColumnDefinition Width="0.65*" /><ColumnDefinition Width="0.8*" /><ColumnDefinition Width="0.75*" /><ColumnDefinition Width="0.9*" /><ColumnDefinition Width="0.85*" /></Grid.ColumnDefinitions>
+                                        <Border Width="30" Height="30" HorizontalAlignment="Left" VerticalAlignment="Top" Background="#DDEBFF" CornerRadius="9"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="15" Foreground="#4D7CFE" Text="&#xE8D6;" /></Border>
+                                        <StackPanel Grid.Column="1" Margin="0,0,10,0"><TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#304A63" Text="{Binding FileName}" TextTrimming="CharacterEllipsis" /><TextBlock Margin="0,4,0,0" FontSize="9" Foreground="#71869B" Text="{Binding Details}" TextTrimming="CharacterEllipsis" /></StackPanel>
+                                        <TextBlock Grid.Column="2" HorizontalAlignment="Center" VerticalAlignment="Top" FontSize="10" Foreground="#5279A4" Text="{Binding Format}" />
+                                        <TextBlock Grid.Column="3" HorizontalAlignment="Center" VerticalAlignment="Top" FontSize="10" Foreground="#5279A4" Text="{Binding FileSize}" />
+                                        <TextBlock Grid.Column="4" HorizontalAlignment="Center" VerticalAlignment="Top" FontSize="10" Foreground="#5279A4" Text="{Binding DurationDisplay}" />
+                                        <TextBlock Grid.Column="5" HorizontalAlignment="Center" VerticalAlignment="Top" FontSize="10" Foreground="#5279A4" Text="{Binding CodecDisplay}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Grid.Column="6" HorizontalAlignment="Center" VerticalAlignment="Top" FontSize="10" FontWeight="SemiBold" Foreground="#4D7CFE" Text="{Binding Status}" />
+                                        <ProgressBar Grid.Column="1" Grid.ColumnSpan="6" Margin="0,31,4,0" Style="{StaticResource GlassProgress}" Maximum="100" Value="{Binding Progress}" />
                                     </Grid>
                                 </Border>
                             </DataTemplate>
@@ -142,16 +233,16 @@
                     <StackPanel>
                         <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#526F8B" Text="音质模式" />
                         <UniformGrid Margin="0,9,0,0" Rows="1" Columns="4">
-                            <RadioButton x:Name="HighQualityRadio" GroupName="AudioQuality" Style="{StaticResource ModeRadio}" Content="高质量" />
-                            <RadioButton x:Name="StandardQualityRadio" GroupName="AudioQuality" Style="{StaticResource ModeRadio}" Content="标准" IsChecked="True" />
-                            <RadioButton x:Name="SmallQualityRadio" GroupName="AudioQuality" Style="{StaticResource ModeRadio}" Content="小文件" />
-                            <RadioButton x:Name="VoiceQualityRadio" GroupName="AudioQuality" Style="{StaticResource ModeRadio}" Content="语音" />
+                            <RadioButton x:Name="HighQualityRadio" GroupName="AudioQuality" Style="{StaticResource ModeRadio}" Content="高质量" Checked="QualityMode_Checked" />
+                            <RadioButton x:Name="StandardQualityRadio" GroupName="AudioQuality" Style="{StaticResource ModeRadio}" Content="标准" IsChecked="True" Checked="QualityMode_Checked" />
+                            <RadioButton x:Name="SmallQualityRadio" GroupName="AudioQuality" Style="{StaticResource ModeRadio}" Content="小文件" Checked="QualityMode_Checked" />
+                            <RadioButton x:Name="VoiceQualityRadio" GroupName="AudioQuality" Style="{StaticResource ModeRadio}" Content="语音" Checked="QualityMode_Checked" />
                         </UniformGrid>
-                        <TextBlock Margin="0,8,0,0" FontSize="10" Foreground="#8495A7" Text="320 / 192 / 128 / 64 kbps，选择后自动应用" />
+                        <TextBlock x:Name="AudioQualityHintText" Margin="0,9,0,0" FontSize="11" Foreground="#6D8297" TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>
 
-                <Expander Grid.Row="6" IsExpanded="False">
+                <Expander Grid.Row="6" Style="{StaticResource GlassExpander}" IsExpanded="False">
                     <Expander.Header><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#526F8B" Text="高级设置" /></Expander.Header>
                     <Border Margin="0,8,0,0" Padding="13" Background="#55EAF3FF" BorderBrush="#ADD7EAF7" BorderThickness="1" CornerRadius="12">
                         <Grid>
@@ -160,7 +251,7 @@
                             <StackPanel><TextBlock FontSize="10" Foreground="{StaticResource MutedBrush}" Text="比特率" /><ComboBox x:Name="BitRateCombo" Margin="0,5,0,0" Style="{StaticResource GlassCombo}" SelectedIndex="0"><ComboBoxItem Tag="">跟随音质模式</ComboBoxItem><ComboBoxItem Tag="64">64 kbps</ComboBoxItem><ComboBoxItem Tag="128">128 kbps</ComboBoxItem><ComboBoxItem Tag="192">192 kbps</ComboBoxItem><ComboBoxItem Tag="256">256 kbps</ComboBoxItem><ComboBoxItem Tag="320">320 kbps</ComboBoxItem></ComboBox></StackPanel>
                             <StackPanel Grid.Column="2"><TextBlock FontSize="10" Foreground="{StaticResource MutedBrush}" Text="采样率" /><ComboBox x:Name="SampleRateCombo" Margin="0,5,0,0" Style="{StaticResource GlassCombo}" SelectedIndex="0"><ComboBoxItem Tag="">跟随源文件</ComboBoxItem><ComboBoxItem Tag="44100">44.1 kHz</ComboBoxItem><ComboBoxItem Tag="48000">48 kHz</ComboBoxItem><ComboBoxItem Tag="96000">96 kHz</ComboBoxItem></ComboBox></StackPanel>
                             <StackPanel Grid.Row="2"><TextBlock FontSize="10" Foreground="{StaticResource MutedBrush}" Text="声道" /><ComboBox x:Name="ChannelsCombo" Margin="0,5,0,0" Style="{StaticResource GlassCombo}" SelectedIndex="0"><ComboBoxItem Tag="">跟随源文件</ComboBoxItem><ComboBoxItem Tag="1">单声道</ComboBoxItem><ComboBoxItem Tag="2">双声道</ComboBoxItem></ComboBox></StackPanel>
-                            <CheckBox x:Name="PreserveMetadataCheck" Grid.Row="2" Grid.Column="2" VerticalAlignment="Center" IsChecked="True" Content="保留元数据" />
+                            <CheckBox x:Name="PreserveMetadataCheck" Grid.Row="2" Grid.Column="2" Style="{StaticResource GlassCheckBox}" VerticalAlignment="Center" IsChecked="True" Content="保留元数据" />
                         </Grid>
                     </Border>
                 </Expander>
@@ -180,7 +271,7 @@
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="10" /><ColumnDefinition Width="*" /><ColumnDefinition Width="10" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                     <Button Style="{StaticResource GlassButton}" Click="Clear_Click" Content="清空列表" />
                     <Button x:Name="CancelButton" Grid.Column="2" Style="{StaticResource GlassButton}" Click="Cancel_Click" Content="取消转换" IsEnabled="False" />
-                    <Button x:Name="StartButton" Grid.Column="4" Style="{StaticResource PrimaryButton}" Click="Start_Click" Content="开始转换" />
+                    <Button x:Name="StartButton" Grid.Column="4" Style="{StaticResource PrimaryButton}" Click="Start_Click"><TextBlock FontWeight="SemiBold" Foreground="White" Text="开始转换" /></Button>
                 </Grid>
             </Grid>
         </Border>

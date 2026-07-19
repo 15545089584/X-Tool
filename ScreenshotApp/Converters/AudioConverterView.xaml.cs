@@ -28,6 +28,7 @@ public partial class AudioConverterView : UserControl
         EngineStatusText.Foreground = _service.IsAvailable
             ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(62, 155, 105))
             : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(194, 126, 58));
+        UpdateQualityHint();
     }
 
     private void SelectFiles_Click(object sender, RoutedEventArgs e)
@@ -191,6 +192,25 @@ public partial class AudioConverterView : UserControl
     }
 
     private void Cancel_Click(object sender, RoutedEventArgs e) => _conversionCancellation?.Cancel();
+
+    private void QualityMode_Checked(object sender, RoutedEventArgs e)
+    {
+        if (AudioQualityHintText is not null)
+        {
+            UpdateQualityHint();
+        }
+    }
+
+    private void UpdateQualityHint()
+    {
+        AudioQualityHintText.Text = HighQualityRadio.IsChecked == true
+            ? "320 kbps · 优先保留声音细节，文件体积较大"
+            : SmallQualityRadio.IsChecked == true
+                ? "128 kbps · 兼顾清晰度与更小体积"
+                : VoiceQualityRadio.IsChecked == true
+                    ? "64 kbps · 适合语音、课程和会议录音"
+                    : "192 kbps · 日常播放与文件大小的平衡选择";
+    }
 
     private void Clear_Click(object sender, RoutedEventArgs e)
     {
