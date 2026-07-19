@@ -1079,7 +1079,7 @@ public partial class MainWindow : Window
         {
             _voiceInputHotKeyMonitor = new RightAltHotKeyMonitor(listenRightAlt: false);
             _voiceInputHotKeyMonitor.EscapePressed += VoiceInputHotKeyMonitor_EscapePressed;
-            _voiceInputHotKeyMonitor.PPressed += VoiceInputHotKeyMonitor_PPressed;
+            _voiceInputHotKeyMonitor.TranslationPressed += VoiceInputHotKeyMonitor_TranslationPressed;
             _voiceInputHotKeyRegistered = RegisterStandardShortcut(handle, NativeMethods.VoiceHotKeyId, _voiceInputShortcut);
             return;
         }
@@ -1087,7 +1087,7 @@ public partial class MainWindow : Window
         _voiceInputHotKeyMonitor = new RightAltHotKeyMonitor();
         _voiceInputHotKeyMonitor.Pressed += VoiceInputHotKeyMonitor_Pressed;
         _voiceInputHotKeyMonitor.EscapePressed += VoiceInputHotKeyMonitor_EscapePressed;
-        _voiceInputHotKeyMonitor.PPressed += VoiceInputHotKeyMonitor_PPressed;
+        _voiceInputHotKeyMonitor.TranslationPressed += VoiceInputHotKeyMonitor_TranslationPressed;
         _voiceInputHotKeyRegistered = _voiceInputHotKeyMonitor.IsInstalled;
         if (!_voiceInputHotKeyRegistered)
         {
@@ -1113,7 +1113,7 @@ public partial class MainWindow : Window
         Dispatcher.BeginInvoke(CancelVoiceInput);
     }
 
-    private void VoiceInputHotKeyMonitor_PPressed(object? sender, EventArgs e)
+    private void VoiceInputHotKeyMonitor_TranslationPressed(object? sender, EventArgs e)
     {
         Dispatcher.BeginInvoke(() => _ = StartVoiceTranslationPreviewAsync());
     }

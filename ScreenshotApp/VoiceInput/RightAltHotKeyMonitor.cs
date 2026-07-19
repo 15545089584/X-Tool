@@ -13,14 +13,15 @@ internal sealed class RightAltHotKeyMonitor : IDisposable
     private const uint VkMenu = 0x12;
     private const uint VkRightMenu = 0xA5;
     private const uint VkEscape = 0x1B;
-    private const uint VkP = 0x50;
+    private const uint VkControl = 0x11;
+    private const uint VkRightControl = 0xA3;
     private const uint LlkhfExtended = 0x01;
     private readonly HookProcedure _procedure;
     private readonly bool _listenRightAlt;
     private IntPtr _hook;
     private int _isRightAltDown;
     private int _isEscapeDown;
-    private int _isPDown;
+    private int _isTranslationKeyDown;
 
     internal RightAltHotKeyMonitor(bool listenRightAlt = true)
     {
@@ -33,7 +34,7 @@ internal sealed class RightAltHotKeyMonitor : IDisposable
 
     internal event EventHandler? Pressed;
     internal event EventHandler? EscapePressed;
-    internal event EventHandler? PPressed;
+    internal event EventHandler? TranslationPressed;
 
     public void Dispose()
     {
@@ -62,16 +63,16 @@ internal sealed class RightAltHotKeyMonitor : IDisposable
                     Interlocked.Exchange(ref _isEscapeDown, 0);
                 }
             }
-            else if (hookData.VirtualKeyCode == VkP)
+            else if (IsRightControl(hookData))
             {
                 if ((keyboardMessage == WmKeyDown || keyboardMessage == WmSysKeyDown) &&
-                    Interlocked.Exchange(ref _isPDown, 1) == 0)
+                    Interlocked.Exchange(ref _isTranslationKeyDown, 1) == 0)
                 {
-                    PPressed?.Invoke(this, EventArgs.Empty);
+                    TranslationPressed?.Invoke(this, EventArgs.Empty);
                 }
                 else if (keyboardMessage == WmKeyUp || keyboardMessage == WmSysKeyUp)
                 {
-                    Interlocked.Exchange(ref _isPDown, 0);
+                    Interlocked.Exchange(ref _isTranslationKeyDown, 0);
                 }
             }
             else if (_listenRightAlt && IsRightAlt(hookData))
@@ -95,6 +96,12 @@ internal sealed class RightAltHotKeyMonitor : IDisposable
     {
         return data.VirtualKeyCode == VkRightMenu ||
                (data.VirtualKeyCode == VkMenu && (data.Flags & LlkhfExtended) != 0);
+    }
+
+    private static bool IsRightControl(KeyboardLowLevelHookData data)
+    {
+        return data.VirtualKeyCode == VkRightControl ||
+               (data.VirtualKeyCode == VkControl && (data.Flags & LlkhfExtended) != 0);
     }
 
     private delegate IntPtr HookProcedure(int code, IntPtr message, IntPtr data);
