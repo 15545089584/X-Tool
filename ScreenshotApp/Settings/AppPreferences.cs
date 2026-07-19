@@ -30,6 +30,12 @@ public sealed class AppPreferences
 
     public bool VoiceInputPasteAutomatically { get; set; } = true;
 
+    public string ScreenshotShortcut { get; set; } = "Ctrl+Shift+A";
+
+    public string ClipboardShortcut { get; set; } = "Ctrl+Shift+V";
+
+    public string VoiceInputShortcut { get; set; } = "RightAlt";
+
     public static AppPreferences Load()
     {
         try

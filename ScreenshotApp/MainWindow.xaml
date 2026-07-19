@@ -503,7 +503,7 @@
                                         <StackPanel>
                                             <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#E6F0FF" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#2D7DFF" Text="&#xE722;" /></Border>
                                             <TextBlock Margin="0,18,0,0" FontSize="17" FontWeight="SemiBold" Text="开始截图" />
-                                            <TextBlock Margin="0,6,0,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="Ctrl + Shift + A" />
+                                            <TextBlock x:Name="HomeScreenshotShortcutText" Margin="0,6,0,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" />
                                         </StackPanel>
                                     </Button>
                                     <Button Grid.Column="2" Style="{StaticResource ActionCardStyle}" Tag="长截图" Click="CaptureAction_Click">
@@ -857,30 +857,30 @@
                                 </Grid.RowDefinitions>
                                 <StackPanel>
                                     <TextBlock FontSize="28" FontWeight="SemiBold" Text="快捷键" />
-                                    <TextBlock Margin="0,8,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}" Text="为截图和剪贴板操作设置全局快捷键" />
+                                    <TextBlock Margin="0,8,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}" Text="点击快捷键后按下新组合；保存前会检查应用内、系统保留及已注册的全局快捷键冲突" />
                                 </StackPanel>
                                 <Border Grid.Row="2" Background="{StaticResource GlassCardBrush}"
                                         BorderBrush="#5AFFFFFF" BorderThickness="1" CornerRadius="14">
                                     <StackPanel>
                                         <Grid Height="72" Margin="22,0">
                                             <TextBlock VerticalAlignment="Center" FontSize="15" Text="截图" />
-                                            <Button HorizontalAlignment="Right" VerticalAlignment="Center" Padding="14,8"
+                                            <Button x:Name="ScreenshotShortcutButton" HorizontalAlignment="Right" VerticalAlignment="Center" Padding="14,8"
                                                     Background="#AFFFFFFF" BorderBrush="#CFFFFFFF" BorderThickness="1"
-                                                    Content="Ctrl + Shift + A" Click="ShortcutButton_Click" />
+                                                    Click="ShortcutButton_Click" PreviewKeyDown="ShortcutButton_PreviewKeyDown" Tag="Screenshot" />
                                         </Grid>
                                         <Border Height="1" Background="#55FFFFFF" />
                                         <Grid Height="72" Margin="22,0">
                                             <TextBlock VerticalAlignment="Center" FontSize="15" Text="剪贴板选择粘贴" />
-                                            <Border HorizontalAlignment="Right" VerticalAlignment="Center" Padding="14,8"
-                                                    Background="#AFFFFFFF" BorderBrush="#CFFFFFFF" BorderThickness="1" CornerRadius="8">
-                                                <TextBlock Foreground="#43617E" Text="Ctrl + Shift + V" />
-                                            </Border>
+                                            <Button x:Name="ClipboardShortcutButton" HorizontalAlignment="Right" VerticalAlignment="Center" Padding="14,8"
+                                                    Background="#AFFFFFFF" BorderBrush="#CFFFFFFF" BorderThickness="1"
+                                                    Click="ShortcutButton_Click" PreviewKeyDown="ShortcutButton_PreviewKeyDown" Tag="Clipboard" />
                                         </Grid>
                                         <Border Height="1" Background="#55FFFFFF" />
                                         <Grid Height="72" Margin="22,0">
-                                            <StackPanel VerticalAlignment="Center"><TextBlock FontSize="15" Text="本地语音输入" /><TextBlock Margin="0,4,0,0" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}" Text="按右 Alt 开始，说完停顿或再次按下即可输入" /></StackPanel>
-                                            <Border HorizontalAlignment="Right" VerticalAlignment="Center" Padding="14,8" Background="#AFFFFFFF" BorderBrush="#CFFFFFFF" BorderThickness="1" CornerRadius="8"><TextBlock Foreground="#43617E" Text="右 Alt" /></Border>
+                                            <StackPanel VerticalAlignment="Center"><TextBlock FontSize="15" Text="本地语音输入" /><TextBlock Margin="0,4,0,0" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}" Text="按右 Alt 或自定义组合键开始、结束语音输入" /></StackPanel>
+                                            <Button x:Name="VoiceShortcutButton" HorizontalAlignment="Right" VerticalAlignment="Center" Padding="14,8" Background="#AFFFFFFF" BorderBrush="#CFFFFFFF" BorderThickness="1" Click="ShortcutButton_Click" PreviewKeyDown="ShortcutButton_PreviewKeyDown" Tag="Voice" />
                                         </Grid>
+                                        <TextBlock x:Name="ShortcutCaptureStatusText" Margin="22,0,22,16" FontSize="11" Foreground="#5E819F" Text="提示：Windows 无法枚举未注册全局热键的第三方键盘钩子，X-Tool 会验证可注册的系统级冲突。" TextWrapping="Wrap" />
                                     </StackPanel>
                                 </Border>
                             </Grid>

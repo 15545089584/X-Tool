@@ -17,6 +17,7 @@ using ScreenshotApp.Converters;
 using ScreenshotApp.History;
 using ScreenshotApp.Recording;
 using ScreenshotApp.Settings;
+using ScreenshotApp.Shortcuts;
 using ScreenshotApp.VoiceInput;
 
 namespace ScreenshotApp;
@@ -58,11 +59,18 @@ public partial class MainWindow : Window
     private string _voiceInputLastHypothesis = string.Empty;
     private readonly Queue<char> _voiceInputPendingCharacters = new();
     private readonly DispatcherTimer _voiceInputTypingTimer;
+    private GlobalShortcut _screenshotShortcut;
+    private GlobalShortcut _clipboardShortcut;
+    private GlobalShortcut _voiceInputShortcut;
+    private string? _shortcutBeingEdited;
 
     public MainWindow()
     {
         InitializeComponent();
         _historyStore = new ScreenshotHistoryStore(_preferences);
+        _ = GlobalShortcut.TryParse(_preferences.ScreenshotShortcut, GlobalShortcut.ScreenshotDefault, out _screenshotShortcut);
+        _ = GlobalShortcut.TryParse(_preferences.ClipboardShortcut, GlobalShortcut.ClipboardDefault, out _clipboardShortcut);
+        _ = GlobalShortcut.TryParse(_preferences.VoiceInputShortcut, GlobalShortcut.VoiceDefault, out _voiceInputShortcut);
         StickerTopmostCheckBox.IsChecked = _preferences.StickerTopmost;
         VoiceInputEnabledCheckBox.IsChecked = _preferences.VoiceInputEnabled;
         VoiceInputPasteAutomaticallyCheckBox.IsChecked = _preferences.VoiceInputPasteAutomatically;
@@ -103,6 +111,7 @@ public partial class MainWindow : Window
             Interval = TimeSpan.FromMilliseconds(34)
         };
         _voiceInputTypingTimer.Tick += VoiceInputTypingTimer_Tick;
+        UpdateShortcutButtons();
 
         SourceInitialized += MainWindow_SourceInitialized;
         Loaded += MainWindow_Loaded;
@@ -277,31 +286,22 @@ public partial class MainWindow : Window
         _windowSource = HwndSource.FromHwnd(handle);
         _windowSource?.AddHook(WindowMessageHook);
 
-        var virtualKey = (uint)KeyInterop.VirtualKeyFromKey(Key.A);
-        _hotKeyRegistered = NativeMethods.RegisterHotKey(
-            handle,
-            NativeMethods.HotKeyId,
-            NativeMethods.ModControl | NativeMethods.ModShift,
-            virtualKey);
-        _clipboardHotKeyRegistered = NativeMethods.RegisterHotKey(
-            handle,
-            NativeMethods.ClipboardHotKeyId,
-            NativeMethods.ModControl | NativeMethods.ModShift,
-            (uint)KeyInterop.VirtualKeyFromKey(Key.V));
+        _hotKeyRegistered = RegisterStandardShortcut(handle, NativeMethods.HotKeyId, _screenshotShortcut);
+        _clipboardHotKeyRegistered = RegisterStandardShortcut(handle, NativeMethods.ClipboardHotKeyId, _clipboardShortcut);
         RegisterVoiceInputHotKey(handle);
         _clipboardListenerRegistered = NativeMethods.AddClipboardFormatListener(handle);
 
         if (!_hotKeyRegistered)
         {
-            Dispatcher.BeginInvoke(() => ShowToast("Ctrl + Shift + A 已被其他程序占用"), DispatcherPriority.Loaded);
+            Dispatcher.BeginInvoke(() => ShowToast($"{_screenshotShortcut.DisplayText} 已被其他程序占用"), DispatcherPriority.Loaded);
         }
         if (!_clipboardHotKeyRegistered)
         {
-            Dispatcher.BeginInvoke(() => ShowToast("Ctrl + Shift + V 已被其他程序占用"), DispatcherPriority.Loaded);
+            Dispatcher.BeginInvoke(() => ShowToast($"{_clipboardShortcut.DisplayText} 已被其他程序占用"), DispatcherPriority.Loaded);
         }
         if (_preferences.VoiceInputEnabled && !_voiceInputHotKeyRegistered)
         {
-            Dispatcher.BeginInvoke(() => ShowToast("右 Alt 已被其他程序占用"), DispatcherPriority.Loaded);
+            Dispatcher.BeginInvoke(() => ShowToast($"{_voiceInputShortcut.DisplayText} 已被其他程序占用"), DispatcherPriority.Loaded);
         }
     }
 
@@ -319,6 +319,10 @@ public partial class MainWindow : Window
         if (_clipboardHotKeyRegistered)
         {
             NativeMethods.UnregisterHotKey(_windowSource.Handle, NativeMethods.ClipboardHotKeyId);
+        }
+        if (_voiceInputHotKeyRegistered && !_voiceInputShortcut.IsRightAlt)
+        {
+            NativeMethods.UnregisterHotKey(_windowSource.Handle, NativeMethods.VoiceHotKeyId);
         }
         _voiceInputHotKeyMonitor?.Dispose();
         _voiceInputHotKeyMonitor = null;
@@ -399,6 +403,11 @@ public partial class MainWindow : Window
         {
             handled = true;
             _ = ShowClipboardPickerAsync();
+        }
+        else if (message == NativeMethods.WmHotKey && wParam.ToInt32() == NativeMethods.VoiceHotKeyId)
+        {
+            handled = true;
+            _ = ToggleVoiceInputAsync();
         }
         return IntPtr.Zero;
     }
@@ -1070,6 +1079,12 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (!_voiceInputShortcut.IsRightAlt)
+        {
+            _voiceInputHotKeyRegistered = RegisterStandardShortcut(handle, NativeMethods.VoiceHotKeyId, _voiceInputShortcut);
+            return;
+        }
+
         _voiceInputHotKeyMonitor = new RightAltHotKeyMonitor();
         _voiceInputHotKeyMonitor.Pressed += VoiceInputHotKeyMonitor_Pressed;
         _voiceInputHotKeyRegistered = _voiceInputHotKeyMonitor.IsInstalled;
@@ -1079,6 +1094,13 @@ public partial class MainWindow : Window
             _voiceInputHotKeyMonitor = null;
         }
     }
+
+    private static bool RegisterStandardShortcut(IntPtr handle, int hotKeyId, GlobalShortcut shortcut) =>
+        shortcut.IsSupportedGlobalCombination && NativeMethods.RegisterHotKey(
+            handle,
+            hotKeyId,
+            shortcut.NativeModifiers,
+            shortcut.VirtualKey);
 
     private void VoiceInputHotKeyMonitor_Pressed(object? sender, EventArgs e)
     {
@@ -1392,6 +1414,10 @@ public partial class MainWindow : Window
             CloseVoiceInputOverlay();
             _voiceInputHotKeyMonitor?.Dispose();
             _voiceInputHotKeyMonitor = null;
+            if (_windowSource is not null && _voiceInputHotKeyRegistered && !_voiceInputShortcut.IsRightAlt)
+            {
+                NativeMethods.UnregisterHotKey(_windowSource.Handle, NativeMethods.VoiceHotKeyId);
+            }
             _voiceInputHotKeyRegistered = false;
             return;
         }
@@ -1618,7 +1644,218 @@ public partial class MainWindow : Window
 
     private void ShortcutButton_Click(object sender, RoutedEventArgs e)
     {
-        ShowToast("快捷键编辑将在全局热键模块接入后启用");
+        if (sender is not Button button || button.Tag is not string target)
+        {
+            return;
+        }
+
+        _shortcutBeingEdited = target;
+        button.Content = "请按下快捷键…";
+        ShortcutCaptureStatusText.Text = "正在监听。按 Esc 取消；右 Alt 仅可用于本地语音输入。";
+        button.Focus();
+    }
+
+    private void ShortcutButton_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (_shortcutBeingEdited is null)
+        {
+            return;
+        }
+
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        e.Handled = true;
+        if (key == Key.Escape)
+        {
+            _shortcutBeingEdited = null;
+            UpdateShortcutButtons();
+            ShortcutCaptureStatusText.Text = "已取消修改。";
+            return;
+        }
+
+        GlobalShortcut candidate;
+        if (key == Key.RightAlt && _shortcutBeingEdited == "Voice")
+        {
+            candidate = GlobalShortcut.VoiceDefault;
+        }
+        else
+        {
+            candidate = GlobalShortcut.FromKey(key, Keyboard.Modifiers);
+        }
+
+        if (!candidate.IsRightAlt && !candidate.IsSupportedGlobalCombination)
+        {
+            ShortcutCaptureStatusText.Text = "请使用 Ctrl、Shift 或 Alt 加一个非修饰键；Windows 徽标键组合不允许设置。";
+            return;
+        }
+
+        if (candidate.IsKnownWindowsReserved)
+        {
+            ShortcutCaptureStatusText.Text = "这是 Windows 保留快捷键，不能设置为 X-Tool 全局快捷键。";
+            return;
+        }
+
+        if (candidate.IsRightAlt && _shortcutBeingEdited != "Voice")
+        {
+            ShortcutCaptureStatusText.Text = "右 Alt 仅可作为本地语音输入快捷键。";
+            return;
+        }
+
+        if (!TryValidateShortcut(_shortcutBeingEdited, candidate, out var reason))
+        {
+            ShortcutCaptureStatusText.Text = reason;
+            return;
+        }
+
+        ApplyShortcut(_shortcutBeingEdited, candidate);
+        _shortcutBeingEdited = null;
+        UpdateShortcutButtons();
+        ShortcutCaptureStatusText.Text = $"已设为 {candidate.DisplayText}，未发现应用内或已注册的系统级冲突。";
+    }
+
+    private bool TryValidateShortcut(string target, GlobalShortcut candidate, out string reason)
+    {
+        reason = string.Empty;
+        var currentShortcut = target switch
+        {
+            "Screenshot" => _screenshotShortcut,
+            "Clipboard" => _clipboardShortcut,
+            _ => _voiceInputShortcut
+        };
+        if (candidate == currentShortcut)
+        {
+            return true;
+        }
+
+        var otherShortcuts = target switch
+        {
+            "Screenshot" => new[] { _clipboardShortcut, _voiceInputShortcut },
+            "Clipboard" => new[] { _screenshotShortcut, _voiceInputShortcut },
+            _ => new[] { _screenshotShortcut, _clipboardShortcut }
+        };
+        if (otherShortcuts.Contains(candidate))
+        {
+            reason = "该快捷键已被 X-Tool 的其他功能使用。";
+            return false;
+        }
+
+        if (candidate.IsRightAlt)
+        {
+            reason = "右 Alt 已设为语音快捷键。该键通过键盘监听实现，Windows 无法枚举其他软件的低级键盘钩子。";
+            return true;
+        }
+
+        if (_windowSource is null)
+        {
+            return true;
+        }
+
+        if (!NativeMethods.RegisterHotKey(
+                _windowSource.Handle,
+                NativeMethods.ShortcutProbeHotKeyId,
+                candidate.NativeModifiers,
+                candidate.VirtualKey))
+        {
+            reason = "该组合已被系统、Windows 保留快捷键或其他程序注册，无法使用。";
+            return false;
+        }
+
+        NativeMethods.UnregisterHotKey(_windowSource.Handle, NativeMethods.ShortcutProbeHotKeyId);
+        return true;
+    }
+
+    private void ApplyShortcut(string target, GlobalShortcut candidate)
+    {
+        var previous = target switch
+        {
+            "Screenshot" => _screenshotShortcut,
+            "Clipboard" => _clipboardShortcut,
+            _ => _voiceInputShortcut
+        };
+        UnregisterShortcut(target);
+        SetShortcut(target, candidate);
+        var registered = RegisterShortcut(target);
+        if (!registered && _windowSource is not null)
+        {
+            SetShortcut(target, previous);
+            _ = RegisterShortcut(target);
+            ShowToast("新快捷键注册失败，已恢复原快捷键");
+            return;
+        }
+
+        _preferences.ScreenshotShortcut = _screenshotShortcut.ToPreferenceValue();
+        _preferences.ClipboardShortcut = _clipboardShortcut.ToPreferenceValue();
+        _preferences.VoiceInputShortcut = _voiceInputShortcut.ToPreferenceValue();
+        _preferences.Save();
+    }
+
+    private void SetShortcut(string target, GlobalShortcut shortcut)
+    {
+        if (target == "Screenshot") _screenshotShortcut = shortcut;
+        else if (target == "Clipboard") _clipboardShortcut = shortcut;
+        else _voiceInputShortcut = shortcut;
+    }
+
+    private void UnregisterShortcut(string target)
+    {
+        if (_windowSource is null)
+        {
+            return;
+        }
+
+        if (target == "Screenshot" && _hotKeyRegistered)
+        {
+            NativeMethods.UnregisterHotKey(_windowSource.Handle, NativeMethods.HotKeyId);
+            _hotKeyRegistered = false;
+        }
+        else if (target == "Clipboard" && _clipboardHotKeyRegistered)
+        {
+            NativeMethods.UnregisterHotKey(_windowSource.Handle, NativeMethods.ClipboardHotKeyId);
+            _clipboardHotKeyRegistered = false;
+        }
+        else if (target == "Voice" && _voiceInputHotKeyRegistered)
+        {
+            _voiceInputHotKeyMonitor?.Dispose();
+            _voiceInputHotKeyMonitor = null;
+            if (!_voiceInputShortcut.IsRightAlt)
+            {
+                NativeMethods.UnregisterHotKey(_windowSource.Handle, NativeMethods.VoiceHotKeyId);
+            }
+
+            _voiceInputHotKeyRegistered = false;
+        }
+    }
+
+    private bool RegisterShortcut(string target)
+    {
+        if (_windowSource is null)
+        {
+            return true;
+        }
+
+        if (target == "Screenshot")
+        {
+            return _hotKeyRegistered = RegisterStandardShortcut(_windowSource.Handle, NativeMethods.HotKeyId, _screenshotShortcut);
+        }
+        if (target == "Clipboard")
+        {
+            return _clipboardHotKeyRegistered = RegisterStandardShortcut(_windowSource.Handle, NativeMethods.ClipboardHotKeyId, _clipboardShortcut);
+        }
+
+        RegisterVoiceInputHotKey(_windowSource.Handle);
+        return _voiceInputHotKeyRegistered;
+    }
+
+    private void UpdateShortcutButtons()
+    {
+        if (ScreenshotShortcutButton is null)
+        {
+            return;
+        }
+
+        ScreenshotShortcutButton.Content = _screenshotShortcut.DisplayText;
+        ClipboardShortcutButton.Content = _clipboardShortcut.DisplayText;
+        VoiceShortcutButton.Content = _voiceInputShortcut.DisplayText;
+        HomeScreenshotShortcutText.Text = _screenshotShortcut.DisplayText;
     }
 
     private void ShowToast(string message)
