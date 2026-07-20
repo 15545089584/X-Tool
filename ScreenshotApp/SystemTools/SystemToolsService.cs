@@ -221,7 +221,18 @@ public static class SystemToolsService
     private static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint msg, IntPtr wParam, string lParam, uint flags, uint timeout, out IntPtr result);
 }
 
-public sealed record PortEntry(string Protocol, string LocalAddress, string RemoteAddress, string State, int ProcessId, string ProcessName, string ProcessPath);
+public sealed record PortEntry(string Protocol, string LocalAddress, string RemoteAddress, string State, int ProcessId, string ProcessName, string ProcessPath)
+{
+    /// <summary>从本地地址提取端口，IPv4、IPv6 与通配地址均适用。</summary>
+    public int Port
+    {
+        get
+        {
+            var separator = LocalAddress.LastIndexOf(':');
+            return separator >= 0 && int.TryParse(LocalAddress[(separator + 1)..], out var port) ? port : 0;
+        }
+    }
+}
 
 public sealed record ProcessEntry(string Name, int ProcessId, double CpuPercent, long MemoryBytes, string Path, DateTime? StartedAt)
 {

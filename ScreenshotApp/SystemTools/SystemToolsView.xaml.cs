@@ -18,6 +18,9 @@ public partial class SystemToolsView : UserControl
     private IReadOnlyList<ServiceEntry> _allServices = Array.Empty<ServiceEntry>();
     private IReadOnlyList<EnvironmentVariableEntry> _allEnvironmentVariables = Array.Empty<EnvironmentVariableEntry>();
     private bool _portsAscending = true;
+    private string _portSortKey = "Port";
+    private bool _portHeaderSortActive;
+    private bool _syncingPortSortSelector;
     private bool _processesAscending = true;
     private bool _servicesAscending = true;
     private readonly HashSet<string> _expandedProcessGroups = new(StringComparer.OrdinalIgnoreCase);
@@ -95,13 +98,38 @@ public partial class SystemToolsView : UserControl
     private void PortFilterTextBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyPortFilter();
     private void ProcessFilterTextBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyProcessFilter();
     private void ServiceFilterTextBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyServiceFilter();
-    private void PortSortComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => ApplyPortFilter();
+    private void PortSortComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        _portSortKey = SelectedTag(PortSortComboBox);
+        if (!_syncingPortSortSelector) _portHeaderSortActive = false;
+        UpdatePortHeaderIndicators();
+        ApplyPortFilter();
+    }
     private void ProcessSortComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => ApplyProcessFilter();
     private void ServiceSortComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => ApplyServiceFilter();
     private void PortSortDirection_Click(object sender, RoutedEventArgs e)
     {
         _portsAscending = !_portsAscending;
         UpdateDirectionButton(PortSortDirectionButton, _portsAscending);
+        UpdatePortHeaderIndicators();
+        ApplyPortFilter();
+    }
+
+    private void PortColumnHeader_Click(object sender, RoutedEventArgs e)
+    {
+        var key = (sender as FrameworkElement)?.Tag?.ToString() ?? "Port";
+        _portsAscending = string.Equals(_portSortKey, key, StringComparison.OrdinalIgnoreCase) ? !_portsAscending : true;
+        _portSortKey = key;
+        _portHeaderSortActive = true;
+        _syncingPortSortSelector = true;
+        PortSortComboBox.SelectedValue = key;
+        if (SelectedTag(PortSortComboBox) != key)
+        {
+            PortSortComboBox.SelectedIndex = FindPortSortIndex(key);
+        }
+        _syncingPortSortSelector = false;
+        UpdateDirectionButton(PortSortDirectionButton, _portsAscending);
+        UpdatePortHeaderIndicators();
         ApplyPortFilter();
     }
 
@@ -124,12 +152,14 @@ public partial class SystemToolsView : UserControl
     {
         var keyword = PortFilterTextBox?.Text.Trim() ?? string.Empty;
         var filtered = _allPorts.Where(item => string.IsNullOrWhiteSpace(keyword) || $"{item.Protocol} {item.LocalAddress} {item.ProcessName} {item.ProcessId} {item.State}".Contains(keyword, StringComparison.OrdinalIgnoreCase));
-        filtered = SelectedTag(PortSortComboBox) switch
+        filtered = _portSortKey switch
         {
             "Protocol" => Sort(filtered, item => item.Protocol, _portsAscending),
+            "LocalAddress" => Sort(filtered, item => item.LocalAddress, _portsAscending),
             "Process" => Sort(filtered, item => item.ProcessName, _portsAscending),
+            "ProcessId" => Sort(filtered, item => item.ProcessId, _portsAscending),
             "State" => Sort(filtered, item => item.State, _portsAscending),
-            _ => Sort(filtered, item => ExtractPort(item.LocalAddress), _portsAscending)
+            _ => Sort(filtered, item => item.Port, _portsAscending)
         };
         Replace(_ports, filtered);
         PortsSummaryText.Text = $"显示 {_ports.Count:N0} 个端口";
@@ -323,6 +353,30 @@ public partial class SystemToolsView : UserControl
     private EnvironmentVariableTarget SelectedEnvironmentScope => (EnvironmentScopeComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() == "Machine" ? EnvironmentVariableTarget.Machine : EnvironmentVariableTarget.User;
 
     private static string SelectedTag(ComboBox comboBox) => (comboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? string.Empty;
+
+    private int FindPortSortIndex(string key)
+    {
+        for (var index = 0; index < PortSortComboBox.Items.Count; index++)
+        {
+            if ((PortSortComboBox.Items[index] as ComboBoxItem)?.Tag?.ToString() == key) return index;
+        }
+
+        return 0;
+    }
+
+    private void UpdatePortHeaderIndicators()
+    {
+        foreach (var (key, indicator) in new[]
+                 {
+                     ("Protocol", PortProtocolSortIndicator), ("LocalAddress", PortAddressSortIndicator), ("Port", PortNumberSortIndicator),
+                     ("Process", PortProcessSortIndicator), ("ProcessId", PortPidSortIndicator), ("State", PortStateSortIndicator)
+                 })
+        {
+            indicator.Text = _portHeaderSortActive && string.Equals(_portSortKey, key, StringComparison.OrdinalIgnoreCase)
+                ? (_portsAscending ? "↑" : "↓")
+                : string.Empty;
+        }
+    }
 
     private static IEnumerable<T> Sort<T, TKey>(IEnumerable<T> values, Func<T, TKey> selector, bool ascending)
         => ascending ? values.OrderBy(selector) : values.OrderByDescending(selector);
