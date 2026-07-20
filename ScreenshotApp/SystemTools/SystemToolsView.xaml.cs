@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -51,6 +52,8 @@ public partial class SystemToolsView : UserControl
         EnvironmentScopeComboBox.SelectedIndex = 0;
         AutoRefreshIntervalComboBox.SelectedIndex = 1;
         UpdatePortAutoRefreshInterval();
+        RelationshipBubbleFilterTextBox.HorizontalContentAlignment = HorizontalAlignment.Left;
+        RelationshipBubbleFilterTextBox.TextAlignment = TextAlignment.Left;
         PortsListBox.ItemContainerGenerator.StatusChanged += (_, _) => ConfigurePortColumns();
         RelationsBubbleListBox.ItemContainerGenerator.StatusChanged += (_, _) => ConfigureRelationshipColumns();
         SetActiveTab("Ports");
@@ -223,6 +226,15 @@ public partial class SystemToolsView : UserControl
     {
         var selected = RelationsBubbleListBox.SelectedItem as SystemRelationshipEntry;
         RelationDetailsPopup.DataContext = selected;
+        if (selected is not null && RelationsBubbleListBox.ItemContainerGenerator.ContainerFromItem(selected) is ListBoxItem item)
+        {
+            RelationDetailsPopup.PlacementTarget = item;
+            RelationDetailsPopup.Placement = item.TranslatePoint(new Point(0, 0), RelationsBubbleListBox).Y > RelationsBubbleListBox.ActualHeight / 2
+                ? PlacementMode.Top
+                : PlacementMode.Bottom;
+            RelationDetailsPopup.VerticalOffset = 8;
+        }
+
         RelationDetailsPopup.IsOpen = selected is not null;
         if (selected is not null) Dispatcher.BeginInvoke(new Action(ConfigureRelationBubble), DispatcherPriority.Loaded);
     }
@@ -241,6 +253,20 @@ public partial class SystemToolsView : UserControl
         popupBorder.ClipToBounds = true;
         popupBorder.Background = new SolidColorBrush(Color.FromRgb(244, 250, 255));
         root.Background = Brushes.Transparent;
+        var closeButton = FindVisualDescendants<Button>(root).FirstOrDefault(button => string.Equals(button.Content?.ToString(), "×", StringComparison.Ordinal));
+        if (closeButton is not null)
+        {
+            closeButton.Style = (Style)FindResource("SystemButton");
+            closeButton.Width = 32;
+            closeButton.Height = 32;
+            closeButton.Padding = new Thickness(0);
+            closeButton.FontSize = 16;
+            closeButton.FontWeight = FontWeights.SemiBold;
+            closeButton.Foreground = new SolidColorBrush(Color.FromRgb(77, 124, 254));
+            closeButton.Background = new SolidColorBrush(Color.FromArgb(148, 255, 255, 255));
+            closeButton.BorderBrush = new SolidColorBrush(Color.FromArgb(174, 209, 232, 247));
+        }
+
         var accent = root.Children.OfType<Grid>().FirstOrDefault(grid =>
             grid.ColumnDefinitions.Count == 4 &&
             grid.Children.OfType<Border>().Count() == 4 &&
@@ -430,7 +456,7 @@ public partial class SystemToolsView : UserControl
     {
         Dispatcher.BeginInvoke(new Action(() =>
         {
-            foreach (var grid in FindVisualDescendants<Grid>(RelationsBubblePanel).Where(grid => grid.ColumnDefinitions.Count == 7))
+            foreach (var grid in FindVisualDescendants<Grid>(RelationsBubblePanel).Where(grid => grid.ColumnDefinitions.Count == 7 && grid.Children.OfType<TextBlock>().Count() >= 6))
             {
                 grid.ColumnDefinitions[0].Width = new GridLength(230);
                 grid.ColumnDefinitions[1].Width = new GridLength(84);
