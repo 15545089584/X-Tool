@@ -1573,6 +1573,27 @@ public partial class MainWindow : Window
         NavigateToPage("ConverterWorkbench");
     }
 
+    private void HomeNavigate_Click(object sender, RoutedEventArgs e)
+    {
+        var page = (sender as FrameworkElement)?.Tag?.ToString();
+        switch (page)
+        {
+            case "FileWorkbench":
+                FileWorkbenchNav.IsChecked = true;
+                break;
+            case "Shortcuts":
+                ShortcutsNav.IsChecked = true;
+                break;
+            case "Settings":
+                SettingsNav.IsChecked = true;
+                break;
+            default:
+                return;
+        }
+
+        NavigateToPage(page);
+    }
+
     private void OpenImageConverter_Click(object sender, RoutedEventArgs e)
     {
         ConverterWorkbenchNav.IsChecked = true;
