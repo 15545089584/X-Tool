@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 
@@ -25,6 +26,14 @@ public partial class SystemToolsView : UserControl
     private bool _isRefreshingPorts;
     private bool _processesAscending = true;
     private bool _servicesAscending = true;
+    private string _processSortKey = "Name";
+    private string _serviceSortKey = "Name";
+    private bool _processHeaderSortActive;
+    private bool _serviceHeaderSortActive;
+    private bool _syncingProcessSortSelector;
+    private bool _syncingServiceSortSelector;
+    private readonly Dictionary<TextBlock, (string Key, string Title)> _processHeaders = new();
+    private readonly Dictionary<TextBlock, (string Key, string Title)> _serviceHeaders = new();
     private readonly HashSet<string> _expandedProcessGroups = new(StringComparer.OrdinalIgnoreCase);
 
     public SystemToolsView()
@@ -44,7 +53,7 @@ public partial class SystemToolsView : UserControl
         UpdatePortAutoRefreshInterval();
         PortsListBox.ItemContainerGenerator.StatusChanged += (_, _) => ConfigurePortColumns();
         SetActiveTab("Ports");
-        Loaded += async (_, _) => { ConfigurePortColumns(); await RefreshPortsAsync(); };
+        Loaded += async (_, _) => { MoveAutoRefreshToPageHeader(); ConfigureInteractiveHeaders(); ConfigurePortColumns(); await RefreshPortsAsync(); };
         Unloaded += (_, _) => _portAutoRefreshTimer.Stop();
     }
 
@@ -116,7 +125,6 @@ public partial class SystemToolsView : UserControl
         if (!IsLoaded) return;
         var enabled = AutoRefreshCheckBox.IsChecked == true;
         AutoRefreshIntervalComboBox.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
-        AutoRefreshIntervalColumn.Width = enabled ? new GridLength(90) : new GridLength(0);
         if (!enabled)
         {
             _portAutoRefreshTimer.Stop();
@@ -142,12 +150,28 @@ public partial class SystemToolsView : UserControl
 
     private async void AutoRefreshPorts_Tick(object? sender, EventArgs e)
     {
-        if (AutoRefreshCheckBox.IsChecked == true && PortsPanel.Visibility == Visibility.Visible) await RefreshPortsAsync();
+        if (AutoRefreshCheckBox.IsChecked != true) return;
+        if (PortsPanel.Visibility == Visibility.Visible) await RefreshPortsAsync();
+        else if (ProcessesPanel.Visibility == Visibility.Visible) await RefreshProcessesAsync();
+        else if (ServicesPanel.Visibility == Visibility.Visible) await RefreshServicesAsync();
     }
     private void ProcessFilterTextBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyProcessFilter();
     private void ServiceFilterTextBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyServiceFilter();
-    private void ProcessSortComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => ApplyProcessFilter();
-    private void ServiceSortComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => ApplyServiceFilter();
+    private void ProcessSortComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        _processSortKey = SelectedTag(ProcessSortComboBox);
+        if (!_syncingProcessSortSelector) _processHeaderSortActive = false;
+        UpdateProcessHeaderIndicators();
+        ApplyProcessFilter();
+    }
+
+    private void ServiceSortComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        _serviceSortKey = SelectedTag(ServiceSortComboBox);
+        if (!_syncingServiceSortSelector) _serviceHeaderSortActive = false;
+        UpdateServiceHeaderIndicators();
+        ApplyServiceFilter();
+    }
     private void PortColumnHeader_Click(object sender, RoutedEventArgs e)
     {
         var key = (sender as FrameworkElement)?.Tag?.ToString() ?? "Port";
@@ -172,6 +196,30 @@ public partial class SystemToolsView : UserControl
         ApplyServiceFilter();
     }
     private void EnvironmentFilterTextBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyEnvironmentFilter();
+
+    private void ProcessColumnHeader_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not TextBlock { Tag: string key }) return;
+        _processesAscending = string.Equals(_processSortKey, key, StringComparison.OrdinalIgnoreCase) ? !_processesAscending : true;
+        _processSortKey = key;
+        _processHeaderSortActive = true;
+        SelectComboItemByTag(ProcessSortComboBox, key, ref _syncingProcessSortSelector);
+        UpdateProcessHeaderIndicators();
+        ApplyProcessFilter();
+        e.Handled = true;
+    }
+
+    private void ServiceColumnHeader_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not TextBlock { Tag: string key }) return;
+        _servicesAscending = string.Equals(_serviceSortKey, key, StringComparison.OrdinalIgnoreCase) ? !_servicesAscending : true;
+        _serviceSortKey = key;
+        _serviceHeaderSortActive = true;
+        SelectComboItemByTag(ServiceSortComboBox, key, ref _syncingServiceSortSelector);
+        UpdateServiceHeaderIndicators();
+        ApplyServiceFilter();
+        e.Handled = true;
+    }
 
     private void ApplyPortFilter()
     {
@@ -203,8 +251,9 @@ public partial class SystemToolsView : UserControl
         var groups = filtered
             .GroupBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
             .Select(group => new ProcessGroup(group.Key, group.ToArray()));
-        groups = SelectedTag(ProcessSortComboBox) switch
+        groups = _processSortKey switch
         {
+            "ProcessId" => Sort(groups, item => item.Items.Min(process => process.ProcessId), _processesAscending),
             "Cpu" => Sort(groups, item => item.CpuPercent, _processesAscending),
             "Memory" => Sort(groups, item => item.MemoryBytes, _processesAscending),
             "Started" => Sort(groups, item => item.StartedAt ?? DateTime.MinValue, _processesAscending),
@@ -217,7 +266,7 @@ public partial class SystemToolsView : UserControl
             rows.Add(ProcessListRow.CreateGroup(group, expanded));
             if (!expanded) continue;
 
-            var children = SelectedTag(ProcessSortComboBox) switch
+            var children = _processSortKey switch
             {
                 "Cpu" => Sort(group.Items, item => item.CpuPercent, _processesAscending),
                 "Memory" => Sort(group.Items, item => item.MemoryBytes, _processesAscending),
@@ -235,7 +284,7 @@ public partial class SystemToolsView : UserControl
     {
         var keyword = ServiceFilterTextBox?.Text.Trim() ?? string.Empty;
         var filtered = _allServices.Where(item => string.IsNullOrWhiteSpace(keyword) || $"{item.Name} {item.DisplayName} {item.Status}".Contains(keyword, StringComparison.OrdinalIgnoreCase));
-        filtered = SelectedTag(ServiceSortComboBox) switch
+        filtered = _serviceSortKey switch
         {
             "Status" => Sort(filtered, item => item.Status, _servicesAscending),
             "Service" => Sort(filtered, item => item.Name, _servicesAscending),
@@ -397,6 +446,107 @@ public partial class SystemToolsView : UserControl
                 ? (_portsAscending ? "↑" : "↓")
                 : string.Empty;
         }
+    }
+
+    /// <summary>将自动刷新提升为页面级控件，端口、进程与服务页共用同一刷新节奏。</summary>
+    private void MoveAutoRefreshToPageHeader()
+    {
+        if (AutoRefreshCheckBox.Parent is not Grid portToolbar || PortsTabButton.Parent is not Grid tabGrid) return;
+
+        portToolbar.Children.Remove(AutoRefreshCheckBox);
+        portToolbar.Children.Remove(AutoRefreshIntervalComboBox);
+
+        var controls = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        controls.Children.Add(AutoRefreshCheckBox);
+        AutoRefreshIntervalComboBox.Margin = new Thickness(10, 0, 0, 0);
+        controls.Children.Add(AutoRefreshIntervalComboBox);
+        var host = new Border
+        {
+            Background = new SolidColorBrush(Color.FromArgb(112, 255, 255, 255)),
+            BorderBrush = new SolidColorBrush(Color.FromRgb(190, 221, 241)),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(11),
+            Padding = new Thickness(10, 2, 8, 2),
+            Child = controls,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        Grid.SetColumn(host, 7);
+        tabGrid.Children.Add(host);
+    }
+
+    /// <summary>为进程和服务列表表头注册点击排序，保持与端口表一致的交互。</summary>
+    private void ConfigureInteractiveHeaders()
+    {
+        RegisterHeaders(ProcessesPanel, new[] { "Name", "ProcessId", "Cpu", "Memory", "Started" }, _processHeaders, ProcessColumnHeader_MouseLeftButtonUp);
+        RegisterHeaders(ServicesPanel, new[] { "DisplayName", "Status" }, _serviceHeaders, ServiceColumnHeader_MouseLeftButtonUp);
+        UpdateProcessHeaderIndicators();
+        UpdateServiceHeaderIndicators();
+    }
+
+    private static void RegisterHeaders(DependencyObject panel, IReadOnlyList<string> keys, IDictionary<TextBlock, (string Key, string Title)> registry, MouseButtonEventHandler handler)
+    {
+        if (registry.Count != 0) return;
+        var headerGrid = FindHeaderGrid(panel, keys.Count);
+        if (headerGrid is null) return;
+
+        for (var column = 0; column < keys.Count; column++)
+        {
+            var header = headerGrid.Children.OfType<TextBlock>().FirstOrDefault(item => Grid.GetColumn(item) == column);
+            if (header is null) continue;
+            registry[header] = (keys[column], header.Text);
+            header.Tag = keys[column];
+            header.Cursor = Cursors.Hand;
+            header.ToolTip = "点击按此列排序";
+            header.MouseLeftButtonUp += handler;
+        }
+    }
+
+    private static Grid? FindHeaderGrid(DependencyObject parent, int minimumColumns)
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, index);
+            if (child is Grid grid && grid.ColumnDefinitions.Count >= minimumColumns && grid.Children.OfType<TextBlock>().Count() >= minimumColumns) return grid;
+            var descendant = FindHeaderGrid(child, minimumColumns);
+            if (descendant is not null) return descendant;
+        }
+
+        return null;
+    }
+
+    private void UpdateProcessHeaderIndicators()
+    {
+        foreach (var (header, data) in _processHeaders)
+        {
+            header.Text = data.Title + (_processHeaderSortActive && string.Equals(data.Key, _processSortKey, StringComparison.OrdinalIgnoreCase) ? (_processesAscending ? " ↑" : " ↓") : string.Empty);
+        }
+    }
+
+    private void UpdateServiceHeaderIndicators()
+    {
+        foreach (var (header, data) in _serviceHeaders)
+        {
+            header.Text = data.Title + (_serviceHeaderSortActive && string.Equals(data.Key, _serviceSortKey, StringComparison.OrdinalIgnoreCase) ? (_servicesAscending ? " ↑" : " ↓") : string.Empty);
+        }
+    }
+
+    private static void SelectComboItemByTag(ComboBox comboBox, string key, ref bool isSynchronizing)
+    {
+        var index = -1;
+        for (var candidate = 0; candidate < comboBox.Items.Count; candidate++)
+        {
+            if ((comboBox.Items[candidate] as ComboBoxItem)?.Tag?.ToString() == key)
+            {
+                index = candidate;
+                break;
+            }
+        }
+
+        if (index < 0 || comboBox.SelectedIndex == index) return;
+        isSynchronizing = true;
+        comboBox.SelectedIndex = index;
+        isSynchronizing = false;
     }
 
     private static IEnumerable<T> Sort<T, TKey>(IEnumerable<T> values, Func<T, TKey> selector, bool ascending)
