@@ -23,7 +23,10 @@ public partial class SystemToolsView : UserControl
     private string _portSortKey = "Port";
     private bool _portHeaderSortActive;
     private readonly DispatcherTimer _portAutoRefreshTimer;
+    private readonly DispatcherTimer _pidHighlightTimer;
     private bool _isRefreshingPorts;
+    private int? _highlightedPortProcessId;
+    private int? _highlightedProcessId;
     private bool _processesAscending = true;
     private bool _servicesAscending = true;
     private string _processSortKey = "Name";
@@ -45,6 +48,8 @@ public partial class SystemToolsView : UserControl
         PathEntriesListBox.ItemsSource = _pathEntries;
         _portAutoRefreshTimer = new DispatcherTimer();
         _portAutoRefreshTimer.Tick += AutoRefreshPorts_Tick;
+        _pidHighlightTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
+        _pidHighlightTimer.Tick += (_, _) => ClearPidHighlights();
         EnvironmentScopeComboBox.SelectedIndex = 0;
         AutoRefreshIntervalComboBox.SelectedIndex = 1;
         ServiceSortComboBox.SelectedIndex = 0;
@@ -52,7 +57,7 @@ public partial class SystemToolsView : UserControl
         PortsListBox.ItemContainerGenerator.StatusChanged += (_, _) => ConfigurePortColumns();
         SetActiveTab("Ports");
         Loaded += async (_, _) => { ConfigureInteractiveHeaders(); ConfigurePortColumns(); await RefreshPortsAsync(); };
-        Unloaded += (_, _) => _portAutoRefreshTimer.Stop();
+        Unloaded += (_, _) => { _portAutoRefreshTimer.Stop(); _pidHighlightTimer.Stop(); };
     }
 
     private async Task RefreshPortsAsync()
@@ -225,9 +230,12 @@ public partial class SystemToolsView : UserControl
             "State" => Sort(filtered, item => item.State, _portsAscending),
             _ => Sort(filtered, item => item.Port, _portsAscending)
         };
-        Replace(_ports, filtered);
+        var visiblePorts = filtered.Select(item => item with { IsPidHighlighted = _highlightedPortProcessId == item.ProcessId }).ToArray();
+        Replace(_ports, visiblePorts);
         PortsSummaryText.Text = $"显示 {_ports.Count:N0} 个端口";
         ConfigurePortColumns();
+        QueuePidLinkMenus(PortsListBox, "定位到进程", LocateProcessByPid_Click);
+        ScrollToHighlightedRow(PortsListBox, visiblePorts.Cast<object>());
     }
 
     private void ApplyProcessFilter()
@@ -271,8 +279,11 @@ public partial class SystemToolsView : UserControl
             rows.AddRange(children.Select(ProcessListRow.CreateChild));
         }
 
-        Replace(_processes, rows);
+        var visibleRows = rows.Select(item => item with { IsPidHighlighted = item.Process?.ProcessId == _highlightedProcessId }).ToArray();
+        Replace(_processes, visibleRows);
         ProcessesSummaryText.Text = $"显示 {groups.Count():N0} 个应用 · {filtered.Count():N0} 个进程";
+        QueuePidLinkMenus(ProcessesListBox, "定位到端口", LocatePortsByPid_Click);
+        ScrollToHighlightedRow(ProcessesListBox, visibleRows.Cast<object>());
     }
 
     private void ApplyServiceFilter()
@@ -311,6 +322,58 @@ public partial class SystemToolsView : UserControl
         if (!SystemToolsService.TryEndProcess(processId, out var error)) MessageBox.Show(error, "结束进程失败", MessageBoxButton.OK, MessageBoxImage.Warning);
         _ = RefreshProcessesAsync();
         _ = RefreshPortsAsync();
+    }
+
+    /// <summary>从端口行按 PID 打开对应进程；保留全部系统进程以避免筛选误隐藏目标。</summary>
+    private async void LocateProcessByPid_Click(object sender, RoutedEventArgs e)
+    {
+        if (GetEntryFromMenu(sender) is not PortEntry { ProcessId: > 0 } port) return;
+        _highlightedPortProcessId = null;
+        _highlightedProcessId = port.ProcessId;
+        ShowSystemProcessEntriesCheckBox.IsChecked = true;
+        ShowActiveProcessesCheckBox.IsChecked = false;
+        ProcessFilterTextBox.Text = port.ProcessId.ToString();
+        await RefreshProcessesAsync();
+        ShowSection("Processes");
+        StartPidHighlightTimer();
+    }
+
+    /// <summary>从进程行按 PID 定位占用端口；同一 PID 的多个端口会同时高亮。</summary>
+    private async void LocatePortsByPid_Click(object sender, RoutedEventArgs e)
+    {
+        if (GetEntryFromMenu(sender) is not ProcessEntry { ProcessId: > 0 } process) return;
+        _highlightedProcessId = null;
+        _highlightedPortProcessId = process.ProcessId;
+        ShowSystemProcessesCheckBox.IsChecked = true;
+        ShowIPv6CheckBox.IsChecked = true;
+        PortFilterTextBox.Text = process.ProcessId.ToString();
+        await RefreshPortsAsync();
+        ShowSection("Ports");
+        StartPidHighlightTimer();
+    }
+
+    private void ShowSection(string section)
+    {
+        PortsPanel.Visibility = section == "Ports" ? Visibility.Visible : Visibility.Collapsed;
+        ProcessesPanel.Visibility = section == "Processes" ? Visibility.Visible : Visibility.Collapsed;
+        ServicesPanel.Visibility = section == "Services" ? Visibility.Visible : Visibility.Collapsed;
+        EnvironmentPanel.Visibility = section == "Environment" ? Visibility.Visible : Visibility.Collapsed;
+        SetActiveTab(section);
+    }
+
+    private void StartPidHighlightTimer()
+    {
+        _pidHighlightTimer.Stop();
+        _pidHighlightTimer.Start();
+    }
+
+    private void ClearPidHighlights()
+    {
+        _pidHighlightTimer.Stop();
+        _highlightedPortProcessId = null;
+        _highlightedProcessId = null;
+        ApplyPortFilter();
+        ApplyProcessFilter();
     }
 
     private void ProcessRowToggle_Click(object sender, RoutedEventArgs e)
@@ -569,6 +632,49 @@ public partial class SystemToolsView : UserControl
         button.ToolTip = ascending ? "当前为升序，点击切换为降序" : "当前为降序，点击切换为升序";
     }
 
+    /// <summary>为端口和单进程行补充 PID 联动菜单，保留既有的目录和结束进程操作。</summary>
+    private void QueuePidLinkMenus(ListBox listBox, string header, RoutedEventHandler handler)
+    {
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            for (var index = 0; index < listBox.Items.Count; index++)
+            {
+                if (listBox.ItemContainerGenerator.ContainerFromIndex(index) is not FrameworkElement container ||
+                    container.DataContext is not (PortEntry or ProcessListRow { Process: not null })) continue;
+                var menu = FindContextMenu(container);
+                if (menu is null || menu.Items.OfType<MenuItem>().Any(item => Equals(item.Tag, "PidLink"))) continue;
+
+                menu.Items.Add(new Separator());
+                var linkItem = new MenuItem { Header = header, Tag = "PidLink" };
+                linkItem.Click += handler;
+                menu.Items.Add(linkItem);
+            }
+        }), DispatcherPriority.Loaded);
+    }
+
+    private static ContextMenu? FindContextMenu(DependencyObject parent)
+    {
+        if (parent is FrameworkElement { ContextMenu: not null } element) return element.ContextMenu;
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            var menu = FindContextMenu(VisualTreeHelper.GetChild(parent, index));
+            if (menu is not null) return menu;
+        }
+
+        return null;
+    }
+
+    private static void ScrollToHighlightedRow(ListBox listBox, IEnumerable<object> rows)
+    {
+        var target = rows.FirstOrDefault(row => row switch
+        {
+            PortEntry port => port.IsPidHighlighted,
+            ProcessListRow process => process.IsPidHighlighted,
+            _ => false
+        });
+        if (target is not null) listBox.ScrollIntoView(target);
+    }
+
     private static object? GetEntryFromMenu(object sender)
     {
         if ((sender as FrameworkElement)?.DataContext is { } entry)
@@ -607,7 +713,7 @@ public partial class SystemToolsView : UserControl
     }
 
     /// <summary>进程列表的显示行：应用汇总行或可操作的单个子进程行。</summary>
-    private sealed record ProcessListRow(string Name, bool IsGroup, bool IsExpanded, int Count, ProcessEntry? Process, double CpuPercent, long MemoryBytes, double DiskBytesPerSecond, double NetworkBitsPerSecond, DateTime? StartedAt)
+    private sealed record ProcessListRow(string Name, bool IsGroup, bool IsExpanded, int Count, ProcessEntry? Process, double CpuPercent, long MemoryBytes, double DiskBytesPerSecond, double NetworkBitsPerSecond, DateTime? StartedAt, bool IsPidHighlighted = false)
     {
         public bool CanExpand => IsGroup && Count > 1;
         public string ExpandGlyph => CanExpand ? (IsExpanded ? "▾" : "▸") : string.Empty;

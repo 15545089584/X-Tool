@@ -276,7 +276,7 @@ public static class SystemToolsService
     private sealed record ProcessSample(string Name, int ProcessId, TimeSpan TotalProcessorTime, long MemoryBytes, string Path, DateTime? StartedAt, ulong ReadTransferCount, ulong WriteTransferCount, ulong OtherTransferCount, long Timestamp);
 }
 
-public sealed record PortEntry(string Protocol, string LocalAddress, string RemoteAddress, string State, int ProcessId, string ProcessName, string ProcessPath)
+public sealed record PortEntry(string Protocol, string LocalAddress, string RemoteAddress, string State, int ProcessId, string ProcessName, string ProcessPath, bool IsPidHighlighted = false)
 {
     /// <summary>从本地地址提取端口，IPv4、IPv6 与通配地址均适用。</summary>
     public int Port
