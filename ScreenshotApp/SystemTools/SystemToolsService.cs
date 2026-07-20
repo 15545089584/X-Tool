@@ -232,6 +232,21 @@ public sealed record PortEntry(string Protocol, string LocalAddress, string Remo
             return separator >= 0 && int.TryParse(LocalAddress[(separator + 1)..], out var port) ? port : 0;
         }
     }
+
+    /// <summary>标记 IPv6 地址，供端口列表的显示筛选使用。</summary>
+    public bool IsIpv6 => LocalAddress.StartsWith("[", StringComparison.Ordinal);
+
+    /// <summary>以系统目录和核心 PID 识别系统进程，避免把应用自身的端口一并隐藏。</summary>
+    public bool IsSystemProcess
+    {
+        get
+        {
+            if (ProcessId is > 0 and <= 4) return true;
+            if (string.IsNullOrWhiteSpace(ProcessPath)) return false;
+            var windowsDirectory = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+            return !string.IsNullOrWhiteSpace(windowsDirectory) && ProcessPath.StartsWith(windowsDirectory, StringComparison.OrdinalIgnoreCase);
+        }
+    }
 }
 
 public sealed record ProcessEntry(string Name, int ProcessId, double CpuPercent, long MemoryBytes, string Path, DateTime? StartedAt)

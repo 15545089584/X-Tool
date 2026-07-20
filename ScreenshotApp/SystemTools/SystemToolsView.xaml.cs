@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Threading;
 
 namespace ScreenshotApp.SystemTools;
 
@@ -20,7 +21,8 @@ public partial class SystemToolsView : UserControl
     private bool _portsAscending = true;
     private string _portSortKey = "Port";
     private bool _portHeaderSortActive;
-    private bool _syncingPortSortSelector;
+    private readonly DispatcherTimer _portAutoRefreshTimer;
+    private bool _isRefreshingPorts;
     private bool _processesAscending = true;
     private bool _servicesAscending = true;
     private readonly HashSet<string> _expandedProcessGroups = new(StringComparer.OrdinalIgnoreCase);
@@ -33,19 +35,27 @@ public partial class SystemToolsView : UserControl
         ServicesListBox.ItemsSource = _services;
         EnvironmentListBox.ItemsSource = _environmentVariables;
         PathEntriesListBox.ItemsSource = _pathEntries;
+        _portAutoRefreshTimer = new DispatcherTimer();
+        _portAutoRefreshTimer.Tick += AutoRefreshPorts_Tick;
         EnvironmentScopeComboBox.SelectedIndex = 0;
-        PortSortComboBox.SelectedIndex = 0;
+        AutoRefreshIntervalComboBox.SelectedIndex = 1;
         ProcessSortComboBox.SelectedIndex = 0;
         ServiceSortComboBox.SelectedIndex = 0;
+        UpdatePortAutoRefreshInterval();
+        PortsListBox.ItemContainerGenerator.StatusChanged += (_, _) => ConfigurePortColumns();
         SetActiveTab("Ports");
-        Loaded += async (_, _) => await RefreshPortsAsync();
+        Loaded += async (_, _) => { ConfigurePortColumns(); await RefreshPortsAsync(); };
+        Unloaded += (_, _) => _portAutoRefreshTimer.Stop();
     }
 
     private async Task RefreshPortsAsync()
     {
+        if (_isRefreshingPorts) return;
+        _isRefreshingPorts = true;
         PortsSummaryText.Text = "正在读取…";
-        try { _allPorts = await Task.Run(SystemToolsService.GetPorts); ApplyPortFilter(); }
+        try { _allPorts = await Task.Run(SystemToolsService.GetPorts); ApplyPortFilter(); ConfigurePortColumns(); }
         catch (Exception exception) { PortsSummaryText.Text = $"读取失败：{exception.Message}"; }
+        finally { _isRefreshingPorts = false; }
     }
 
     private async Task RefreshProcessesAsync()
@@ -96,39 +106,54 @@ public partial class SystemToolsView : UserControl
     private async void RefreshProcesses_Click(object sender, RoutedEventArgs e) => await RefreshProcessesAsync();
     private async void RefreshServices_Click(object sender, RoutedEventArgs e) => await RefreshServicesAsync();
     private void PortFilterTextBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyPortFilter();
-    private void ProcessFilterTextBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyProcessFilter();
-    private void ServiceFilterTextBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyServiceFilter();
-    private void PortSortComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void PortDisplayOption_Changed(object sender, RoutedEventArgs e)
     {
-        _portSortKey = SelectedTag(PortSortComboBox);
-        if (!_syncingPortSortSelector) _portHeaderSortActive = false;
-        UpdatePortHeaderIndicators();
-        ApplyPortFilter();
-    }
-    private void ProcessSortComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => ApplyProcessFilter();
-    private void ServiceSortComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => ApplyServiceFilter();
-    private void PortSortDirection_Click(object sender, RoutedEventArgs e)
-    {
-        _portsAscending = !_portsAscending;
-        UpdateDirectionButton(PortSortDirectionButton, _portsAscending);
-        UpdatePortHeaderIndicators();
-        ApplyPortFilter();
+        if (IsLoaded) ApplyPortFilter();
     }
 
+    private void AutoRefreshCheckBox_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        var enabled = AutoRefreshCheckBox.IsChecked == true;
+        AutoRefreshIntervalComboBox.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
+        AutoRefreshIntervalColumn.Width = enabled ? new GridLength(90) : new GridLength(0);
+        if (!enabled)
+        {
+            _portAutoRefreshTimer.Stop();
+            return;
+        }
+
+        UpdatePortAutoRefreshInterval();
+        if (IsLoaded) _portAutoRefreshTimer.Start();
+    }
+
+    private void AutoRefreshIntervalComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        UpdatePortAutoRefreshInterval();
+        if (AutoRefreshCheckBox.IsChecked == true) _portAutoRefreshTimer.Start();
+    }
+
+    private void UpdatePortAutoRefreshInterval()
+    {
+        var seconds = int.TryParse(SelectedTag(AutoRefreshIntervalComboBox), out var value) ? value : 5;
+        _portAutoRefreshTimer.Interval = TimeSpan.FromSeconds(seconds);
+    }
+
+    private async void AutoRefreshPorts_Tick(object? sender, EventArgs e)
+    {
+        if (AutoRefreshCheckBox.IsChecked == true && PortsPanel.Visibility == Visibility.Visible) await RefreshPortsAsync();
+    }
+    private void ProcessFilterTextBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyProcessFilter();
+    private void ServiceFilterTextBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyServiceFilter();
+    private void ProcessSortComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => ApplyProcessFilter();
+    private void ServiceSortComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => ApplyServiceFilter();
     private void PortColumnHeader_Click(object sender, RoutedEventArgs e)
     {
         var key = (sender as FrameworkElement)?.Tag?.ToString() ?? "Port";
         _portsAscending = string.Equals(_portSortKey, key, StringComparison.OrdinalIgnoreCase) ? !_portsAscending : true;
         _portSortKey = key;
         _portHeaderSortActive = true;
-        _syncingPortSortSelector = true;
-        PortSortComboBox.SelectedValue = key;
-        if (SelectedTag(PortSortComboBox) != key)
-        {
-            PortSortComboBox.SelectedIndex = FindPortSortIndex(key);
-        }
-        _syncingPortSortSelector = false;
-        UpdateDirectionButton(PortSortDirectionButton, _portsAscending);
         UpdatePortHeaderIndicators();
         ApplyPortFilter();
     }
@@ -151,7 +176,12 @@ public partial class SystemToolsView : UserControl
     private void ApplyPortFilter()
     {
         var keyword = PortFilterTextBox?.Text.Trim() ?? string.Empty;
-        var filtered = _allPorts.Where(item => string.IsNullOrWhiteSpace(keyword) || $"{item.Protocol} {item.LocalAddress} {item.ProcessName} {item.ProcessId} {item.State}".Contains(keyword, StringComparison.OrdinalIgnoreCase));
+        var showSystemProcesses = ShowSystemProcessesCheckBox?.IsChecked != false;
+        var showIpv6 = ShowIPv6CheckBox?.IsChecked != false;
+        var filtered = _allPorts.Where(item =>
+            (showSystemProcesses || !item.IsSystemProcess) &&
+            (showIpv6 || !item.IsIpv6) &&
+            (string.IsNullOrWhiteSpace(keyword) || $"{item.Protocol} {item.LocalAddress} {item.Port} {item.ProcessName} {item.ProcessId} {item.State}".Contains(keyword, StringComparison.OrdinalIgnoreCase)));
         filtered = _portSortKey switch
         {
             "Protocol" => Sort(filtered, item => item.Protocol, _portsAscending),
@@ -163,6 +193,7 @@ public partial class SystemToolsView : UserControl
         };
         Replace(_ports, filtered);
         PortsSummaryText.Text = $"显示 {_ports.Count:N0} 个端口";
+        ConfigurePortColumns();
     }
 
     private void ApplyProcessFilter()
@@ -354,16 +385,6 @@ public partial class SystemToolsView : UserControl
 
     private static string SelectedTag(ComboBox comboBox) => (comboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? string.Empty;
 
-    private int FindPortSortIndex(string key)
-    {
-        for (var index = 0; index < PortSortComboBox.Items.Count; index++)
-        {
-            if ((PortSortComboBox.Items[index] as ComboBoxItem)?.Tag?.ToString() == key) return index;
-        }
-
-        return 0;
-    }
-
     private void UpdatePortHeaderIndicators()
     {
         foreach (var (key, indicator) in new[]
@@ -381,10 +402,47 @@ public partial class SystemToolsView : UserControl
     private static IEnumerable<T> Sort<T, TKey>(IEnumerable<T> values, Func<T, TKey> selector, bool ascending)
         => ascending ? values.OrderBy(selector) : values.OrderByDescending(selector);
 
-    private static int ExtractPort(string address)
+    /// <summary>统一端口表头与行的列宽，避免 IPv6 地址与端口号视觉粘连。</summary>
+    private void ConfigurePortColumns()
     {
-        var separator = address.LastIndexOf(':');
-        return separator >= 0 && int.TryParse(address[(separator + 1)..], out var port) ? port : int.MaxValue;
+        ConfigurePortGrid(PortProtocolHeader?.Parent as Grid);
+        for (var index = 0; index < PortsListBox.Items.Count; index++)
+        {
+            if (PortsListBox.ItemContainerGenerator.ContainerFromIndex(index) is not DependencyObject item) continue;
+            var rowGrid = FindVisualChild<Grid>(item);
+            ConfigurePortGrid(rowGrid);
+            if (rowGrid is null) continue;
+
+            foreach (var text in rowGrid.Children.OfType<TextBlock>().Where(item => Grid.GetColumn(item) == 1))
+            {
+                text.TextTrimming = TextTrimming.CharacterEllipsis;
+                text.ToolTip = text.Text;
+            }
+        }
+    }
+
+    private static void ConfigurePortGrid(Grid? grid)
+    {
+        if (grid is null || grid.ColumnDefinitions.Count != 6) return;
+        grid.ColumnDefinitions[0].Width = new GridLength(70);
+        grid.ColumnDefinitions[1].Width = new GridLength(240);
+        grid.ColumnDefinitions[2].Width = new GridLength(110);
+        grid.ColumnDefinitions[3].Width = new GridLength(1, GridUnitType.Star);
+        grid.ColumnDefinitions[4].Width = new GridLength(100);
+        grid.ColumnDefinitions[5].Width = new GridLength(150);
+    }
+
+    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, index);
+            if (child is T target) return target;
+            var descendant = FindVisualChild<T>(child);
+            if (descendant is not null) return descendant;
+        }
+
+        return null;
     }
 
     private static void UpdateDirectionButton(Button button, bool ascending)
