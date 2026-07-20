@@ -9,7 +9,7 @@ namespace ScreenshotApp.SystemTools;
 public partial class SystemToolsView : UserControl
 {
     private readonly ObservableCollection<PortEntry> _ports = new();
-    private readonly ObservableCollection<ProcessEntry> _processes = new();
+    private readonly ObservableCollection<ProcessListRow> _processes = new();
     private readonly ObservableCollection<ServiceEntry> _services = new();
     private readonly ObservableCollection<EnvironmentVariableEntry> _environmentVariables = new();
     private readonly ObservableCollection<PathEntry> _pathEntries = new();
@@ -20,6 +20,7 @@ public partial class SystemToolsView : UserControl
     private bool _portsAscending = true;
     private bool _processesAscending = true;
     private bool _servicesAscending = true;
+    private readonly HashSet<string> _expandedProcessGroups = new(StringComparer.OrdinalIgnoreCase);
 
     public SystemToolsView()
     {
@@ -138,15 +139,35 @@ public partial class SystemToolsView : UserControl
     {
         var keyword = ProcessFilterTextBox?.Text.Trim() ?? string.Empty;
         var filtered = _allProcesses.Where(item => string.IsNullOrWhiteSpace(keyword) || $"{item.Name} {item.ProcessId} {item.Path}".Contains(keyword, StringComparison.OrdinalIgnoreCase));
-        filtered = SelectedTag(ProcessSortComboBox) switch
+        var groups = filtered
+            .GroupBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(group => new ProcessGroup(group.Key, group.ToArray()));
+        groups = SelectedTag(ProcessSortComboBox) switch
         {
-            "Cpu" => Sort(filtered, item => item.CpuPercent, _processesAscending),
-            "Memory" => Sort(filtered, item => item.MemoryBytes, _processesAscending),
-            "Started" => Sort(filtered, item => item.StartedAt ?? DateTime.MinValue, _processesAscending),
-            _ => Sort(filtered, item => item.Name, _processesAscending)
+            "Cpu" => Sort(groups, item => item.CpuPercent, _processesAscending),
+            "Memory" => Sort(groups, item => item.MemoryBytes, _processesAscending),
+            "Started" => Sort(groups, item => item.StartedAt ?? DateTime.MinValue, _processesAscending),
+            _ => Sort(groups, item => item.Name, _processesAscending)
         };
-        Replace(_processes, filtered);
-        ProcessesSummaryText.Text = $"显示 {_processes.Count:N0} 个进程";
+        var rows = new List<ProcessListRow>();
+        foreach (var group in groups)
+        {
+            var expanded = group.Items.Count > 1 && _expandedProcessGroups.Contains(group.Name);
+            rows.Add(ProcessListRow.CreateGroup(group, expanded));
+            if (!expanded) continue;
+
+            var children = SelectedTag(ProcessSortComboBox) switch
+            {
+                "Cpu" => Sort(group.Items, item => item.CpuPercent, _processesAscending),
+                "Memory" => Sort(group.Items, item => item.MemoryBytes, _processesAscending),
+                "Started" => Sort(group.Items, item => item.StartedAt ?? DateTime.MinValue, _processesAscending),
+                _ => Sort(group.Items, item => item.Name, _processesAscending)
+            };
+            rows.AddRange(children.Select(ProcessListRow.CreateChild));
+        }
+
+        Replace(_processes, rows);
+        ProcessesSummaryText.Text = $"显示 {groups.Count():N0} 个应用 · {filtered.Count():N0} 个进程";
     }
 
     private void ApplyServiceFilter()
@@ -185,6 +206,13 @@ public partial class SystemToolsView : UserControl
         if (!SystemToolsService.TryEndProcess(processId, out var error)) MessageBox.Show(error, "结束进程失败", MessageBoxButton.OK, MessageBoxImage.Warning);
         _ = RefreshProcessesAsync();
         _ = RefreshPortsAsync();
+    }
+
+    private void ProcessRowToggle_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not ProcessListRow { IsGroup: true, CanExpand: true } row) return;
+        if (!_expandedProcessGroups.Add(row.Name)) _expandedProcessGroups.Remove(row.Name);
+        ApplyProcessFilter();
     }
 
     private async void StartService_Click(object sender, RoutedEventArgs e) => await ControlServiceAsync(sender, start: true);
@@ -315,7 +343,7 @@ public partial class SystemToolsView : UserControl
     {
         if ((sender as FrameworkElement)?.DataContext is { } entry)
         {
-            return entry;
+            return entry is ProcessListRow processRow ? processRow.Process : entry;
         }
 
         return ((sender as FrameworkElement)?.Parent as ContextMenu)?.PlacementTarget is FrameworkElement target
@@ -329,5 +357,39 @@ public partial class SystemToolsView : UserControl
     {
         public PathEntry(string value) => Value = value;
         public string Value { get; set; }
+    }
+
+    /// <summary>同名进程的汇总，避免多进程应用占满列表；展开后保留原始 PID 行。</summary>
+    private sealed record ProcessGroup(string Name, IReadOnlyList<ProcessEntry> Items)
+    {
+        public double CpuPercent => Items.Sum(item => item.CpuPercent);
+        public long MemoryBytes => Items.Sum(item => item.MemoryBytes);
+        public DateTime? StartedAt
+        {
+            get
+            {
+                var values = Items.Select(item => item.StartedAt).Where(item => item.HasValue).Select(item => item!.Value).ToArray();
+                return values.Length == 0 ? null : values.Min();
+            }
+        }
+    }
+
+    /// <summary>进程列表的显示行：应用汇总行或可操作的单个子进程行。</summary>
+    private sealed record ProcessListRow(string Name, bool IsGroup, bool IsExpanded, int Count, ProcessEntry? Process, double CpuPercent, long MemoryBytes, DateTime? StartedAt)
+    {
+        public bool CanExpand => IsGroup && Count > 1;
+        public string ExpandGlyph => CanExpand ? (IsExpanded ? "▾" : "▸") : string.Empty;
+        public string DisplayName => IsGroup && Count > 1 ? $"{Name} ({Count})" : Name;
+        public string ProcessIdText => IsGroup ? "—" : Process?.ProcessId.ToString() ?? "—";
+        public string CpuText => $"{CpuPercent:F1}%";
+        public string MemoryText => $"{MemoryBytes / 1024d / 1024d:F1} MB";
+        public string StartedAtText => StartedAt?.ToString("yyyy-MM-dd HH:mm") ?? "—";
+        public string Path => Process?.Path ?? string.Empty;
+
+        public static ProcessListRow CreateGroup(ProcessGroup group, bool expanded)
+            => new(group.Name, true, expanded, group.Items.Count, null, group.CpuPercent, group.MemoryBytes, group.StartedAt);
+
+        public static ProcessListRow CreateChild(ProcessEntry process)
+            => new(process.Name, false, false, 1, process, process.CpuPercent, process.MemoryBytes, process.StartedAt);
     }
 }
