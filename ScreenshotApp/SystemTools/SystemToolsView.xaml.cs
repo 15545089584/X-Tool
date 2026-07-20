@@ -16,6 +16,9 @@ public partial class SystemToolsView : UserControl
     private IReadOnlyList<ProcessEntry> _allProcesses = Array.Empty<ProcessEntry>();
     private IReadOnlyList<ServiceEntry> _allServices = Array.Empty<ServiceEntry>();
     private IReadOnlyList<EnvironmentVariableEntry> _allEnvironmentVariables = Array.Empty<EnvironmentVariableEntry>();
+    private bool _portsAscending = true;
+    private bool _processesAscending = true;
+    private bool _servicesAscending = true;
 
     public SystemToolsView()
     {
@@ -25,6 +28,10 @@ public partial class SystemToolsView : UserControl
         ServicesListBox.ItemsSource = _services;
         EnvironmentListBox.ItemsSource = _environmentVariables;
         EnvironmentScopeComboBox.SelectedIndex = 0;
+        PortSortComboBox.SelectedIndex = 0;
+        ProcessSortComboBox.SelectedIndex = 0;
+        ServiceSortComboBox.SelectedIndex = 0;
+        SetActiveTab("Ports");
         Loaded += async (_, _) => await RefreshPortsAsync();
     }
 
@@ -85,26 +92,72 @@ public partial class SystemToolsView : UserControl
     private void PortFilterTextBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyPortFilter();
     private void ProcessFilterTextBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyProcessFilter();
     private void ServiceFilterTextBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyServiceFilter();
+    private void PortSortComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => ApplyPortFilter();
+    private void ProcessSortComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => ApplyProcessFilter();
+    private void ServiceSortComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => ApplyServiceFilter();
+    private void PortSortDirection_Click(object sender, RoutedEventArgs e)
+    {
+        _portsAscending = !_portsAscending;
+        UpdateDirectionButton(PortSortDirectionButton, _portsAscending);
+        ApplyPortFilter();
+    }
+
+    private void ProcessSortDirection_Click(object sender, RoutedEventArgs e)
+    {
+        _processesAscending = !_processesAscending;
+        UpdateDirectionButton(ProcessSortDirectionButton, _processesAscending);
+        ApplyProcessFilter();
+    }
+
+    private void ServiceSortDirection_Click(object sender, RoutedEventArgs e)
+    {
+        _servicesAscending = !_servicesAscending;
+        UpdateDirectionButton(ServiceSortDirectionButton, _servicesAscending);
+        ApplyServiceFilter();
+    }
     private void EnvironmentFilterTextBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyEnvironmentFilter();
 
     private void ApplyPortFilter()
     {
         var keyword = PortFilterTextBox?.Text.Trim() ?? string.Empty;
-        Replace(_ports, _allPorts.Where(item => string.IsNullOrWhiteSpace(keyword) || $"{item.LocalAddress} {item.ProcessName} {item.ProcessId}".Contains(keyword, StringComparison.OrdinalIgnoreCase)));
+        var filtered = _allPorts.Where(item => string.IsNullOrWhiteSpace(keyword) || $"{item.Protocol} {item.LocalAddress} {item.ProcessName} {item.ProcessId} {item.State}".Contains(keyword, StringComparison.OrdinalIgnoreCase));
+        filtered = SelectedTag(PortSortComboBox) switch
+        {
+            "Protocol" => Sort(filtered, item => item.Protocol, _portsAscending),
+            "Process" => Sort(filtered, item => item.ProcessName, _portsAscending),
+            "State" => Sort(filtered, item => item.State, _portsAscending),
+            _ => Sort(filtered, item => ExtractPort(item.LocalAddress), _portsAscending)
+        };
+        Replace(_ports, filtered);
         PortsSummaryText.Text = $"显示 {_ports.Count:N0} 个端口";
     }
 
     private void ApplyProcessFilter()
     {
         var keyword = ProcessFilterTextBox?.Text.Trim() ?? string.Empty;
-        Replace(_processes, _allProcesses.Where(item => string.IsNullOrWhiteSpace(keyword) || $"{item.Name} {item.ProcessId} {item.Path}".Contains(keyword, StringComparison.OrdinalIgnoreCase)));
+        var filtered = _allProcesses.Where(item => string.IsNullOrWhiteSpace(keyword) || $"{item.Name} {item.ProcessId} {item.Path}".Contains(keyword, StringComparison.OrdinalIgnoreCase));
+        filtered = SelectedTag(ProcessSortComboBox) switch
+        {
+            "Cpu" => Sort(filtered, item => item.CpuPercent, _processesAscending),
+            "Memory" => Sort(filtered, item => item.MemoryBytes, _processesAscending),
+            "Started" => Sort(filtered, item => item.StartedAt ?? DateTime.MinValue, _processesAscending),
+            _ => Sort(filtered, item => item.Name, _processesAscending)
+        };
+        Replace(_processes, filtered);
         ProcessesSummaryText.Text = $"显示 {_processes.Count:N0} 个进程";
     }
 
     private void ApplyServiceFilter()
     {
         var keyword = ServiceFilterTextBox?.Text.Trim() ?? string.Empty;
-        Replace(_services, _allServices.Where(item => string.IsNullOrWhiteSpace(keyword) || $"{item.Name} {item.DisplayName}".Contains(keyword, StringComparison.OrdinalIgnoreCase)));
+        var filtered = _allServices.Where(item => string.IsNullOrWhiteSpace(keyword) || $"{item.Name} {item.DisplayName} {item.Status}".Contains(keyword, StringComparison.OrdinalIgnoreCase));
+        filtered = SelectedTag(ServiceSortComboBox) switch
+        {
+            "Status" => Sort(filtered, item => item.Status, _servicesAscending),
+            "Service" => Sort(filtered, item => item.Name, _servicesAscending),
+            _ => Sort(filtered, item => item.DisplayName, _servicesAscending)
+        };
+        Replace(_services, filtered);
         ServicesSummaryText.Text = $"显示 {_services.Count:N0} 项服务";
     }
 
@@ -176,6 +229,24 @@ public partial class SystemToolsView : UserControl
     }
 
     private EnvironmentVariableTarget SelectedEnvironmentScope => (EnvironmentScopeComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() == "Machine" ? EnvironmentVariableTarget.Machine : EnvironmentVariableTarget.User;
+
+    private static string SelectedTag(ComboBox comboBox) => (comboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? string.Empty;
+
+    private static IEnumerable<T> Sort<T, TKey>(IEnumerable<T> values, Func<T, TKey> selector, bool ascending)
+        => ascending ? values.OrderBy(selector) : values.OrderByDescending(selector);
+
+    private static int ExtractPort(string address)
+    {
+        var separator = address.LastIndexOf(':');
+        return separator >= 0 && int.TryParse(address[(separator + 1)..], out var port) ? port : int.MaxValue;
+    }
+
+    private static void UpdateDirectionButton(Button button, bool ascending)
+    {
+        button.Content = ascending ? "\uE70E" : "\uE70D";
+        button.ToolTip = ascending ? "当前为升序，点击切换为降序" : "当前为降序，点击切换为升序";
+    }
+
     private static object? GetEntryFromMenu(object sender)
     {
         if ((sender as FrameworkElement)?.DataContext is { } entry)
