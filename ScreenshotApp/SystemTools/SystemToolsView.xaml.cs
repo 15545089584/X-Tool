@@ -243,7 +243,7 @@ public partial class SystemToolsView : UserControl
 
     private static void UpdateDirectionButton(Button button, bool ascending)
     {
-        button.Content = ascending ? "\uE70E" : "\uE70D";
+        button.Content = ascending ? "↑" : "↓";
         button.ToolTip = ascending ? "当前为升序，点击切换为降序" : "当前为降序，点击切换为升序";
     }
 
