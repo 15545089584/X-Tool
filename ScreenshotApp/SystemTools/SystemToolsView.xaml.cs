@@ -12,6 +12,7 @@ public partial class SystemToolsView : UserControl
     private readonly ObservableCollection<ProcessEntry> _processes = new();
     private readonly ObservableCollection<ServiceEntry> _services = new();
     private readonly ObservableCollection<EnvironmentVariableEntry> _environmentVariables = new();
+    private readonly ObservableCollection<PathEntry> _pathEntries = new();
     private IReadOnlyList<PortEntry> _allPorts = Array.Empty<PortEntry>();
     private IReadOnlyList<ProcessEntry> _allProcesses = Array.Empty<ProcessEntry>();
     private IReadOnlyList<ServiceEntry> _allServices = Array.Empty<ServiceEntry>();
@@ -27,6 +28,7 @@ public partial class SystemToolsView : UserControl
         ProcessesListBox.ItemsSource = _processes;
         ServicesListBox.ItemsSource = _services;
         EnvironmentListBox.ItemsSource = _environmentVariables;
+        PathEntriesListBox.ItemsSource = _pathEntries;
         EnvironmentScopeComboBox.SelectedIndex = 0;
         PortSortComboBox.SelectedIndex = 0;
         ProcessSortComboBox.SelectedIndex = 0;
@@ -205,6 +207,7 @@ public partial class SystemToolsView : UserControl
         if (EnvironmentListBox.SelectedItem is not EnvironmentVariableEntry variable) return;
         EnvironmentNameTextBox.Text = variable.Name;
         EnvironmentValueTextBox.Text = variable.Value;
+        SetValueEditor(variable.Name, variable.Value, reloadPathEntries: true);
     }
 
     private void ClearEnvironmentEditor_Click(object sender, RoutedEventArgs e)
@@ -212,12 +215,15 @@ public partial class SystemToolsView : UserControl
         EnvironmentListBox.SelectedItem = null;
         EnvironmentNameTextBox.Clear();
         EnvironmentValueTextBox.Clear();
+        _pathEntries.Clear();
+        StandardValueEditor.Visibility = Visibility.Visible;
+        PathValueEditor.Visibility = Visibility.Collapsed;
     }
 
     private void SaveEnvironmentVariable_Click(object sender, RoutedEventArgs e)
     {
         var name = EnvironmentNameTextBox.Text;
-        var value = EnvironmentValueTextBox.Text;
+        var value = IsPathEditorActive ? string.Join(";", _pathEntries.Select(item => item.Value.Trim()).Where(item => !string.IsNullOrWhiteSpace(item))) : EnvironmentValueTextBox.Text;
         if (!SystemToolsService.TrySaveEnvironmentVariable(name, value, SelectedEnvironmentScope, out var error))
         {
             MessageBox.Show(error, "保存环境变量失败", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -226,6 +232,64 @@ public partial class SystemToolsView : UserControl
 
         RefreshEnvironment();
         MessageBox.Show(string.IsNullOrWhiteSpace(value) ? "已删除环境变量。" : "环境变量已保存；新启动的程序会读取到新值。", "环境变量", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    private void EnvironmentNameTextBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        SetValueEditor(EnvironmentNameTextBox.Text, EnvironmentValueTextBox.Text, reloadPathEntries: PathValueEditor.Visibility != Visibility.Visible);
+    }
+
+    private void AddPathFolder_Click(object sender, RoutedEventArgs e)
+    {
+        using var dialog = new System.Windows.Forms.FolderBrowserDialog { Description = "选择要加入 Path 的目录", UseDescriptionForTitle = true };
+        if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK || string.IsNullOrWhiteSpace(dialog.SelectedPath)) return;
+        _pathEntries.Add(new PathEntry(dialog.SelectedPath));
+        PathEntriesListBox.SelectedIndex = _pathEntries.Count - 1;
+    }
+
+    private void AddPathEntry_Click(object sender, RoutedEventArgs e)
+    {
+        _pathEntries.Add(new PathEntry(string.Empty));
+        PathEntriesListBox.SelectedIndex = _pathEntries.Count - 1;
+    }
+
+    private void MovePathEntryUp_Click(object sender, RoutedEventArgs e) => MovePathEntry(-1);
+    private void MovePathEntryDown_Click(object sender, RoutedEventArgs e) => MovePathEntry(1);
+
+    private void MovePathEntry(int offset)
+    {
+        var index = PathEntriesListBox.SelectedIndex;
+        var nextIndex = index + offset;
+        if (index < 0 || nextIndex < 0 || nextIndex >= _pathEntries.Count) return;
+        _pathEntries.Move(index, nextIndex);
+        PathEntriesListBox.SelectedIndex = nextIndex;
+    }
+
+    private void RemovePathEntry_Click(object sender, RoutedEventArgs e)
+    {
+        var index = PathEntriesListBox.SelectedIndex;
+        if (index < 0) return;
+        _pathEntries.RemoveAt(index);
+        PathEntriesListBox.SelectedIndex = Math.Min(index, _pathEntries.Count - 1);
+    }
+
+    private void PathEntriesListBox_SelectionChanged(object sender, SelectionChangedEventArgs e) { }
+
+    private bool IsPathEditorActive => PathValueEditor.Visibility == Visibility.Visible;
+
+    private void SetValueEditor(string name, string value, bool reloadPathEntries)
+    {
+        var isPath = string.Equals(name.Trim(), "Path", StringComparison.OrdinalIgnoreCase);
+        StandardValueEditor.Visibility = isPath ? Visibility.Collapsed : Visibility.Visible;
+        PathValueEditor.Visibility = isPath ? Visibility.Visible : Visibility.Collapsed;
+        if (!isPath || !reloadPathEntries) return;
+
+        _pathEntries.Clear();
+        foreach (var segment in value.Split(';', StringSplitOptions.None))
+        {
+            _pathEntries.Add(new PathEntry(segment.Trim()));
+        }
     }
 
     private EnvironmentVariableTarget SelectedEnvironmentScope => (EnvironmentScopeComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() == "Machine" ? EnvironmentVariableTarget.Machine : EnvironmentVariableTarget.User;
@@ -259,4 +323,11 @@ public partial class SystemToolsView : UserControl
             : null;
     }
     private static void Replace<T>(ObservableCollection<T> collection, IEnumerable<T> values) { collection.Clear(); foreach (var value in values) collection.Add(value); }
+
+    /// <summary>Path 的单个路径条目，允许在列表中逐项修改与调整顺序。</summary>
+    private sealed class PathEntry
+    {
+        public PathEntry(string value) => Value = value;
+        public string Value { get; set; }
+    }
 }
