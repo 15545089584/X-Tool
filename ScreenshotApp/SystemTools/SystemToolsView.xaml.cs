@@ -409,7 +409,7 @@ public partial class SystemToolsView : UserControl
         for (var index = 0; index < PortsListBox.Items.Count; index++)
         {
             if (PortsListBox.ItemContainerGenerator.ContainerFromIndex(index) is not DependencyObject item) continue;
-            var rowGrid = FindVisualChild<Grid>(item);
+            var rowGrid = FindPortRowGrid(item);
             ConfigurePortGrid(rowGrid);
             if (rowGrid is null) continue;
 
@@ -425,20 +425,20 @@ public partial class SystemToolsView : UserControl
     {
         if (grid is null || grid.ColumnDefinitions.Count != 6) return;
         grid.ColumnDefinitions[0].Width = new GridLength(70);
-        grid.ColumnDefinitions[1].Width = new GridLength(240);
-        grid.ColumnDefinitions[2].Width = new GridLength(110);
+        grid.ColumnDefinitions[1].Width = new GridLength(330);
+        grid.ColumnDefinitions[2].Width = new GridLength(130);
         grid.ColumnDefinitions[3].Width = new GridLength(1, GridUnitType.Star);
         grid.ColumnDefinitions[4].Width = new GridLength(100);
         grid.ColumnDefinitions[5].Width = new GridLength(150);
     }
 
-    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+    private static Grid? FindPortRowGrid(DependencyObject parent)
     {
         for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
         {
             var child = VisualTreeHelper.GetChild(parent, index);
-            if (child is T target) return target;
-            var descendant = FindVisualChild<T>(child);
+            if (child is Grid { ColumnDefinitions.Count: 6 } rowGrid) return rowGrid;
+            var descendant = FindPortRowGrid(child);
             if (descendant is not null) return descendant;
         }
 
@@ -492,14 +492,14 @@ public partial class SystemToolsView : UserControl
         public bool CanExpand => IsGroup && Count > 1;
         public string ExpandGlyph => CanExpand ? (IsExpanded ? "▾" : "▸") : string.Empty;
         public string DisplayName => IsGroup && Count > 1 ? $"{Name} ({Count})" : Name;
-        public string ProcessIdText => IsGroup ? "—" : Process?.ProcessId.ToString() ?? "—";
+        public string ProcessIdText => Process?.ProcessId.ToString() ?? "—";
         public string CpuText => $"{CpuPercent:F1}%";
         public string MemoryText => $"{MemoryBytes / 1024d / 1024d:F1} MB";
         public string StartedAtText => StartedAt?.ToString("yyyy-MM-dd HH:mm") ?? "—";
         public string Path => Process?.Path ?? string.Empty;
 
         public static ProcessListRow CreateGroup(ProcessGroup group, bool expanded)
-            => new(group.Name, true, expanded, group.Items.Count, null, group.CpuPercent, group.MemoryBytes, group.StartedAt);
+            => new(group.Name, true, expanded, group.Items.Count, group.Items.Count == 1 ? group.Items[0] : null, group.CpuPercent, group.MemoryBytes, group.StartedAt);
 
         public static ProcessListRow CreateChild(ProcessEntry process)
             => new(process.Name, false, false, 1, process, process.CpuPercent, process.MemoryBytes, process.StartedAt);
