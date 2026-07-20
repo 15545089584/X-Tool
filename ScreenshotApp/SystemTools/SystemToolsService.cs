@@ -13,6 +13,8 @@ public static class SystemToolsService
     private static readonly Regex ServiceNameLine = new(@"^SERVICE_NAME:\s*(?<name>.+)$", RegexOptions.Compiled | RegexOptions.Multiline);
     private static readonly Regex DisplayNameLine = new(@"^DISPLAY_NAME:\s*(?<name>.+)$", RegexOptions.Compiled | RegexOptions.Multiline);
     private static readonly Regex ServiceStateLine = new(@"^\s*STATE\s*:\s*\d+\s+(?<state>.+)$", RegexOptions.Compiled | RegexOptions.Multiline);
+    private static readonly object ProcessSampleLock = new();
+    private static Dictionary<int, ProcessSample> _previousProcessSamples = new();
 
     public static IReadOnlyList<PortEntry> GetPorts()
     {
@@ -39,37 +41,73 @@ public static class SystemToolsService
 
     public static IReadOnlyList<ProcessEntry> GetProcesses()
     {
-        var firstSample = new Dictionary<int, TimeSpan>();
-        foreach (var process in Process.GetProcesses())
+        var samples = ReadProcessSamples();
+        if (samples.Count == 0) return Array.Empty<ProcessEntry>();
+
+        // 首次打开页面没有历史采样，短暂补采样一次，避免 CPU、磁盘列全部显示为 0。
+        lock (ProcessSampleLock)
         {
-            try { firstSample[process.Id] = process.TotalProcessorTime; }
-            catch { }
-            finally { process.Dispose(); }
+            if (_previousProcessSamples.Count != 0) return CreateProcessEntries(samples);
+            _previousProcessSamples = samples.ToDictionary(item => item.ProcessId);
         }
 
-        Thread.Sleep(220);
-        var elapsedMilliseconds = 220d * Math.Max(1, Environment.ProcessorCount);
-        var entries = new List<ProcessEntry>();
+        Thread.Sleep(650);
+        samples = ReadProcessSamples();
+        return CreateProcessEntries(samples);
+    }
+
+    /// <summary>读取一次累计性能计数；速率由相邻两次采样的增量计算。</summary>
+    private static IReadOnlyList<ProcessSample> ReadProcessSamples()
+    {
+        var timestamp = Stopwatch.GetTimestamp();
+        var samples = new List<ProcessSample>();
         foreach (var process in Process.GetProcesses())
         {
             try
             {
-                var totalProcessorTime = process.TotalProcessorTime;
-                var cpu = firstSample.TryGetValue(process.Id, out var initial)
-                    ? Math.Max(0, (totalProcessorTime - initial).TotalMilliseconds / elapsedMilliseconds * 100d)
-                    : 0;
                 string path = string.Empty;
                 DateTime? startedAt = null;
                 try { path = process.MainModule?.FileName ?? string.Empty; } catch { }
                 try { startedAt = process.StartTime; } catch { }
-                var memoryBytes = process.WorkingSet64;
-                entries.Add(new ProcessEntry(process.ProcessName, process.Id, cpu, memoryBytes, path, startedAt));
+                var io = TryGetProcessIoCounters(process, out var counters) ? counters : default;
+                samples.Add(new ProcessSample(process.ProcessName, process.Id, process.TotalProcessorTime, process.WorkingSet64, path, startedAt, io.ReadTransferCount, io.WriteTransferCount, io.OtherTransferCount, timestamp));
             }
             catch { }
             finally { process.Dispose(); }
         }
 
+        return samples;
+    }
+
+    private static IReadOnlyList<ProcessEntry> CreateProcessEntries(IReadOnlyList<ProcessSample> samples)
+    {
+        var entries = new List<ProcessEntry>();
+        lock (ProcessSampleLock)
+        {
+            foreach (var sample in samples)
+            {
+                _previousProcessSamples.TryGetValue(sample.ProcessId, out var previous);
+                var elapsedSeconds = previous is null ? 0d : (sample.Timestamp - previous.Timestamp) / (double)Stopwatch.Frequency;
+                var cpu = elapsedSeconds > 0 ? Math.Max(0, (sample.TotalProcessorTime - previous!.TotalProcessorTime).TotalSeconds / elapsedSeconds / Math.Max(1, Environment.ProcessorCount) * 100d) : 0;
+                var disk = elapsedSeconds > 0 ? CalculateRate(sample.ReadTransferCount, previous!.ReadTransferCount, elapsedSeconds) + CalculateRate(sample.WriteTransferCount, previous.WriteTransferCount, elapsedSeconds) : 0;
+                // Windows 进程级 API 未单独公开所有协议的网络计数；其它 I/O 字节是可用的近似值，并保留在界面提示中说明。
+                var network = elapsedSeconds > 0 ? CalculateRate(sample.OtherTransferCount, previous!.OtherTransferCount, elapsedSeconds) * 8d : 0;
+                entries.Add(new ProcessEntry(sample.Name, sample.ProcessId, cpu, sample.MemoryBytes, disk, network, sample.Path, sample.StartedAt));
+            }
+
+            _previousProcessSamples = samples.ToDictionary(item => item.ProcessId);
+        }
+
         return entries.OrderByDescending(item => item.MemoryBytes).ThenBy(item => item.Name, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    private static double CalculateRate(ulong current, ulong previous, double elapsedSeconds)
+        => current >= previous && elapsedSeconds > 0 ? (current - previous) / elapsedSeconds : 0;
+
+    private static bool TryGetProcessIoCounters(Process process, out IoCounters counters)
+    {
+        try { return GetProcessIoCounters(process.Handle, out counters); }
+        catch { counters = default; return false; }
     }
 
     public static IReadOnlyList<ServiceEntry> GetServices()
@@ -219,6 +257,23 @@ public static class SystemToolsService
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint msg, IntPtr wParam, string lParam, uint flags, uint timeout, out IntPtr result);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetProcessIoCounters(IntPtr hProcess, out IoCounters lpIoCounters);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct IoCounters
+    {
+        public ulong ReadOperationCount;
+        public ulong WriteOperationCount;
+        public ulong OtherOperationCount;
+        public ulong ReadTransferCount;
+        public ulong WriteTransferCount;
+        public ulong OtherTransferCount;
+    }
+
+    /// <summary>进程一次性能采样的累计计数，用于下次刷新计算速率。</summary>
+    private sealed record ProcessSample(string Name, int ProcessId, TimeSpan TotalProcessorTime, long MemoryBytes, string Path, DateTime? StartedAt, ulong ReadTransferCount, ulong WriteTransferCount, ulong OtherTransferCount, long Timestamp);
 }
 
 public sealed record PortEntry(string Protocol, string LocalAddress, string RemoteAddress, string State, int ProcessId, string ProcessName, string ProcessPath)
@@ -249,10 +304,20 @@ public sealed record PortEntry(string Protocol, string LocalAddress, string Remo
     }
 }
 
-public sealed record ProcessEntry(string Name, int ProcessId, double CpuPercent, long MemoryBytes, string Path, DateTime? StartedAt)
+public sealed record ProcessEntry(string Name, int ProcessId, double CpuPercent, long MemoryBytes, double DiskBytesPerSecond, double NetworkBitsPerSecond, string Path, DateTime? StartedAt)
 {
     public string CpuText => $"{CpuPercent:F1}%";
     public string MemoryText => $"{MemoryBytes / 1024d / 1024d:F1} MB";
+    public bool IsActive => CpuPercent >= 0.1 || DiskBytesPerSecond >= 10_000 || NetworkBitsPerSecond >= 10_000;
+    public bool IsSystemProcess
+    {
+        get
+        {
+            if (ProcessId is > 0 and <= 4) return true;
+            var windowsDirectory = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+            return !string.IsNullOrWhiteSpace(windowsDirectory) && !string.IsNullOrWhiteSpace(Path) && Path.StartsWith(windowsDirectory, StringComparison.OrdinalIgnoreCase);
+        }
+    }
     public string StartedAtText => StartedAt?.ToString("yyyy-MM-dd HH:mm") ?? "—";
 }
 

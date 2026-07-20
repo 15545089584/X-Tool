@@ -30,7 +30,6 @@ public partial class SystemToolsView : UserControl
     private string _serviceSortKey = "Name";
     private bool _processHeaderSortActive;
     private bool _serviceHeaderSortActive;
-    private bool _syncingProcessSortSelector;
     private bool _syncingServiceSortSelector;
     private readonly Dictionary<TextBlock, (string Key, string Title)> _processHeaders = new();
     private readonly Dictionary<TextBlock, (string Key, string Title)> _serviceHeaders = new();
@@ -48,12 +47,11 @@ public partial class SystemToolsView : UserControl
         _portAutoRefreshTimer.Tick += AutoRefreshPorts_Tick;
         EnvironmentScopeComboBox.SelectedIndex = 0;
         AutoRefreshIntervalComboBox.SelectedIndex = 1;
-        ProcessSortComboBox.SelectedIndex = 0;
         ServiceSortComboBox.SelectedIndex = 0;
         UpdatePortAutoRefreshInterval();
         PortsListBox.ItemContainerGenerator.StatusChanged += (_, _) => ConfigurePortColumns();
         SetActiveTab("Ports");
-        Loaded += async (_, _) => { MoveAutoRefreshToPageHeader(); ConfigureInteractiveHeaders(); ConfigurePortColumns(); await RefreshPortsAsync(); };
+        Loaded += async (_, _) => { ConfigureInteractiveHeaders(); ConfigurePortColumns(); await RefreshPortsAsync(); };
         Unloaded += (_, _) => _portAutoRefreshTimer.Stop();
     }
 
@@ -124,7 +122,6 @@ public partial class SystemToolsView : UserControl
     {
         if (!IsLoaded) return;
         var enabled = AutoRefreshCheckBox.IsChecked == true;
-        AutoRefreshIntervalComboBox.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
         if (!enabled)
         {
             _portAutoRefreshTimer.Stop();
@@ -156,14 +153,11 @@ public partial class SystemToolsView : UserControl
         else if (ServicesPanel.Visibility == Visibility.Visible) await RefreshServicesAsync();
     }
     private void ProcessFilterTextBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyProcessFilter();
-    private void ServiceFilterTextBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyServiceFilter();
-    private void ProcessSortComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void ProcessDisplayOption_Changed(object sender, RoutedEventArgs e)
     {
-        _processSortKey = SelectedTag(ProcessSortComboBox);
-        if (!_syncingProcessSortSelector) _processHeaderSortActive = false;
-        UpdateProcessHeaderIndicators();
-        ApplyProcessFilter();
+        if (IsLoaded) ApplyProcessFilter();
     }
+    private void ServiceFilterTextBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyServiceFilter();
 
     private void ServiceSortComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -182,13 +176,6 @@ public partial class SystemToolsView : UserControl
         ApplyPortFilter();
     }
 
-    private void ProcessSortDirection_Click(object sender, RoutedEventArgs e)
-    {
-        _processesAscending = !_processesAscending;
-        UpdateDirectionButton(ProcessSortDirectionButton, _processesAscending);
-        ApplyProcessFilter();
-    }
-
     private void ServiceSortDirection_Click(object sender, RoutedEventArgs e)
     {
         _servicesAscending = !_servicesAscending;
@@ -203,7 +190,6 @@ public partial class SystemToolsView : UserControl
         _processesAscending = string.Equals(_processSortKey, key, StringComparison.OrdinalIgnoreCase) ? !_processesAscending : true;
         _processSortKey = key;
         _processHeaderSortActive = true;
-        SelectComboItemByTag(ProcessSortComboBox, key, ref _syncingProcessSortSelector);
         UpdateProcessHeaderIndicators();
         ApplyProcessFilter();
         e.Handled = true;
@@ -247,7 +233,12 @@ public partial class SystemToolsView : UserControl
     private void ApplyProcessFilter()
     {
         var keyword = ProcessFilterTextBox?.Text.Trim() ?? string.Empty;
-        var filtered = _allProcesses.Where(item => string.IsNullOrWhiteSpace(keyword) || $"{item.Name} {item.ProcessId} {item.Path}".Contains(keyword, StringComparison.OrdinalIgnoreCase));
+        var showActiveOnly = ShowActiveProcessesCheckBox?.IsChecked == true;
+        var showSystemProcesses = ShowSystemProcessEntriesCheckBox?.IsChecked != false;
+        var filtered = _allProcesses.Where(item =>
+            (!showActiveOnly || item.IsActive) &&
+            (showSystemProcesses || !item.IsSystemProcess) &&
+            (string.IsNullOrWhiteSpace(keyword) || $"{item.Name} {item.ProcessId} {item.Path}".Contains(keyword, StringComparison.OrdinalIgnoreCase)));
         var groups = filtered
             .GroupBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
             .Select(group => new ProcessGroup(group.Key, group.ToArray()));
@@ -256,6 +247,8 @@ public partial class SystemToolsView : UserControl
             "ProcessId" => Sort(groups, item => item.Items.Min(process => process.ProcessId), _processesAscending),
             "Cpu" => Sort(groups, item => item.CpuPercent, _processesAscending),
             "Memory" => Sort(groups, item => item.MemoryBytes, _processesAscending),
+            "Disk" => Sort(groups, item => item.DiskBytesPerSecond, _processesAscending),
+            "Network" => Sort(groups, item => item.NetworkBitsPerSecond, _processesAscending),
             "Started" => Sort(groups, item => item.StartedAt ?? DateTime.MinValue, _processesAscending),
             _ => Sort(groups, item => item.Name, _processesAscending)
         };
@@ -270,6 +263,8 @@ public partial class SystemToolsView : UserControl
             {
                 "Cpu" => Sort(group.Items, item => item.CpuPercent, _processesAscending),
                 "Memory" => Sort(group.Items, item => item.MemoryBytes, _processesAscending),
+                "Disk" => Sort(group.Items, item => item.DiskBytesPerSecond, _processesAscending),
+                "Network" => Sort(group.Items, item => item.NetworkBitsPerSecond, _processesAscending),
                 "Started" => Sort(group.Items, item => item.StartedAt ?? DateTime.MinValue, _processesAscending),
                 _ => Sort(group.Items, item => item.Name, _processesAscending)
             };
@@ -448,37 +443,10 @@ public partial class SystemToolsView : UserControl
         }
     }
 
-    /// <summary>将自动刷新提升为页面级控件，端口、进程与服务页共用同一刷新节奏。</summary>
-    private void MoveAutoRefreshToPageHeader()
-    {
-        if (AutoRefreshCheckBox.Parent is not Grid portToolbar || PortsTabButton.Parent is not Grid tabGrid) return;
-
-        portToolbar.Children.Remove(AutoRefreshCheckBox);
-        portToolbar.Children.Remove(AutoRefreshIntervalComboBox);
-
-        var controls = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-        controls.Children.Add(AutoRefreshCheckBox);
-        AutoRefreshIntervalComboBox.Margin = new Thickness(10, 0, 0, 0);
-        controls.Children.Add(AutoRefreshIntervalComboBox);
-        var host = new Border
-        {
-            Background = new SolidColorBrush(Color.FromArgb(112, 255, 255, 255)),
-            BorderBrush = new SolidColorBrush(Color.FromRgb(190, 221, 241)),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(11),
-            Padding = new Thickness(10, 2, 8, 2),
-            Child = controls,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        Grid.SetColumn(host, 7);
-        tabGrid.Children.Add(host);
-    }
-
     /// <summary>为进程和服务列表表头注册点击排序，保持与端口表一致的交互。</summary>
     private void ConfigureInteractiveHeaders()
     {
-        RegisterHeaders(ProcessesPanel, new[] { "Name", "ProcessId", "Cpu", "Memory", "Started" }, _processHeaders, ProcessColumnHeader_MouseLeftButtonUp);
+        RegisterHeaders(ProcessesPanel, new[] { "Name", "ProcessId", "Cpu", "Memory", "Disk", "Network", "Started" }, _processHeaders, ProcessColumnHeader_MouseLeftButtonUp);
         RegisterHeaders(ServicesPanel, new[] { "DisplayName", "Status" }, _serviceHeaders, ServiceColumnHeader_MouseLeftButtonUp);
         UpdateProcessHeaderIndicators();
         UpdateServiceHeaderIndicators();
@@ -626,6 +594,8 @@ public partial class SystemToolsView : UserControl
     {
         public double CpuPercent => Items.Sum(item => item.CpuPercent);
         public long MemoryBytes => Items.Sum(item => item.MemoryBytes);
+        public double DiskBytesPerSecond => Items.Sum(item => item.DiskBytesPerSecond);
+        public double NetworkBitsPerSecond => Items.Sum(item => item.NetworkBitsPerSecond);
         public DateTime? StartedAt
         {
             get
@@ -637,7 +607,7 @@ public partial class SystemToolsView : UserControl
     }
 
     /// <summary>进程列表的显示行：应用汇总行或可操作的单个子进程行。</summary>
-    private sealed record ProcessListRow(string Name, bool IsGroup, bool IsExpanded, int Count, ProcessEntry? Process, double CpuPercent, long MemoryBytes, DateTime? StartedAt)
+    private sealed record ProcessListRow(string Name, bool IsGroup, bool IsExpanded, int Count, ProcessEntry? Process, double CpuPercent, long MemoryBytes, double DiskBytesPerSecond, double NetworkBitsPerSecond, DateTime? StartedAt)
     {
         public bool CanExpand => IsGroup && Count > 1;
         public string ExpandGlyph => CanExpand ? (IsExpanded ? "▾" : "▸") : string.Empty;
@@ -645,13 +615,15 @@ public partial class SystemToolsView : UserControl
         public string ProcessIdText => Process?.ProcessId.ToString() ?? "—";
         public string CpuText => $"{CpuPercent:F1}%";
         public string MemoryText => $"{MemoryBytes / 1024d / 1024d:F1} MB";
+        public string DiskText => $"{DiskBytesPerSecond / 1024d / 1024d:F2}";
+        public string NetworkText => $"{NetworkBitsPerSecond / 1_000_000d:F2}";
         public string StartedAtText => StartedAt?.ToString("yyyy-MM-dd HH:mm") ?? "—";
         public string Path => Process?.Path ?? string.Empty;
 
         public static ProcessListRow CreateGroup(ProcessGroup group, bool expanded)
-            => new(group.Name, true, expanded, group.Items.Count, group.Items.Count == 1 ? group.Items[0] : null, group.CpuPercent, group.MemoryBytes, group.StartedAt);
+            => new(group.Name, true, expanded, group.Items.Count, group.Items.Count == 1 ? group.Items[0] : null, group.CpuPercent, group.MemoryBytes, group.DiskBytesPerSecond, group.NetworkBitsPerSecond, group.StartedAt);
 
         public static ProcessListRow CreateChild(ProcessEntry process)
-            => new(process.Name, false, false, 1, process, process.CpuPercent, process.MemoryBytes, process.StartedAt);
+            => new(process.Name, false, false, 1, process, process.CpuPercent, process.MemoryBytes, process.DiskBytesPerSecond, process.NetworkBitsPerSecond, process.StartedAt);
     }
 }
