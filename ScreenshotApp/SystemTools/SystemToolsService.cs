@@ -364,6 +364,16 @@ public sealed record SystemRelationshipEntry(ProcessEntry Process, IReadOnlyList
     public bool HasNetworkActivity => NetworkEntries.Count > 0;
     public bool HasListeningPorts => NetworkEntries.Any(IsListening);
     public string ServiceSummary => Services.Count == 0 ? "无" : Services.Count == 1 ? Services[0].DisplayName : $"{Services.Count} 个服务";
+    public string PortSummary
+    {
+        get
+        {
+            var ports = NetworkEntries.Select(item => item.Port).Where(item => item > 0).Distinct().OrderBy(item => item).ToArray();
+            if (ports.Length == 0) return "—";
+            var visible = string.Join(" · ", ports.Take(3));
+            return ports.Length > 3 ? $"{visible} +{ports.Length - 3}" : visible;
+        }
+    }
     public string NetworkSummary
     {
         get

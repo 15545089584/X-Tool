@@ -43,7 +43,7 @@ public partial class SystemToolsView : UserControl
         PortsListBox.ItemsSource = _ports;
         ProcessesListBox.ItemsSource = _processes;
         ServicesListBox.ItemsSource = _services;
-        RelationsListBox.ItemsSource = _relationships;
+        RelationsBubbleListBox.ItemsSource = _relationships;
         EnvironmentListBox.ItemsSource = _environmentVariables;
         PathEntriesListBox.ItemsSource = _pathEntries;
         _portAutoRefreshTimer = new DispatcherTimer();
@@ -87,6 +87,7 @@ public partial class SystemToolsView : UserControl
         if (_isRefreshingRelationships) return;
         _isRefreshingRelationships = true;
         RelationsSummaryText.Text = "正在建立关联…";
+        RelationsBubbleSummaryText.Text = "正在建立关联…";
         try
         {
             var snapshot = await Task.Run(SystemToolsService.GetRelationshipSnapshot);
@@ -104,6 +105,7 @@ public partial class SystemToolsView : UserControl
         catch (Exception exception)
         {
             RelationsSummaryText.Text = $"读取失败：{exception.Message}";
+            RelationsBubbleSummaryText.Text = $"读取失败：{exception.Message}";
         }
         finally
         {
@@ -123,7 +125,7 @@ public partial class SystemToolsView : UserControl
         PortsPanel.Visibility = section == "Ports" ? Visibility.Visible : Visibility.Collapsed;
         ProcessesPanel.Visibility = section == "Processes" ? Visibility.Visible : Visibility.Collapsed;
         ServicesPanel.Visibility = section == "Services" ? Visibility.Visible : Visibility.Collapsed;
-        RelationsPanel.Visibility = section == "Relations" ? Visibility.Visible : Visibility.Collapsed;
+        RelationsBubblePanel.Visibility = section == "Relations" ? Visibility.Visible : Visibility.Collapsed;
         EnvironmentPanel.Visibility = section == "Environment" ? Visibility.Visible : Visibility.Collapsed;
         SetActiveTab(section);
         if (section == "Processes") _ = RefreshProcessesAsync();
@@ -186,7 +188,7 @@ public partial class SystemToolsView : UserControl
         if (PortsPanel.Visibility == Visibility.Visible) await RefreshPortsAsync();
         else if (ProcessesPanel.Visibility == Visibility.Visible) await RefreshProcessesAsync();
         else if (ServicesPanel.Visibility == Visibility.Visible) await RefreshServicesAsync();
-        else if (RelationsPanel.Visibility == Visibility.Visible) await RefreshRelationshipsAsync();
+        else if (RelationsBubblePanel.Visibility == Visibility.Visible) await RefreshRelationshipsAsync();
     }
     private void ProcessFilterTextBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyProcessFilter();
     private void ProcessDisplayOption_Changed(object sender, RoutedEventArgs e)
@@ -214,6 +216,32 @@ public partial class SystemToolsView : UserControl
         RelationDetailsPanel.DataContext = selected;
         RelationDetailsPanel.Visibility = selected is null ? Visibility.Collapsed : Visibility.Visible;
         RelationEmptyState.Visibility = selected is null ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void RelationsBubbleListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        var selected = RelationsBubbleListBox.SelectedItem as SystemRelationshipEntry;
+        RelationDetailsPopup.DataContext = selected;
+        RelationDetailsPopup.IsOpen = selected is not null;
+        if (selected is not null) Dispatcher.BeginInvoke(new Action(MoveRelationBubbleAccentToHeader), DispatcherPriority.Loaded);
+    }
+
+    private void CloseRelationDetails_Click(object sender, RoutedEventArgs e)
+    {
+        RelationDetailsPopup.IsOpen = false;
+        RelationsBubbleListBox.SelectedItem = null;
+    }
+
+    /// <summary>将彩虹分隔条置于详情标题与内容之间，避免宽气泡内的标题发生视觉重叠。</summary>
+    private void MoveRelationBubbleAccentToHeader()
+    {
+        if (RelationDetailsPopup.Child is not Border popupBorder || VisualTreeHelper.GetChildrenCount(popupBorder) == 0) return;
+        if (VisualTreeHelper.GetChild(popupBorder, 0) is not Grid root) return;
+        var accent = root.Children.OfType<Grid>().FirstOrDefault(grid =>
+            grid.ColumnDefinitions.Count == 4 &&
+            grid.Children.OfType<Border>().Count() == 4 &&
+            grid.Children.OfType<Border>().All(border => Math.Abs(border.Height - 3) < 0.1));
+        if (accent is not null) Grid.SetRow(accent, 1);
     }
     private void PortColumnHeader_Click(object sender, RoutedEventArgs e)
     {
@@ -339,9 +367,15 @@ public partial class SystemToolsView : UserControl
 
     private void ApplyRelationshipFilter()
     {
-        var keyword = RelationshipFilterTextBox?.Text.Trim() ?? string.Empty;
-        var scope = SelectedTag(RelationshipScopeComboBox);
-        var showSystemProcesses = ShowSystemRelationsCheckBox?.IsChecked != false;
+        var keyword = RelationsBubblePanel.Visibility == Visibility.Visible
+            ? RelationshipBubbleFilterTextBox.Text.Trim()
+            : RelationshipFilterTextBox?.Text.Trim() ?? string.Empty;
+        var scope = RelationsBubblePanel.Visibility == Visibility.Visible
+            ? SelectedTag(RelationshipBubbleScopeComboBox)
+            : SelectedTag(RelationshipScopeComboBox);
+        var showSystemProcesses = RelationsBubblePanel.Visibility == Visibility.Visible
+            ? ShowSystemBubbleRelationsCheckBox.IsChecked != false
+            : ShowSystemRelationsCheckBox?.IsChecked != false;
         var filtered = _allRelationships.Where(item =>
             (showSystemProcesses || !item.Process.IsSystemProcess) &&
             (scope switch
@@ -358,13 +392,12 @@ public partial class SystemToolsView : UserControl
         var visible = filtered.ToArray();
         Replace(_relationships, visible);
         RelationsSummaryText.Text = $"运行进程 {_allRelationships.Count:N0} · 已显示 {visible.Length:N0} · 关联服务 {_allRelationships.Sum(item => item.Services.Count):N0} · 网络记录 {_allRelationships.Sum(item => item.NetworkEntries.Count):N0}";
+        RelationsBubbleSummaryText.Text = RelationsSummaryText.Text;
 
-        if (RelationsListBox.SelectedItem is not SystemRelationshipEntry selected || !visible.Contains(selected))
+        if (RelationsBubbleListBox.SelectedItem is not SystemRelationshipEntry selected || !visible.Contains(selected))
         {
-            RelationsListBox.SelectedItem = null;
-            RelationDetailsPanel.DataContext = null;
-            RelationDetailsPanel.Visibility = Visibility.Collapsed;
-            RelationEmptyState.Visibility = Visibility.Visible;
+            RelationsBubbleListBox.SelectedItem = null;
+            RelationDetailsPopup.IsOpen = false;
         }
     }
 
