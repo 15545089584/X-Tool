@@ -13,20 +13,20 @@ public partial class SystemToolsView : UserControl
     private readonly ObservableCollection<PortEntry> _ports = new();
     private readonly ObservableCollection<ProcessListRow> _processes = new();
     private readonly ObservableCollection<ServiceEntry> _services = new();
+    private readonly ObservableCollection<SystemRelationshipEntry> _relationships = new();
     private readonly ObservableCollection<EnvironmentVariableEntry> _environmentVariables = new();
     private readonly ObservableCollection<PathEntry> _pathEntries = new();
     private IReadOnlyList<PortEntry> _allPorts = Array.Empty<PortEntry>();
     private IReadOnlyList<ProcessEntry> _allProcesses = Array.Empty<ProcessEntry>();
     private IReadOnlyList<ServiceEntry> _allServices = Array.Empty<ServiceEntry>();
+    private IReadOnlyList<SystemRelationshipEntry> _allRelationships = Array.Empty<SystemRelationshipEntry>();
     private IReadOnlyList<EnvironmentVariableEntry> _allEnvironmentVariables = Array.Empty<EnvironmentVariableEntry>();
     private bool _portsAscending = true;
     private string _portSortKey = "Port";
     private bool _portHeaderSortActive;
     private readonly DispatcherTimer _portAutoRefreshTimer;
-    private readonly DispatcherTimer _pidHighlightTimer;
     private bool _isRefreshingPorts;
-    private int? _highlightedPortProcessId;
-    private int? _highlightedProcessId;
+    private bool _isRefreshingRelationships;
     private bool _processesAscending = true;
     private bool _servicesAscending = true;
     private string _processSortKey = "Name";
@@ -43,19 +43,18 @@ public partial class SystemToolsView : UserControl
         PortsListBox.ItemsSource = _ports;
         ProcessesListBox.ItemsSource = _processes;
         ServicesListBox.ItemsSource = _services;
+        RelationsListBox.ItemsSource = _relationships;
         EnvironmentListBox.ItemsSource = _environmentVariables;
         PathEntriesListBox.ItemsSource = _pathEntries;
         _portAutoRefreshTimer = new DispatcherTimer();
         _portAutoRefreshTimer.Tick += AutoRefreshPorts_Tick;
-        _pidHighlightTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
-        _pidHighlightTimer.Tick += (_, _) => ClearPidHighlights();
         EnvironmentScopeComboBox.SelectedIndex = 0;
         AutoRefreshIntervalComboBox.SelectedIndex = 1;
         UpdatePortAutoRefreshInterval();
         PortsListBox.ItemContainerGenerator.StatusChanged += (_, _) => ConfigurePortColumns();
         SetActiveTab("Ports");
         Loaded += async (_, _) => { ConfigureInteractiveHeaders(); ConfigurePortColumns(); await RefreshPortsAsync(); };
-        Unloaded += (_, _) => { _portAutoRefreshTimer.Stop(); _pidHighlightTimer.Stop(); };
+        Unloaded += (_, _) => _portAutoRefreshTimer.Stop();
     }
 
     private async Task RefreshPortsAsync()
@@ -82,6 +81,36 @@ public partial class SystemToolsView : UserControl
         catch (Exception exception) { ServicesSummaryText.Text = $"读取失败：{exception.Message}"; }
     }
 
+    /// <summary>通过同一次快照建立服务、进程与端口关系，避免页面间依赖搜索框或重复读取数据。</summary>
+    private async Task RefreshRelationshipsAsync()
+    {
+        if (_isRefreshingRelationships) return;
+        _isRefreshingRelationships = true;
+        RelationsSummaryText.Text = "正在建立关联…";
+        try
+        {
+            var snapshot = await Task.Run(SystemToolsService.GetRelationshipSnapshot);
+            _allRelationships = snapshot.Processes
+                .Select(process => new SystemRelationshipEntry(
+                    process,
+                    snapshot.Services.Where(service => service.ProcessId == process.ProcessId).ToArray(),
+                    snapshot.Ports.Where(port => port.ProcessId == process.ProcessId).ToArray()))
+                .OrderByDescending(item => item.HasNetworkActivity || item.HasServices)
+                .ThenByDescending(item => item.MemoryBytes)
+                .ThenBy(item => item.ProcessName, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            ApplyRelationshipFilter();
+        }
+        catch (Exception exception)
+        {
+            RelationsSummaryText.Text = $"读取失败：{exception.Message}";
+        }
+        finally
+        {
+            _isRefreshingRelationships = false;
+        }
+    }
+
     private void RefreshEnvironment()
     {
         try { _allEnvironmentVariables = SystemToolsService.GetEnvironmentVariables(SelectedEnvironmentScope); ApplyEnvironmentFilter(); }
@@ -94,16 +123,18 @@ public partial class SystemToolsView : UserControl
         PortsPanel.Visibility = section == "Ports" ? Visibility.Visible : Visibility.Collapsed;
         ProcessesPanel.Visibility = section == "Processes" ? Visibility.Visible : Visibility.Collapsed;
         ServicesPanel.Visibility = section == "Services" ? Visibility.Visible : Visibility.Collapsed;
+        RelationsPanel.Visibility = section == "Relations" ? Visibility.Visible : Visibility.Collapsed;
         EnvironmentPanel.Visibility = section == "Environment" ? Visibility.Visible : Visibility.Collapsed;
         SetActiveTab(section);
         if (section == "Processes") _ = RefreshProcessesAsync();
         else if (section == "Services") _ = RefreshServicesAsync();
+        else if (section == "Relations") _ = RefreshRelationshipsAsync();
         else if (section == "Environment") RefreshEnvironment();
     }
 
     private void SetActiveTab(string section)
     {
-        foreach (var (button, name) in new[] { (PortsTabButton, "Ports"), (ProcessesTabButton, "Processes"), (ServicesTabButton, "Services"), (EnvironmentTabButton, "Environment") })
+        foreach (var (button, name) in new[] { (PortsTabButton, "Ports"), (ProcessesTabButton, "Processes"), (ServicesTabButton, "Services"), (RelationsTabButton, "Relations"), (EnvironmentTabButton, "Environment") })
         {
             var active = name == section;
             button.Background = new SolidColorBrush(active ? Color.FromRgb(77, 124, 254) : Color.FromArgb(134, 255, 255, 255));
@@ -115,6 +146,7 @@ public partial class SystemToolsView : UserControl
     private async void RefreshPorts_Click(object sender, RoutedEventArgs e) => await RefreshPortsAsync();
     private async void RefreshProcesses_Click(object sender, RoutedEventArgs e) => await RefreshProcessesAsync();
     private async void RefreshServices_Click(object sender, RoutedEventArgs e) => await RefreshServicesAsync();
+    private async void RefreshRelationships_Click(object sender, RoutedEventArgs e) => await RefreshRelationshipsAsync();
     private void PortFilterTextBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyPortFilter();
     private void PortDisplayOption_Changed(object sender, RoutedEventArgs e)
     {
@@ -154,6 +186,7 @@ public partial class SystemToolsView : UserControl
         if (PortsPanel.Visibility == Visibility.Visible) await RefreshPortsAsync();
         else if (ProcessesPanel.Visibility == Visibility.Visible) await RefreshProcessesAsync();
         else if (ServicesPanel.Visibility == Visibility.Visible) await RefreshServicesAsync();
+        else if (RelationsPanel.Visibility == Visibility.Visible) await RefreshRelationshipsAsync();
     }
     private void ProcessFilterTextBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyProcessFilter();
     private void ProcessDisplayOption_Changed(object sender, RoutedEventArgs e)
@@ -164,6 +197,23 @@ public partial class SystemToolsView : UserControl
     private void ServiceDisplayOption_Changed(object sender, RoutedEventArgs e)
     {
         if (IsLoaded) ApplyServiceFilter();
+    }
+    private void RelationshipFilterTextBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyRelationshipFilter();
+    private void RelationshipDisplayOption_Changed(object sender, RoutedEventArgs e)
+    {
+        if (IsLoaded) ApplyRelationshipFilter();
+    }
+    private void RelationshipScopeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (IsLoaded) ApplyRelationshipFilter();
+    }
+
+    private void RelationsListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        var selected = RelationsListBox.SelectedItem as SystemRelationshipEntry;
+        RelationDetailsPanel.DataContext = selected;
+        RelationDetailsPanel.Visibility = selected is null ? Visibility.Collapsed : Visibility.Visible;
+        RelationEmptyState.Visibility = selected is null ? Visibility.Visible : Visibility.Collapsed;
     }
     private void PortColumnHeader_Click(object sender, RoutedEventArgs e)
     {
@@ -205,10 +255,9 @@ public partial class SystemToolsView : UserControl
         var showSystemProcesses = ShowSystemProcessesCheckBox?.IsChecked != false;
         var showIpv6 = ShowIPv6CheckBox?.IsChecked != false;
         var filtered = _allPorts.Where(item =>
-            _highlightedPortProcessId == item.ProcessId ||
-            ((showSystemProcesses || !item.IsSystemProcess) &&
-             (showIpv6 || !item.IsIpv6) &&
-             (string.IsNullOrWhiteSpace(keyword) || $"{item.Protocol} {item.LocalAddress} {item.Port} {item.ProcessName} {item.ProcessId} {item.State}".Contains(keyword, StringComparison.OrdinalIgnoreCase))));
+            (showSystemProcesses || !item.IsSystemProcess) &&
+            (showIpv6 || !item.IsIpv6) &&
+            (string.IsNullOrWhiteSpace(keyword) || $"{item.Protocol} {item.LocalAddress} {item.Port} {item.ProcessName} {item.ProcessId} {item.State}".Contains(keyword, StringComparison.OrdinalIgnoreCase)));
         filtered = _portSortKey switch
         {
             "Protocol" => Sort(filtered, item => item.Protocol, _portsAscending),
@@ -218,12 +267,10 @@ public partial class SystemToolsView : UserControl
             "State" => Sort(filtered, item => item.State, _portsAscending),
             _ => Sort(filtered, item => item.Port, _portsAscending)
         };
-        var visiblePorts = filtered.Select(item => item with { IsPidHighlighted = _highlightedPortProcessId.HasValue && _highlightedPortProcessId.Value == item.ProcessId }).ToArray();
+        var visiblePorts = filtered.ToArray();
         Replace(_ports, visiblePorts);
         PortsSummaryText.Text = $"显示 {_ports.Count:N0} 个端口";
         ConfigurePortColumns();
-        QueuePidLinkMenus(PortsListBox, "定位到进程", LocateProcessByPid_Click);
-        ScrollToHighlightedRow(PortsListBox, visiblePorts.Cast<object>());
     }
 
     private void ApplyProcessFilter()
@@ -232,10 +279,9 @@ public partial class SystemToolsView : UserControl
         var showActiveOnly = ShowActiveProcessesCheckBox?.IsChecked == true;
         var showSystemProcesses = ShowSystemProcessEntriesCheckBox?.IsChecked != false;
         var filtered = _allProcesses.Where(item =>
-            _highlightedProcessId == item.ProcessId ||
-            ((!showActiveOnly || item.IsActive) &&
-             (showSystemProcesses || !item.IsSystemProcess) &&
-             (string.IsNullOrWhiteSpace(keyword) || $"{item.Name} {item.ProcessId} {item.Path}".Contains(keyword, StringComparison.OrdinalIgnoreCase))));
+            (!showActiveOnly || item.IsActive) &&
+            (showSystemProcesses || !item.IsSystemProcess) &&
+            (string.IsNullOrWhiteSpace(keyword) || $"{item.Name} {item.ProcessId} {item.Path}".Contains(keyword, StringComparison.OrdinalIgnoreCase)));
         var groups = filtered
             .GroupBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
             .Select(group => new ProcessGroup(group.Key, group.ToArray()));
@@ -268,11 +314,9 @@ public partial class SystemToolsView : UserControl
             rows.AddRange(children.Select(ProcessListRow.CreateChild));
         }
 
-        var visibleRows = rows.Select(item => item with { IsPidHighlighted = _highlightedProcessId.HasValue && item.Process?.ProcessId == _highlightedProcessId.Value }).ToArray();
+        var visibleRows = rows.ToArray();
         Replace(_processes, visibleRows);
         ProcessesSummaryText.Text = $"显示 {groups.Count():N0} 个应用 · {filtered.Count():N0} 个进程";
-        QueuePidLinkMenus(ProcessesListBox, "定位到端口", LocatePortsByPid_Click);
-        ScrollToHighlightedRow(ProcessesListBox, visibleRows.Cast<object>());
     }
 
     private void ApplyServiceFilter()
@@ -291,6 +335,37 @@ public partial class SystemToolsView : UserControl
         };
         Replace(_services, filtered);
         ServicesSummaryText.Text = $"显示 {_services.Count:N0} 项服务";
+    }
+
+    private void ApplyRelationshipFilter()
+    {
+        var keyword = RelationshipFilterTextBox?.Text.Trim() ?? string.Empty;
+        var scope = SelectedTag(RelationshipScopeComboBox);
+        var showSystemProcesses = ShowSystemRelationsCheckBox?.IsChecked != false;
+        var filtered = _allRelationships.Where(item =>
+            (showSystemProcesses || !item.Process.IsSystemProcess) &&
+            (scope switch
+            {
+                "Services" => item.HasServices,
+                "Network" => item.HasNetworkActivity,
+                "Listening" => item.HasListeningPorts,
+                "Unrelated" => !item.HasServices && !item.HasNetworkActivity,
+                _ => true
+            }) &&
+            (string.IsNullOrWhiteSpace(keyword) ||
+              $"{item.ProcessName} {item.ProcessId} {item.ProcessPath} {item.ServiceSummary} {string.Join(' ', item.Services.Select(service => service.Name + " " + service.DisplayName))} {string.Join(' ', item.NetworkEntries.Select(port => port.Protocol + " " + port.LocalAddress + " " + port.RemoteAddress + " " + port.State))}"
+                 .Contains(keyword, StringComparison.OrdinalIgnoreCase)));
+        var visible = filtered.ToArray();
+        Replace(_relationships, visible);
+        RelationsSummaryText.Text = $"运行进程 {_allRelationships.Count:N0} · 已显示 {visible.Length:N0} · 关联服务 {_allRelationships.Sum(item => item.Services.Count):N0} · 网络记录 {_allRelationships.Sum(item => item.NetworkEntries.Count):N0}";
+
+        if (RelationsListBox.SelectedItem is not SystemRelationshipEntry selected || !visible.Contains(selected))
+        {
+            RelationsListBox.SelectedItem = null;
+            RelationDetailsPanel.DataContext = null;
+            RelationDetailsPanel.Visibility = Visibility.Collapsed;
+            RelationEmptyState.Visibility = Visibility.Visible;
+        }
     }
 
     private void ApplyEnvironmentFilter()
@@ -317,69 +392,8 @@ public partial class SystemToolsView : UserControl
         _ = RefreshPortsAsync();
     }
 
-    /// <summary>从端口行按 PID 打开对应进程；保留全部系统进程以避免筛选误隐藏目标。</summary>
-    private async void LocateProcessByPid_Click(object sender, RoutedEventArgs e)
-    {
-        if (GetEntryFromMenu(sender) is not PortEntry { ProcessId: > 0 } port) return;
-        _highlightedPortProcessId = null;
-        _highlightedProcessId = port.ProcessId;
-        if (!_allProcesses.Any(item => item.ProcessId == port.ProcessId)) await RefreshProcessesAsync();
-        if (!_allProcesses.Any(item => item.ProcessId == port.ProcessId))
-        {
-            _highlightedProcessId = null;
-            ApplyProcessFilter();
-            MessageBox.Show($"未找到 PID {port.ProcessId} 对应的进程。\n\n该进程可能已结束，或当前权限不足以读取它。", "无法定位进程", MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
-
-        ShowSection("Processes");
-        QueueHighlightedRowScroll(ProcessesListBox, _processes.Cast<object>());
-        StartPidHighlightTimer();
-    }
-
-    /// <summary>从进程行按 PID 定位占用端口；同一 PID 的多个端口会同时高亮。</summary>
-    private async void LocatePortsByPid_Click(object sender, RoutedEventArgs e)
-    {
-        if (GetEntryFromMenu(sender) is not ProcessEntry { ProcessId: > 0 } process) return;
-        _highlightedProcessId = null;
-        _highlightedPortProcessId = process.ProcessId;
-        if (!_allPorts.Any(item => item.ProcessId == process.ProcessId)) await RefreshPortsAsync();
-        if (!_allPorts.Any(item => item.ProcessId == process.ProcessId))
-        {
-            _highlightedPortProcessId = null;
-            ApplyPortFilter();
-            MessageBox.Show($"未找到 PID {process.ProcessId} 对应的端口。\n\n该进程当前没有可见端口，或端口已在刷新期间关闭。", "无法定位端口", MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
-
-        ShowSection("Ports");
-        QueueHighlightedRowScroll(PortsListBox, _ports.Cast<object>());
-        StartPidHighlightTimer();
-    }
-
-    private void ShowSection(string section)
-    {
-        PortsPanel.Visibility = section == "Ports" ? Visibility.Visible : Visibility.Collapsed;
-        ProcessesPanel.Visibility = section == "Processes" ? Visibility.Visible : Visibility.Collapsed;
-        ServicesPanel.Visibility = section == "Services" ? Visibility.Visible : Visibility.Collapsed;
-        EnvironmentPanel.Visibility = section == "Environment" ? Visibility.Visible : Visibility.Collapsed;
-        SetActiveTab(section);
-    }
-
-    private void StartPidHighlightTimer()
-    {
-        _pidHighlightTimer.Stop();
-        _pidHighlightTimer.Start();
-    }
-
-    private void ClearPidHighlights()
-    {
-        _pidHighlightTimer.Stop();
-        _highlightedPortProcessId = null;
-        _highlightedProcessId = null;
-        ApplyPortFilter();
-        ApplyProcessFilter();
-    }
+    // 旧版端口模板仍保留该事件名称以兼容已加载的 XAML；菜单已从界面隐藏，关联追踪统一由关系看板承载。
+    private void LocateProcessByPid_Click(object sender, RoutedEventArgs e) { }
 
     private void ProcessRowToggle_Click(object sender, RoutedEventArgs e)
     {
@@ -640,53 +654,6 @@ public partial class SystemToolsView : UserControl
         button.ToolTip = ascending ? "当前为升序，点击切换为降序" : "当前为降序，点击切换为升序";
     }
 
-    /// <summary>为端口和单进程行补充 PID 联动菜单，保留既有的目录和结束进程操作。</summary>
-    private void QueuePidLinkMenus(ListBox listBox, string header, RoutedEventHandler handler)
-    {
-        Dispatcher.BeginInvoke(new Action(() =>
-        {
-            for (var index = 0; index < listBox.Items.Count; index++)
-            {
-                if (listBox.ItemContainerGenerator.ContainerFromIndex(index) is not FrameworkElement container ||
-                    container.DataContext is not (PortEntry or ProcessListRow { Process: not null })) continue;
-                var menu = FindContextMenu(container);
-                if (menu is null || menu.Items.OfType<MenuItem>().Any(item => Equals(item.Tag, "PidLink") || string.Equals(item.Header?.ToString(), header, StringComparison.Ordinal))) continue;
-
-                menu.Items.Add(new Separator());
-                var linkItem = new MenuItem { Header = header, Tag = "PidLink" };
-                linkItem.Click += handler;
-                menu.Items.Add(linkItem);
-            }
-        }), DispatcherPriority.Loaded);
-    }
-
-    private static ContextMenu? FindContextMenu(DependencyObject parent)
-    {
-        if (parent is FrameworkElement { ContextMenu: not null } element) return element.ContextMenu;
-        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
-        {
-            var menu = FindContextMenu(VisualTreeHelper.GetChild(parent, index));
-            if (menu is not null) return menu;
-        }
-
-        return null;
-    }
-
-    private static void ScrollToHighlightedRow(ListBox listBox, IEnumerable<object> rows)
-    {
-        var target = rows.FirstOrDefault(row => row switch
-        {
-            PortEntry port => port.IsPidHighlighted,
-            ProcessListRow process => process.IsPidHighlighted,
-            _ => false
-        });
-        if (target is not null) listBox.ScrollIntoView(target);
-    }
-
-    /// <summary>切换页签后等待目标列表完成布局，再滚动到带彩虹框的目标行。</summary>
-    private void QueueHighlightedRowScroll(ListBox listBox, IEnumerable<object> rows)
-        => Dispatcher.BeginInvoke(new Action(() => ScrollToHighlightedRow(listBox, rows)), DispatcherPriority.ContextIdle);
-
     private static object? GetEntryFromMenu(object sender)
     {
         if ((sender as FrameworkElement)?.DataContext is { } entry)
@@ -725,7 +692,7 @@ public partial class SystemToolsView : UserControl
     }
 
     /// <summary>进程列表的显示行：应用汇总行或可操作的单个子进程行。</summary>
-    private sealed record ProcessListRow(string Name, bool IsGroup, bool IsExpanded, int Count, ProcessEntry? Process, double CpuPercent, long MemoryBytes, double DiskBytesPerSecond, double NetworkBitsPerSecond, DateTime? StartedAt, bool IsPidHighlighted = false)
+    private sealed record ProcessListRow(string Name, bool IsGroup, bool IsExpanded, int Count, ProcessEntry? Process, double CpuPercent, long MemoryBytes, double DiskBytesPerSecond, double NetworkBitsPerSecond, DateTime? StartedAt)
     {
         public bool CanExpand => IsGroup && Count > 1;
         public string ExpandGlyph => CanExpand ? (IsExpanded ? "▾" : "▸") : string.Empty;

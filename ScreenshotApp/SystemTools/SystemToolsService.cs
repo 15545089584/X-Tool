@@ -13,10 +13,23 @@ public static class SystemToolsService
     private static readonly Regex ServiceNameLine = new(@"^SERVICE_NAME:\s*(?<name>.+)$", RegexOptions.Compiled | RegexOptions.Multiline);
     private static readonly Regex DisplayNameLine = new(@"^DISPLAY_NAME:\s*(?<name>.+)$", RegexOptions.Compiled | RegexOptions.Multiline);
     private static readonly Regex ServiceStateLine = new(@"^\s*STATE\s*:\s*\d+\s+(?<state>.+)$", RegexOptions.Compiled | RegexOptions.Multiline);
+    private static readonly Regex ServiceProcessIdLine = new(@"^\s*PID\s*:\s*(?<pid>\d+)$", RegexOptions.Compiled | RegexOptions.Multiline);
     private static readonly object ProcessSampleLock = new();
     private static Dictionary<int, ProcessSample> _previousProcessSamples = new();
 
-    public static IReadOnlyList<PortEntry> GetPorts()
+    public static IReadOnlyList<PortEntry> GetPorts() => GetPorts(processesById: null);
+
+    /// <summary>一次采集三类只读数据，并以进程索引复用端口的进程信息，避免逐条端口重复访问进程句柄。</summary>
+    public static SystemRelationshipSnapshot GetRelationshipSnapshot()
+    {
+        var processes = GetProcesses();
+        var processesById = processes.ToDictionary(item => item.ProcessId);
+        var ports = GetPorts(processesById);
+        var services = GetServices();
+        return new SystemRelationshipSnapshot(processes, ports, services, DateTime.Now);
+    }
+
+    private static IReadOnlyList<PortEntry> GetPorts(IReadOnlyDictionary<int, ProcessEntry>? processesById)
     {
         var entries = new List<PortEntry>();
         foreach (var line in RunCommand("netstat.exe", "-ano").Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries))
@@ -29,7 +42,9 @@ public static class SystemToolsService
 
             var protocol = match.Groups[1].Value.ToUpperInvariant();
             var state = match.Groups["state"].Success ? match.Groups["state"].Value : "监听";
-            var (name, path) = GetProcessDetails(pid);
+            var (name, path) = processesById is not null && processesById.TryGetValue(pid, out var process)
+                ? (process.Name, process.Path)
+                : GetProcessDetails(pid);
             entries.Add(new PortEntry(protocol, match.Groups["local"].Value, match.Groups["remote"].Value, state, pid, name, path));
         }
 
@@ -67,10 +82,14 @@ public static class SystemToolsService
             {
                 string path = string.Empty;
                 DateTime? startedAt = null;
+                var processorTime = TimeSpan.Zero;
+                long memoryBytes = 0;
                 try { path = process.MainModule?.FileName ?? string.Empty; } catch { }
                 try { startedAt = process.StartTime; } catch { }
+                try { processorTime = process.TotalProcessorTime; } catch { }
+                try { memoryBytes = process.WorkingSet64; } catch { }
                 var io = TryGetProcessIoCounters(process, out var counters) ? counters : default;
-                samples.Add(new ProcessSample(process.ProcessName, process.Id, process.TotalProcessorTime, process.WorkingSet64, path, startedAt, io.ReadTransferCount, io.WriteTransferCount, io.OtherTransferCount, timestamp));
+                samples.Add(new ProcessSample(process.ProcessName, process.Id, processorTime, memoryBytes, path, startedAt, io.ReadTransferCount, io.WriteTransferCount, io.OtherTransferCount, timestamp));
             }
             catch { }
             finally { process.Dispose(); }
@@ -112,7 +131,7 @@ public static class SystemToolsService
 
     public static IReadOnlyList<ServiceEntry> GetServices()
     {
-        var blocks = Regex.Split(RunCommand("sc.exe", "query type= service state= all").Replace("\r\n", "\n"), @"\n\s*\n");
+        var blocks = Regex.Split(RunCommand("sc.exe", "queryex type= service state= all").Replace("\r\n", "\n"), @"\n\s*\n");
         var entries = new List<ServiceEntry>();
         foreach (var block in blocks)
         {
@@ -120,7 +139,9 @@ public static class SystemToolsService
             if (string.IsNullOrWhiteSpace(name)) continue;
             var displayName = DisplayNameLine.Match(block).Groups["name"].Value.Trim();
             var state = ServiceStateLine.Match(block).Groups["state"].Value.Trim();
-            entries.Add(new ServiceEntry(name, string.IsNullOrWhiteSpace(displayName) ? name : displayName, NormalizeServiceState(state)));
+            var processIdText = ServiceProcessIdLine.Match(block).Groups["pid"].Value;
+            var processId = int.TryParse(processIdText, out var value) ? value : 0;
+            entries.Add(new ServiceEntry(name, string.IsNullOrWhiteSpace(displayName) ? name : displayName, NormalizeServiceState(state), processId));
         }
 
         return entries.OrderBy(item => item.DisplayName, StringComparer.OrdinalIgnoreCase).ToArray();
@@ -276,7 +297,7 @@ public static class SystemToolsService
     private sealed record ProcessSample(string Name, int ProcessId, TimeSpan TotalProcessorTime, long MemoryBytes, string Path, DateTime? StartedAt, ulong ReadTransferCount, ulong WriteTransferCount, ulong OtherTransferCount, long Timestamp);
 }
 
-public sealed record PortEntry(string Protocol, string LocalAddress, string RemoteAddress, string State, int ProcessId, string ProcessName, string ProcessPath, bool IsPidHighlighted = false)
+public sealed record PortEntry(string Protocol, string LocalAddress, string RemoteAddress, string State, int ProcessId, string ProcessName, string ProcessPath)
 {
     /// <summary>从本地地址提取端口，IPv4、IPv6 与通配地址均适用。</summary>
     public int Port
@@ -321,10 +342,44 @@ public sealed record ProcessEntry(string Name, int ProcessId, double CpuPercent,
     public string StartedAtText => StartedAt?.ToString("yyyy-MM-dd HH:mm") ?? "—";
 }
 
-public sealed record ServiceEntry(string Name, string DisplayName, string Status)
+public sealed record ServiceEntry(string Name, string DisplayName, string Status, int ProcessId = 0)
 {
     public bool ShouldStart => Status != "运行中";
     public string ToggleActionText => ShouldStart ? "启动" : "停止";
+}
+
+/// <summary>同一时刻采集的系统关系数据，供关联关系页在单次刷新内稳定建立 PID 映射。</summary>
+public sealed record SystemRelationshipSnapshot(IReadOnlyList<ProcessEntry> Processes, IReadOnlyList<PortEntry> Ports, IReadOnlyList<ServiceEntry> Services, DateTime CapturedAt);
+
+/// <summary>以运行进程为核心的关联展示行；PID 与启动时间共同标识该次运行实例。</summary>
+public sealed record SystemRelationshipEntry(ProcessEntry Process, IReadOnlyList<ServiceEntry> Services, IReadOnlyList<PortEntry> NetworkEntries)
+{
+    public int ProcessId => Process.ProcessId;
+    public DateTime? StartedAt => Process.StartedAt;
+    public string ProcessName => Process.Name;
+    public string ProcessPath => Process.Path;
+    public double CpuPercent => Process.CpuPercent;
+    public long MemoryBytes => Process.MemoryBytes;
+    public bool HasServices => Services.Count > 0;
+    public bool HasNetworkActivity => NetworkEntries.Count > 0;
+    public bool HasListeningPorts => NetworkEntries.Any(IsListening);
+    public string ServiceSummary => Services.Count == 0 ? "无" : Services.Count == 1 ? Services[0].DisplayName : $"{Services.Count} 个服务";
+    public string NetworkSummary
+    {
+        get
+        {
+            if (NetworkEntries.Count == 0) return "无";
+            var listening = NetworkEntries.Count(IsListening);
+            return listening > 0 ? $"{NetworkEntries.Count} 项 · {listening} 个监听" : $"{NetworkEntries.Count} 项连接";
+        }
+    }
+    public string CpuText => $"{CpuPercent:F1}%";
+    public string MemoryText => $"{MemoryBytes / 1024d / 1024d:F1} MB";
+    public string StartedAtText => StartedAt?.ToString("yyyy-MM-dd HH:mm") ?? "—";
+    public string InstanceKey => StartedAt.HasValue ? $"PID {ProcessId} · {StartedAt:yyyy-MM-dd HH:mm:ss}" : $"PID {ProcessId}";
+
+    public static bool IsListening(PortEntry entry)
+        => entry.State.Contains("LISTEN", StringComparison.OrdinalIgnoreCase) || entry.State.Contains("监听", StringComparison.Ordinal);
 }
 
 public sealed record EnvironmentVariableEntry(string Name, string Value, EnvironmentVariableTarget Target);
