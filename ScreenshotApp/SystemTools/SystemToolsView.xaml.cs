@@ -323,7 +323,7 @@ public partial class SystemToolsView : UserControl
         if (GetEntryFromMenu(sender) is not PortEntry { ProcessId: > 0 } port) return;
         _highlightedPortProcessId = null;
         _highlightedProcessId = port.ProcessId;
-        await RefreshProcessesAsync();
+        if (!_allProcesses.Any(item => item.ProcessId == port.ProcessId)) await RefreshProcessesAsync();
         if (!_allProcesses.Any(item => item.ProcessId == port.ProcessId))
         {
             _highlightedProcessId = null;
@@ -333,6 +333,7 @@ public partial class SystemToolsView : UserControl
         }
 
         ShowSection("Processes");
+        QueueHighlightedRowScroll(ProcessesListBox, _processes.Cast<object>());
         StartPidHighlightTimer();
     }
 
@@ -342,7 +343,7 @@ public partial class SystemToolsView : UserControl
         if (GetEntryFromMenu(sender) is not ProcessEntry { ProcessId: > 0 } process) return;
         _highlightedProcessId = null;
         _highlightedPortProcessId = process.ProcessId;
-        await RefreshPortsAsync();
+        if (!_allPorts.Any(item => item.ProcessId == process.ProcessId)) await RefreshPortsAsync();
         if (!_allPorts.Any(item => item.ProcessId == process.ProcessId))
         {
             _highlightedPortProcessId = null;
@@ -352,6 +353,7 @@ public partial class SystemToolsView : UserControl
         }
 
         ShowSection("Ports");
+        QueueHighlightedRowScroll(PortsListBox, _ports.Cast<object>());
         StartPidHighlightTimer();
     }
 
@@ -645,7 +647,7 @@ public partial class SystemToolsView : UserControl
                 if (listBox.ItemContainerGenerator.ContainerFromIndex(index) is not FrameworkElement container ||
                     container.DataContext is not (PortEntry or ProcessListRow { Process: not null })) continue;
                 var menu = FindContextMenu(container);
-                if (menu is null || menu.Items.OfType<MenuItem>().Any(item => Equals(item.Tag, "PidLink"))) continue;
+                if (menu is null || menu.Items.OfType<MenuItem>().Any(item => Equals(item.Tag, "PidLink") || string.Equals(item.Header?.ToString(), header, StringComparison.Ordinal))) continue;
 
                 menu.Items.Add(new Separator());
                 var linkItem = new MenuItem { Header = header, Tag = "PidLink" };
@@ -677,6 +679,10 @@ public partial class SystemToolsView : UserControl
         });
         if (target is not null) listBox.ScrollIntoView(target);
     }
+
+    /// <summary>切换页签后等待目标列表完成布局，再滚动到带彩虹框的目标行。</summary>
+    private void QueueHighlightedRowScroll(ListBox listBox, IEnumerable<object> rows)
+        => Dispatcher.BeginInvoke(new Action(() => ScrollToHighlightedRow(listBox, rows)), DispatcherPriority.ContextIdle);
 
     private static object? GetEntryFromMenu(object sender)
     {
