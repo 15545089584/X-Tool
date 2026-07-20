@@ -388,8 +388,11 @@ public partial class SystemToolsView : UserControl
         ApplyProcessFilter();
     }
 
-    private async void StartService_Click(object sender, RoutedEventArgs e) => await ControlServiceAsync(sender, start: true);
-    private async void StopService_Click(object sender, RoutedEventArgs e) => await ControlServiceAsync(sender, start: false);
+    private async void ToggleService_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not ServiceEntry service) return;
+        await ControlServiceAsync(sender, service.ShouldStart);
+    }
 
     private async Task ControlServiceAsync(object sender, bool start)
     {

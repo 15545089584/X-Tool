@@ -321,6 +321,10 @@ public sealed record ProcessEntry(string Name, int ProcessId, double CpuPercent,
     public string StartedAtText => StartedAt?.ToString("yyyy-MM-dd HH:mm") ?? "—";
 }
 
-public sealed record ServiceEntry(string Name, string DisplayName, string Status);
+public sealed record ServiceEntry(string Name, string DisplayName, string Status)
+{
+    public bool ShouldStart => Status != "运行中";
+    public string ToggleActionText => ShouldStart ? "启动" : "停止";
+}
 
 public sealed record EnvironmentVariableEntry(string Name, string Value, EnvironmentVariableTarget Target);
