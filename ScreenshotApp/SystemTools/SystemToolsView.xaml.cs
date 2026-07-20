@@ -52,6 +52,7 @@ public partial class SystemToolsView : UserControl
         AutoRefreshIntervalComboBox.SelectedIndex = 1;
         UpdatePortAutoRefreshInterval();
         PortsListBox.ItemContainerGenerator.StatusChanged += (_, _) => ConfigurePortColumns();
+        RelationsBubbleListBox.ItemContainerGenerator.StatusChanged += (_, _) => ConfigureRelationshipColumns();
         SetActiveTab("Ports");
         Loaded += async (_, _) => { ConfigureInteractiveHeaders(); ConfigurePortColumns(); await RefreshPortsAsync(); };
         Unloaded += (_, _) => _portAutoRefreshTimer.Stop();
@@ -223,7 +224,7 @@ public partial class SystemToolsView : UserControl
         var selected = RelationsBubbleListBox.SelectedItem as SystemRelationshipEntry;
         RelationDetailsPopup.DataContext = selected;
         RelationDetailsPopup.IsOpen = selected is not null;
-        if (selected is not null) Dispatcher.BeginInvoke(new Action(MoveRelationBubbleAccentToHeader), DispatcherPriority.Loaded);
+        if (selected is not null) Dispatcher.BeginInvoke(new Action(ConfigureRelationBubble), DispatcherPriority.Loaded);
     }
 
     private void CloseRelationDetails_Click(object sender, RoutedEventArgs e)
@@ -232,16 +233,38 @@ public partial class SystemToolsView : UserControl
         RelationsBubbleListBox.SelectedItem = null;
     }
 
-    /// <summary>将彩虹分隔条置于详情标题与内容之间，避免宽气泡内的标题发生视觉重叠。</summary>
-    private void MoveRelationBubbleAccentToHeader()
+    /// <summary>修正详情气泡的三色分隔、圆角裁切和 CPU 指标列，避免动态布局产生重叠。</summary>
+    private void ConfigureRelationBubble()
     {
         if (RelationDetailsPopup.Child is not Border popupBorder || VisualTreeHelper.GetChildrenCount(popupBorder) == 0) return;
         if (VisualTreeHelper.GetChild(popupBorder, 0) is not Grid root) return;
+        popupBorder.ClipToBounds = true;
+        popupBorder.Background = new SolidColorBrush(Color.FromRgb(244, 250, 255));
+        root.Background = Brushes.Transparent;
         var accent = root.Children.OfType<Grid>().FirstOrDefault(grid =>
             grid.ColumnDefinitions.Count == 4 &&
             grid.Children.OfType<Border>().Count() == 4 &&
             grid.Children.OfType<Border>().All(border => Math.Abs(border.Height - 3) < 0.1));
-        if (accent is not null) Grid.SetRow(accent, 1);
+        if (accent is not null)
+        {
+            Grid.SetRow(accent, 1);
+            while (accent.ColumnDefinitions.Count > 3)
+            {
+                accent.Children.RemoveAt(accent.Children.Count - 1);
+                accent.ColumnDefinitions.RemoveAt(accent.ColumnDefinitions.Count - 1);
+            }
+
+            var colors = new[] { Color.FromRgb(45, 174, 188), Color.FromRgb(137, 113, 200), Color.FromRgb(201, 138, 59) };
+            foreach (var (border, index) in accent.Children.OfType<Border>().Select((border, index) => (border, index))) border.Background = new SolidColorBrush(colors[index]);
+        }
+
+        var metrics = FindVisualDescendants<Grid>(root).FirstOrDefault(grid => grid.ColumnDefinitions.Count == 5 && grid.Children.OfType<Border>().Count() == 4);
+        if (metrics is null) return;
+        var metricBorders = metrics.Children.OfType<Border>().ToArray();
+        var separator = metricBorders.FirstOrDefault(border => Math.Abs(border.Width - 1) < 0.1);
+        var cpu = metricBorders.FirstOrDefault(border => Grid.GetColumn(border) == 3);
+        if (separator is not null) Grid.SetColumn(separator, 1);
+        if (cpu is not null) Grid.SetColumn(cpu, 2);
     }
     private void PortColumnHeader_Click(object sender, RoutedEventArgs e)
     {
@@ -391,6 +414,7 @@ public partial class SystemToolsView : UserControl
                  .Contains(keyword, StringComparison.OrdinalIgnoreCase)));
         var visible = filtered.ToArray();
         Replace(_relationships, visible);
+        ConfigureRelationshipColumns();
         RelationsSummaryText.Text = $"运行进程 {_allRelationships.Count:N0} · 已显示 {visible.Length:N0} · 关联服务 {_allRelationships.Sum(item => item.Services.Count):N0} · 网络记录 {_allRelationships.Sum(item => item.NetworkEntries.Count):N0}";
         RelationsBubbleSummaryText.Text = RelationsSummaryText.Text;
 
@@ -398,6 +422,41 @@ public partial class SystemToolsView : UserControl
         {
             RelationsBubbleListBox.SelectedItem = null;
             RelationDetailsPopup.IsOpen = false;
+        }
+    }
+
+    /// <summary>关系看板的表头与数据行使用同一列宽，压缩首列空白并为服务、端口和网络摘要保留阅读间距。</summary>
+    private void ConfigureRelationshipColumns()
+    {
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            foreach (var grid in FindVisualDescendants<Grid>(RelationsBubblePanel).Where(grid => grid.ColumnDefinitions.Count == 7))
+            {
+                grid.ColumnDefinitions[0].Width = new GridLength(230);
+                grid.ColumnDefinitions[1].Width = new GridLength(84);
+                grid.ColumnDefinitions[2].Width = new GridLength(166);
+                grid.ColumnDefinitions[3].Width = new GridLength(218);
+                grid.ColumnDefinitions[4].Width = new GridLength(172);
+                grid.ColumnDefinitions[5].Width = new GridLength(76);
+                grid.ColumnDefinitions[6].Width = new GridLength(112);
+            }
+        }), DispatcherPriority.Loaded);
+    }
+
+    private static IEnumerable<T> FindVisualDescendants<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, index);
+            if (child is T item)
+            {
+                yield return item;
+            }
+
+            foreach (var descendant in FindVisualDescendants<T>(child))
+            {
+                yield return descendant;
+            }
         }
     }
 
