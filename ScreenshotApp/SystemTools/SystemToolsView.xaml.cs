@@ -324,6 +324,14 @@ public partial class SystemToolsView : UserControl
         _highlightedPortProcessId = null;
         _highlightedProcessId = port.ProcessId;
         await RefreshProcessesAsync();
+        if (!_allProcesses.Any(item => item.ProcessId == port.ProcessId))
+        {
+            _highlightedProcessId = null;
+            ApplyProcessFilter();
+            MessageBox.Show($"未找到 PID {port.ProcessId} 对应的进程。\n\n该进程可能已结束，或当前权限不足以读取它。", "无法定位进程", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
         ShowSection("Processes");
         StartPidHighlightTimer();
     }
@@ -335,6 +343,14 @@ public partial class SystemToolsView : UserControl
         _highlightedProcessId = null;
         _highlightedPortProcessId = process.ProcessId;
         await RefreshPortsAsync();
+        if (!_allPorts.Any(item => item.ProcessId == process.ProcessId))
+        {
+            _highlightedPortProcessId = null;
+            ApplyPortFilter();
+            MessageBox.Show($"未找到 PID {process.ProcessId} 对应的端口。\n\n该进程当前没有可见端口，或端口已在刷新期间关闭。", "无法定位端口", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
         ShowSection("Ports");
         StartPidHighlightTimer();
     }
