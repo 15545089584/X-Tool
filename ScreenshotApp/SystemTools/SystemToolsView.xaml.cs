@@ -33,7 +33,6 @@ public partial class SystemToolsView : UserControl
     private string _serviceSortKey = "Name";
     private bool _processHeaderSortActive;
     private bool _serviceHeaderSortActive;
-    private bool _syncingServiceSortSelector;
     private readonly Dictionary<TextBlock, (string Key, string Title)> _processHeaders = new();
     private readonly Dictionary<TextBlock, (string Key, string Title)> _serviceHeaders = new();
     private readonly HashSet<string> _expandedProcessGroups = new(StringComparer.OrdinalIgnoreCase);
@@ -52,7 +51,6 @@ public partial class SystemToolsView : UserControl
         _pidHighlightTimer.Tick += (_, _) => ClearPidHighlights();
         EnvironmentScopeComboBox.SelectedIndex = 0;
         AutoRefreshIntervalComboBox.SelectedIndex = 1;
-        ServiceSortComboBox.SelectedIndex = 0;
         UpdatePortAutoRefreshInterval();
         PortsListBox.ItemContainerGenerator.StatusChanged += (_, _) => ConfigurePortColumns();
         SetActiveTab("Ports");
@@ -163,13 +161,9 @@ public partial class SystemToolsView : UserControl
         if (IsLoaded) ApplyProcessFilter();
     }
     private void ServiceFilterTextBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyServiceFilter();
-
-    private void ServiceSortComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void ServiceDisplayOption_Changed(object sender, RoutedEventArgs e)
     {
-        _serviceSortKey = SelectedTag(ServiceSortComboBox);
-        if (!_syncingServiceSortSelector) _serviceHeaderSortActive = false;
-        UpdateServiceHeaderIndicators();
-        ApplyServiceFilter();
+        if (IsLoaded) ApplyServiceFilter();
     }
     private void PortColumnHeader_Click(object sender, RoutedEventArgs e)
     {
@@ -181,12 +175,6 @@ public partial class SystemToolsView : UserControl
         ApplyPortFilter();
     }
 
-    private void ServiceSortDirection_Click(object sender, RoutedEventArgs e)
-    {
-        _servicesAscending = !_servicesAscending;
-        UpdateDirectionButton(ServiceSortDirectionButton, _servicesAscending);
-        ApplyServiceFilter();
-    }
     private void EnvironmentFilterTextBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyEnvironmentFilter();
 
     private void ProcessColumnHeader_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -206,7 +194,6 @@ public partial class SystemToolsView : UserControl
         _servicesAscending = string.Equals(_serviceSortKey, key, StringComparison.OrdinalIgnoreCase) ? !_servicesAscending : true;
         _serviceSortKey = key;
         _serviceHeaderSortActive = true;
-        SelectComboItemByTag(ServiceSortComboBox, key, ref _syncingServiceSortSelector);
         UpdateServiceHeaderIndicators();
         ApplyServiceFilter();
         e.Handled = true;
@@ -218,9 +205,10 @@ public partial class SystemToolsView : UserControl
         var showSystemProcesses = ShowSystemProcessesCheckBox?.IsChecked != false;
         var showIpv6 = ShowIPv6CheckBox?.IsChecked != false;
         var filtered = _allPorts.Where(item =>
-            (showSystemProcesses || !item.IsSystemProcess) &&
-            (showIpv6 || !item.IsIpv6) &&
-            (string.IsNullOrWhiteSpace(keyword) || $"{item.Protocol} {item.LocalAddress} {item.Port} {item.ProcessName} {item.ProcessId} {item.State}".Contains(keyword, StringComparison.OrdinalIgnoreCase)));
+            _highlightedPortProcessId == item.ProcessId ||
+            ((showSystemProcesses || !item.IsSystemProcess) &&
+             (showIpv6 || !item.IsIpv6) &&
+             (string.IsNullOrWhiteSpace(keyword) || $"{item.Protocol} {item.LocalAddress} {item.Port} {item.ProcessName} {item.ProcessId} {item.State}".Contains(keyword, StringComparison.OrdinalIgnoreCase))));
         filtered = _portSortKey switch
         {
             "Protocol" => Sort(filtered, item => item.Protocol, _portsAscending),
@@ -230,7 +218,7 @@ public partial class SystemToolsView : UserControl
             "State" => Sort(filtered, item => item.State, _portsAscending),
             _ => Sort(filtered, item => item.Port, _portsAscending)
         };
-        var visiblePorts = filtered.Select(item => item with { IsPidHighlighted = _highlightedPortProcessId == item.ProcessId }).ToArray();
+        var visiblePorts = filtered.Select(item => item with { IsPidHighlighted = _highlightedPortProcessId.HasValue && _highlightedPortProcessId.Value == item.ProcessId }).ToArray();
         Replace(_ports, visiblePorts);
         PortsSummaryText.Text = $"显示 {_ports.Count:N0} 个端口";
         ConfigurePortColumns();
@@ -244,9 +232,10 @@ public partial class SystemToolsView : UserControl
         var showActiveOnly = ShowActiveProcessesCheckBox?.IsChecked == true;
         var showSystemProcesses = ShowSystemProcessEntriesCheckBox?.IsChecked != false;
         var filtered = _allProcesses.Where(item =>
-            (!showActiveOnly || item.IsActive) &&
-            (showSystemProcesses || !item.IsSystemProcess) &&
-            (string.IsNullOrWhiteSpace(keyword) || $"{item.Name} {item.ProcessId} {item.Path}".Contains(keyword, StringComparison.OrdinalIgnoreCase)));
+            _highlightedProcessId == item.ProcessId ||
+            ((!showActiveOnly || item.IsActive) &&
+             (showSystemProcesses || !item.IsSystemProcess) &&
+             (string.IsNullOrWhiteSpace(keyword) || $"{item.Name} {item.ProcessId} {item.Path}".Contains(keyword, StringComparison.OrdinalIgnoreCase))));
         var groups = filtered
             .GroupBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
             .Select(group => new ProcessGroup(group.Key, group.ToArray()));
@@ -279,7 +268,7 @@ public partial class SystemToolsView : UserControl
             rows.AddRange(children.Select(ProcessListRow.CreateChild));
         }
 
-        var visibleRows = rows.Select(item => item with { IsPidHighlighted = item.Process?.ProcessId == _highlightedProcessId }).ToArray();
+        var visibleRows = rows.Select(item => item with { IsPidHighlighted = _highlightedProcessId.HasValue && item.Process?.ProcessId == _highlightedProcessId.Value }).ToArray();
         Replace(_processes, visibleRows);
         ProcessesSummaryText.Text = $"显示 {groups.Count():N0} 个应用 · {filtered.Count():N0} 个进程";
         QueuePidLinkMenus(ProcessesListBox, "定位到端口", LocatePortsByPid_Click);
@@ -289,7 +278,11 @@ public partial class SystemToolsView : UserControl
     private void ApplyServiceFilter()
     {
         var keyword = ServiceFilterTextBox?.Text.Trim() ?? string.Empty;
-        var filtered = _allServices.Where(item => string.IsNullOrWhiteSpace(keyword) || $"{item.Name} {item.DisplayName} {item.Status}".Contains(keyword, StringComparison.OrdinalIgnoreCase));
+        var showRunning = ShowRunningServicesCheckBox?.IsChecked != false;
+        var showStopped = ShowStoppedServicesCheckBox?.IsChecked != false;
+        var filtered = _allServices.Where(item =>
+            ((showRunning && item.Status == "运行中") || (showStopped && item.Status != "运行中")) &&
+            (string.IsNullOrWhiteSpace(keyword) || $"{item.Name} {item.DisplayName} {item.Status}".Contains(keyword, StringComparison.OrdinalIgnoreCase)));
         filtered = _serviceSortKey switch
         {
             "Status" => Sort(filtered, item => item.Status, _servicesAscending),
@@ -330,9 +323,6 @@ public partial class SystemToolsView : UserControl
         if (GetEntryFromMenu(sender) is not PortEntry { ProcessId: > 0 } port) return;
         _highlightedPortProcessId = null;
         _highlightedProcessId = port.ProcessId;
-        ShowSystemProcessEntriesCheckBox.IsChecked = true;
-        ShowActiveProcessesCheckBox.IsChecked = false;
-        ProcessFilterTextBox.Text = port.ProcessId.ToString();
         await RefreshProcessesAsync();
         ShowSection("Processes");
         StartPidHighlightTimer();
@@ -344,9 +334,6 @@ public partial class SystemToolsView : UserControl
         if (GetEntryFromMenu(sender) is not ProcessEntry { ProcessId: > 0 } process) return;
         _highlightedProcessId = null;
         _highlightedPortProcessId = process.ProcessId;
-        ShowSystemProcessesCheckBox.IsChecked = true;
-        ShowIPv6CheckBox.IsChecked = true;
-        PortFilterTextBox.Text = process.ProcessId.ToString();
         await RefreshPortsAsync();
         ShowSection("Ports");
         StartPidHighlightTimer();
