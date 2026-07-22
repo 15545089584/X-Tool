@@ -584,16 +584,21 @@ public partial class NetworkWorkbenchView : UserControl
                 _processTrafficTotals[processId] = _processTrafficTotals.GetValueOrDefault(processId) + Math.Max(0, bitsPerSecond) / 8d * elapsedSeconds;
             }
             _lastConnectionSampleAt = now;
-            _allConnections = portsTask.Result
+            var exactTrafficRunning = _exactTrafficClient.IsRunning;
+            var processTrafficTotals = _processTrafficTotals.ToDictionary(item => item.Key, item => item.Value);
+            // 逐连接 ETW 匹配会读取进程启动时间并检索流量桶，不能占用 UI 线程。
+            _allConnections = await Task.Run(() => portsTask.Result
                 .Select(item =>
                 {
-                    var exact = _exactTrafficClient.GetMeasurement(item.ProcessId, item.Protocol, item.LocalAddress, item.RemoteAddress);
+                    var exact = exactTrafficRunning
+                        ? _exactTrafficClient.GetMeasurement(item.ProcessId, item.Protocol, item.LocalAddress, item.RemoteAddress)
+                        : default;
                     return new NetworkConnectionRow(item,
-                        _exactTrafficClient.IsRunning ? exact.BitsPerSecond : trafficByProcess.GetValueOrDefault(item.ProcessId),
-                        _exactTrafficClient.IsRunning ? exact.TotalBytes : _processTrafficTotals.GetValueOrDefault(item.ProcessId),
-                        _exactTrafficClient.IsRunning);
+                        exactTrafficRunning ? exact.BitsPerSecond : trafficByProcess.GetValueOrDefault(item.ProcessId),
+                        exactTrafficRunning ? exact.TotalBytes : processTrafficTotals.GetValueOrDefault(item.ProcessId),
+                        exactTrafficRunning);
                 })
-                .ToArray();
+                .ToArray());
             ApplyConnectionFilter();
             _lastConnectionsRefreshAt = DateTime.UtcNow;
         }
@@ -632,14 +637,48 @@ public partial class NetworkWorkbenchView : UserControl
             "State" => Sort(filtered, item => item.State, _connectionsAscending),
             _ => Sort(filtered, item => item.LocalAddress, _connectionsAscending)
         };
-        _connections.Clear();
-        foreach (var item in filtered) _connections.Add(item);
+        SyncConnectionRows(filtered.ToList());
         ConnectionsSummaryText.Text = $"显示 {_connections.Count} / {_allConnections.Count} 项";
         if (ExactTrafficStatusText is not null)
         {
             ExactTrafficStatusText.Text = _exactTrafficClient.IsRunning
                 ? "ETW 逐连接精确数据"
                 : $"{_exactTrafficClient.StatusText} · 系统 I/O 估算（非逐连接）";
+        }
+    }
+
+    /// <summary>按稳定连接键同步列表，避免每次刷新都清空并重建数百个 UI 项。</summary>
+    private void SyncConnectionRows(IReadOnlyList<NetworkConnectionRow> latestRows)
+    {
+        var latestKeys = latestRows.Select(item => item.Identity).ToHashSet();
+        for (var index = _connections.Count - 1; index >= 0; index--)
+        {
+            if (!latestKeys.Contains(_connections[index].Identity)) _connections.RemoveAt(index);
+        }
+
+        for (var targetIndex = 0; targetIndex < latestRows.Count; targetIndex++)
+        {
+            var latest = latestRows[targetIndex];
+            if (targetIndex < _connections.Count && _connections[targetIndex].Identity == latest.Identity)
+            {
+                if (_connections[targetIndex] != latest) _connections[targetIndex] = latest;
+                continue;
+            }
+
+            var existingIndex = -1;
+            for (var index = targetIndex + 1; index < _connections.Count; index++)
+            {
+                if (_connections[index].Identity != latest.Identity) continue;
+                existingIndex = index;
+                break;
+            }
+
+            if (existingIndex >= 0)
+            {
+                _connections.Move(existingIndex, targetIndex);
+                if (_connections[targetIndex] != latest) _connections[targetIndex] = latest;
+            }
+            else _connections.Insert(targetIndex, latest);
         }
     }
 
@@ -1149,6 +1188,7 @@ public partial class NetworkWorkbenchView : UserControl
         public string State => Entry.State;
         public int ProcessId => Entry.ProcessId;
         public string ProcessName => Entry.ProcessName;
+        public ConnectionIdentity Identity => new(Protocol, LocalAddress, RemoteAddress, ProcessId, State);
         public bool IsIpv6 => Entry.IsIpv6;
         public bool IsListening => State.Contains("LISTEN", StringComparison.OrdinalIgnoreCase) || State.Contains("监听", StringComparison.OrdinalIgnoreCase);
         public bool IsActiveConnection => !IsListening && !string.IsNullOrWhiteSpace(RemoteAddress) && RemoteAddress is not "0.0.0.0:0" and not "[::]:0" and not "*:*";
@@ -1162,4 +1202,6 @@ public partial class NetworkWorkbenchView : UserControl
         });
         public string TotalTrafficText => FormatBytes(TotalTrafficBytes);
     }
+
+    private readonly record struct ConnectionIdentity(string Protocol, string LocalAddress, string RemoteAddress, int ProcessId, string State);
 }
