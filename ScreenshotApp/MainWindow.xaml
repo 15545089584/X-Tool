@@ -8,6 +8,7 @@
         xmlns:converters="clr-namespace:ScreenshotApp.Converters"
         xmlns:fileWorkbench="clr-namespace:ScreenshotApp.FileWorkbench"
         xmlns:systemTools="clr-namespace:ScreenshotApp.SystemTools"
+        xmlns:networkWorkbench="clr-namespace:ScreenshotApp.NetworkWorkbench"
         mc:Ignorable="d"
         Title="X-Tool"
         Icon="Assets/XTool.ico"
@@ -393,6 +394,15 @@
                                 <TextBlock Style="{StaticResource IconTextStyle}" FontSize="17" Text="&#xE8B7;" Foreground="#626971" />
                             </Border>
                             <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" FontSize="15" Text="文件工作台" />
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="NetworkWorkbenchNav" GroupName="Navigation" Style="{StaticResource NavItemStyle}"
+                                 Tag="NetworkWorkbench" Checked="NavButton_Checked">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Width="34" Height="34" Background="#F7F8FA" CornerRadius="9">
+                                <TextBlock Style="{StaticResource IconTextStyle}" FontSize="17" Text="&#xE774;" Foreground="#626971" />
+                            </Border>
+                            <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" FontSize="15" Text="网络工作台" />
                         </StackPanel>
                     </RadioButton>
                     <RadioButton x:Name="SystemToolsNav" GroupName="Navigation" Style="{StaticResource NavItemStyle}"
@@ -915,6 +925,7 @@
 
                             <!-- 本地文件批处理与增强搜索。 -->
                             <fileWorkbench:FileWorkbenchView x:Name="FileWorkbenchView" Visibility="Collapsed" />
+                            <networkWorkbench:NetworkWorkbenchView x:Name="NetworkWorkbenchView" Visibility="Collapsed" />
                             <systemTools:SystemToolsView x:Name="SystemToolsView" Visibility="Collapsed" />
 
                             <!-- 快捷键页 -->
