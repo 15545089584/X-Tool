@@ -283,7 +283,9 @@ public static class NetworkWorkbenchService
     public static async Task<IReadOnlyList<NetworkDiagnosticResult>> RunFullDiagnosticAsync(string target, int port, CancellationToken cancellationToken)
     {
         var results = new List<NetworkDiagnosticResult>();
-        var overview = await GetOverviewAsync(cancellationToken);
+        // 总览读取包含 netsh Wi-Fi 信息。完整诊断可能由 UI 线程直接触发，
+        // 因此明确放到线程池，避免同步读取命令输出时等待 WPF 同步上下文。
+        var overview = await Task.Run(() => GetOverviewAsync(cancellationToken), cancellationToken).ConfigureAwait(false);
         results.Add(new NetworkDiagnosticResult(DateTime.Now, "默认路由", overview.ActiveAdapterName,
             overview.HasPhysicalConnection && overview.Gateway != "—",
             $"网卡 {overview.ActiveAdapterName} · IPv4 {overview.IPv4Address} · 网关 {overview.Gateway} · {overview.ConnectivityProbeText}", 0));
@@ -291,9 +293,9 @@ public static class NetworkWorkbenchService
         foreach (var kind in new[] { "DNS", "TCP", "HTTP" })
         {
             cancellationToken.ThrowIfCancellationRequested();
-            results.Add(await RunDiagnosticAsync(kind, target, port, cancellationToken));
+            results.Add(await RunDiagnosticAsync(kind, target, port, cancellationToken).ConfigureAwait(false));
         }
-        results.Add(await TestCurrentProxyAsync(cancellationToken));
+        results.Add(await TestCurrentProxyAsync(cancellationToken).ConfigureAwait(false));
         return results;
     }
 
@@ -537,9 +539,9 @@ public static class NetworkWorkbenchService
         using var registration = cancellationToken.Register(() => { try { if (!process.HasExited) process.Kill(entireProcessTree: true); } catch { } });
         var outputTask = process.StandardOutput.ReadToEndAsync();
         var errorTask = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync(cancellationToken);
-        var output = await outputTask;
-        var error = await errorTask;
+        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+        var output = await outputTask.ConfigureAwait(false);
+        var error = await errorTask.ConfigureAwait(false);
         return string.IsNullOrWhiteSpace(output) ? error : output;
     }
 

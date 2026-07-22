@@ -7,6 +7,7 @@ using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Shapes;
 using System.Windows.Threading;
 
 namespace ScreenshotApp.NetworkWorkbench;
@@ -170,8 +171,8 @@ public partial class NetworkWorkbenchView : UserControl
                               string.Equals(snapshot.ActiveAdapterId, _previousOverview.ActiveAdapterId, StringComparison.OrdinalIgnoreCase);
             var receivedDelta = sameAdapter ? Math.Max(0, snapshot.BytesReceived - _previousOverview!.BytesReceived) : 0;
             var sentDelta = sameAdapter ? Math.Max(0, snapshot.BytesSent - _previousOverview!.BytesSent) : 0;
-            var download = receivedDelta / elapsed;
-            var upload = sentDelta / elapsed;
+            var download = sameAdapter && elapsed > 0 ? receivedDelta / elapsed : 0;
+            var upload = sameAdapter && elapsed > 0 ? sentDelta / elapsed : 0;
 
             if (!sameAdapter)
             {
@@ -233,7 +234,7 @@ public partial class NetworkWorkbenchView : UserControl
 
     private static void AddHistory(Queue<double> history, double value)
     {
-        history.Enqueue(value);
+        history.Enqueue(double.IsFinite(value) && value >= 0 ? value : 0);
         while (history.Count > 60) history.Dequeue();
     }
 
@@ -273,11 +274,34 @@ public partial class NetworkWorkbenchView : UserControl
         var width = TrafficCanvas.ActualWidth;
         var height = TrafficCanvas.ActualHeight;
         if (width <= 1 || height <= 1) return;
-        var max = Math.Max(1024d, _downloadHistory.Concat(_uploadHistory).DefaultIfEmpty(0).Max());
+        var max = Math.Max(1024d, _downloadHistory.Concat(_uploadHistory).Where(double.IsFinite).DefaultIfEmpty(0).Max());
         TrafficAxisMaxText.Text = FormatByteRate(max);
         TrafficAxisMidText.Text = FormatByteRate(max / 2d);
-        DownloadPolyline.Points = BuildPoints(_downloadHistory, width, height, max);
-        UploadPolyline.Points = BuildPoints(_uploadHistory, width, height, max);
+        var downloadPoints = BuildPoints(_downloadHistory, width, height, max);
+        var uploadPoints = BuildPoints(_uploadHistory, width, height, max);
+        TrafficCanvas.Children.Clear();
+        DrawTrafficSeries(downloadPoints, BrushFrom("#4D7CFE"), 2.8);
+        DrawTrafficSeries(uploadPoints, BrushFrom("#A55FEF"), 2.5);
+        TrafficCanvas.InvalidateVisual();
+    }
+
+    private void DrawTrafficSeries(PointCollection points, Brush stroke, double thickness)
+    {
+        for (var index = 1; index < points.Count; index++)
+        {
+            TrafficCanvas.Children.Add(new Line
+            {
+                X1 = points[index - 1].X,
+                Y1 = points[index - 1].Y,
+                X2 = points[index].X,
+                Y2 = points[index].Y,
+                Stroke = stroke,
+                StrokeThickness = thickness,
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round,
+                SnapsToDevicePixels = true
+            });
+        }
     }
 
     private static PointCollection BuildPoints(IEnumerable<double> source, double width, double height, double max)
@@ -285,9 +309,16 @@ public partial class NetworkWorkbenchView : UserControl
         var values = source.ToArray();
         var points = new PointCollection();
         if (values.Length == 0) return points;
+        if (values.Length == 1)
+        {
+            var y = height - Math.Min(height, values[0] / max * (height - 5)) - 2;
+            points.Add(new Point(0, y));
+            points.Add(new Point(width, y));
+            return points;
+        }
         for (var index = 0; index < values.Length; index++)
         {
-            var x = values.Length == 1 ? width : index * width / (values.Length - 1);
+            var x = index * width / (values.Length - 1);
             var y = height - Math.Min(height, values[index] / max * (height - 5)) - 2;
             points.Add(new Point(x, y));
         }
@@ -450,6 +481,14 @@ public partial class NetworkWorkbenchView : UserControl
         var port = int.TryParse(DiagnosticPortTextBox.Text, out var parsedPort) && parsedPort is > 0 and <= 65535 ? parsedPort : 443;
         _diagnosticCancellation = new CancellationTokenSource();
         CancelDiagnosticButton.IsEnabled = true;
+        NetworkDiagnosticResult? pendingResult = null;
+        if (kind == "Full")
+        {
+            button.IsEnabled = false;
+            button.Content = "诊断中…";
+            pendingResult = new NetworkDiagnosticResult(DateTime.Now, "完整诊断", target, true, "正在分层检查默认路由、DNS、TCP、HTTP 与当前代理…", 0);
+            _diagnostics.Insert(0, pendingResult);
+        }
         try
         {
             if (kind == "Full")
@@ -463,8 +502,22 @@ public partial class NetworkWorkbenchView : UserControl
                 _diagnostics.Insert(0, result);
             }
         }
+        catch (OperationCanceledException)
+        {
+            _diagnostics.Insert(0, new NetworkDiagnosticResult(DateTime.Now, kind == "Full" ? "完整诊断" : kind, target, false, "已取消", 0));
+        }
+        catch (Exception exception)
+        {
+            _diagnostics.Insert(0, new NetworkDiagnosticResult(DateTime.Now, kind == "Full" ? "完整诊断" : kind, target, false, exception.Message, 0));
+        }
         finally
         {
+            if (pendingResult is not null) _diagnostics.Remove(pendingResult);
+            if (kind == "Full")
+            {
+                button.Content = "完整诊断";
+                button.IsEnabled = true;
+            }
             _diagnosticCancellation.Dispose();
             _diagnosticCancellation = null;
             CancelDiagnosticButton.IsEnabled = false;
