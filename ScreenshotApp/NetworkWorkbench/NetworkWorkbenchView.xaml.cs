@@ -110,7 +110,12 @@ public partial class NetworkWorkbenchView : UserControl
         if (sender is not Button button || button.Tag is not string tab) return;
         SelectTab(tab);
         if (tab == "Adapters") await RefreshAdaptersAsync();
-        if (tab == "Connections") await RefreshConnectionsAsync();
+        if (tab == "Connections")
+        {
+            // 用户主动切换到连接页后才按需请求 ETW 管理员授权，避免后台或启动时弹出 UAC。
+            await EnsureExactTrafficEnabledAsync();
+            await RefreshConnectionsAsync();
+        }
         if (tab == "Proxy") await LoadProxyAsync(updateSnapshot: false);
         if (tab == "Profiles") ReloadProfiles();
     }
@@ -627,7 +632,9 @@ public partial class NetworkWorkbenchView : UserControl
         ConnectionsSummaryText.Text = $"显示 {_connections.Count} / {_allConnections.Count} 项";
         if (ExactTrafficStatusText is not null)
         {
-            ExactTrafficStatusText.Text = _exactTrafficClient.IsRunning ? "ETW 逐连接精确数据" : "系统 I/O 估算（非逐连接）";
+            ExactTrafficStatusText.Text = _exactTrafficClient.IsRunning
+                ? "ETW 逐连接精确数据"
+                : $"{_exactTrafficClient.StatusText} · 系统 I/O 估算（非逐连接）";
         }
     }
 
@@ -638,16 +645,12 @@ public partial class NetworkWorkbenchView : UserControl
 
     private async void RefreshConnections_Click(object sender, RoutedEventArgs e) => await RefreshConnectionsAsync();
 
-    private async void EnableExactTraffic_Click(object sender, RoutedEventArgs e)
+    private async Task EnsureExactTrafficEnabledAsync()
     {
-        EnableExactTrafficButton.IsEnabled = false;
-        EnableExactTrafficButton.Content = "等待授权…";
+        if (_exactTrafficClient.IsRunning) return;
+        ExactTrafficStatusText.Text = "正在请求管理员授权以启用 ETW 精确监测…";
         var result = await _exactTrafficClient.StartAsync();
         ExactTrafficStatusText.Text = result.Message;
-        if (!result.Success) MessageBox.Show(result.Message, "精确流量监测", MessageBoxButton.OK, MessageBoxImage.Information);
-        EnableExactTrafficButton.Content = result.Success ? "精确监测中" : "启用精确监测";
-        EnableExactTrafficButton.IsEnabled = !result.Success;
-        await RefreshConnectionsAsync();
     }
 
     private void ConnectionDisplayOption_Changed(object sender, RoutedEventArgs e)
