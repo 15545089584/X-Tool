@@ -21,7 +21,7 @@ public partial class NetworkWorkbenchView : UserControl
     private ProxySettingsSnapshot _proxySnapshot = new(false, string.Empty, string.Empty, string.Empty, true);
     private CancellationTokenSource? _diagnosticCancellation;
     private bool _initialized;
-    private bool _refreshingOverview;
+    private readonly SemaphoreSlim _overviewRefreshGate = new(1, 1);
     private bool _refreshingConnections;
     private string _connectionSortKey = "LocalAddress";
     private bool _connectionsAscending = true;
@@ -58,7 +58,7 @@ public partial class NetworkWorkbenchView : UserControl
         }
         else
         {
-            await RefreshOverviewAsync();
+            await RefreshOverviewAsync(force: true);
         }
     }
 
@@ -91,21 +91,31 @@ public partial class NetworkWorkbenchView : UserControl
         }
     }
 
-    private async Task RefreshOverviewAsync()
+    private async Task RefreshOverviewAsync(bool force = false)
     {
-        if (_refreshingOverview || !IsVisible || AutoRefreshCheckBox.IsChecked != true && _previousOverview is not null) return;
-        _refreshingOverview = true;
+        if (!IsVisible || !force && AutoRefreshCheckBox.IsChecked != true && _previousOverview is not null) return;
+        if (force) await _overviewRefreshGate.WaitAsync();
+        else if (!await _overviewRefreshGate.WaitAsync(0)) return;
         try
         {
             var snapshot = await Task.Run(NetworkWorkbenchService.GetOverview);
             var elapsed = _previousOverview is null ? 0 : Math.Max(0.1, (snapshot.CapturedAt - _previousOverview.CapturedAt).TotalSeconds);
-            var download = _previousOverview is null ? 0 : Math.Max(0, snapshot.BytesReceived - _previousOverview.BytesReceived) / elapsed;
-            var upload = _previousOverview is null ? 0 : Math.Max(0, snapshot.BytesSent - _previousOverview.BytesSent) / elapsed;
+            var sameAdapter = snapshot.HasPhysicalConnection && _previousOverview is not null &&
+                              string.Equals(snapshot.ActiveAdapterId, _previousOverview.ActiveAdapterId, StringComparison.OrdinalIgnoreCase);
+            var download = sameAdapter ? Math.Max(0, snapshot.BytesReceived - _previousOverview!.BytesReceived) / elapsed : 0;
+            var upload = sameAdapter ? Math.Max(0, snapshot.BytesSent - _previousOverview!.BytesSent) / elapsed : 0;
+
+            if (!sameAdapter)
+            {
+                _downloadHistory.Clear();
+                _uploadHistory.Clear();
+            }
 
             HeaderStatusText.Text = snapshot.ConnectivityText;
             HeaderStatusDot.Fill = BrushFrom(snapshot.IsInternetAvailable ? "#61C995" : "#F0B15A");
             OverviewNetworkText.Text = snapshot.ConnectivityText;
             OverviewAdapterText.Text = snapshot.ActiveAdapterName;
+            OverviewAdapterText.ToolTip = snapshot.ConnectionDetail;
             OverviewIpv4Text.Text = snapshot.IPv4Address;
             OverviewGatewayText.Text = $"网关 {snapshot.Gateway}";
             OverviewDownloadText.Text = FormatByteRate(download);
@@ -114,10 +124,12 @@ public partial class NetworkWorkbenchView : UserControl
             OverviewDetailGatewayText.Text = snapshot.Gateway;
             OverviewDnsText.Text = snapshot.DnsServers;
             OverviewDhcpText.Text = snapshot.DhcpText;
+            OverviewActiveAdapterText.Text = $"{snapshot.ActiveAdapterName} · {snapshot.ActiveAdapterType}";
             OverviewWifiText.Text = snapshot.WifiSsid;
             OverviewWifiSignalText.Text = $"{snapshot.WifiSignal} / {snapshot.WifiChannel}";
+            OverviewProxyText.Text = snapshot.ProxyText;
             OverviewIpv6Text.Text = snapshot.IPv6Address;
-            TrafficUpdatedText.Text = $"更新于 {snapshot.CapturedAt:HH:mm:ss}";
+            TrafficUpdatedText.Text = $"{snapshot.ActiveAdapterName} · 更新于 {snapshot.CapturedAt:HH:mm:ss}";
             ProxyDnsText.Text = snapshot.DnsServers;
 
             AddHistory(_downloadHistory, download);
@@ -132,7 +144,7 @@ public partial class NetworkWorkbenchView : UserControl
         }
         finally
         {
-            _refreshingOverview = false;
+            _overviewRefreshGate.Release();
         }
     }
 
@@ -175,7 +187,27 @@ public partial class NetworkWorkbenchView : UserControl
         foreach (var item in items) _adapters.Add(item);
     }
 
-    private async void RefreshAdapters_Click(object sender, RoutedEventArgs e) => await RefreshAdaptersAsync();
+    private async void RefreshAdapters_Click(object sender, RoutedEventArgs e)
+    {
+        RefreshAdaptersButton.IsEnabled = false;
+        RefreshAdaptersButton.Content = "刷新中…";
+        AdapterRefreshStatusText.Text = "正在重新枚举网卡与网络状态";
+        try
+        {
+            NetworkWorkbenchService.InvalidateNetworkCaches();
+            await Task.WhenAll(RefreshAdaptersAsync(), RefreshOverviewAsync(force: true));
+            AdapterRefreshStatusText.Text = $"已于 {DateTime.Now:HH:mm:ss} 完成刷新 · {_adapters.Count} 个接口";
+        }
+        catch (Exception exception)
+        {
+            AdapterRefreshStatusText.Text = $"刷新失败：{exception.Message}";
+        }
+        finally
+        {
+            RefreshAdaptersButton.Content = "刷新网卡";
+            RefreshAdaptersButton.IsEnabled = true;
+        }
+    }
 
     private async Task RefreshConnectionsAsync()
     {
@@ -337,7 +369,11 @@ public partial class NetworkWorkbenchView : UserControl
         ProxyAutoDetectCheckBox.IsChecked = proxy.AutoDetect;
     }
 
-    private async void ReloadProxy_Click(object sender, RoutedEventArgs e) => await LoadProxyAsync(updateSnapshot: false);
+    private async void ReloadProxy_Click(object sender, RoutedEventArgs e)
+    {
+        await LoadProxyAsync(updateSnapshot: false);
+        await RefreshOverviewAsync(force: true);
+    }
 
     private async void SaveProxy_Click(object sender, RoutedEventArgs e)
     {
@@ -349,10 +385,10 @@ public partial class NetworkWorkbenchView : UserControl
             return;
         }
         ProxyChangeHintText.Text = $"已于 {DateTime.Now:HH:mm:ss} 保存并广播代理变更。";
-        await RefreshOverviewAsync();
+        await RefreshOverviewAsync(force: true);
     }
 
-    private void RestoreProxy_Click(object sender, RoutedEventArgs e)
+    private async void RestoreProxy_Click(object sender, RoutedEventArgs e)
     {
         if (MessageBox.Show("恢复到进入本页面时保留的代理快照吗？", "恢复代理", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
         if (!NetworkWorkbenchService.TrySaveCurrentUserProxy(_proxySnapshot, out var error))
@@ -362,6 +398,7 @@ public partial class NetworkWorkbenchView : UserControl
         }
         WriteProxyEditor(_proxySnapshot);
         ProxyChangeHintText.Text = "已恢复页面快照并广播代理变更。";
+        await RefreshOverviewAsync(force: true);
     }
 
     private void ReloadProfiles()
@@ -400,7 +437,7 @@ public partial class NetworkWorkbenchView : UserControl
         WriteProxyEditor(profile.Proxy);
         SelectTab("Proxy");
         ProxyChangeHintText.Text = $"已应用网络方案“{profile.Name}”。";
-        await RefreshOverviewAsync();
+        await RefreshOverviewAsync(force: true);
     }
 
     private void DeleteProfile_Click(object sender, RoutedEventArgs e)

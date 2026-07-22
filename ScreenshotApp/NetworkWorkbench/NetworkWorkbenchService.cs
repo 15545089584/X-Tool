@@ -23,6 +23,11 @@ public static class NetworkWorkbenchService
     private static readonly object WifiCacheLock = new();
     private static WifiDetails _cachedWifi = new("—", "—", "—", "—", "—");
     private static DateTime _wifiCacheTime = DateTime.MinValue;
+    private static readonly string[] VirtualAdapterKeywords =
+    {
+        "virtual", "vpn", "radmin", "hyper-v", "vmware", "vbox", "virtualbox",
+        "wsl", "tap", "tun", "loopback", "npcap", "docker", "default switch"
+    };
 
     static NetworkWorkbenchService()
     {
@@ -32,27 +37,46 @@ public static class NetworkWorkbenchService
     public static NetworkOverviewSnapshot GetOverview()
     {
         var adapters = GetAdapters();
-        var active = adapters.FirstOrDefault(item => item.IsPrimary) ?? adapters.FirstOrDefault(item => item.IsUp);
-        var internetAvailable = TryGetInternetConnectivity() ?? NetworkInterface.GetIsNetworkAvailable();
-        var wifi = GetWifiDetails();
+        var active = adapters.FirstOrDefault(item => item.IsPrimary);
+        var hasPhysicalConnection = active is not null;
+        var internetAvailable = hasPhysicalConnection && (TryGetInternetConnectivity() ?? NetworkInterface.GetIsNetworkAvailable());
+        var hasVirtualConnection = adapters.Any(item => item.IsUp && item.IsVirtual);
+        var connectivityText = internetAvailable
+            ? "互联网已连接"
+            : hasPhysicalConnection
+                ? "网络已连接，无互联网"
+                : hasVirtualConnection
+                    ? "仅虚拟网络可用"
+                    : "未连接网络";
+        var wifi = active?.InterfaceType == NetworkInterfaceType.Wireless80211.ToString()
+            ? GetWifiDetails()
+            : WifiDetails.Empty;
+        var proxy = GetCurrentUserProxy();
         return new NetworkOverviewSnapshot(
-            internetAvailable ? "互联网已连接" : active is null ? "未连接网络" : "仅本地网络",
+            connectivityText,
             internetAvailable,
-            active?.Name ?? "无活动网卡",
+            hasPhysicalConnection,
+            active?.Id ?? string.Empty,
+            active?.Name ?? "无活动物理网卡",
             active?.Description ?? "—",
+            active?.InterfaceType ?? "—",
             active?.IPv4Address ?? "—",
             active?.IPv6Address ?? "—",
             active?.Gateway ?? "—",
             active?.DnsServers ?? "—",
             active?.DhcpText ?? "—",
             active?.LinkSpeedBitsPerSecond ?? 0,
-            adapters.Where(item => item.IsUp).Sum(item => item.BytesReceived),
-            adapters.Where(item => item.IsUp).Sum(item => item.BytesSent),
+            active?.BytesReceived ?? 0,
+            active?.BytesSent ?? 0,
             wifi.Ssid,
             wifi.Signal,
             wifi.Channel,
             wifi.ReceiveRate,
             wifi.TransmitRate,
+            FormatProxySummary(proxy),
+            active is null
+                ? hasVirtualConnection ? "物理链路已断开，虚拟接口仍处于启用状态" : "未检测到已连接的物理网卡"
+                : internetAvailable ? $"{active.Name} · 系统互联网检测通过" : $"{active.Name} · 物理链路可用，但互联网检测未通过",
             DateTime.Now);
     }
 
@@ -69,9 +93,16 @@ public static class NetworkWorkbenchService
                 var statistics = adapter.GetIPv4Statistics();
                 var ipv4 = properties.UnicastAddresses.FirstOrDefault(item => item.Address.AddressFamily == AddressFamily.InterNetwork)?.Address.ToString() ?? "—";
                 var ipv6 = properties.UnicastAddresses.FirstOrDefault(item => item.Address.AddressFamily == AddressFamily.InterNetworkV6 && !item.Address.IsIPv6LinkLocal)?.Address.ToString() ?? "—";
-                var gateway = properties.GatewayAddresses.FirstOrDefault(item => !IPAddress.Any.Equals(item.Address) && !IPAddress.IPv6Any.Equals(item.Address))?.Address.ToString() ?? "—";
+                var gateways = properties.GatewayAddresses
+                    .Where(item => !IPAddress.Any.Equals(item.Address) && !IPAddress.IPv6Any.Equals(item.Address))
+                    .Select(item => item.Address)
+                    .ToArray();
+                var gateway = gateways.FirstOrDefault(item => item.AddressFamily == AddressFamily.InterNetwork)?.ToString()
+                              ?? gateways.FirstOrDefault()?.ToString()
+                              ?? "—";
                 var dns = string.Join(" · ", properties.DnsAddresses.Select(item => item.ToString()));
                 var isUp = adapter.OperationalStatus == OperationalStatus.Up;
+                var isVirtual = IsVirtualAdapter(adapter);
                 candidates.Add(new NetworkAdapterEntry(
                     adapter.Id,
                     adapter.Name,
@@ -88,21 +119,37 @@ public static class NetworkWorkbenchService
                     statistics.BytesReceived,
                     statistics.BytesSent,
                     adapter.GetPhysicalAddress().ToString(),
-                    ipv4Properties?.Mtu ?? 0));
+                    ipv4Properties?.Mtu ?? 0,
+                    isVirtual));
             }
             catch
             {
-                candidates.Add(new NetworkAdapterEntry(adapter.Id, adapter.Name, adapter.Description, adapter.NetworkInterfaceType.ToString(), adapter.OperationalStatus == OperationalStatus.Up, false, "—", "—", "—", "—", "—", adapter.Speed, 0, 0, adapter.GetPhysicalAddress().ToString(), 0));
+                candidates.Add(new NetworkAdapterEntry(adapter.Id, adapter.Name, adapter.Description, adapter.NetworkInterfaceType.ToString(), adapter.OperationalStatus == OperationalStatus.Up, false, "—", "—", "—", "—", "—", adapter.Speed, 0, 0, adapter.GetPhysicalAddress().ToString(), 0, IsVirtualAdapter(adapter)));
             }
         }
 
-        var primary = candidates.FirstOrDefault(item => item.IsUp && item.Gateway != "—") ?? candidates.FirstOrDefault(item => item.IsUp);
+        var primary = candidates
+            .Where(item => item.IsUp && !item.IsVirtual && item.IPv4Address != "—")
+            .OrderByDescending(item => item.Gateway != "—")
+            .ThenByDescending(item => item.InterfaceType == NetworkInterfaceType.Wireless80211.ToString())
+            .ThenByDescending(item => item.LinkSpeedBitsPerSecond)
+            .FirstOrDefault();
         return candidates
             .Select(item => item with { IsPrimary = primary is not null && string.Equals(item.Id, primary.Id, StringComparison.OrdinalIgnoreCase) })
             .OrderByDescending(item => item.IsPrimary)
             .ThenByDescending(item => item.IsUp)
             .ThenBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    /// <summary>手动刷新时丢弃 Wi-Fi 命令缓存，确保断开或切换后立即反映。</summary>
+    public static void InvalidateNetworkCaches()
+    {
+        lock (WifiCacheLock)
+        {
+            _cachedWifi = WifiDetails.Empty;
+            _wifiCacheTime = DateTime.MinValue;
+        }
     }
 
     public static IReadOnlyList<PortEntry> GetConnections() => SystemToolsService.GetPorts();
@@ -225,7 +272,7 @@ public static class NetworkWorkbenchService
     {
         lock (WifiCacheLock)
         {
-            if (DateTime.UtcNow - _wifiCacheTime < TimeSpan.FromSeconds(5)) return _cachedWifi;
+            if (DateTime.UtcNow - _wifiCacheTime < TimeSpan.FromSeconds(2)) return _cachedWifi;
         }
 
         try
@@ -248,8 +295,27 @@ public static class NetworkWorkbenchService
         }
         catch
         {
-            lock (WifiCacheLock) return _cachedWifi;
+            lock (WifiCacheLock)
+            {
+                _cachedWifi = WifiDetails.Empty;
+                _wifiCacheTime = DateTime.UtcNow;
+                return _cachedWifi;
+            }
         }
+    }
+
+    private static bool IsVirtualAdapter(NetworkInterface adapter)
+    {
+        if (adapter.NetworkInterfaceType is NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel or NetworkInterfaceType.Ppp) return true;
+        var identity = $"{adapter.Name} {adapter.Description}";
+        return VirtualAdapterKeywords.Any(keyword => identity.Contains(keyword, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string FormatProxySummary(ProxySettingsSnapshot proxy)
+    {
+        if (proxy.Enabled) return string.IsNullOrWhiteSpace(proxy.Server) ? "手动代理已启用" : $"手动代理 · {proxy.Server}";
+        if (!string.IsNullOrWhiteSpace(proxy.PacUrl)) return "PAC 自动配置";
+        return proxy.AutoDetect ? "自动检测" : "直连（代理已关闭）";
     }
 
     private static bool? TryGetInternetConnectivity()
@@ -288,15 +354,18 @@ public static class NetworkWorkbenchService
     [DllImport("wininet.dll", SetLastError = true)]
     private static extern bool InternetSetOption(IntPtr internet, int option, IntPtr buffer, int bufferLength);
 
-    private sealed record WifiDetails(string Ssid, string Signal, string Channel, string ReceiveRate, string TransmitRate);
+    private sealed record WifiDetails(string Ssid, string Signal, string Channel, string ReceiveRate, string TransmitRate)
+    {
+        public static WifiDetails Empty { get; } = new("—", "—", "—", "—", "—");
+    }
 }
 
-public sealed record NetworkOverviewSnapshot(string ConnectivityText, bool IsInternetAvailable, string ActiveAdapterName, string ActiveAdapterDescription, string IPv4Address, string IPv6Address, string Gateway, string DnsServers, string DhcpText, long LinkSpeedBitsPerSecond, long BytesReceived, long BytesSent, string WifiSsid, string WifiSignal, string WifiChannel, string WifiReceiveRate, string WifiTransmitRate, DateTime CapturedAt);
+public sealed record NetworkOverviewSnapshot(string ConnectivityText, bool IsInternetAvailable, bool HasPhysicalConnection, string ActiveAdapterId, string ActiveAdapterName, string ActiveAdapterDescription, string ActiveAdapterType, string IPv4Address, string IPv6Address, string Gateway, string DnsServers, string DhcpText, long LinkSpeedBitsPerSecond, long BytesReceived, long BytesSent, string WifiSsid, string WifiSignal, string WifiChannel, string WifiReceiveRate, string WifiTransmitRate, string ProxyText, string ConnectionDetail, DateTime CapturedAt);
 
-public sealed record NetworkAdapterEntry(string Id, string Name, string Description, string InterfaceType, bool IsUp, bool IsPrimary, string IPv4Address, string IPv6Address, string Gateway, string DnsServers, string DhcpText, long LinkSpeedBitsPerSecond, long BytesReceived, long BytesSent, string MacAddress, int Mtu)
+public sealed record NetworkAdapterEntry(string Id, string Name, string Description, string InterfaceType, bool IsUp, bool IsPrimary, string IPv4Address, string IPv6Address, string Gateway, string DnsServers, string DhcpText, long LinkSpeedBitsPerSecond, long BytesReceived, long BytesSent, string MacAddress, int Mtu, bool IsVirtual)
 {
     public string StatusText => IsUp ? "已连接" : "未连接";
-    public string PrimaryText => IsPrimary ? "主用" : string.Empty;
+    public string PrimaryText => IsPrimary ? "主用物理链路" : IsVirtual ? "虚拟接口" : string.Empty;
     public string LinkSpeedText => FormatBits(LinkSpeedBitsPerSecond);
     public string MacText => string.IsNullOrWhiteSpace(MacAddress) ? "—" : string.Join("-", Enumerable.Range(0, MacAddress.Length / 2).Select(index => MacAddress.Substring(index * 2, 2)));
     private static string FormatBits(long bits) => bits >= 1_000_000_000 ? $"{bits / 1_000_000_000d:F1} Gbps" : bits >= 1_000_000 ? $"{bits / 1_000_000d:F0} Mbps" : $"{bits / 1_000d:F0} Kbps";
