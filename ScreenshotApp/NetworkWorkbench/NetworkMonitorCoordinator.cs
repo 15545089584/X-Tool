@@ -22,6 +22,16 @@ internal sealed class NetworkMonitorCoordinator : IAsyncDisposable
     private int _bucketSampleCount;
     private int _persistTicks;
     private bool _networkEventsRegistered;
+    private int _dnsFailureSamples;
+    private int _highUploadSamples;
+    private DateTime _lastDnsAlert;
+    private DateTime _lastUploadAlert;
+    private DateTime _lastHighLatencyAlert;
+    private int _probePersistTicks;
+    private NetworkAlertSettings _alertSettings = NetworkAlertSettings.Default;
+    private bool _alertSettingsLoaded;
+    private int _budgetCheckTicks;
+    private DateTime _lastBudgetAlertDate;
 
     public NetworkMonitorCoordinator(NetworkHistoryStore historyStore) => _historyStore = historyStore;
 
@@ -80,6 +90,15 @@ internal sealed class NetworkMonitorCoordinator : IAsyncDisposable
     public Task ClearHistoryAsync(CancellationToken cancellationToken = default)
         => _historyStore.ClearAsync(cancellationToken);
 
+    public Task<NetworkAlertSettings> GetAlertSettingsAsync(CancellationToken cancellationToken = default)
+        => _historyStore.GetAlertSettingsAsync(cancellationToken);
+
+    public async Task SetAlertSettingsAsync(NetworkAlertSettings settings, CancellationToken cancellationToken = default)
+    {
+        _alertSettings = settings; _alertSettingsLoaded = true;
+        await _historyStore.SetAlertSettingsAsync(settings, cancellationToken);
+    }
+
     private async Task MonitorLoopAsync(CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)
@@ -94,6 +113,7 @@ internal sealed class NetworkMonitorCoordinator : IAsyncDisposable
         if (!await _refreshGate.WaitAsync(0, cancellationToken)) return;
         try
         {
+            if (!_alertSettingsLoaded) { _alertSettings = await _historyStore.GetAlertSettingsAsync(cancellationToken); _alertSettingsLoaded = true; }
             if (invalidateCaches) NetworkWorkbenchService.InvalidateNetworkCaches();
             var snapshot = await NetworkWorkbenchService.GetOverviewAsync(cancellationToken).ConfigureAwait(false);
             var previous = _previousSnapshot;
@@ -107,6 +127,16 @@ internal sealed class NetworkMonitorCoordinator : IAsyncDisposable
 
             var sample = new NetworkMonitorSample(snapshot, previous, sameAdapter, receivedDelta, sentDelta, downloadRate, uploadRate);
             DetectTimelineEvents(previous, snapshot);
+            DetectOperationalAlerts(sample);
+            if (++_probePersistTicks % 5 == 0)
+            {
+                _ = _historyStore.AddProbeAsync(new NetworkProbeHistoryPoint(snapshot.CapturedAt, snapshot.ActiveAdapterId,
+                    snapshot.ConnectivityProbeText.Contains("网关 可达", StringComparison.Ordinal),
+                    snapshot.ConnectivityProbeText.Contains("DNS 正常", StringComparison.Ordinal),
+                    snapshot.ConnectivityProbeText.Contains("HTTP 正常", StringComparison.Ordinal),
+                    snapshot.GatewayLatencyMs, snapshot.DnsLatencyMs, snapshot.HttpLatencyMs));
+            }
+            if (++_budgetCheckTicks % 60 == 0) _ = CheckDailyBudgetAsync(snapshot);
             AccumulateTraffic(sample);
             _previousSnapshot = snapshot;
             SampleAvailable?.Invoke(this, sample);
@@ -226,6 +256,59 @@ internal sealed class NetworkMonitorCoordinator : IAsyncDisposable
             PublishEvent(new NetworkTimelineEvent(current.CapturedAt, "DnsChanged", "Info", "DNS 配置已变化",
                 current.DnsServers, current.ActiveAdapterId, current.ActiveAdapterName));
         }
+        if (current.WifiSsid != "—" && !string.Equals(previous.WifiBssid, current.WifiBssid, StringComparison.OrdinalIgnoreCase))
+        {
+            PublishEvent(new NetworkTimelineEvent(current.CapturedAt, "WifiRoamed", "Info", "Wi-Fi 接入点已变化",
+                $"{previous.WifiBssid} → {current.WifiBssid} · 信号 {current.WifiSignal}", current.ActiveAdapterId, current.ActiveAdapterName));
+        }
+    }
+
+    private void DetectOperationalAlerts(NetworkMonitorSample sample)
+    {
+        var now = sample.Snapshot.CapturedAt;
+        _dnsFailureSamples = sample.Snapshot.ConnectivityProbeText.Contains("DNS 失败", StringComparison.Ordinal) ? _dnsFailureSamples + 1 : 0;
+        _highUploadSamples = sample.UploadRate >= _alertSettings.HighUploadMegabytesPerSecond * 1024 * 1024 ? _highUploadSamples + 1 : 0;
+        if (IsQuietHour(now.Hour)) return;
+        if (_dnsFailureSamples >= 3 && now - _lastDnsAlert > TimeSpan.FromMinutes(10))
+        {
+            _lastDnsAlert = now;
+            PublishEvent(new NetworkTimelineEvent(now, "DnsProbeFailure", "Warning", "DNS 连续探测失败",
+                "已连续 3 次探测失败；建议先检查 DNS 配置或执行清理 DNS 缓存。", sample.Snapshot.ActiveAdapterId, sample.Snapshot.ActiveAdapterName));
+        }
+        if (_highUploadSamples >= 3 && now - _lastUploadAlert > TimeSpan.FromMinutes(10))
+        {
+            _lastUploadAlert = now;
+            PublishEvent(new NetworkTimelineEvent(now, "HighUpload", "Warning", "持续高上传速率",
+                $"上传已连续 3 秒超过 {_alertSettings.HighUploadMegabytesPerSecond:F1} MB/s，当前 {sample.UploadRate / 1024 / 1024:F1} MB/s。", sample.Snapshot.ActiveAdapterId, sample.Snapshot.ActiveAdapterName));
+        }
+        if (sample.Snapshot.HttpLatencyMs >= _alertSettings.HighLatencyMilliseconds && now - _lastHighLatencyAlert > TimeSpan.FromMinutes(10))
+        {
+            _lastHighLatencyAlert = now;
+            PublishEvent(new NetworkTimelineEvent(now, "HighLatency", "Warning", "HTTP 探测延迟偏高",
+                $"当前探测耗时 {sample.Snapshot.HttpLatencyMs} ms；告警 10 分钟内不重复。", sample.Snapshot.ActiveAdapterId, sample.Snapshot.ActiveAdapterName));
+        }
+    }
+
+    private async Task CheckDailyBudgetAsync(NetworkOverviewSnapshot snapshot)
+    {
+        if (_alertSettings.DailyBudgetGigabytes <= 0 || _lastBudgetAlertDate.Date == DateTime.Today || IsQuietHour(DateTime.Now.Hour)) return;
+        try
+        {
+            var samples = await _historyStore.GetTrafficAsync(TimeSpan.FromDays(1));
+            var total = samples.Where(item => item.BucketTime.Date == DateTime.Today).Sum(item => item.DownloadedBytes + item.UploadedBytes);
+            if (total < _alertSettings.DailyBudgetGigabytes * 1024 * 1024 * 1024) return;
+            _lastBudgetAlertDate = DateTime.Today;
+            PublishEvent(new NetworkTimelineEvent(DateTime.Now, "DailyBudget", "Warning", "今日流量达到预算",
+                $"今日累计 {total / 1024d / 1024d / 1024d:F2} GB，预算 {_alertSettings.DailyBudgetGigabytes:F2} GB。", snapshot.ActiveAdapterId, snapshot.ActiveAdapterName));
+        }
+        catch (Exception exception) { MonitorFailed?.Invoke(this, exception); }
+    }
+
+    private bool IsQuietHour(int hour)
+    {
+        var start = _alertSettings.QuietStartHour; var end = _alertSettings.QuietEndHour;
+        if (start == end) return false;
+        return start < end ? hour >= start && hour < end : hour >= start || hour < end;
     }
 
     private void PublishEvent(NetworkTimelineEvent entry)

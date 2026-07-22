@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using System.IO;
 using System.Threading.Channels;
+using System.Text.Json;
 
 namespace ScreenshotApp.NetworkWorkbench;
 
@@ -82,6 +83,26 @@ internal sealed class NetworkHistoryStore : IAsyncDisposable
         });
     }
 
+    public async ValueTask AddProbeAsync(NetworkProbeHistoryPoint point)
+    {
+        await EnqueueAsync(connection =>
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = @"INSERT INTO probe_samples
+                (sample_time, adapter_id, gateway_ok, dns_ok, http_ok, gateway_ms, dns_ms, http_ms)
+                VALUES ($time, $adapter, $gatewayOk, $dnsOk, $httpOk, $gatewayMs, $dnsMs, $httpMs);";
+            command.Parameters.AddWithValue("$time", point.Time.ToString("O"));
+            command.Parameters.AddWithValue("$adapter", point.AdapterId);
+            command.Parameters.AddWithValue("$gatewayOk", point.GatewaySucceeded ? 1 : 0);
+            command.Parameters.AddWithValue("$dnsOk", point.DnsSucceeded ? 1 : 0);
+            command.Parameters.AddWithValue("$httpOk", point.HttpSucceeded ? 1 : 0);
+            command.Parameters.AddWithValue("$gatewayMs", point.GatewayLatencyMs);
+            command.Parameters.AddWithValue("$dnsMs", point.DnsLatencyMs);
+            command.Parameters.AddWithValue("$httpMs", point.HttpLatencyMs);
+            command.ExecuteNonQuery();
+        });
+    }
+
     public async Task<IReadOnlyList<NetworkTrafficHistoryPoint>> GetTrafficAsync(TimeSpan range, CancellationToken cancellationToken = default)
     {
         await _initialized.Task.WaitAsync(cancellationToken);
@@ -159,10 +180,30 @@ internal sealed class NetworkHistoryStore : IAsyncDisposable
         }, cancellationToken);
     }
 
+    public async Task<NetworkAlertSettings> GetAlertSettingsAsync(CancellationToken cancellationToken = default)
+    {
+        await _initialized.Task.WaitAsync(cancellationToken);
+        return await Task.Run(() =>
+        {
+            using var connection = OpenConnection(); using var command = connection.CreateCommand();
+            command.CommandText = "SELECT value FROM settings WHERE key = 'alert_settings';";
+            try { return JsonSerializer.Deserialize<NetworkAlertSettings>(command.ExecuteScalar()?.ToString() ?? string.Empty) ?? NetworkAlertSettings.Default; }
+            catch { return NetworkAlertSettings.Default; }
+        }, cancellationToken);
+    }
+
+    public Task SetAlertSettingsAsync(NetworkAlertSettings settings, CancellationToken cancellationToken = default)
+        => EnqueueAsync(connection =>
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = "INSERT INTO settings (key, value) VALUES ('alert_settings', $value) ON CONFLICT(key) DO UPDATE SET value = excluded.value;";
+            command.Parameters.AddWithValue("$value", JsonSerializer.Serialize(settings)); command.ExecuteNonQuery();
+        }, cancellationToken);
+
     public Task ClearAsync(CancellationToken cancellationToken = default) => EnqueueAsync(connection =>
     {
         using var command = connection.CreateCommand();
-        command.CommandText = "DELETE FROM traffic_samples; DELETE FROM network_events;";
+        command.CommandText = "DELETE FROM traffic_samples; DELETE FROM probe_samples; DELETE FROM network_events;";
         command.ExecuteNonQuery();
     }, cancellationToken);
 
@@ -234,6 +275,17 @@ internal sealed class NetworkHistoryStore : IAsyncDisposable
                 physical_connected INTEGER NOT NULL,
                 PRIMARY KEY (bucket_time, adapter_id));
             CREATE INDEX IF NOT EXISTS ix_traffic_samples_time ON traffic_samples(bucket_time);
+            CREATE TABLE IF NOT EXISTS probe_samples (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sample_time TEXT NOT NULL,
+                adapter_id TEXT NOT NULL,
+                gateway_ok INTEGER NOT NULL,
+                dns_ok INTEGER NOT NULL,
+                http_ok INTEGER NOT NULL,
+                gateway_ms INTEGER NOT NULL,
+                dns_ms INTEGER NOT NULL,
+                http_ms INTEGER NOT NULL);
+            CREATE INDEX IF NOT EXISTS ix_probe_samples_time ON probe_samples(sample_time DESC);
             CREATE TABLE IF NOT EXISTS network_events (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 event_time TEXT NOT NULL,
@@ -258,7 +310,7 @@ internal sealed class NetworkHistoryStore : IAsyncDisposable
     {
         var threshold = DateTime.Now.AddDays(-days).ToString("O");
         using var command = connection.CreateCommand();
-        command.CommandText = "DELETE FROM traffic_samples WHERE bucket_time < $threshold; DELETE FROM network_events WHERE event_time < $threshold;";
+        command.CommandText = "DELETE FROM traffic_samples WHERE bucket_time < $threshold; DELETE FROM probe_samples WHERE sample_time < $threshold; DELETE FROM network_events WHERE event_time < $threshold;";
         command.Parameters.AddWithValue("$threshold", threshold);
         command.ExecuteNonQuery();
     }
@@ -298,4 +350,13 @@ internal sealed record NetworkTimelineEvent(
     public string TimeText => Time.ToString("MM-dd HH:mm:ss");
     public string Summary => string.IsNullOrWhiteSpace(Detail) ? Title : $"{Title} · {Detail}";
     public string AccentColor => Severity switch { "Error" => "#EF7E83", "Warning" => "#F0B15A", "Success" => "#61C995", _ => "#4D7CFE" };
+}
+
+internal sealed record NetworkProbeHistoryPoint(DateTime Time, string AdapterId, bool GatewaySucceeded, bool DnsSucceeded,
+    bool HttpSucceeded, long GatewayLatencyMs, long DnsLatencyMs, long HttpLatencyMs);
+
+public sealed record NetworkAlertSettings(double HighUploadMegabytesPerSecond, int HighLatencyMilliseconds,
+    double DailyBudgetGigabytes, int QuietStartHour, int QuietEndHour)
+{
+    public static NetworkAlertSettings Default { get; } = new(10, 800, 0, 23, 7);
 }

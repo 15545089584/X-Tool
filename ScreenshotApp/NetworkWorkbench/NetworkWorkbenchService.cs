@@ -19,10 +19,14 @@ public static class NetworkWorkbenchService
 {
     private const string InternetSettingsKey = @"Software\Microsoft\Windows\CurrentVersion\Internet Settings";
     private static readonly string ProfilesPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "X-Tool", "network-profiles.json");
+    private static readonly string ProfileRestorePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "X-Tool", "network-profile-restore.json");
     private static readonly Regex KeyValueLine = new(@"^\s*(?<key>[^:：]+)\s*[:：]\s*(?<value>.*?)\s*$", RegexOptions.Compiled);
     private static readonly object WifiCacheLock = new();
-    private static WifiDetails _cachedWifi = new("—", "—", "—", "—", "—");
+    private static WifiDetails _cachedWifi = WifiDetails.Empty;
     private static DateTime _wifiCacheTime = DateTime.MinValue;
+    private static readonly object InterfaceMetricCacheLock = new();
+    private static IReadOnlyDictionary<int, int> _cachedInterfaceMetrics = new Dictionary<int, int>();
+    private static DateTime _interfaceMetricCacheTime = DateTime.MinValue;
     private static readonly SemaphoreSlim ConnectivityProbeGate = new(1, 1);
     private static ConnectivityProbeSnapshot _cachedConnectivityProbe = ConnectivityProbeSnapshot.Empty;
     private static DateTime _connectivityProbeCacheTime = DateTime.MinValue;
@@ -90,12 +94,19 @@ public static class NetworkWorkbenchService
             wifi.Channel,
             wifi.ReceiveRate,
             wifi.TransmitRate,
+            wifi.Bssid,
+            wifi.RadioType,
+            wifi.Authentication,
+            wifi.ChannelWidth,
             FormatProxySummary(proxy),
             active is null
                 ? hasVirtualConnection ? "物理链路已断开，虚拟接口仍处于启用状态" : "未检测到已连接的物理网卡"
                 : $"{active.Name} · 默认路由接口 {active.InterfaceIndex}",
             probe.Summary,
             probe.CapturedAt,
+            probe.GatewayLatencyMs,
+            probe.DnsLatencyMs,
+            probe.HttpLatencyMs,
             adapters.Count(item => item.IsUp && !item.IsVirtual),
             DateTime.Now);
     }
@@ -103,6 +114,7 @@ public static class NetworkWorkbenchService
     public static IReadOnlyList<NetworkAdapterEntry> GetAdapters()
     {
         var candidates = new List<NetworkAdapterEntry>();
+        var interfaceMetrics = GetInterfaceMetrics();
         foreach (var adapter in NetworkInterface.GetAllNetworkInterfaces())
         {
             if (adapter.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue;
@@ -111,7 +123,9 @@ public static class NetworkWorkbenchService
                 var properties = adapter.GetIPProperties();
                 var ipv4Properties = properties.GetIPv4Properties();
                 var statistics = adapter.GetIPv4Statistics();
-                var ipv4 = properties.UnicastAddresses.FirstOrDefault(item => item.Address.AddressFamily == AddressFamily.InterNetwork)?.Address.ToString() ?? "—";
+                var ipv4Unicast = properties.UnicastAddresses.FirstOrDefault(item => item.Address.AddressFamily == AddressFamily.InterNetwork);
+                var ipv4 = ipv4Unicast?.Address.ToString() ?? "—";
+                var ipv4PrefixLength = ipv4Unicast?.PrefixLength ?? 0;
                 var ipv6 = properties.UnicastAddresses.FirstOrDefault(item => item.Address.AddressFamily == AddressFamily.InterNetworkV6 && !item.Address.IsIPv6LinkLocal)?.Address.ToString() ?? "—";
                 var gateways = properties.GatewayAddresses
                     .Where(item => !IPAddress.Any.Equals(item.Address) && !IPAddress.IPv6Any.Equals(item.Address))
@@ -131,6 +145,7 @@ public static class NetworkWorkbenchService
                     isUp,
                     false,
                     ipv4,
+                    ipv4PrefixLength,
                     ipv6,
                     gateway,
                     string.IsNullOrWhiteSpace(dns) ? "—" : dns,
@@ -141,11 +156,12 @@ public static class NetworkWorkbenchService
                     adapter.GetPhysicalAddress().ToString(),
                     ipv4Properties?.Mtu ?? 0,
                     isVirtual,
-                    ipv4Properties?.Index ?? 0));
+                    ipv4Properties?.Index ?? 0,
+                    interfaceMetrics.GetValueOrDefault(ipv4Properties?.Index ?? 0)));
             }
             catch
             {
-                candidates.Add(new NetworkAdapterEntry(adapter.Id, adapter.Name, adapter.Description, adapter.NetworkInterfaceType.ToString(), adapter.OperationalStatus == OperationalStatus.Up, false, "—", "—", "—", "—", "—", adapter.Speed, 0, 0, adapter.GetPhysicalAddress().ToString(), 0, IsVirtualAdapter(adapter), 0));
+                candidates.Add(new NetworkAdapterEntry(adapter.Id, adapter.Name, adapter.Description, adapter.NetworkInterfaceType.ToString(), adapter.OperationalStatus == OperationalStatus.Up, false, "—", 0, "—", "—", "—", "—", adapter.Speed, 0, 0, adapter.GetPhysicalAddress().ToString(), 0, IsVirtualAdapter(adapter), 0, 0));
             }
         }
 
@@ -323,7 +339,7 @@ public static class NetworkWorkbenchService
     {
         var adapter = GetAdapters().FirstOrDefault(item => item.IsPrimary);
         var snapshot = adapter is null ? null : new NetworkAdapterConfigurationSnapshot(
-            adapter.Id, adapter.Name, adapter.IPv4Address, adapter.Gateway, adapter.DnsServers, adapter.DhcpText, adapter.Mtu);
+            adapter.Id, adapter.Name, adapter.IPv4Address, adapter.IPv4PrefixLength, adapter.Gateway, adapter.DnsServers, adapter.DhcpText, adapter.Mtu, adapter.InterfaceMetric);
         return new NetworkProfile(name, proxy, DateTime.Now, snapshot);
     }
 
@@ -341,6 +357,8 @@ public static class NetworkWorkbenchService
                 if (!string.Equals(currentAdapter.Name, profile.Adapter.Name, StringComparison.OrdinalIgnoreCase)) changes.Add($"主用网卡：{currentAdapter.Name} → {profile.Adapter.Name}");
                 if (!string.Equals(currentAdapter.DnsServers, profile.Adapter.DnsServers, StringComparison.OrdinalIgnoreCase)) changes.Add($"DNS：{currentAdapter.DnsServers} → {profile.Adapter.DnsServers}");
                 if (!string.Equals(currentAdapter.DhcpText, profile.Adapter.DhcpText, StringComparison.OrdinalIgnoreCase)) changes.Add($"地址方式：{currentAdapter.DhcpText} → {profile.Adapter.DhcpText}");
+                if (currentAdapter.Mtu != profile.Adapter.Mtu) changes.Add($"MTU：{currentAdapter.Mtu} → {profile.Adapter.Mtu}");
+                if (currentAdapter.InterfaceMetric != profile.Adapter.InterfaceMetric) changes.Add($"接口跃点：{currentAdapter.InterfaceMetric} → {profile.Adapter.InterfaceMetric}");
             }
         }
         return changes.Count == 0 ? "当前配置已与该方案一致。" : string.Join(Environment.NewLine, changes);
@@ -377,6 +395,34 @@ public static class NetworkWorkbenchService
         File.WriteAllText(ProfilesPath, JsonSerializer.Serialize(profiles, new JsonSerializerOptions { WriteIndented = true }), new UTF8Encoding(false));
     }
 
+    public static void SaveProfileRestorePoint(NetworkProfile profile, TimeSpan lifetime)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(ProfileRestorePath)!);
+        var envelope = new NetworkProfileRestorePoint(profile, DateTime.Now.Add(lifetime));
+        File.WriteAllText(ProfileRestorePath, JsonSerializer.Serialize(envelope, new JsonSerializerOptions { WriteIndented = true }), new UTF8Encoding(false));
+    }
+
+    public static NetworkProfile? LoadProfileRestorePoint()
+    {
+        try
+        {
+            if (!File.Exists(ProfileRestorePath)) return null;
+            var envelope = JsonSerializer.Deserialize<NetworkProfileRestorePoint>(File.ReadAllText(ProfileRestorePath, Encoding.UTF8));
+            if (envelope is null || envelope.ExpiresAt <= DateTime.Now) { File.Delete(ProfileRestorePath); return null; }
+            return envelope.Profile;
+        }
+        catch { return null; }
+    }
+
+    public static IReadOnlyList<NetworkProfile> ImportProfiles(string path)
+    {
+        var profiles = JsonSerializer.Deserialize<List<NetworkProfile>>(File.ReadAllText(path, Encoding.UTF8)) ?? new();
+        return profiles.Where(item => !string.IsNullOrWhiteSpace(item.Name)).ToArray();
+    }
+
+    public static void ExportProfiles(string path, IEnumerable<NetworkProfile> profiles)
+        => File.WriteAllText(path, JsonSerializer.Serialize(profiles, new JsonSerializerOptions { WriteIndented = true }), new UTF8Encoding(false));
+
     private static (string Host, int Port)? ParseProxyEndpoint(string value)
     {
         var first = value.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() ?? string.Empty;
@@ -403,7 +449,8 @@ public static class NetworkWorkbenchService
                 if (match.Success) values[match.Groups["key"].Value.Trim()] = match.Groups["value"].Value.Trim();
             }
             string Find(params string[] keys) => keys.Select(key => values.FirstOrDefault(item => item.Key.Contains(key, StringComparison.OrdinalIgnoreCase)).Value).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? "—";
-            var result = new WifiDetails(Find("SSID"), Find("信号", "Signal"), Find("频道", "通道", "Channel"), Find("接收速率", "Receive rate"), Find("传输速率", "Transmit rate"));
+            var result = new WifiDetails(Find("SSID"), Find("信号", "Signal"), Find("频道", "通道", "Channel"), Find("接收速率", "Receive rate"), Find("传输速率", "Transmit rate"),
+                Find("BSSID"), Find("无线电类型", "Radio type"), Find("身份验证", "Authentication"), Find("信道宽度", "Channel width"));
             lock (WifiCacheLock)
             {
                 _cachedWifi = result;
@@ -427,6 +474,42 @@ public static class NetworkWorkbenchService
         if (adapter.NetworkInterfaceType is NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel or NetworkInterfaceType.Ppp) return true;
         var identity = $"{adapter.Name} {adapter.Description}";
         return VirtualAdapterKeywords.Any(keyword => identity.Contains(keyword, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static IReadOnlyDictionary<int, int> GetInterfaceMetrics()
+    {
+        lock (InterfaceMetricCacheLock)
+        {
+            if (DateTime.UtcNow - _interfaceMetricCacheTime < TimeSpan.FromSeconds(5))
+            {
+                return _cachedInterfaceMetrics;
+            }
+        }
+
+        try
+        {
+            var output = RunProcessAsync("netsh.exe", "interface ipv4 show interfaces", CancellationToken.None).GetAwaiter().GetResult();
+            var result = new Dictionary<int, int>();
+            foreach (var line in output.Split('\n'))
+            {
+                var match = Regex.Match(line, @"^\s*(?<index>\d+)\s+(?<metric>\d+)\s+\d+");
+                if (match.Success && int.TryParse(match.Groups["index"].Value, out var index) && int.TryParse(match.Groups["metric"].Value, out var metric)) result[index] = metric;
+            }
+            lock (InterfaceMetricCacheLock)
+            {
+                _cachedInterfaceMetrics = result;
+                _interfaceMetricCacheTime = DateTime.UtcNow;
+                return _cachedInterfaceMetrics;
+            }
+        }
+        catch
+        {
+            lock (InterfaceMetricCacheLock)
+            {
+                _interfaceMetricCacheTime = DateTime.UtcNow;
+                return _cachedInterfaceMetrics;
+            }
+        }
     }
 
     private static string FormatProxySummary(ProxySettingsSnapshot proxy)
@@ -459,11 +542,18 @@ public static class NetworkWorkbenchService
             var httpTask = ProbeHttpAsync(cancellationToken);
             await Task.WhenAll(gatewayTask, dnsTask, httpTask);
 
+            var gateway = await gatewayTask;
+            var dns = await dnsTask;
+            var http = await httpTask;
+
             var result = new ConnectivityProbeSnapshot(
                 adapter.Id,
-                await gatewayTask,
-                await dnsTask,
-                await httpTask,
+                gateway.Succeeded,
+                dns.Succeeded,
+                http.Succeeded,
+                gateway.ElapsedMilliseconds,
+                dns.ElapsedMilliseconds,
+                http.ElapsedMilliseconds,
                 DateTime.Now);
             if (probeGeneration == Volatile.Read(ref _connectivityProbeGeneration))
             {
@@ -478,40 +568,43 @@ public static class NetworkWorkbenchService
         }
     }
 
-    private static async Task<bool> ProbeGatewayAsync(string gateway, CancellationToken cancellationToken)
+    private static async Task<ProbeResult> ProbeGatewayAsync(string gateway, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(gateway) || gateway == "—") return false;
+        if (string.IsNullOrWhiteSpace(gateway) || gateway == "—") return new(false, -1);
+        var watch = Stopwatch.StartNew();
         try
         {
             using var ping = new Ping();
             var reply = await ping.SendPingAsync(gateway, 1200).WaitAsync(TimeSpan.FromMilliseconds(1500), cancellationToken);
-            return reply.Status == IPStatus.Success;
+            return new(reply.Status == IPStatus.Success, watch.ElapsedMilliseconds);
         }
-        catch { return false; }
+        catch { return new(false, watch.ElapsedMilliseconds); }
     }
 
-    private static async Task<bool> ProbeDnsAsync(CancellationToken cancellationToken)
+    private static async Task<ProbeResult> ProbeDnsAsync(CancellationToken cancellationToken)
     {
+        var watch = Stopwatch.StartNew();
         try
         {
             var addresses = await Dns.GetHostAddressesAsync("www.msftconnecttest.com")
                 .WaitAsync(TimeSpan.FromSeconds(2), cancellationToken);
-            return addresses.Length != 0;
+            return new(addresses.Length != 0, watch.ElapsedMilliseconds);
         }
-        catch { return false; }
+        catch { return new(false, watch.ElapsedMilliseconds); }
     }
 
-    private static async Task<bool> ProbeHttpAsync(CancellationToken cancellationToken)
+    private static async Task<ProbeResult> ProbeHttpAsync(CancellationToken cancellationToken)
     {
+        var watch = Stopwatch.StartNew();
         try
         {
             using var response = await DirectConnectivityClient.GetAsync(
                 "http://www.msftconnecttest.com/connecttest.txt",
                 HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken);
-            return response.IsSuccessStatusCode;
+            return new(response.IsSuccessStatusCode, watch.ElapsedMilliseconds);
         }
-        catch { return false; }
+        catch { return new(false, watch.ElapsedMilliseconds); }
     }
 
     private static int TryGetBestInterfaceIndex()
@@ -551,23 +644,27 @@ public static class NetworkWorkbenchService
     [DllImport("iphlpapi.dll")]
     private static extern uint GetBestInterface(uint destinationAddress, out uint bestInterfaceIndex);
 
-    private sealed record WifiDetails(string Ssid, string Signal, string Channel, string ReceiveRate, string TransmitRate)
+    private sealed record WifiDetails(string Ssid, string Signal, string Channel, string ReceiveRate, string TransmitRate,
+        string Bssid, string RadioType, string Authentication, string ChannelWidth)
     {
-        public static WifiDetails Empty { get; } = new("—", "—", "—", "—", "—");
+        public static WifiDetails Empty { get; } = new("—", "—", "—", "—", "—", "—", "—", "—", "—");
     }
 
-    private sealed record ConnectivityProbeSnapshot(string AdapterId, bool GatewaySucceeded, bool DnsSucceeded, bool HttpSucceeded, DateTime CapturedAt)
+    private sealed record ConnectivityProbeSnapshot(string AdapterId, bool GatewaySucceeded, bool DnsSucceeded, bool HttpSucceeded,
+        long GatewayLatencyMs, long DnsLatencyMs, long HttpLatencyMs, DateTime CapturedAt)
     {
-        public static ConnectivityProbeSnapshot Empty { get; } = new(string.Empty, false, false, false, DateTime.MinValue);
+        public static ConnectivityProbeSnapshot Empty { get; } = new(string.Empty, false, false, false, -1, -1, -1, DateTime.MinValue);
         public string Summary => string.IsNullOrWhiteSpace(AdapterId)
             ? "未执行联网探测"
-            : $"网关 {(GatewaySucceeded ? "可达" : "未响应")} · DNS {(DnsSucceeded ? "正常" : "失败")} · HTTP {(HttpSucceeded ? "正常" : "失败")}";
+            : $"网关 {(GatewaySucceeded ? $"可达 {GatewayLatencyMs} ms" : "未响应")} · DNS {(DnsSucceeded ? $"正常 {DnsLatencyMs} ms" : "失败")} · HTTP {(HttpSucceeded ? $"正常 {HttpLatencyMs} ms" : "失败")}";
     }
+
+    private readonly record struct ProbeResult(bool Succeeded, long ElapsedMilliseconds);
 }
 
-public sealed record NetworkOverviewSnapshot(string ConnectivityText, bool IsInternetAvailable, bool HasPhysicalConnection, string ActiveAdapterId, string ActiveAdapterName, string ActiveAdapterDescription, string ActiveAdapterType, string IPv4Address, string IPv6Address, string Gateway, string DnsServers, string DhcpText, long LinkSpeedBitsPerSecond, long BytesReceived, long BytesSent, string WifiSsid, string WifiSignal, string WifiChannel, string WifiReceiveRate, string WifiTransmitRate, string ProxyText, string ConnectionDetail, string ConnectivityProbeText, DateTime ConnectivityProbeCapturedAt, int ActivePhysicalAdapterCount, DateTime CapturedAt);
+public sealed record NetworkOverviewSnapshot(string ConnectivityText, bool IsInternetAvailable, bool HasPhysicalConnection, string ActiveAdapterId, string ActiveAdapterName, string ActiveAdapterDescription, string ActiveAdapterType, string IPv4Address, string IPv6Address, string Gateway, string DnsServers, string DhcpText, long LinkSpeedBitsPerSecond, long BytesReceived, long BytesSent, string WifiSsid, string WifiSignal, string WifiChannel, string WifiReceiveRate, string WifiTransmitRate, string WifiBssid, string WifiRadioType, string WifiAuthentication, string WifiChannelWidth, string ProxyText, string ConnectionDetail, string ConnectivityProbeText, DateTime ConnectivityProbeCapturedAt, long GatewayLatencyMs, long DnsLatencyMs, long HttpLatencyMs, int ActivePhysicalAdapterCount, DateTime CapturedAt);
 
-public sealed record NetworkAdapterEntry(string Id, string Name, string Description, string InterfaceType, bool IsUp, bool IsPrimary, string IPv4Address, string IPv6Address, string Gateway, string DnsServers, string DhcpText, long LinkSpeedBitsPerSecond, long BytesReceived, long BytesSent, string MacAddress, int Mtu, bool IsVirtual, int InterfaceIndex)
+public sealed record NetworkAdapterEntry(string Id, string Name, string Description, string InterfaceType, bool IsUp, bool IsPrimary, string IPv4Address, int IPv4PrefixLength, string IPv6Address, string Gateway, string DnsServers, string DhcpText, long LinkSpeedBitsPerSecond, long BytesReceived, long BytesSent, string MacAddress, int Mtu, bool IsVirtual, int InterfaceIndex, int InterfaceMetric)
 {
     public string StatusText => IsUp ? "已连接" : "未连接";
     public string PrimaryText => IsPrimary ? "主用物理链路" : IsVirtual ? "虚拟接口" : string.Empty;
@@ -583,7 +680,7 @@ public sealed record NetworkDiagnosticResult(DateTime Time, string Kind, string 
     public string StatusText => Succeeded ? "成功" : "失败";
     public string ElapsedText => $"{ElapsedMilliseconds:N0} ms";
 }
-public sealed record NetworkAdapterConfigurationSnapshot(string Id, string Name, string IPv4Address, string Gateway, string DnsServers, string DhcpText, int Mtu);
+public sealed record NetworkAdapterConfigurationSnapshot(string Id, string Name, string IPv4Address, int IPv4PrefixLength, string Gateway, string DnsServers, string DhcpText, int Mtu, int InterfaceMetric);
 public sealed record NetworkProfile(string Name, ProxySettingsSnapshot Proxy, DateTime UpdatedAt, NetworkAdapterConfigurationSnapshot? Adapter = null)
 {
     public string UpdatedAtText => UpdatedAt.ToString("yyyy-MM-dd HH:mm");
@@ -596,3 +693,4 @@ public sealed record NetworkProfile(string Name, ProxySettingsSnapshot Proxy, Da
         }
     }
 }
+internal sealed record NetworkProfileRestorePoint(NetworkProfile Profile, DateTime ExpiresAt);

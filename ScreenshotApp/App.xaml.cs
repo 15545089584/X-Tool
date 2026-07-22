@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Interop;
 using Forms = System.Windows.Forms;
 using ScreenshotApp.SystemTools;
+using ScreenshotApp.NetworkWorkbench;
 
 namespace ScreenshotApp;
 
@@ -26,6 +27,12 @@ public partial class App : System.Windows.Application
         if (e.Args.Length == 2 && string.Equals(e.Args[0], "--apply-elevated-system-action", StringComparison.Ordinal))
         {
             Shutdown(SystemToolsService.ApplyElevatedSystemActionRequest(e.Args[1]));
+            return;
+        }
+
+        if (e.Args.Length == 2 && string.Equals(e.Args[0], "--network-etw-helper", StringComparison.Ordinal))
+        {
+            Shutdown(NetworkEtwTrafficHelper.Run(e.Args[1]));
             return;
         }
 

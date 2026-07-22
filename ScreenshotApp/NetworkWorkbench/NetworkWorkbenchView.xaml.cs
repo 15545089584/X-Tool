@@ -25,6 +25,7 @@ public partial class NetworkWorkbenchView : UserControl
     private readonly List<double> _historicalUpload = new();
     private readonly NetworkHistoryStore _historyStore;
     private readonly NetworkMonitorCoordinator _monitorCoordinator;
+    private readonly NetworkEtwTrafficClient _exactTrafficClient = new();
     private IReadOnlyList<NetworkConnectionRow> _allConnections = Array.Empty<NetworkConnectionRow>();
     private NetworkOverviewSnapshot? _previousOverview;
     private ProxySettingsSnapshot _proxySnapshot = new(false, string.Empty, string.Empty, string.Empty, true);
@@ -79,6 +80,7 @@ public partial class NetworkWorkbenchView : UserControl
     private async void NetworkWorkbenchView_Unloaded(object sender, RoutedEventArgs e)
     {
         await _monitorCoordinator.StopAsync();
+        _exactTrafficClient.Dispose();
     }
 
     private async void NetworkWorkbenchView_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
@@ -188,7 +190,8 @@ public partial class NetworkWorkbenchView : UserControl
             OverviewDhcpText.Text = snapshot.DhcpText;
             OverviewActiveAdapterText.Text = $"{snapshot.ActiveAdapterName} · {snapshot.ActiveAdapterType}";
             OverviewWifiText.Text = snapshot.WifiSsid;
-            OverviewWifiSignalText.Text = $"{snapshot.WifiSignal} / {snapshot.WifiChannel}";
+            OverviewWifiSignalText.Text = $"{snapshot.WifiSignal} / 信道 {snapshot.WifiChannel} · {snapshot.WifiRadioType}";
+            OverviewWifiSignalText.ToolTip = $"BSSID {snapshot.WifiBssid}\n安全 {snapshot.WifiAuthentication}\n信道宽度 {snapshot.WifiChannelWidth}";
             OverviewProxyText.Text = snapshot.ProxyText;
             OverviewIpv6Text.Text = snapshot.IPv6Address;
             OverviewProbeText.Text = snapshot.ConnectivityProbeText;
@@ -319,7 +322,7 @@ public partial class NetworkWorkbenchView : UserControl
 
     private void UpdateTrafficRangeButtons()
     {
-        foreach (var button in new[] { RealtimeRangeButton, Minutes15RangeButton, Hour1RangeButton, Hours24RangeButton, Days7RangeButton })
+        foreach (var button in new[] { RealtimeRangeButton, Minutes15RangeButton, Hour1RangeButton, Hours24RangeButton, Days7RangeButton, Days30RangeButton, Days90RangeButton })
         {
             var selected = string.Equals(button.Tag?.ToString(), _trafficRange, StringComparison.Ordinal);
             button.Background = BrushFrom(selected ? "#4D7CFE" : "#70FFFFFF");
@@ -336,6 +339,8 @@ public partial class NetworkWorkbenchView : UserControl
             "1h" => TimeSpan.FromHours(1),
             "24h" => TimeSpan.FromHours(24),
             "7d" => TimeSpan.FromDays(7),
+            "30d" => TimeSpan.FromDays(30),
+            "90d" => TimeSpan.FromDays(90),
             _ => TimeSpan.FromMinutes(1)
         };
         try
@@ -424,6 +429,41 @@ public partial class NetworkWorkbenchView : UserControl
         }
     }
 
+    private async void ExportNetworkHistory_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var days = RetentionButton.Tag is int value ? value : 7;
+            var samples = await _monitorCoordinator.GetTrafficHistoryAsync(TimeSpan.FromDays(days));
+            var events = await _monitorCoordinator.GetTimelineEventsAsync(5000);
+            var dialog = new Microsoft.Win32.SaveFileDialog { Filter = "CSV 文件|*.csv", FileName = $"XTool_网络历史_{DateTime.Now:yyyyMMdd_HHmm}.csv" };
+            if (dialog.ShowDialog() != true) return;
+            var builder = new StringBuilder("类型,时间,网卡,下载字节,上传字节,平均下载Bps,平均上传Bps,事件,详情\r\n");
+            foreach (var item in samples) builder.AppendLine($"流量,{item.BucketTime:O},\"{EscapeCsv(item.AdapterName)}\",{item.DownloadedBytes},{item.UploadedBytes},{item.AverageDownloadRate:F2},{item.AverageUploadRate:F2},,");
+            foreach (var item in events) builder.AppendLine($"事件,{item.Time:O},\"{EscapeCsv(item.AdapterName)}\",,,,,\"{EscapeCsv(item.Title)}\",\"{EscapeCsv(item.Detail)}\"");
+            File.WriteAllText(dialog.FileName, builder.ToString(), new UTF8Encoding(true));
+            MessageBox.Show("网络历史已导出。", "导出历史", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception exception) { MessageBox.Show(exception.Message, "导出历史失败", MessageBoxButton.OK, MessageBoxImage.Warning); }
+    }
+
+    private async void AlertSettings_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var settings = await _monitorCoordinator.GetAlertSettingsAsync();
+            var window = new NetworkAlertSettingsWindow(settings) { Owner = Window.GetWindow(this) };
+            if (window.ShowDialog() == true && window.Result is not null)
+            {
+                await _monitorCoordinator.SetAlertSettingsAsync(window.Result);
+                HistoryStatusText.Text = "告警阈值与每日流量预算已保存"; HistoryStatusText.Visibility = Visibility.Visible;
+            }
+        }
+        catch (Exception exception) { MessageBox.Show(exception.Message, "保存告警设置失败", MessageBoxButton.OK, MessageBoxImage.Warning); }
+    }
+
+    private static string EscapeCsv(string value) => value.Replace("\"", "\"\"");
+
     private void UpdateTrafficChart()
     {
         var width = TrafficCanvas.ActualWidth;
@@ -511,6 +551,11 @@ public partial class NetworkWorkbenchView : UserControl
         }
     }
 
+    private void OpenNetworkDeepTools_Click(object sender, RoutedEventArgs e)
+    {
+        new NetworkDeepToolsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
+    }
+
     private async Task RefreshConnectionsAsync()
     {
         if (_refreshingConnections) return;
@@ -531,7 +576,14 @@ public partial class NetworkWorkbenchView : UserControl
             }
             _lastConnectionSampleAt = now;
             _allConnections = portsTask.Result
-                .Select(item => new NetworkConnectionRow(item, trafficByProcess.GetValueOrDefault(item.ProcessId), _processTrafficTotals.GetValueOrDefault(item.ProcessId)))
+                .Select(item =>
+                {
+                    var exact = _exactTrafficClient.GetMeasurement(item.ProcessId, item.Protocol, item.LocalAddress, item.RemoteAddress);
+                    return new NetworkConnectionRow(item,
+                        _exactTrafficClient.IsRunning ? exact.BitsPerSecond : trafficByProcess.GetValueOrDefault(item.ProcessId),
+                        _exactTrafficClient.IsRunning ? exact.TotalBytes : _processTrafficTotals.GetValueOrDefault(item.ProcessId),
+                        _exactTrafficClient.IsRunning);
+                })
                 .ToArray();
             ApplyConnectionFilter();
         }
@@ -573,6 +625,10 @@ public partial class NetworkWorkbenchView : UserControl
         _connections.Clear();
         foreach (var item in filtered) _connections.Add(item);
         ConnectionsSummaryText.Text = $"显示 {_connections.Count} / {_allConnections.Count} 项";
+        if (ExactTrafficStatusText is not null)
+        {
+            ExactTrafficStatusText.Text = _exactTrafficClient.IsRunning ? "ETW 逐连接精确数据" : "系统 I/O 估算（非逐连接）";
+        }
     }
 
     private void ConnectionFilterTextBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -581,6 +637,18 @@ public partial class NetworkWorkbenchView : UserControl
     }
 
     private async void RefreshConnections_Click(object sender, RoutedEventArgs e) => await RefreshConnectionsAsync();
+
+    private async void EnableExactTraffic_Click(object sender, RoutedEventArgs e)
+    {
+        EnableExactTrafficButton.IsEnabled = false;
+        EnableExactTrafficButton.Content = "等待授权…";
+        var result = await _exactTrafficClient.StartAsync();
+        ExactTrafficStatusText.Text = result.Message;
+        if (!result.Success) MessageBox.Show(result.Message, "精确流量监测", MessageBoxButton.OK, MessageBoxImage.Information);
+        EnableExactTrafficButton.Content = result.Success ? "精确监测中" : "启用精确监测";
+        EnableExactTrafficButton.IsEnabled = !result.Success;
+        await RefreshConnectionsAsync();
+    }
 
     private void ConnectionDisplayOption_Changed(object sender, RoutedEventArgs e)
     {
@@ -608,7 +676,7 @@ public partial class NetworkWorkbenchView : UserControl
                      (RemoteAddressSortHeader, "RemoteAddress", "远程端点"),
                      (ProcessSortHeader, "Process", "进程"),
                      (PidSortHeader, "ProcessId", "PID"),
-                     (TrafficSortHeader, "Traffic", "进程速率"),
+                     (TrafficSortHeader, "Traffic", "实时速率"),
                      (TotalTrafficSortHeader, "TotalTraffic", "会话累计"),
                      (StateSortHeader, "State", "状态")
                  })
@@ -880,6 +948,7 @@ public partial class NetworkWorkbenchView : UserControl
         _profiles.Clear();
         foreach (var profile in NetworkWorkbenchService.LoadProfiles().OrderByDescending(item => item.UpdatedAt)) _profiles.Add(profile);
         ProfilesSummaryText.Text = $"{_profiles.Count} 个方案";
+        _profileRestorePoint = NetworkWorkbenchService.LoadProfileRestorePoint();
     }
 
     private void SaveProfile_Click(object sender, RoutedEventArgs e)
@@ -902,15 +971,25 @@ public partial class NetworkWorkbenchView : UserControl
     private async void ApplyProfile_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is not NetworkProfile profile) return;
+        var applyAdapterFields = ApplyProfileDnsCheckBox.IsChecked == true || ApplyProfileAddressCheckBox.IsChecked == true || ApplyProfileMtuCheckBox.IsChecked == true;
+        if (applyAdapterFields && profile.Adapter is not null && !NetworkWorkbenchService.GetAdapters().Any(item =>
+                item.Id.Equals(profile.Adapter.Id, StringComparison.OrdinalIgnoreCase) ||
+                item.Name.Equals(profile.Adapter.Name, StringComparison.OrdinalIgnoreCase)))
+        {
+            MessageBox.Show($"方案绑定的网卡“{profile.Adapter.Name}”当前不存在。为避免误改其他接口，已阻止应用。", "网卡不匹配", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
         var difference = NetworkWorkbenchService.BuildProfileDifference(profile);
         if (MessageBox.Show($"应用网络方案“{profile.Name}”吗？\n\n将发生以下变化：\n{difference}\n\n应用前会创建本次恢复点；DNS 修改可能请求管理员授权。", "应用网络方案", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
         _profileRestorePoint = NetworkWorkbenchService.CaptureProfile("应用前恢复点", NetworkWorkbenchService.GetCurrentUserProxy());
-        if (!NetworkWorkbenchService.TrySaveCurrentUserProxy(profile.Proxy, out var error))
+        NetworkWorkbenchService.SaveProfileRestorePoint(_profileRestorePoint, TimeSpan.FromHours(24));
+        string? error = null;
+        if (ApplyProfileProxyCheckBox.IsChecked == true && !NetworkWorkbenchService.TrySaveCurrentUserProxy(profile.Proxy, out error))
         {
             MessageBox.Show(error ?? "应用失败。", "应用网络方案失败", MessageBoxButton.OK, MessageBoxImage.Error);
             return;
         }
-        if (profile.Adapter is not null)
+        if (profile.Adapter is not null && ApplyProfileDnsCheckBox.IsChecked == true)
         {
             var dns = GetIpv4Dns(profile.Adapter.DnsServers);
             error = await Task.Run(() => SystemToolsService.TrySetNetworkAdapterDnsWithElevation(profile.Adapter.Name, dns.ElementAtOrDefault(0) ?? string.Empty, dns.ElementAtOrDefault(1) ?? string.Empty, out var value) ? null : value);
@@ -921,14 +1000,47 @@ public partial class NetworkWorkbenchView : UserControl
                 return;
             }
         }
-        WriteProxyEditor(profile.Proxy);
+        if (profile.Adapter is not null && ApplyProfileAddressCheckBox.IsChecked == true)
+        {
+            var useDhcp = profile.Adapter.DhcpText.Contains("自动", StringComparison.Ordinal);
+            error = await Task.Run(() => SystemToolsService.TrySetNetworkAdapterAddressWithElevation(profile.Adapter.Name, useDhcp,
+                profile.Adapter.IPv4Address, profile.Adapter.IPv4PrefixLength, profile.Adapter.Gateway, out var value) ? null : value);
+            if (error is not null) { MessageBox.Show($"IPv4 地址应用失败：\n{error}", "应用网络方案失败", MessageBoxButton.OK, MessageBoxImage.Error); return; }
+        }
+        if (profile.Adapter is not null && ApplyProfileMtuCheckBox.IsChecked == true && profile.Adapter.Mtu > 0)
+        {
+            error = await Task.Run(() => SystemToolsService.TrySetNetworkAdapterMtuWithElevation(profile.Adapter.Name, profile.Adapter.Mtu, out var value) ? null : value);
+            if (error is not null) { MessageBox.Show($"MTU 应用失败：\n{error}", "应用网络方案失败", MessageBoxButton.OK, MessageBoxImage.Error); return; }
+            if (profile.Adapter.InterfaceMetric > 0)
+            {
+                error = await Task.Run(() => SystemToolsService.TrySetNetworkAdapterMetricWithElevation(profile.Adapter.Name, profile.Adapter.InterfaceMetric, out var value) ? null : value);
+                if (error is not null) { MessageBox.Show($"接口跃点应用失败：\n{error}", "应用网络方案失败", MessageBoxButton.OK, MessageBoxImage.Error); return; }
+            }
+        }
+        if (ApplyProfileProxyCheckBox.IsChecked == true) WriteProxyEditor(profile.Proxy);
         ProxyChangeHintText.Text = $"已应用网络方案“{profile.Name}”，可在网络方案页恢复应用前配置。";
         NetworkWorkbenchService.InvalidateNetworkCaches();
         await RefreshOverviewAsync(force: true);
+        await Task.Delay(650);
+        var verification = await NetworkWorkbenchService.GetOverviewAsync();
+        if (!verification.IsInternetAvailable && _profileRestorePoint is not null &&
+            MessageBox.Show($"方案已写入，但联网复核未通过：\n{verification.ConnectivityProbeText}\n\n是否立即回滚代理与 DNS？", "应用后复核失败", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
+        {
+            NetworkWorkbenchService.TrySaveCurrentUserProxy(_profileRestorePoint.Proxy, out _);
+            if (_profileRestorePoint.Adapter is not null)
+            {
+                var restoreDns = GetIpv4Dns(_profileRestorePoint.Adapter.DnsServers);
+                await Task.Run(() => SystemToolsService.TrySetNetworkAdapterDnsWithElevation(_profileRestorePoint.Adapter.Name,
+                    restoreDns.ElementAtOrDefault(0) ?? string.Empty, restoreDns.ElementAtOrDefault(1) ?? string.Empty, out _));
+            }
+            NetworkWorkbenchService.InvalidateNetworkCaches();
+            await Task.WhenAll(LoadProxyAsync(updateSnapshot: false), RefreshOverviewAsync(force: true), RefreshAdaptersAsync());
+        }
     }
 
     private async void RestoreProfileSnapshot_Click(object sender, RoutedEventArgs e)
     {
+        _profileRestorePoint ??= NetworkWorkbenchService.LoadProfileRestorePoint();
         if (_profileRestorePoint is null)
         {
             MessageBox.Show("本次运行尚未应用网络方案，没有可恢复的应用前配置。", "恢复网络配置", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -949,6 +1061,32 @@ public partial class NetworkWorkbenchView : UserControl
         else MessageBox.Show("已恢复应用前的代理与 DNS 配置。", "恢复完成", MessageBoxButton.OK, MessageBoxImage.Information);
         NetworkWorkbenchService.InvalidateNetworkCaches();
         await Task.WhenAll(LoadProxyAsync(updateSnapshot: false), RefreshOverviewAsync(force: true), RefreshAdaptersAsync());
+    }
+
+    private void ImportProfiles_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog { Filter = "X-Tool 网络方案|*.json" };
+        if (dialog.ShowDialog() != true) return;
+        try
+        {
+            var imported = NetworkWorkbenchService.ImportProfiles(dialog.FileName);
+            foreach (var profile in imported)
+            {
+                var existing = _profiles.FirstOrDefault(item => item.Name.Equals(profile.Name, StringComparison.OrdinalIgnoreCase));
+                if (existing is not null) _profiles.Remove(existing);
+                _profiles.Add(profile);
+            }
+            NetworkWorkbenchService.SaveProfiles(_profiles); ProfilesSummaryText.Text = $"{_profiles.Count} 个方案";
+        }
+        catch (Exception exception) { MessageBox.Show(exception.Message, "导入方案失败", MessageBoxButton.OK, MessageBoxImage.Warning); }
+    }
+
+    private void ExportProfiles_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.SaveFileDialog { Filter = "X-Tool 网络方案|*.json", FileName = $"XTool_网络方案_{DateTime.Now:yyyyMMdd}.json" };
+        if (dialog.ShowDialog() != true) return;
+        try { NetworkWorkbenchService.ExportProfiles(dialog.FileName, _profiles); }
+        catch (Exception exception) { MessageBox.Show(exception.Message, "导出方案失败", MessageBoxButton.OK, MessageBoxImage.Warning); }
     }
 
     private static string[] GetIpv4Dns(string dnsText) => dnsText
@@ -995,7 +1133,7 @@ public partial class NetworkWorkbenchView : UserControl
         => ascending ? values.OrderBy(selector) : values.OrderByDescending(selector);
 
     /// <summary>把端点记录与同 PID 的实时流量采样合并，端口表本身不提供逐连接字节计数。</summary>
-    private sealed record NetworkConnectionRow(PortEntry Entry, double TrafficBitsPerSecond, double TotalTrafficBytes)
+    private sealed record NetworkConnectionRow(PortEntry Entry, double TrafficBitsPerSecond, double TotalTrafficBytes, bool IsExact)
     {
         public string Protocol => Entry.Protocol;
         public string LocalAddress => Entry.LocalAddress;
@@ -1006,14 +1144,14 @@ public partial class NetworkWorkbenchView : UserControl
         public bool IsIpv6 => Entry.IsIpv6;
         public bool IsListening => State.Contains("LISTEN", StringComparison.OrdinalIgnoreCase) || State.Contains("监听", StringComparison.OrdinalIgnoreCase);
         public bool IsActiveConnection => !IsListening && !string.IsNullOrWhiteSpace(RemoteAddress) && RemoteAddress is not "0.0.0.0:0" and not "[::]:0" and not "*:*";
-        public string TrafficText => TrafficBitsPerSecond switch
+        public string TrafficText => (IsExact ? "精确 " : "估算 ") + (TrafficBitsPerSecond switch
         {
             >= 1_000_000_000 => $"{TrafficBitsPerSecond / 1_000_000_000d:F2} Gbps",
             >= 1_000_000 => $"{TrafficBitsPerSecond / 1_000_000d:F2} Mbps",
             >= 1_000 => $"{TrafficBitsPerSecond / 1_000d:F1} Kbps",
             > 0 => $"{TrafficBitsPerSecond:F0} bps",
             _ => "0 bps"
-        };
+        });
         public string TotalTrafficText => FormatBytes(TotalTrafficBytes);
     }
 }

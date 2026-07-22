@@ -330,8 +330,36 @@ public static class SystemToolsService
             "管理员保存 DNS 失败",
             out error);
 
+    public static bool TrySetNetworkAdapterAddressWithElevation(string adapterName, bool dhcp, string address, int prefixLength, string gateway, out string? error)
+        => RunElevatedSystemAction(new ElevatedSystemActionRequest("SetNetworkAdapterAddress", Name: adapterName,
+            Value: dhcp ? "dhcp" : address, ExtraValue: $"{prefixLength}|{gateway}"), "保存 IPv4 地址失败", out error);
+
+    public static bool TrySetNetworkAdapterMtuWithElevation(string adapterName, int mtu, out string? error)
+        => RunElevatedSystemAction(new ElevatedSystemActionRequest("SetNetworkAdapterMtu", Name: adapterName, Value: mtu.ToString()), "保存 MTU 失败", out error);
+
+    public static bool TrySetNetworkAdapterMetricWithElevation(string adapterName, int metric, out string? error)
+        => RunElevatedSystemAction(new ElevatedSystemActionRequest("SetNetworkAdapterMetric", Name: adapterName, Value: metric.ToString()), "保存接口跃点失败", out error);
+
     public static bool TryFlushDnsWithElevation(out string? error)
         => RunElevatedSystemAction(new ElevatedSystemActionRequest("FlushDns"), "清理 DNS 缓存失败", out error);
+
+    public static bool TryResetWinsockWithElevation(out string? error)
+        => RunElevatedSystemAction(new ElevatedSystemActionRequest("ResetWinsock"), "重置 Winsock 失败", out error);
+
+    public static bool TryResetTcpIpWithElevation(out string? error)
+        => RunElevatedSystemAction(new ElevatedSystemActionRequest("ResetTcpIp"), "重置 TCP/IP 失败", out error);
+
+    public static bool TryCreateTemporaryFirewallBlockRuleWithElevation(int port, out string? error)
+    {
+        if (port is < 1 or > 65535) { error = "端口必须位于 1 到 65535。"; return false; }
+        return RunElevatedSystemAction(new ElevatedSystemActionRequest("AddTemporaryFirewallRule", Value: port.ToString()), "创建临时防火墙规则失败", out error);
+    }
+
+    public static bool TryRemoveXToolFirewallRuleWithElevation(int port, out string? error)
+    {
+        if (port is < 1 or > 65535) { error = "端口必须位于 1 到 65535。"; return false; }
+        return RunElevatedSystemAction(new ElevatedSystemActionRequest("RemoveXToolFirewallRule", Value: port.ToString()), "删除 X-Tool 临时规则失败", out error);
+    }
 
     public static bool TrySyncWinHttpProxyWithElevation(bool reset, out string? error)
         => RunElevatedSystemAction(
@@ -364,7 +392,18 @@ public static class SystemToolsService
                 "SetNetworkAdapterState" => TrySetNetworkAdapterState(request.Name ?? string.Empty, request.Start, out actionError),
                 "RenewNetworkAdapterDhcp" => TryRenewNetworkAdapterDhcp(request.Name ?? string.Empty, out actionError),
                 "SetNetworkAdapterDns" => TrySetNetworkAdapterDns(request.Name ?? string.Empty, request.Value ?? string.Empty, request.ExtraValue ?? string.Empty, out actionError),
+                "SetNetworkAdapterAddress" => TrySetNetworkAdapterAddress(request.Name ?? string.Empty, request.Value ?? string.Empty, request.ExtraValue ?? string.Empty, out actionError),
+                "SetNetworkAdapterMtu" => int.TryParse(request.Value, out var mtu) && mtu is >= 576 and <= 9000 &&
+                    TryRunSystemCommand("netsh.exe", $"interface ipv4 set subinterface \"{EscapeCommandValue(request.Name ?? string.Empty)}\" mtu={mtu} store=persistent", out actionError),
+                "SetNetworkAdapterMetric" => int.TryParse(request.Value, out var metric) && metric is >= 1 and <= 9999 &&
+                    TryRunSystemCommand("netsh.exe", $"interface ipv4 set interface interface=\"{EscapeCommandValue(request.Name ?? string.Empty)}\" metric={metric}", out actionError),
                 "FlushDns" => TryRunSystemCommand("ipconfig.exe", "/flushdns", out actionError),
+                "ResetWinsock" => TryRunSystemCommand("netsh.exe", "winsock reset", out actionError),
+                "ResetTcpIp" => TryRunSystemCommand("netsh.exe", "int ip reset", out actionError),
+                "AddTemporaryFirewallRule" => int.TryParse(request.Value, out var firewallPort) && firewallPort is >= 1 and <= 65535 &&
+                    TryRunSystemCommand("netsh.exe", $"advfirewall firewall add rule name=\"X-Tool 临时阻止 TCP {firewallPort}\" dir=out action=block protocol=TCP remoteport={firewallPort}", out actionError),
+                "RemoveXToolFirewallRule" => int.TryParse(request.Value, out var removeFirewallPort) && removeFirewallPort is >= 1 and <= 65535 &&
+                    TryRunSystemCommand("netsh.exe", $"advfirewall firewall delete rule name=\"X-Tool 临时阻止 TCP {removeFirewallPort}\"", out actionError),
                 "SyncWinHttpProxy" => TryRunSystemCommand("netsh.exe", "winhttp import proxy source=ie", out actionError),
                 "ResetWinHttpProxy" => TryRunSystemCommand("netsh.exe", "winhttp reset proxy", out actionError),
                 _ => false
@@ -496,6 +535,21 @@ public static class SystemToolsService
         }
         if (!TryRunSystemCommand("netsh.exe", $"interface ipv4 set dnsservers name=\"{EscapeCommandValue(adapterName)}\" source=static address=\"{primaryDns}\" validate=no", out error)) return false;
         return string.IsNullOrWhiteSpace(secondaryDns) || TryRunSystemCommand("netsh.exe", $"interface ipv4 add dnsservers name=\"{EscapeCommandValue(adapterName)}\" address=\"{secondaryDns}\" index=2 validate=no", out error);
+    }
+
+    private static bool TrySetNetworkAdapterAddress(string adapterName, string value, string extra, out string? error)
+    {
+        if (string.IsNullOrWhiteSpace(adapterName)) { error = "网卡名称不能为空"; return false; }
+        if (string.Equals(value, "dhcp", StringComparison.OrdinalIgnoreCase))
+            return TryRunSystemCommand("netsh.exe", $"interface ipv4 set address name=\"{EscapeCommandValue(adapterName)}\" source=dhcp", out error);
+        var parts = extra.Split('|');
+        if (!IPAddress.TryParse(value, out var address) || address.AddressFamily != AddressFamily.InterNetwork ||
+            parts.Length != 2 || !int.TryParse(parts[0], out var prefix) || prefix is < 1 or > 32 ||
+            !IPAddress.TryParse(parts[1], out var gateway) || gateway.AddressFamily != AddressFamily.InterNetwork)
+        { error = "静态 IPv4、前缀长度或网关无效"; return false; }
+        var maskValue = prefix == 0 ? 0u : uint.MaxValue << (32 - prefix);
+        var mask = string.Join('.', new[] { 24, 16, 8, 0 }.Select(shift => ((maskValue >> shift) & 255).ToString()));
+        return TryRunSystemCommand("netsh.exe", $"interface ipv4 set address name=\"{EscapeCommandValue(adapterName)}\" source=static address={value} mask={mask} gateway={parts[1]} store=persistent", out error);
     }
 
     private static bool TryRunSystemCommand(string fileName, string arguments, out string? error)

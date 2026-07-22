@@ -34,6 +34,8 @@
     <PackageReference Include="PDFsharp" Version="6.2.4" />
     <!-- 网络工作台历史监测数据；所有数据库 I/O 均在专用后台线程执行。 -->
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.8" />
+    <!-- Windows ETW 网络事件解析，用于管理员授权后的逐进程精确流量采集。 -->
+    <PackageReference Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="3.1.21" />
   </ItemGroup>
 
   <ItemGroup>
