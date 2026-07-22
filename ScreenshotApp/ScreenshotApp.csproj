@@ -32,6 +32,8 @@
     <PackageReference Include="Vortice.MediaFoundation" Version="2.4.2" />
     <!-- 图片与已有 PDF 的本地生成、合并采用 MIT 许可的 PDFsharp。 -->
     <PackageReference Include="PDFsharp" Version="6.2.4" />
+    <!-- 网络工作台历史监测数据；所有数据库 I/O 均在专用后台线程执行。 -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.8" />
   </ItemGroup>
 
   <ItemGroup>

@@ -18,22 +18,23 @@ public partial class NetworkWorkbenchView : UserControl
     private readonly ObservableCollection<NetworkAdapterEntry> _adapters = new();
     private readonly ObservableCollection<NetworkConnectionRow> _connections = new();
     private readonly ObservableCollection<NetworkProfile> _profiles = new();
+    private readonly ObservableCollection<NetworkTimelineEvent> _timelineEvents = new();
     private readonly Queue<double> _downloadHistory = new();
     private readonly Queue<double> _uploadHistory = new();
-    private readonly DispatcherTimer _overviewTimer;
-    private readonly DispatcherTimer _networkChangeDebounceTimer;
+    private readonly List<double> _historicalDownload = new();
+    private readonly List<double> _historicalUpload = new();
+    private readonly NetworkHistoryStore _historyStore;
+    private readonly NetworkMonitorCoordinator _monitorCoordinator;
     private IReadOnlyList<NetworkConnectionRow> _allConnections = Array.Empty<NetworkConnectionRow>();
     private NetworkOverviewSnapshot? _previousOverview;
     private ProxySettingsSnapshot _proxySnapshot = new(false, string.Empty, string.Empty, string.Empty, true);
     private CancellationTokenSource? _diagnosticCancellation;
     private bool _initialized;
-    private readonly SemaphoreSlim _overviewRefreshGate = new(1, 1);
     private bool _refreshingConnections;
     private string _connectionSortKey = "LocalAddress";
     private bool _connectionsAscending = true;
     private bool _connectionHeaderSortActive;
     private string _activeTab = "Overview";
-    private bool _networkEventsRegistered;
     private string _trafficSessionAdapterId = string.Empty;
     private double _sessionDownloadedBytes;
     private double _sessionUploadedBytes;
@@ -46,18 +47,23 @@ public partial class NetworkWorkbenchView : UserControl
     private readonly Dictionary<int, double> _processTrafficTotals = new();
     private DateTime _lastConnectionSampleAt = DateTime.Now;
     private NetworkProfile? _profileRestorePoint;
+    private string _trafficRange = "Realtime";
+    private bool _historyControlsInitialized;
+    private int _historyRefreshTicks;
 
     public NetworkWorkbenchView()
     {
+        _historyStore = new NetworkHistoryStore();
+        _monitorCoordinator = new NetworkMonitorCoordinator(_historyStore);
         InitializeComponent();
         DiagnosticResultsListBox.ItemsSource = _diagnostics;
         AdaptersListBox.ItemsSource = _adapters;
         ConnectionsListBox.ItemsSource = _connections;
         ProfilesListBox.ItemsSource = _profiles;
-        _overviewTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-        _overviewTimer.Tick += OverviewTimer_Tick;
-        _networkChangeDebounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(450) };
-        _networkChangeDebounceTimer.Tick += NetworkChangeDebounceTimer_Tick;
+        NetworkEventsListBox.ItemsSource = _timelineEvents;
+        _monitorCoordinator.SampleAvailable += MonitorCoordinator_SampleAvailable;
+        _monitorCoordinator.TimelineEventAvailable += MonitorCoordinator_TimelineEventAvailable;
+        _monitorCoordinator.MonitorFailed += MonitorCoordinator_MonitorFailed;
         TrafficCanvas.SizeChanged += (_, _) => UpdateTrafficChart();
         Loaded += NetworkWorkbenchView_Loaded;
         Unloaded += NetworkWorkbenchView_Unloaded;
@@ -66,61 +72,29 @@ public partial class NetworkWorkbenchView : UserControl
 
     private void NetworkWorkbenchView_Loaded(object sender, RoutedEventArgs e)
     {
-        if (_networkEventsRegistered) return;
-        NetworkChange.NetworkAddressChanged += NetworkAddressChanged;
-        NetworkChange.NetworkAvailabilityChanged += NetworkAvailabilityChanged;
-        _networkEventsRegistered = true;
+        _monitorCoordinator.AutoRefreshEnabled = AutoRefreshCheckBox.IsChecked == true;
+        if (IsVisible) _monitorCoordinator.Start();
     }
 
-    private void NetworkWorkbenchView_Unloaded(object sender, RoutedEventArgs e)
+    private async void NetworkWorkbenchView_Unloaded(object sender, RoutedEventArgs e)
     {
-        if (!_networkEventsRegistered) return;
-        NetworkChange.NetworkAddressChanged -= NetworkAddressChanged;
-        NetworkChange.NetworkAvailabilityChanged -= NetworkAvailabilityChanged;
-        _networkEventsRegistered = false;
-        _networkChangeDebounceTimer.Stop();
-    }
-
-    private void NetworkAddressChanged(object? sender, EventArgs e) => ScheduleNetworkChangeRefresh();
-    private void NetworkAvailabilityChanged(object? sender, NetworkAvailabilityEventArgs e) => ScheduleNetworkChangeRefresh();
-
-    private async void OverviewTimer_Tick(object? sender, EventArgs e)
-    {
-        await RefreshOverviewAsync();
-        if (_activeTab == "Connections" && ++_connectionRefreshTicks % 3 == 0) await RefreshConnectionsAsync();
-    }
-
-    private void ScheduleNetworkChangeRefresh()
-    {
-        Dispatcher.BeginInvoke(() =>
-        {
-            if (!IsVisible) return;
-            _networkChangeDebounceTimer.Stop();
-            _networkChangeDebounceTimer.Start();
-        });
-    }
-
-    private async void NetworkChangeDebounceTimer_Tick(object? sender, EventArgs e)
-    {
-        _networkChangeDebounceTimer.Stop();
-        NetworkWorkbenchService.InvalidateNetworkCaches();
-        var adapterRefresh = _activeTab == "Adapters" ? RefreshAdaptersAsync() : Task.CompletedTask;
-        await Task.WhenAll(RefreshOverviewAsync(force: true), adapterRefresh);
+        await _monitorCoordinator.StopAsync();
     }
 
     private async void NetworkWorkbenchView_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
         if (!IsVisible)
         {
-            _overviewTimer.Stop();
+            await _monitorCoordinator.StopAsync();
             return;
         }
 
-        _overviewTimer.Start();
+        _monitorCoordinator.AutoRefreshEnabled = AutoRefreshCheckBox.IsChecked == true;
+        _monitorCoordinator.Start();
         if (!_initialized)
         {
             _initialized = true;
-            await Task.WhenAll(RefreshOverviewAsync(), RefreshAdaptersAsync(), RefreshConnectionsAsync(), LoadProxyAsync());
+            await Task.WhenAll(RefreshOverviewAsync(force: true), RefreshAdaptersAsync(), RefreshConnectionsAsync(), LoadProxyAsync(), LoadHistoryControlsAsync());
             ReloadProfiles();
         }
         else
@@ -161,30 +135,42 @@ public partial class NetworkWorkbenchView : UserControl
     private async Task RefreshOverviewAsync(bool force = false)
     {
         if (!IsVisible || !force && AutoRefreshCheckBox.IsChecked != true && _previousOverview is not null) return;
-        if (force) await _overviewRefreshGate.WaitAsync();
-        else if (!await _overviewRefreshGate.WaitAsync(0)) return;
+        await _monitorCoordinator.RefreshNowAsync(force);
+    }
+
+    private void MonitorCoordinator_SampleAvailable(object? sender, NetworkMonitorSample sample)
+    {
+        Dispatcher.BeginInvoke(async () =>
+        {
+            if (!IsVisible) return;
+            ApplyOverviewSample(sample);
+            if (_activeTab == "Connections" && ++_connectionRefreshTicks % 3 == 0) await RefreshConnectionsAsync();
+            if (_trafficRange != "Realtime" && ++_historyRefreshTicks % 30 == 0) await RefreshTrafficHistoryAsync();
+        });
+    }
+
+    private void ApplyOverviewSample(NetworkMonitorSample sample)
+    {
+        var snapshot = sample.Snapshot;
+        var download = sample.DownloadRate;
+        var upload = sample.UploadRate;
+        var sessionAdapterKey = string.IsNullOrWhiteSpace(snapshot.ActiveAdapterId)
+            ? snapshot.ActiveAdapterName
+            : snapshot.ActiveAdapterId;
+        if (!sample.SameAdapter || string.IsNullOrWhiteSpace(_trafficSessionAdapterId) ||
+            !string.Equals(_trafficSessionAdapterId, sessionAdapterKey, StringComparison.OrdinalIgnoreCase))
+        {
+            _downloadHistory.Clear();
+            _uploadHistory.Clear();
+            ResetTrafficSession(sessionAdapterKey);
+        }
+        else
+        {
+            UpdateTrafficSession(sample.ReceivedDelta, sample.SentDelta, download, upload);
+        }
+
         try
         {
-            var snapshot = await Task.Run(() => NetworkWorkbenchService.GetOverviewAsync());
-            var elapsed = _previousOverview is null ? 0 : Math.Max(0.1, (snapshot.CapturedAt - _previousOverview.CapturedAt).TotalSeconds);
-            var sameAdapter = snapshot.HasPhysicalConnection && _previousOverview is not null &&
-                              string.Equals(snapshot.ActiveAdapterId, _previousOverview.ActiveAdapterId, StringComparison.OrdinalIgnoreCase);
-            var receivedDelta = sameAdapter ? Math.Max(0, snapshot.BytesReceived - _previousOverview!.BytesReceived) : 0;
-            var sentDelta = sameAdapter ? Math.Max(0, snapshot.BytesSent - _previousOverview!.BytesSent) : 0;
-            var download = sameAdapter && elapsed > 0 ? receivedDelta / elapsed : 0;
-            var upload = sameAdapter && elapsed > 0 ? sentDelta / elapsed : 0;
-
-            if (!sameAdapter)
-            {
-                _downloadHistory.Clear();
-                _uploadHistory.Clear();
-                ResetTrafficSession(snapshot.ActiveAdapterId);
-            }
-            else
-            {
-                UpdateTrafficSession(receivedDelta, sentDelta, download, upload);
-            }
-
             HeaderStatusText.Text = snapshot.ConnectivityText;
             HeaderStatusDot.Fill = BrushFrom(snapshot.IsInternetAvailable ? "#61C995" : snapshot.HasPhysicalConnection ? "#F0B15A" : "#EF7E83");
             OverviewNetworkText.Text = snapshot.ConnectivityText;
@@ -213,12 +199,12 @@ public partial class NetworkWorkbenchView : UserControl
                 ? "尚未探测"
                 : $"{snapshot.ConnectivityProbeCapturedAt:HH:mm:ss} · {probeAge:F0} 秒前";
             TrafficUpdatedText.Text = $"{snapshot.ActiveAdapterName} · 更新于 {snapshot.CapturedAt:HH:mm:ss}";
-            TrafficStatsText.Text = BuildTrafficStatsText();
+            if (_trafficRange == "Realtime") TrafficStatsText.Text = BuildTrafficStatsText();
             ProxyDnsText.Text = snapshot.DnsServers;
 
             AddHistory(_downloadHistory, download);
             AddHistory(_uploadHistory, upload);
-            UpdateTrafficChart();
+            if (_trafficRange == "Realtime") UpdateTrafficChart();
             _previousOverview = snapshot;
         }
         catch (Exception exception)
@@ -226,10 +212,25 @@ public partial class NetworkWorkbenchView : UserControl
             HeaderStatusText.Text = $"读取失败：{exception.Message}";
             HeaderStatusDot.Fill = BrushFrom("#EF7E83");
         }
-        finally
+    }
+
+    private void MonitorCoordinator_TimelineEventAvailable(object? sender, NetworkTimelineEvent entry)
+    {
+        Dispatcher.BeginInvoke(() =>
         {
-            _overviewRefreshGate.Release();
-        }
+            _timelineEvents.Insert(0, entry);
+            while (_timelineEvents.Count > 50) _timelineEvents.RemoveAt(_timelineEvents.Count - 1);
+            HistoryStatusText.Visibility = Visibility.Collapsed;
+        });
+    }
+
+    private void MonitorCoordinator_MonitorFailed(object? sender, Exception exception)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            HeaderStatusText.Text = $"监测失败：{exception.Message}";
+            HeaderStatusDot.Fill = BrushFrom("#EF7E83");
+        });
     }
 
     private static void AddHistory(Queue<double> history, double value)
@@ -269,16 +270,172 @@ public partial class NetworkWorkbenchView : UserControl
         return $"平均 ↓ {FormatByteRate(averageDownload)}  ↑ {FormatByteRate(averageUpload)}    峰值 ↓ {FormatByteRate(_peakDownloadRate)}  ↑ {FormatByteRate(_peakUploadRate)}    会话 ↓ {FormatBytes(_sessionDownloadedBytes)}  ↑ {FormatBytes(_sessionUploadedBytes)}";
     }
 
+    private async Task LoadHistoryControlsAsync()
+    {
+        if (_historyControlsInitialized) return;
+        try
+        {
+            var retentionDays = await _monitorCoordinator.GetRetentionDaysAsync();
+            RetentionButton.Tag = retentionDays;
+            RetentionButton.Content = $"保留 {retentionDays} 天";
+            var events = await _monitorCoordinator.GetTimelineEventsAsync();
+            _timelineEvents.Clear();
+            foreach (var entry in events) _timelineEvents.Add(entry);
+            HistoryStatusText.Text = events.Count == 0 ? "尚无网络变化记录" : string.Empty;
+            HistoryStatusText.Visibility = events.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            _historyControlsInitialized = true;
+            UpdateTrafficRangeButtons();
+        }
+        catch (Exception exception)
+        {
+            HistoryStatusText.Text = $"历史记录不可用：{exception.Message}";
+            HistoryStatusText.Visibility = Visibility.Visible;
+        }
+    }
+
+    private void AutoRefreshOption_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_monitorCoordinator is null) return;
+        _monitorCoordinator.AutoRefreshEnabled = AutoRefreshCheckBox.IsChecked == true;
+        if (AutoRefreshCheckBox.IsChecked == true && IsVisible) _ = _monitorCoordinator.RefreshNowAsync();
+    }
+
+    private async void TrafficRange_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button || button.Tag is not string range) return;
+        _trafficRange = range;
+        UpdateTrafficRangeButtons();
+        if (range == "Realtime")
+        {
+            TrafficAxisStartText.Text = "60 秒前";
+            TrafficAxisCenterText.Text = "30 秒前";
+            TrafficAxisEndText.Text = "现在";
+            TrafficStatsText.Text = BuildTrafficStatsText();
+            UpdateTrafficChart();
+            return;
+        }
+        await RefreshTrafficHistoryAsync();
+    }
+
+    private void UpdateTrafficRangeButtons()
+    {
+        foreach (var button in new[] { RealtimeRangeButton, Minutes15RangeButton, Hour1RangeButton, Hours24RangeButton, Days7RangeButton })
+        {
+            var selected = string.Equals(button.Tag?.ToString(), _trafficRange, StringComparison.Ordinal);
+            button.Background = BrushFrom(selected ? "#4D7CFE" : "#70FFFFFF");
+            button.Foreground = BrushFrom(selected ? "#FFFFFF" : "#52708E");
+            button.BorderBrush = BrushFrom(selected ? "#4D7CFE" : "#8CC8E6F8");
+        }
+    }
+
+    private async Task RefreshTrafficHistoryAsync()
+    {
+        var range = _trafficRange switch
+        {
+            "15m" => TimeSpan.FromMinutes(15),
+            "1h" => TimeSpan.FromHours(1),
+            "24h" => TimeSpan.FromHours(24),
+            "7d" => TimeSpan.FromDays(7),
+            _ => TimeSpan.FromMinutes(1)
+        };
+        try
+        {
+            var samples = await _monitorCoordinator.GetTrafficHistoryAsync(range);
+            var grouped = AggregateTrafficHistory(samples, 60);
+            _historicalDownload.Clear();
+            _historicalUpload.Clear();
+            _historicalDownload.AddRange(grouped.Select(item => item.DownloadRate));
+            _historicalUpload.AddRange(grouped.Select(item => item.UploadRate));
+            var totalDownload = samples.Sum(item => item.DownloadedBytes);
+            var totalUpload = samples.Sum(item => item.UploadedBytes);
+            var averageDownload = samples.Count == 0 ? 0 : samples.Average(item => item.AverageDownloadRate);
+            var averageUpload = samples.Count == 0 ? 0 : samples.Average(item => item.AverageUploadRate);
+            var peakDownload = samples.Count == 0 ? 0 : samples.Max(item => item.PeakDownloadRate);
+            var peakUpload = samples.Count == 0 ? 0 : samples.Max(item => item.PeakUploadRate);
+            TrafficStatsText.Text = samples.Count == 0
+                ? "该时间范围尚无已落盘的分钟数据，持续监测后会自动出现"
+                : $"平均 ↓ {FormatByteRate(averageDownload)}  ↑ {FormatByteRate(averageUpload)}    峰值 ↓ {FormatByteRate(peakDownload)}  ↑ {FormatByteRate(peakUpload)}    累计 ↓ {FormatBytes(totalDownload)}  ↑ {FormatBytes(totalUpload)}";
+            UpdateHistoryAxisLabels(range);
+            UpdateTrafficChart();
+        }
+        catch (Exception exception)
+        {
+            TrafficStatsText.Text = $"读取历史失败：{exception.Message}";
+        }
+    }
+
+    private static IReadOnlyList<(double DownloadRate, double UploadRate)> AggregateTrafficHistory(IReadOnlyList<NetworkTrafficHistoryPoint> samples, int maximumPoints)
+    {
+        if (samples.Count == 0) return Array.Empty<(double, double)>();
+        var groupSize = Math.Max(1, (int)Math.Ceiling(samples.Count / (double)maximumPoints));
+        var result = new List<(double, double)>();
+        for (var index = 0; index < samples.Count; index += groupSize)
+        {
+            var group = samples.Skip(index).Take(groupSize).ToArray();
+            result.Add((group.Average(item => item.AverageDownloadRate), group.Average(item => item.AverageUploadRate)));
+        }
+        return result;
+    }
+
+    private void UpdateHistoryAxisLabels(TimeSpan range)
+    {
+        TrafficAxisStartText.Text = range.TotalDays >= 1 ? $"{range.TotalDays:F0} 天前" : range.TotalHours >= 1 ? $"{range.TotalHours:F0} 小时前" : $"{range.TotalMinutes:F0} 分钟前";
+        var half = TimeSpan.FromTicks(range.Ticks / 2);
+        TrafficAxisCenterText.Text = half.TotalDays >= 1 ? $"{half.TotalDays:F1} 天前" : half.TotalHours >= 1 ? $"{half.TotalHours:F1} 小时前" : $"{half.TotalMinutes:F0} 分钟前";
+        TrafficAxisEndText.Text = "现在";
+    }
+
+    private async void RetentionButton_Click(object sender, RoutedEventArgs e)
+    {
+        var current = RetentionButton.Tag is int days ? days : 7;
+        var next = current switch { 1 => 7, 7 => 30, 30 => 90, _ => 1 };
+        RetentionButton.IsEnabled = false;
+        try
+        {
+            await _monitorCoordinator.SetRetentionDaysAsync(next);
+            RetentionButton.Tag = next;
+            RetentionButton.Content = $"保留 {next} 天";
+            HistoryStatusText.Text = $"已更新保留期，并清理 {next} 天以前的数据";
+            HistoryStatusText.Visibility = Visibility.Visible;
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show($"更新历史保留期失败：{exception.Message}", "网络历史", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        finally { RetentionButton.IsEnabled = true; }
+    }
+
+    private async void ClearNetworkHistory_Click(object sender, RoutedEventArgs e)
+    {
+        if (MessageBox.Show("确定清除全部网络流量历史与网络事件吗？此操作不会修改系统网络配置。", "清除网络历史", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        try
+        {
+            await _monitorCoordinator.ClearHistoryAsync();
+            _timelineEvents.Clear();
+            _historicalDownload.Clear();
+            _historicalUpload.Clear();
+            HistoryStatusText.Text = "历史数据已清除；实时监测仍在继续";
+            HistoryStatusText.Visibility = Visibility.Visible;
+            if (_trafficRange != "Realtime") await RefreshTrafficHistoryAsync();
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show($"清除网络历史失败：{exception.Message}", "网络历史", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
     private void UpdateTrafficChart()
     {
         var width = TrafficCanvas.ActualWidth;
         var height = TrafficCanvas.ActualHeight;
         if (width <= 1 || height <= 1) return;
-        var max = Math.Max(1024d, _downloadHistory.Concat(_uploadHistory).Where(double.IsFinite).DefaultIfEmpty(0).Max());
+        var downloadSource = _trafficRange == "Realtime" ? _downloadHistory.AsEnumerable() : _historicalDownload;
+        var uploadSource = _trafficRange == "Realtime" ? _uploadHistory.AsEnumerable() : _historicalUpload;
+        var max = Math.Max(1024d, downloadSource.Concat(uploadSource).Where(double.IsFinite).DefaultIfEmpty(0).Max());
         TrafficAxisMaxText.Text = FormatByteRate(max);
         TrafficAxisMidText.Text = FormatByteRate(max / 2d);
-        var downloadPoints = BuildPoints(_downloadHistory, width, height, max);
-        var uploadPoints = BuildPoints(_uploadHistory, width, height, max);
+        var downloadPoints = BuildPoints(downloadSource, width, height, max);
+        var uploadPoints = BuildPoints(uploadSource, width, height, max);
         TrafficCanvas.Children.Clear();
         DrawTrafficSeries(downloadPoints, BrushFrom("#4D7CFE"), 2.8);
         DrawTrafficSeries(uploadPoints, BrushFrom("#A55FEF"), 2.5);
