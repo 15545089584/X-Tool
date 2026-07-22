@@ -3,6 +3,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Interop;
 using Forms = System.Windows.Forms;
+using ScreenshotApp.SystemTools;
 
 namespace ScreenshotApp;
 
@@ -19,6 +20,12 @@ public partial class App : System.Windows.Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
+        if (e.Args.Length == 2 && string.Equals(e.Args[0], "--apply-machine-environment", StringComparison.Ordinal))
+        {
+            Shutdown(SystemToolsService.ApplyMachineEnvironmentWriteRequest(e.Args[1]));
+            return;
+        }
+
         base.OnStartup(e);
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 

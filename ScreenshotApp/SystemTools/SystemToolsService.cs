@@ -1,7 +1,11 @@
 using System.Diagnostics;
+using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Security.Principal;
+using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace ScreenshotApp.SystemTools;
@@ -234,6 +238,101 @@ public static class SystemToolsService
             return false;
         }
     }
+
+    /// <summary>当前进程未提权时，仅为一次系统变量写入触发 UAC，不让整个应用长期以管理员运行。</summary>
+    public static bool TrySaveMachineEnvironmentVariableWithElevation(string name, string value, out string? error)
+    {
+        if (IsRunningAsAdministrator())
+        {
+            return TrySaveEnvironmentVariable(name, value, EnvironmentVariableTarget.Machine, out error);
+        }
+
+        var requestPath = Path.Combine(Path.GetTempPath(), $"xtool-environment-{Guid.NewGuid():N}.json");
+        try
+        {
+            File.WriteAllText(
+                requestPath,
+                JsonSerializer.Serialize(new ElevatedEnvironmentWriteRequest(name, value)),
+                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            var executablePath = Environment.ProcessPath;
+            if (string.IsNullOrWhiteSpace(executablePath) || !File.Exists(executablePath))
+            {
+                error = "未能找到 X-Tool 可执行文件，无法请求管理员授权";
+                return false;
+            }
+
+            using var process = Process.Start(new ProcessStartInfo(executablePath, $"--apply-machine-environment \"{requestPath}\"")
+            {
+                UseShellExecute = true,
+                Verb = "runas",
+                WindowStyle = ProcessWindowStyle.Hidden
+            });
+            if (process is null)
+            {
+                error = "无法启动管理员授权进程";
+                return false;
+            }
+
+            process.WaitForExit();
+            if (process.ExitCode == 0)
+            {
+                error = null;
+                return true;
+            }
+
+            error = process.ExitCode == 1223 ? "已取消管理员授权，未保存系统环境变量" : "管理员保存失败，请确认账户拥有管理员权限";
+            return false;
+        }
+        catch (Win32Exception exception) when (exception.NativeErrorCode == 1223)
+        {
+            error = "已取消管理员授权，未保存系统环境变量";
+            return false;
+        }
+        catch (Exception exception)
+        {
+            error = exception.Message;
+            return false;
+        }
+        finally
+        {
+            try { File.Delete(requestPath); }
+            catch { /* 管理员子进程可能刚清理完临时文件。 */ }
+        }
+    }
+
+    /// <summary>供经 UAC 启动的无界面子进程调用，仅处理临时文件中的一项系统变量写入。</summary>
+    public static int ApplyMachineEnvironmentWriteRequest(string requestPath)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(requestPath) || !File.Exists(requestPath))
+            {
+                return 2;
+            }
+
+            var request = JsonSerializer.Deserialize<ElevatedEnvironmentWriteRequest>(File.ReadAllText(requestPath, Encoding.UTF8));
+            return request is not null && TrySaveEnvironmentVariable(request.Name, request.Value, EnvironmentVariableTarget.Machine, out _)
+                ? 0
+                : 5;
+        }
+        catch
+        {
+            return 5;
+        }
+        finally
+        {
+            try { File.Delete(requestPath); }
+            catch { /* 临时文件会由父进程再次兜底清理。 */ }
+        }
+    }
+
+    public static bool IsRunningAsAdministrator()
+    {
+        using var identity = WindowsIdentity.GetCurrent();
+        return new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator);
+    }
+
+    private sealed record ElevatedEnvironmentWriteRequest(string Name, string Value);
 
     private static string RunCommand(string fileName, string arguments)
     {

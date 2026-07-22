@@ -560,7 +560,24 @@ public partial class SystemToolsView : UserControl
     {
         var name = EnvironmentNameTextBox.Text;
         var value = IsPathEditorActive ? string.Join(";", _pathEntries.Select(item => item.Value.Trim()).Where(item => !string.IsNullOrWhiteSpace(item))) : EnvironmentValueTextBox.Text;
-        if (!SystemToolsService.TrySaveEnvironmentVariable(name, value, SelectedEnvironmentScope, out var error))
+        var target = SelectedEnvironmentScope;
+        if (target == EnvironmentVariableTarget.Machine && !SystemToolsService.IsRunningAsAdministrator())
+        {
+            var confirmation = MessageBox.Show(
+                "保存系统环境变量需要 Windows 管理员授权。X-Tool 将仅为本次保存请求授权，是否继续？",
+                "需要管理员权限",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+            if (confirmation != MessageBoxResult.Yes)
+            {
+                return;
+            }
+        }
+
+        var saved = target == EnvironmentVariableTarget.Machine
+            ? SystemToolsService.TrySaveMachineEnvironmentVariableWithElevation(name, value, out var error)
+            : SystemToolsService.TrySaveEnvironmentVariable(name, value, target, out error);
+        if (!saved)
         {
             MessageBox.Show(error, "保存环境变量失败", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
