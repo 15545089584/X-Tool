@@ -1,5 +1,6 @@
 using ScreenshotApp.SystemTools;
 using System.Collections.ObjectModel;
+using System.Net.NetworkInformation;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -16,6 +17,7 @@ public partial class NetworkWorkbenchView : UserControl
     private readonly Queue<double> _downloadHistory = new();
     private readonly Queue<double> _uploadHistory = new();
     private readonly DispatcherTimer _overviewTimer;
+    private readonly DispatcherTimer _networkChangeDebounceTimer;
     private IReadOnlyList<NetworkConnectionRow> _allConnections = Array.Empty<NetworkConnectionRow>();
     private NetworkOverviewSnapshot? _previousOverview;
     private ProxySettingsSnapshot _proxySnapshot = new(false, string.Empty, string.Empty, string.Empty, true);
@@ -27,6 +29,15 @@ public partial class NetworkWorkbenchView : UserControl
     private bool _connectionsAscending = true;
     private bool _connectionHeaderSortActive;
     private string _activeTab = "Overview";
+    private bool _networkEventsRegistered;
+    private string _trafficSessionAdapterId = string.Empty;
+    private double _sessionDownloadedBytes;
+    private double _sessionUploadedBytes;
+    private double _peakDownloadRate;
+    private double _peakUploadRate;
+    private double _downloadRateTotal;
+    private double _uploadRateTotal;
+    private int _trafficSampleCount;
 
     public NetworkWorkbenchView()
     {
@@ -37,8 +48,50 @@ public partial class NetworkWorkbenchView : UserControl
         ProfilesListBox.ItemsSource = _profiles;
         _overviewTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _overviewTimer.Tick += async (_, _) => await RefreshOverviewAsync();
+        _networkChangeDebounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(450) };
+        _networkChangeDebounceTimer.Tick += NetworkChangeDebounceTimer_Tick;
         TrafficCanvas.SizeChanged += (_, _) => UpdateTrafficChart();
+        Loaded += NetworkWorkbenchView_Loaded;
+        Unloaded += NetworkWorkbenchView_Unloaded;
         SelectTab("Overview");
+    }
+
+    private void NetworkWorkbenchView_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (_networkEventsRegistered) return;
+        NetworkChange.NetworkAddressChanged += NetworkAddressChanged;
+        NetworkChange.NetworkAvailabilityChanged += NetworkAvailabilityChanged;
+        _networkEventsRegistered = true;
+    }
+
+    private void NetworkWorkbenchView_Unloaded(object sender, RoutedEventArgs e)
+    {
+        if (!_networkEventsRegistered) return;
+        NetworkChange.NetworkAddressChanged -= NetworkAddressChanged;
+        NetworkChange.NetworkAvailabilityChanged -= NetworkAvailabilityChanged;
+        _networkEventsRegistered = false;
+        _networkChangeDebounceTimer.Stop();
+    }
+
+    private void NetworkAddressChanged(object? sender, EventArgs e) => ScheduleNetworkChangeRefresh();
+    private void NetworkAvailabilityChanged(object? sender, NetworkAvailabilityEventArgs e) => ScheduleNetworkChangeRefresh();
+
+    private void ScheduleNetworkChangeRefresh()
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (!IsVisible) return;
+            _networkChangeDebounceTimer.Stop();
+            _networkChangeDebounceTimer.Start();
+        });
+    }
+
+    private async void NetworkChangeDebounceTimer_Tick(object? sender, EventArgs e)
+    {
+        _networkChangeDebounceTimer.Stop();
+        NetworkWorkbenchService.InvalidateNetworkCaches();
+        var adapterRefresh = _activeTab == "Adapters" ? RefreshAdaptersAsync() : Task.CompletedTask;
+        await Task.WhenAll(RefreshOverviewAsync(force: true), adapterRefresh);
     }
 
     private async void NetworkWorkbenchView_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
@@ -98,23 +151,32 @@ public partial class NetworkWorkbenchView : UserControl
         else if (!await _overviewRefreshGate.WaitAsync(0)) return;
         try
         {
-            var snapshot = await Task.Run(NetworkWorkbenchService.GetOverview);
+            var snapshot = await Task.Run(() => NetworkWorkbenchService.GetOverviewAsync());
             var elapsed = _previousOverview is null ? 0 : Math.Max(0.1, (snapshot.CapturedAt - _previousOverview.CapturedAt).TotalSeconds);
             var sameAdapter = snapshot.HasPhysicalConnection && _previousOverview is not null &&
                               string.Equals(snapshot.ActiveAdapterId, _previousOverview.ActiveAdapterId, StringComparison.OrdinalIgnoreCase);
-            var download = sameAdapter ? Math.Max(0, snapshot.BytesReceived - _previousOverview!.BytesReceived) / elapsed : 0;
-            var upload = sameAdapter ? Math.Max(0, snapshot.BytesSent - _previousOverview!.BytesSent) / elapsed : 0;
+            var receivedDelta = sameAdapter ? Math.Max(0, snapshot.BytesReceived - _previousOverview!.BytesReceived) : 0;
+            var sentDelta = sameAdapter ? Math.Max(0, snapshot.BytesSent - _previousOverview!.BytesSent) : 0;
+            var download = receivedDelta / elapsed;
+            var upload = sentDelta / elapsed;
 
             if (!sameAdapter)
             {
                 _downloadHistory.Clear();
                 _uploadHistory.Clear();
+                ResetTrafficSession(snapshot.ActiveAdapterId);
+            }
+            else
+            {
+                UpdateTrafficSession(receivedDelta, sentDelta, download, upload);
             }
 
             HeaderStatusText.Text = snapshot.ConnectivityText;
-            HeaderStatusDot.Fill = BrushFrom(snapshot.IsInternetAvailable ? "#61C995" : "#F0B15A");
+            HeaderStatusDot.Fill = BrushFrom(snapshot.IsInternetAvailable ? "#61C995" : snapshot.HasPhysicalConnection ? "#F0B15A" : "#EF7E83");
             OverviewNetworkText.Text = snapshot.ConnectivityText;
-            OverviewAdapterText.Text = snapshot.ActiveAdapterName;
+            OverviewAdapterText.Text = snapshot.ActivePhysicalAdapterCount > 1
+                ? $"{snapshot.ActiveAdapterName} · {snapshot.ActivePhysicalAdapterCount} 条物理链路"
+                : snapshot.ActiveAdapterName;
             OverviewAdapterText.ToolTip = snapshot.ConnectionDetail;
             OverviewIpv4Text.Text = snapshot.IPv4Address;
             OverviewGatewayText.Text = $"网关 {snapshot.Gateway}";
@@ -129,7 +191,15 @@ public partial class NetworkWorkbenchView : UserControl
             OverviewWifiSignalText.Text = $"{snapshot.WifiSignal} / {snapshot.WifiChannel}";
             OverviewProxyText.Text = snapshot.ProxyText;
             OverviewIpv6Text.Text = snapshot.IPv6Address;
+            OverviewProbeText.Text = snapshot.ConnectivityProbeText;
+            var probeAge = snapshot.ConnectivityProbeCapturedAt == DateTime.MinValue
+                ? 0
+                : Math.Max(0, (snapshot.CapturedAt - snapshot.ConnectivityProbeCapturedAt).TotalSeconds);
+            OverviewProbeTimeText.Text = snapshot.ConnectivityProbeCapturedAt == DateTime.MinValue
+                ? "尚未探测"
+                : $"{snapshot.ConnectivityProbeCapturedAt:HH:mm:ss} · {probeAge:F0} 秒前";
             TrafficUpdatedText.Text = $"{snapshot.ActiveAdapterName} · 更新于 {snapshot.CapturedAt:HH:mm:ss}";
+            TrafficStatsText.Text = BuildTrafficStatsText();
             ProxyDnsText.Text = snapshot.DnsServers;
 
             AddHistory(_downloadHistory, download);
@@ -152,6 +222,37 @@ public partial class NetworkWorkbenchView : UserControl
     {
         history.Enqueue(value);
         while (history.Count > 60) history.Dequeue();
+    }
+
+    private void ResetTrafficSession(string adapterId)
+    {
+        _trafficSessionAdapterId = adapterId;
+        _sessionDownloadedBytes = 0;
+        _sessionUploadedBytes = 0;
+        _peakDownloadRate = 0;
+        _peakUploadRate = 0;
+        _downloadRateTotal = 0;
+        _uploadRateTotal = 0;
+        _trafficSampleCount = 0;
+    }
+
+    private void UpdateTrafficSession(double receivedDelta, double sentDelta, double downloadRate, double uploadRate)
+    {
+        _sessionDownloadedBytes += receivedDelta;
+        _sessionUploadedBytes += sentDelta;
+        _peakDownloadRate = Math.Max(_peakDownloadRate, downloadRate);
+        _peakUploadRate = Math.Max(_peakUploadRate, uploadRate);
+        _downloadRateTotal += downloadRate;
+        _uploadRateTotal += uploadRate;
+        _trafficSampleCount++;
+    }
+
+    private string BuildTrafficStatsText()
+    {
+        if (string.IsNullOrWhiteSpace(_trafficSessionAdapterId)) return "当前无物理链路，流量采样已暂停";
+        var averageDownload = _trafficSampleCount == 0 ? 0 : _downloadRateTotal / _trafficSampleCount;
+        var averageUpload = _trafficSampleCount == 0 ? 0 : _uploadRateTotal / _trafficSampleCount;
+        return $"平均 ↓ {FormatByteRate(averageDownload)}  ↑ {FormatByteRate(averageUpload)}    峰值 ↓ {FormatByteRate(_peakDownloadRate)}  ↑ {FormatByteRate(_peakUploadRate)}    会话 ↓ {FormatBytes(_sessionDownloadedBytes)}  ↑ {FormatBytes(_sessionUploadedBytes)}";
     }
 
     private void UpdateTrafficChart()
@@ -457,6 +558,14 @@ public partial class NetworkWorkbenchView : UserControl
         if (bytes >= 1024 * 1024) return $"{bytes / 1024 / 1024:F1} MB/s";
         if (bytes >= 1024) return $"{bytes / 1024:F1} KB/s";
         return $"{bytes:F0} B/s";
+    }
+
+    private static string FormatBytes(double bytes)
+    {
+        if (bytes >= 1024 * 1024 * 1024) return $"{bytes / 1024 / 1024 / 1024:F2} GB";
+        if (bytes >= 1024 * 1024) return $"{bytes / 1024 / 1024:F1} MB";
+        if (bytes >= 1024) return $"{bytes / 1024:F1} KB";
+        return $"{bytes:F0} B";
     }
 
     private static string FormatBitRate(long bits)

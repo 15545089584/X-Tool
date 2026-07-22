@@ -23,6 +23,18 @@ public static class NetworkWorkbenchService
     private static readonly object WifiCacheLock = new();
     private static WifiDetails _cachedWifi = new("—", "—", "—", "—", "—");
     private static DateTime _wifiCacheTime = DateTime.MinValue;
+    private static readonly SemaphoreSlim ConnectivityProbeGate = new(1, 1);
+    private static ConnectivityProbeSnapshot _cachedConnectivityProbe = ConnectivityProbeSnapshot.Empty;
+    private static DateTime _connectivityProbeCacheTime = DateTime.MinValue;
+    private static int _connectivityProbeGeneration;
+    private static readonly HttpClient DirectConnectivityClient = new(new SocketsHttpHandler
+    {
+        UseProxy = false,
+        ConnectTimeout = TimeSpan.FromSeconds(2)
+    })
+    {
+        Timeout = TimeSpan.FromSeconds(3)
+    };
     private static readonly string[] VirtualAdapterKeywords =
     {
         "virtual", "vpn", "radmin", "hyper-v", "vmware", "vbox", "virtualbox",
@@ -34,17 +46,22 @@ public static class NetworkWorkbenchService
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
     }
 
-    public static NetworkOverviewSnapshot GetOverview()
+    public static async Task<NetworkOverviewSnapshot> GetOverviewAsync(CancellationToken cancellationToken = default)
     {
         var adapters = GetAdapters();
         var active = adapters.FirstOrDefault(item => item.IsPrimary);
         var hasPhysicalConnection = active is not null;
-        var internetAvailable = hasPhysicalConnection && (TryGetInternetConnectivity() ?? NetworkInterface.GetIsNetworkAvailable());
         var hasVirtualConnection = adapters.Any(item => item.IsUp && item.IsVirtual);
+        var probe = active is null
+            ? ConnectivityProbeSnapshot.Empty with { CapturedAt = DateTime.Now }
+            : await GetConnectivityProbeAsync(active, cancellationToken);
+        var internetAvailable = probe.HttpSucceeded;
         var connectivityText = internetAvailable
             ? "互联网已连接"
             : hasPhysicalConnection
-                ? "网络已连接，无互联网"
+                ? probe.DnsSucceeded
+                    ? "互联网受限"
+                    : "网络已连接，无互联网"
                 : hasVirtualConnection
                     ? "仅虚拟网络可用"
                     : "未连接网络";
@@ -76,7 +93,10 @@ public static class NetworkWorkbenchService
             FormatProxySummary(proxy),
             active is null
                 ? hasVirtualConnection ? "物理链路已断开，虚拟接口仍处于启用状态" : "未检测到已连接的物理网卡"
-                : internetAvailable ? $"{active.Name} · 系统互联网检测通过" : $"{active.Name} · 物理链路可用，但互联网检测未通过",
+                : $"{active.Name} · 默认路由接口 {active.InterfaceIndex}",
+            probe.Summary,
+            probe.CapturedAt,
+            adapters.Count(item => item.IsUp && !item.IsVirtual),
             DateTime.Now);
     }
 
@@ -120,20 +140,24 @@ public static class NetworkWorkbenchService
                     statistics.BytesSent,
                     adapter.GetPhysicalAddress().ToString(),
                     ipv4Properties?.Mtu ?? 0,
-                    isVirtual));
+                    isVirtual,
+                    ipv4Properties?.Index ?? 0));
             }
             catch
             {
-                candidates.Add(new NetworkAdapterEntry(adapter.Id, adapter.Name, adapter.Description, adapter.NetworkInterfaceType.ToString(), adapter.OperationalStatus == OperationalStatus.Up, false, "—", "—", "—", "—", "—", adapter.Speed, 0, 0, adapter.GetPhysicalAddress().ToString(), 0, IsVirtualAdapter(adapter)));
+                candidates.Add(new NetworkAdapterEntry(adapter.Id, adapter.Name, adapter.Description, adapter.NetworkInterfaceType.ToString(), adapter.OperationalStatus == OperationalStatus.Up, false, "—", "—", "—", "—", "—", adapter.Speed, 0, 0, adapter.GetPhysicalAddress().ToString(), 0, IsVirtualAdapter(adapter), 0));
             }
         }
 
-        var primary = candidates
+        var physicalCandidates = candidates
             .Where(item => item.IsUp && !item.IsVirtual && item.IPv4Address != "—")
-            .OrderByDescending(item => item.Gateway != "—")
-            .ThenByDescending(item => item.InterfaceType == NetworkInterfaceType.Wireless80211.ToString())
-            .ThenByDescending(item => item.LinkSpeedBitsPerSecond)
-            .FirstOrDefault();
+            .ToArray();
+        var bestInterfaceIndex = TryGetBestInterfaceIndex();
+        var primary = physicalCandidates.FirstOrDefault(item => item.InterfaceIndex == bestInterfaceIndex)
+                      ?? physicalCandidates
+                          .OrderByDescending(item => item.Gateway != "—")
+                          .ThenByDescending(item => item.LinkSpeedBitsPerSecond)
+                          .FirstOrDefault();
         return candidates
             .Select(item => item with { IsPrimary = primary is not null && string.Equals(item.Id, primary.Id, StringComparison.OrdinalIgnoreCase) })
             .OrderByDescending(item => item.IsPrimary)
@@ -149,6 +173,9 @@ public static class NetworkWorkbenchService
         {
             _cachedWifi = WifiDetails.Empty;
             _wifiCacheTime = DateTime.MinValue;
+            _cachedConnectivityProbe = ConnectivityProbeSnapshot.Empty;
+            _connectivityProbeCacheTime = DateTime.MinValue;
+            Interlocked.Increment(ref _connectivityProbeGeneration);
         }
     }
 
@@ -318,16 +345,92 @@ public static class NetworkWorkbenchService
         return proxy.AutoDetect ? "自动检测" : "直连（代理已关闭）";
     }
 
-    private static bool? TryGetInternetConnectivity()
+    private static async Task<ConnectivityProbeSnapshot> GetConnectivityProbeAsync(NetworkAdapterEntry adapter, CancellationToken cancellationToken)
+    {
+        if (string.Equals(_cachedConnectivityProbe.AdapterId, adapter.Id, StringComparison.OrdinalIgnoreCase) &&
+            DateTime.UtcNow - _connectivityProbeCacheTime < TimeSpan.FromSeconds(5))
+        {
+            return _cachedConnectivityProbe;
+        }
+
+        await ConnectivityProbeGate.WaitAsync(cancellationToken);
+        try
+        {
+            if (string.Equals(_cachedConnectivityProbe.AdapterId, adapter.Id, StringComparison.OrdinalIgnoreCase) &&
+                DateTime.UtcNow - _connectivityProbeCacheTime < TimeSpan.FromSeconds(5))
+            {
+                return _cachedConnectivityProbe;
+            }
+
+            var probeGeneration = Volatile.Read(ref _connectivityProbeGeneration);
+            var gatewayTask = ProbeGatewayAsync(adapter.Gateway, cancellationToken);
+            var dnsTask = ProbeDnsAsync(cancellationToken);
+            var httpTask = ProbeHttpAsync(cancellationToken);
+            await Task.WhenAll(gatewayTask, dnsTask, httpTask);
+
+            var result = new ConnectivityProbeSnapshot(
+                adapter.Id,
+                await gatewayTask,
+                await dnsTask,
+                await httpTask,
+                DateTime.Now);
+            if (probeGeneration == Volatile.Read(ref _connectivityProbeGeneration))
+            {
+                _cachedConnectivityProbe = result;
+                _connectivityProbeCacheTime = DateTime.UtcNow;
+            }
+            return result;
+        }
+        finally
+        {
+            ConnectivityProbeGate.Release();
+        }
+    }
+
+    private static async Task<bool> ProbeGatewayAsync(string gateway, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(gateway) || gateway == "—") return false;
+        try
+        {
+            using var ping = new Ping();
+            var reply = await ping.SendPingAsync(gateway, 1200).WaitAsync(TimeSpan.FromMilliseconds(1500), cancellationToken);
+            return reply.Status == IPStatus.Success;
+        }
+        catch { return false; }
+    }
+
+    private static async Task<bool> ProbeDnsAsync(CancellationToken cancellationToken)
     {
         try
         {
-            var type = Type.GetTypeFromProgID("NetworkListManager");
-            if (type is null) return null;
-            dynamic manager = Activator.CreateInstance(type)!;
-            return manager.IsConnectedToInternet;
+            var addresses = await Dns.GetHostAddressesAsync("www.msftconnecttest.com")
+                .WaitAsync(TimeSpan.FromSeconds(2), cancellationToken);
+            return addresses.Length != 0;
         }
-        catch { return null; }
+        catch { return false; }
+    }
+
+    private static async Task<bool> ProbeHttpAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var response = await DirectConnectivityClient.GetAsync(
+                "http://www.msftconnecttest.com/connecttest.txt",
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken);
+            return response.IsSuccessStatusCode;
+        }
+        catch { return false; }
+    }
+
+    private static int TryGetBestInterfaceIndex()
+    {
+        try
+        {
+            var destination = BitConverter.ToUInt32(IPAddress.Parse("8.8.8.8").GetAddressBytes(), 0);
+            return GetBestInterface(destination, out var interfaceIndex) == 0 ? (int)interfaceIndex : 0;
+        }
+        catch { return 0; }
     }
 
     private static async Task<string> RunProcessAsync(string fileName, string arguments, CancellationToken cancellationToken)
@@ -354,15 +457,26 @@ public static class NetworkWorkbenchService
     [DllImport("wininet.dll", SetLastError = true)]
     private static extern bool InternetSetOption(IntPtr internet, int option, IntPtr buffer, int bufferLength);
 
+    [DllImport("iphlpapi.dll")]
+    private static extern uint GetBestInterface(uint destinationAddress, out uint bestInterfaceIndex);
+
     private sealed record WifiDetails(string Ssid, string Signal, string Channel, string ReceiveRate, string TransmitRate)
     {
         public static WifiDetails Empty { get; } = new("—", "—", "—", "—", "—");
     }
+
+    private sealed record ConnectivityProbeSnapshot(string AdapterId, bool GatewaySucceeded, bool DnsSucceeded, bool HttpSucceeded, DateTime CapturedAt)
+    {
+        public static ConnectivityProbeSnapshot Empty { get; } = new(string.Empty, false, false, false, DateTime.MinValue);
+        public string Summary => string.IsNullOrWhiteSpace(AdapterId)
+            ? "未执行联网探测"
+            : $"网关 {(GatewaySucceeded ? "可达" : "未响应")} · DNS {(DnsSucceeded ? "正常" : "失败")} · HTTP {(HttpSucceeded ? "正常" : "失败")}";
+    }
 }
 
-public sealed record NetworkOverviewSnapshot(string ConnectivityText, bool IsInternetAvailable, bool HasPhysicalConnection, string ActiveAdapterId, string ActiveAdapterName, string ActiveAdapterDescription, string ActiveAdapterType, string IPv4Address, string IPv6Address, string Gateway, string DnsServers, string DhcpText, long LinkSpeedBitsPerSecond, long BytesReceived, long BytesSent, string WifiSsid, string WifiSignal, string WifiChannel, string WifiReceiveRate, string WifiTransmitRate, string ProxyText, string ConnectionDetail, DateTime CapturedAt);
+public sealed record NetworkOverviewSnapshot(string ConnectivityText, bool IsInternetAvailable, bool HasPhysicalConnection, string ActiveAdapterId, string ActiveAdapterName, string ActiveAdapterDescription, string ActiveAdapterType, string IPv4Address, string IPv6Address, string Gateway, string DnsServers, string DhcpText, long LinkSpeedBitsPerSecond, long BytesReceived, long BytesSent, string WifiSsid, string WifiSignal, string WifiChannel, string WifiReceiveRate, string WifiTransmitRate, string ProxyText, string ConnectionDetail, string ConnectivityProbeText, DateTime ConnectivityProbeCapturedAt, int ActivePhysicalAdapterCount, DateTime CapturedAt);
 
-public sealed record NetworkAdapterEntry(string Id, string Name, string Description, string InterfaceType, bool IsUp, bool IsPrimary, string IPv4Address, string IPv6Address, string Gateway, string DnsServers, string DhcpText, long LinkSpeedBitsPerSecond, long BytesReceived, long BytesSent, string MacAddress, int Mtu, bool IsVirtual)
+public sealed record NetworkAdapterEntry(string Id, string Name, string Description, string InterfaceType, bool IsUp, bool IsPrimary, string IPv4Address, string IPv6Address, string Gateway, string DnsServers, string DhcpText, long LinkSpeedBitsPerSecond, long BytesReceived, long BytesSent, string MacAddress, int Mtu, bool IsVirtual, int InterfaceIndex)
 {
     public string StatusText => IsUp ? "已连接" : "未连接";
     public string PrimaryText => IsPrimary ? "主用物理链路" : IsVirtual ? "虚拟接口" : string.Empty;
