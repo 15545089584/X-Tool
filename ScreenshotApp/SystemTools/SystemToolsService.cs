@@ -18,9 +18,6 @@ public static class SystemToolsService
     private static readonly Regex DisplayNameLine = new(@"^DISPLAY_NAME:\s*(?<name>.+)$", RegexOptions.Compiled | RegexOptions.Multiline);
     private static readonly Regex ServiceStateLine = new(@"^\s*STATE\s*:\s*\d+\s+(?<state>.+)$", RegexOptions.Compiled | RegexOptions.Multiline);
     private static readonly Regex ServiceProcessIdLine = new(@"^\s*PID\s*:\s*(?<pid>\d+)$", RegexOptions.Compiled | RegexOptions.Multiline);
-    private static readonly object ProcessSampleLock = new();
-    private static Dictionary<int, ProcessSample> _previousProcessSamples = new();
-
     public static IReadOnlyList<PortEntry> GetPorts() => GetPorts(processesById: null);
 
     /// <summary>一次采集三类只读数据，并以进程索引复用端口的进程信息，避免逐条端口重复访问进程句柄。</summary>
@@ -60,19 +57,12 @@ public static class SystemToolsService
 
     public static IReadOnlyList<ProcessEntry> GetProcesses()
     {
-        var samples = ReadProcessSamples();
-        if (samples.Count == 0) return Array.Empty<ProcessEntry>();
-
-        // 首次打开页面没有历史采样，短暂补采样一次，避免 CPU、磁盘列全部显示为 0。
-        lock (ProcessSampleLock)
-        {
-            if (_previousProcessSamples.Count != 0) return CreateProcessEntries(samples);
-            _previousProcessSamples = samples.ToDictionary(item => item.ProcessId);
-        }
-
+        // 每次刷新都使用一组独立的前后样本，避免关系看板或自动刷新覆盖共享基线，
+        // 也确保 CPU 与 I/O 速率拥有足够长的测量区间。
+        var previousSamples = ReadProcessSamples().ToDictionary(item => item.ProcessId);
+        if (previousSamples.Count == 0) return Array.Empty<ProcessEntry>();
         Thread.Sleep(650);
-        samples = ReadProcessSamples();
-        return CreateProcessEntries(samples);
+        return CreateProcessEntries(ReadProcessSamples(), previousSamples);
     }
 
     /// <summary>读取一次累计性能计数；速率由相邻两次采样的增量计算。</summary>
@@ -102,23 +92,18 @@ public static class SystemToolsService
         return samples;
     }
 
-    private static IReadOnlyList<ProcessEntry> CreateProcessEntries(IReadOnlyList<ProcessSample> samples)
+    private static IReadOnlyList<ProcessEntry> CreateProcessEntries(IReadOnlyList<ProcessSample> samples, IReadOnlyDictionary<int, ProcessSample> previousSamples)
     {
         var entries = new List<ProcessEntry>();
-        lock (ProcessSampleLock)
+        foreach (var sample in samples)
         {
-            foreach (var sample in samples)
-            {
-                _previousProcessSamples.TryGetValue(sample.ProcessId, out var previous);
-                var elapsedSeconds = previous is null ? 0d : (sample.Timestamp - previous.Timestamp) / (double)Stopwatch.Frequency;
-                var cpu = elapsedSeconds > 0 ? Math.Max(0, (sample.TotalProcessorTime - previous!.TotalProcessorTime).TotalSeconds / elapsedSeconds / Math.Max(1, Environment.ProcessorCount) * 100d) : 0;
-                var disk = elapsedSeconds > 0 ? CalculateRate(sample.ReadTransferCount, previous!.ReadTransferCount, elapsedSeconds) + CalculateRate(sample.WriteTransferCount, previous.WriteTransferCount, elapsedSeconds) : 0;
-                // Windows 进程级 API 未单独公开所有协议的网络计数；其它 I/O 字节是可用的近似值，并保留在界面提示中说明。
-                var network = elapsedSeconds > 0 ? CalculateRate(sample.OtherTransferCount, previous!.OtherTransferCount, elapsedSeconds) * 8d : 0;
-                entries.Add(new ProcessEntry(sample.Name, sample.ProcessId, cpu, sample.MemoryBytes, disk, network, sample.Path, sample.StartedAt));
-            }
-
-            _previousProcessSamples = samples.ToDictionary(item => item.ProcessId);
+            previousSamples.TryGetValue(sample.ProcessId, out var previous);
+            var elapsedSeconds = previous is null ? 0d : (sample.Timestamp - previous.Timestamp) / (double)Stopwatch.Frequency;
+            var cpu = elapsedSeconds > 0 ? Math.Max(0, (sample.TotalProcessorTime - previous!.TotalProcessorTime).TotalSeconds / elapsedSeconds / Math.Max(1, Environment.ProcessorCount) * 100d) : 0;
+            var disk = elapsedSeconds > 0 ? CalculateRate(sample.ReadTransferCount, previous!.ReadTransferCount, elapsedSeconds) + CalculateRate(sample.WriteTransferCount, previous.WriteTransferCount, elapsedSeconds) : 0;
+            // Windows 进程级 API 未单独公开所有协议的网络计数；其它 I/O 字节是可用的近似值，并保留在界面提示中说明。
+            var network = elapsedSeconds > 0 ? CalculateRate(sample.OtherTransferCount, previous!.OtherTransferCount, elapsedSeconds) * 8d : 0;
+            entries.Add(new ProcessEntry(sample.Name, sample.ProcessId, cpu, sample.MemoryBytes, disk, network, sample.Path, sample.StartedAt));
         }
 
         return entries.OrderByDescending(item => item.MemoryBytes).ThenBy(item => item.Name, StringComparer.OrdinalIgnoreCase).ToArray();
@@ -177,16 +162,54 @@ public static class SystemToolsService
     }
 
     public static bool TryEndProcessWithElevation(int processId, out string? error)
+        => TryEndProcessesWithElevation(new[] { processId }, out error);
+
+    public static bool TryEndProcessesWithElevation(IReadOnlyCollection<int> processIds, out string? error)
     {
-        if (TryEndProcess(processId, out error) || IsRunningAsAdministrator())
+        var distinctProcessIds = processIds.Where(processId => processId > 0).Distinct().ToArray();
+        if (distinctProcessIds.Length == 0)
         {
-            return error is null;
+            error = "没有可结束的进程 PID";
+            return false;
+        }
+
+        var failedProcessIds = new List<int>();
+        var directErrors = new List<string>();
+        foreach (var processId in distinctProcessIds)
+        {
+            if (TryEndProcess(processId, out var itemError)) continue;
+            failedProcessIds.Add(processId);
+            directErrors.Add($"PID {processId}：{itemError}");
+        }
+
+        if (failedProcessIds.Count == 0)
+        {
+            error = null;
+            return true;
+        }
+
+        if (IsRunningAsAdministrator())
+        {
+            error = string.Join(Environment.NewLine, directErrors);
+            return false;
         }
 
         return RunElevatedSystemAction(
-            new ElevatedSystemActionRequest("EndProcess", ProcessId: processId),
+            new ElevatedSystemActionRequest("EndProcesses", ProcessIds: failedProcessIds.ToArray()),
             "管理员结束进程失败",
             out error);
+    }
+
+    private static bool TryEndProcesses(IReadOnlyCollection<int> processIds, out string? error)
+    {
+        var errors = new List<string>();
+        foreach (var processId in processIds)
+        {
+            if (!TryEndProcess(processId, out var itemError)) errors.Add($"PID {processId}：{itemError}");
+        }
+
+        error = errors.Count == 0 ? null : string.Join(Environment.NewLine, errors);
+        return errors.Count == 0;
     }
 
     public static bool TryOpenProcessDirectory(string path, out string? error)
@@ -212,12 +235,12 @@ public static class SystemToolsService
 
     public static bool TryControlService(string serviceName, bool start, out string? error)
     {
-        var output = RunCommand("sc.exe", $"{(start ? "start" : "stop")} \"{serviceName}\"");
-        if (output.Contains("FAILED", StringComparison.OrdinalIgnoreCase) || output.Contains("拒绝访问", StringComparison.OrdinalIgnoreCase) || output.Contains("Access is denied", StringComparison.OrdinalIgnoreCase))
+        var result = RunCommandWithExitCode("sc.exe", $"{(start ? "start" : "stop")} \"{serviceName}\"");
+        if (result.ExitCode != 0)
         {
-            error = output.Contains("拒绝访问", StringComparison.OrdinalIgnoreCase) || output.Contains("Access is denied", StringComparison.OrdinalIgnoreCase)
-                ? "权限不足，请以管理员身份启动 X-Tool 后重试"
-                : output.Trim();
+            error = result.Output.Contains("拒绝访问", StringComparison.OrdinalIgnoreCase) || result.Output.Contains("Access is denied", StringComparison.OrdinalIgnoreCase)
+                ? $"权限不足，请授权管理员操作后重试。{Environment.NewLine}{result.Output.Trim()}"
+                : string.IsNullOrWhiteSpace(result.Output) ? $"sc.exe 返回错误代码 {result.ExitCode}" : result.Output.Trim();
             return false;
         }
 
@@ -300,17 +323,29 @@ public static class SystemToolsService
                 return 2;
             }
 
+            string? actionError = null;
             var succeeded = request.Action switch
             {
-                "SetMachineEnvironment" => TrySaveEnvironmentVariable(request.Name ?? string.Empty, request.Value ?? string.Empty, EnvironmentVariableTarget.Machine, out _),
-                "EndProcess" => TryEndProcess(request.ProcessId, out _),
-                "ControlService" => TryControlService(request.Name ?? string.Empty, request.Start, out _),
+                "SetMachineEnvironment" => TrySaveEnvironmentVariable(request.Name ?? string.Empty, request.Value ?? string.Empty, EnvironmentVariableTarget.Machine, out actionError),
+                "EndProcesses" => TryEndProcesses(request.ProcessIds ?? Array.Empty<int>(), out actionError),
+                "ControlService" => TryControlService(request.Name ?? string.Empty, request.Start, out actionError),
                 _ => false
             };
+            if (!succeeded && string.IsNullOrWhiteSpace(actionError)) actionError = "不支持的管理员操作";
+            if (!string.IsNullOrWhiteSpace(request.ResultPath))
+            {
+                File.WriteAllText(request.ResultPath, JsonSerializer.Serialize(new ElevatedSystemActionResult(succeeded, actionError)), new UTF8Encoding(false));
+            }
             return succeeded ? 0 : 5;
         }
-        catch
+        catch (Exception exception)
         {
+            try
+            {
+                var request = JsonSerializer.Deserialize<ElevatedSystemActionRequest>(File.ReadAllText(requestPath, Encoding.UTF8));
+                if (!string.IsNullOrWhiteSpace(request?.ResultPath)) File.WriteAllText(request.ResultPath, JsonSerializer.Serialize(new ElevatedSystemActionResult(false, exception.Message)), new UTF8Encoding(false));
+            }
+            catch { }
             return 5;
         }
         finally
@@ -329,8 +364,10 @@ public static class SystemToolsService
     private static bool RunElevatedSystemAction(ElevatedSystemActionRequest request, string failureMessage, out string? error)
     {
         var requestPath = Path.Combine(Path.GetTempPath(), $"xtool-system-action-{Guid.NewGuid():N}.json");
+        var resultPath = Path.ChangeExtension(requestPath, ".result.json");
         try
         {
+            request = request with { ResultPath = resultPath };
             File.WriteAllText(requestPath, JsonSerializer.Serialize(request), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             var executablePath = Environment.ProcessPath;
             if (string.IsNullOrWhiteSpace(executablePath) || !File.Exists(executablePath))
@@ -352,13 +389,19 @@ public static class SystemToolsService
             }
 
             process.WaitForExit();
-            if (process.ExitCode == 0)
+            ElevatedSystemActionResult? actionResult = null;
+            if (File.Exists(resultPath))
+            {
+                try { actionResult = JsonSerializer.Deserialize<ElevatedSystemActionResult>(File.ReadAllText(resultPath, Encoding.UTF8)); }
+                catch { }
+            }
+            if (process.ExitCode == 0 && actionResult?.Succeeded != false)
             {
                 error = null;
                 return true;
             }
 
-            error = failureMessage;
+            error = string.IsNullOrWhiteSpace(actionResult?.Error) ? failureMessage : actionResult.Error;
             return false;
         }
         catch (Win32Exception exception) when (exception.NativeErrorCode == 1223)
@@ -375,6 +418,8 @@ public static class SystemToolsService
         {
             try { File.Delete(requestPath); }
             catch { /* 管理员子进程可能已经清理临时文件。 */ }
+            try { File.Delete(resultPath); }
+            catch { /* 结果文件仅用于父子进程传递错误信息。 */ }
         }
     }
 
@@ -385,9 +430,13 @@ public static class SystemToolsService
                 error.Contains("Access is denied", StringComparison.OrdinalIgnoreCase));
     }
 
-    private sealed record ElevatedSystemActionRequest(string Action, string? Name = null, string? Value = null, int ProcessId = 0, bool Start = false);
+    private sealed record ElevatedSystemActionRequest(string Action, string? Name = null, string? Value = null, int[]? ProcessIds = null, bool Start = false, string? ResultPath = null);
+    private sealed record ElevatedSystemActionResult(bool Succeeded, string? Error);
 
     private static string RunCommand(string fileName, string arguments)
+        => RunCommandWithExitCode(fileName, arguments).Output;
+
+    private static CommandResult RunCommandWithExitCode(string fileName, string arguments)
     {
         using var process = Process.Start(new ProcessStartInfo(fileName, arguments)
         {
@@ -396,12 +445,14 @@ public static class SystemToolsService
             RedirectStandardOutput = true,
             RedirectStandardError = true
         });
-        if (process is null) return string.Empty;
+        if (process is null) return new CommandResult(-1, string.Empty);
         var output = process.StandardOutput.ReadToEnd();
         var error = process.StandardError.ReadToEnd();
         process.WaitForExit(8000);
-        return string.IsNullOrWhiteSpace(output) ? error : output;
+        return new CommandResult(process.HasExited ? process.ExitCode : -1, string.IsNullOrWhiteSpace(output) ? error : output);
     }
+
+    private sealed record CommandResult(int ExitCode, string Output);
 
     private static (string Name, string Path) GetProcessDetails(int processId)
     {

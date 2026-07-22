@@ -56,9 +56,10 @@ public partial class SystemToolsView : UserControl
         RelationshipBubbleFilterTextBox.HorizontalContentAlignment = HorizontalAlignment.Left;
         RelationshipBubbleFilterTextBox.TextAlignment = TextAlignment.Left;
         PortsListBox.ItemContainerGenerator.StatusChanged += (_, _) => ConfigurePortColumns();
+        ProcessesListBox.ItemContainerGenerator.StatusChanged += (_, _) => ConfigureProcessColumns();
         RelationsBubbleListBox.ItemContainerGenerator.StatusChanged += (_, _) => ConfigureRelationshipColumns();
         SetActiveTab("Ports");
-        Loaded += async (_, _) => { ConfigureInteractiveHeaders(); ConfigurePortColumns(); await RefreshPortsAsync(); };
+        Loaded += async (_, _) => { ConfigureInteractiveHeaders(); ConfigurePortColumns(); ConfigureProcessColumns(); await RefreshPortsAsync(); };
         Unloaded += (_, _) => _portAutoRefreshTimer.Stop();
     }
 
@@ -75,7 +76,7 @@ public partial class SystemToolsView : UserControl
     private async Task RefreshProcessesAsync()
     {
         ProcessesSummaryText.Text = "正在采样 CPU 与内存…";
-        try { _allProcesses = await Task.Run(SystemToolsService.GetProcesses); ApplyProcessFilter(); }
+        try { _allProcesses = await Task.Run(SystemToolsService.GetProcesses); ApplyProcessFilter(); ConfigureProcessColumns(); }
         catch (Exception exception) { ProcessesSummaryText.Text = $"读取失败：{exception.Message}"; }
     }
 
@@ -496,30 +497,37 @@ public partial class SystemToolsView : UserControl
 
     private void OpenProcessDirectory_Click(object sender, RoutedEventArgs e)
     {
-        var path = GetEntryFromMenu(sender) switch { ProcessEntry process => process.Path, PortEntry port => port.ProcessPath, _ => string.Empty };
+        var path = GetEntryFromMenu(sender) switch { ProcessListRow row => row.Path, ProcessEntry process => process.Path, PortEntry port => port.ProcessPath, _ => string.Empty };
         if (!SystemToolsService.TryOpenProcessDirectory(path, out var error)) MessageBox.Show(error, "无法打开目录", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     private async void EndProcess_Click(object sender, RoutedEventArgs e)
     {
         var entry = GetEntryFromMenu(sender);
-        var processId = entry switch { ProcessEntry process => process.ProcessId, PortEntry port => port.ProcessId, _ => 0 };
-        var name = entry switch { ProcessEntry process => process.Name, PortEntry port => port.ProcessName, _ => "该进程" };
-        if (processId <= 0)
+        var processes = entry switch
+        {
+            ProcessListRow row => row.Processes,
+            ProcessEntry process => new[] { process },
+            _ => Array.Empty<ProcessEntry>()
+        };
+        var processIds = entry is PortEntry port ? new[] { port.ProcessId } : processes.Select(process => process.ProcessId).Where(processId => processId > 0).Distinct().ToArray();
+        var name = entry switch { ProcessListRow row => row.DisplayName, ProcessEntry process => process.Name, PortEntry portEntry => portEntry.ProcessName, _ => "该进程" };
+        if (processIds.Length == 0)
         {
             MessageBox.Show("未能读取该行对应的 PID，请刷新列表后重试。", "无法结束进程", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
-        if (MessageBox.Show($"确定结束 {name}（PID {processId}）吗？\n\n未保存的数据可能丢失；权限不足时将请求管理员授权。", "确认结束进程", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
-        var result = await Task.Run(() => SystemToolsService.TryEndProcessWithElevation(processId, out var error) ? null : error);
+        var targetDescription = processIds.Length == 1 ? $"PID {processIds[0]}" : $"组内 {processIds.Length} 个进程";
+        if (MessageBox.Show($"确定结束 {name}（{targetDescription}）吗？\n\n未保存的数据可能丢失；权限不足时将请求管理员授权。", "确认结束进程", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+        var result = await Task.Run(() => SystemToolsService.TryEndProcessesWithElevation(processIds, out var error) ? null : error);
         if (!string.IsNullOrWhiteSpace(result))
         {
             MessageBox.Show(result, "结束进程失败", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         else
         {
-            MessageBox.Show($"已结束 {name}（PID {processId}）。", "进程管理", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show($"已结束 {name}（{targetDescription}）。", "进程管理", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         _ = RefreshProcessesAsync();
@@ -798,6 +806,48 @@ public partial class SystemToolsView : UserControl
     private static IEnumerable<T> Sort<T, TKey>(IEnumerable<T> values, Func<T, TKey> selector, bool ascending)
         => ascending ? values.OrderBy(selector) : values.OrderByDescending(selector);
 
+    /// <summary>让进程表的固定列共享一致的中心线，并为右侧滚动条保留精确宽度。</summary>
+    private void ConfigureProcessColumns()
+    {
+        var headerGrid = FindHeaderGrid(ProcessesPanel, 7);
+        if (headerGrid is not null)
+        {
+            headerGrid.Margin = new Thickness(6, 0, 15, 0);
+            AlignProcessGridText(headerGrid);
+        }
+
+        for (var index = 0; index < ProcessesListBox.Items.Count; index++)
+        {
+            if (ProcessesListBox.ItemContainerGenerator.ContainerFromIndex(index) is not DependencyObject item) continue;
+            var rowGrid = FindGridWithColumnCount(item, 7);
+            AlignProcessGridText(rowGrid);
+        }
+    }
+
+    private static void AlignProcessGridText(Grid? grid)
+    {
+        if (grid is null) return;
+        foreach (var text in grid.Children.OfType<TextBlock>())
+        {
+            var column = Grid.GetColumn(text);
+            if (column is >= 1 and <= 5) text.HorizontalAlignment = HorizontalAlignment.Center;
+            else if (column == 6) text.HorizontalAlignment = HorizontalAlignment.Right;
+        }
+    }
+
+    private static Grid? FindGridWithColumnCount(DependencyObject parent, int columnCount)
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, index);
+            if (child is Grid grid && grid.ColumnDefinitions.Count == columnCount) return grid;
+            var descendant = FindGridWithColumnCount(child, columnCount);
+            if (descendant is not null) return descendant;
+        }
+
+        return null;
+    }
+
     /// <summary>统一端口表头与行的列宽，避免 IPv6 地址与端口号视觉粘连。</summary>
     private void ConfigurePortColumns()
     {
@@ -851,7 +901,7 @@ public partial class SystemToolsView : UserControl
     {
         static object? Normalize(object? value) => value switch
         {
-            ProcessListRow processRow => processRow.Process,
+            ProcessListRow processRow => processRow,
             ProcessEntry process => process,
             PortEntry port => port,
             _ => null
@@ -896,13 +946,13 @@ public partial class SystemToolsView : UserControl
     }
 
     /// <summary>进程列表的显示行：应用汇总行或可操作的单个子进程行。</summary>
-    private sealed record ProcessListRow(string Name, bool IsGroup, bool IsExpanded, int Count, ProcessEntry? Process, double CpuPercent, long MemoryBytes, double DiskBytesPerSecond, double NetworkBitsPerSecond, DateTime? StartedAt)
+    private sealed record ProcessListRow(string Name, bool IsGroup, bool IsExpanded, int Count, ProcessEntry? Process, IReadOnlyList<ProcessEntry> Processes, double CpuPercent, long MemoryBytes, double DiskBytesPerSecond, double NetworkBitsPerSecond, DateTime? StartedAt)
     {
         public bool CanExpand => IsGroup && Count > 1;
         public string ExpandGlyph => CanExpand ? (IsExpanded ? "▾" : "▸") : string.Empty;
         public string DisplayName => IsGroup && Count > 1 ? $"{Name} ({Count})" : Name;
         public string ProcessIdText => Process?.ProcessId.ToString() ?? "—";
-        public string CpuText => $"{CpuPercent:F1}%";
+        public string CpuText => CpuPercent > 0 && CpuPercent < 0.1 ? "<0.1%" : $"{CpuPercent:F1}%";
         public string MemoryText => $"{MemoryBytes / 1024d / 1024d:F1} MB";
         public string DiskText => $"{DiskBytesPerSecond / 1024d / 1024d:F2}";
         public string NetworkText => $"{NetworkBitsPerSecond / 1_000_000d:F2}";
@@ -910,9 +960,9 @@ public partial class SystemToolsView : UserControl
         public string Path => Process?.Path ?? string.Empty;
 
         public static ProcessListRow CreateGroup(ProcessGroup group, bool expanded)
-            => new(group.Name, true, expanded, group.Items.Count, group.Items.Count == 1 ? group.Items[0] : null, group.CpuPercent, group.MemoryBytes, group.DiskBytesPerSecond, group.NetworkBitsPerSecond, group.StartedAt);
+            => new(group.Name, true, expanded, group.Items.Count, group.Items.Count == 1 ? group.Items[0] : null, group.Items, group.CpuPercent, group.MemoryBytes, group.DiskBytesPerSecond, group.NetworkBitsPerSecond, group.StartedAt);
 
         public static ProcessListRow CreateChild(ProcessEntry process)
-            => new(process.Name, false, false, 1, process, process.CpuPercent, process.MemoryBytes, process.DiskBytesPerSecond, process.NetworkBitsPerSecond, process.StartedAt);
+            => new(process.Name, false, false, 1, process, new[] { process }, process.CpuPercent, process.MemoryBytes, process.DiskBytesPerSecond, process.NetworkBitsPerSecond, process.StartedAt);
     }
 }
