@@ -59,6 +59,7 @@ public partial class MainWindow : Window
     private string _voiceInputCommittedText = string.Empty;
     private CancellationTokenSource? _voiceTranslationCancellation;
     private bool _voiceTranslationPreviewActive;
+    private bool _voiceInputAwaitingConfirmation;
     private string _voiceInputTranslatedText = string.Empty;
     private GlobalShortcut _screenshotShortcut;
     private GlobalShortcut _clipboardShortcut;
@@ -1121,6 +1122,18 @@ public partial class MainWindow : Window
 
     private void CancelVoiceInput()
     {
+        if (_voiceInputAwaitingConfirmation)
+        {
+            _voiceInputAwaitingConfirmation = false;
+            _voiceTranslationPreviewActive = false;
+            _voiceInputTranslatedText = string.Empty;
+            _voiceInputCommittedText = string.Empty;
+            CancelVoiceTranslation();
+            CloseVoiceInputOverlay();
+            ShowToast("已取消待确认的翻译结果");
+            return;
+        }
+
         if (!_voiceInputService.IsRecording)
         {
             return;
@@ -1153,6 +1166,12 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (_voiceInputAwaitingConfirmation)
+        {
+            await ConfirmVoiceInputAsync();
+            return;
+        }
+
         if (_voiceInputService.IsRecording)
         {
             await FinishVoiceInputAsync();
@@ -1168,6 +1187,7 @@ public partial class MainWindow : Window
             _voiceInputCommittedText = string.Empty;
             _voiceInputTranslatedText = string.Empty;
             _voiceTranslationPreviewActive = false;
+            _voiceInputAwaitingConfirmation = false;
             _voiceInputService.Start();
             ShowVoiceInputOverlay("正在聆听…", "再次按右 Alt 结束");
             _voiceInputOverlay?.ClearRecognizedText();
@@ -1235,7 +1255,7 @@ public partial class MainWindow : Window
         }
 
         // 翻译键用于锁定这一段口述：先停止采集并进行最终识别，不能继续让环境声改写原句。
-        await FinishVoiceInputAsync();
+        await FinishVoiceInputAsync(waitForConfirmation: true);
     }
 
     private async Task RefreshVoiceTranslationPreviewAsync(string sourceText)
@@ -1301,7 +1321,7 @@ public partial class MainWindow : Window
         _voiceTranslationCancellation = null;
     }
 
-    private async Task FinishVoiceInputAsync()
+    private async Task FinishVoiceInputAsync(bool waitForConfirmation = false)
     {
         if (!_voiceInputService.IsRecording)
         {
@@ -1346,6 +1366,15 @@ public partial class MainWindow : Window
             {
                 _voiceInputOverlay?.SetRecognizedText(text);
             }
+
+            if (waitForConfirmation && _voiceTranslationPreviewActive)
+            {
+                _voiceInputCommittedText = outputText;
+                _voiceInputAwaitingConfirmation = true;
+                ShowToast("翻译完成，再次按右 Alt 确认输入；按 Esc 取消");
+                return;
+            }
+
             if (!_preferences.VoiceInputPasteAutomatically || _voiceInputPasteTarget == IntPtr.Zero)
             {
                 ShowToast(await SetVoiceInputClipboardTextAsync(outputText)
@@ -1372,12 +1401,42 @@ public partial class MainWindow : Window
         {
             CancelVoiceTranslation();
             _voiceTranslationPreviewActive = false;
-            CloseVoiceInputOverlay();
+            if (!_voiceInputAwaitingConfirmation)
+            {
+                CloseVoiceInputOverlay();
+            }
             cancellation.Dispose();
             if (ReferenceEquals(_voiceInputCancellation, cancellation))
             {
                 _voiceInputCancellation = null;
             }
+        }
+    }
+
+    private async Task ConfirmVoiceInputAsync()
+    {
+        var outputText = _voiceInputCommittedText;
+        _voiceInputAwaitingConfirmation = false;
+        _voiceTranslationPreviewActive = false;
+        CloseVoiceInputOverlay();
+
+        if (string.IsNullOrWhiteSpace(outputText))
+        {
+            ShowToast("没有可确认的翻译结果");
+            return;
+        }
+
+        if (!_preferences.VoiceInputPasteAutomatically || _voiceInputPasteTarget == IntPtr.Zero)
+        {
+            ShowToast(await SetVoiceInputClipboardTextAsync(outputText)
+                ? "翻译结果已确认并复制到系统剪贴板"
+                : "翻译结果已确认，但暂时无法写入剪贴板");
+            return;
+        }
+
+        if (await PasteVoiceInputTextAsync(outputText, showSuccess: true))
+        {
+            await SetVoiceInputClipboardTextAsync(outputText);
         }
     }
 
