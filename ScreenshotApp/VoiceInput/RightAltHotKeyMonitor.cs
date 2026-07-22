@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 
 namespace ScreenshotApp.VoiceInput;
 
-/// <summary>监听右 Alt 单键，不吞掉原始键盘消息。</summary>
+/// <summary>监听右 Alt 单键，并在触发热键时拦截原始按键消息以保留目标输入框焦点。</summary>
 internal sealed class RightAltHotKeyMonitor : IDisposable
 {
     private const int WhKeyboardLl = 13;
@@ -15,11 +15,16 @@ internal sealed class RightAltHotKeyMonitor : IDisposable
     private const uint VkEscape = 0x1B;
     private const uint VkControl = 0x11;
     private const uint VkRightControl = 0xA3;
+    private const uint VkShift = 0x10;
+    private const uint VkLeftWindows = 0x5B;
+    private const uint VkRightWindows = 0x5C;
     private const uint LlkhfExtended = 0x01;
     private readonly HookProcedure _procedure;
     private readonly bool _listenRightAlt;
     private IntPtr _hook;
     private int _isRightAltDown;
+    private int _isRightAltCandidate;
+    private int _suppressRightAltUntilUp;
     private int _isEscapeDown;
     private int _isTranslationKeyDown;
 
@@ -77,14 +82,36 @@ internal sealed class RightAltHotKeyMonitor : IDisposable
             }
             else if (_listenRightAlt && IsRightAlt(hookData))
             {
-                if ((keyboardMessage == WmKeyDown || keyboardMessage == WmSysKeyDown) &&
-                    Interlocked.Exchange(ref _isRightAltDown, 1) == 0)
+                if (keyboardMessage == WmKeyDown || keyboardMessage == WmSysKeyDown)
                 {
-                    Pressed?.Invoke(this, EventArgs.Empty);
+                    if (Interlocked.Exchange(ref _isRightAltDown, 1) == 0)
+                    {
+                        // AltGr 与其他组合键仍交由原程序处理，避免破坏正常输入。
+                        var isSingleRightAlt = !IsCompanionModifierDown();
+                        Interlocked.Exchange(ref _isRightAltCandidate, isSingleRightAlt ? 1 : 0);
+                        Interlocked.Exchange(ref _suppressRightAltUntilUp, isSingleRightAlt ? 1 : 0);
+                    }
                 }
                 else if (keyboardMessage == WmKeyUp || keyboardMessage == WmSysKeyUp)
                 {
                     Interlocked.Exchange(ref _isRightAltDown, 0);
+                    var shouldTrigger = Interlocked.Exchange(ref _isRightAltCandidate, 0) == 1;
+                    var shouldSuppress = Interlocked.Exchange(ref _suppressRightAltUntilUp, 0) == 1;
+                    if (shouldTrigger)
+                    {
+                        // 在抬键后才显示浮窗，前台窗口已稳定，避免浏览器的 Alt 菜单抢占焦点。
+                        Pressed?.Invoke(this, EventArgs.Empty);
+                    }
+
+                    if (shouldSuppress)
+                    {
+                        return new IntPtr(1);
+                    }
+                }
+
+                if (Volatile.Read(ref _suppressRightAltUntilUp) == 1)
+                {
+                    return new IntPtr(1);
                 }
             }
         }
@@ -103,6 +130,13 @@ internal sealed class RightAltHotKeyMonitor : IDisposable
         return data.VirtualKeyCode == VkRightControl ||
                (data.VirtualKeyCode == VkControl && (data.Flags & LlkhfExtended) != 0);
     }
+
+    private static bool IsCompanionModifierDown()
+    {
+        return IsKeyDown(VkControl) || IsKeyDown(VkShift) || IsKeyDown(VkLeftWindows) || IsKeyDown(VkRightWindows);
+    }
+
+    private static bool IsKeyDown(uint virtualKey) => (GetAsyncKeyState((int)virtualKey) & 0x8000) != 0;
 
     private delegate IntPtr HookProcedure(int code, IntPtr message, IntPtr data);
 
@@ -125,6 +159,9 @@ internal sealed class RightAltHotKeyMonitor : IDisposable
 
     [DllImport("user32.dll")]
     private static extern IntPtr CallNextHookEx(IntPtr hookHandle, int code, IntPtr message, IntPtr data);
+
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int virtualKey);
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr GetModuleHandle(string? moduleName);
