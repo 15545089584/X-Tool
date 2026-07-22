@@ -86,8 +86,11 @@ internal sealed class RightAltHotKeyMonitor : IDisposable
                 {
                     if (Interlocked.Exchange(ref _isRightAltDown, 1) == 0)
                     {
-                        // AltGr 与其他组合键仍交由原程序处理，避免破坏正常输入。
-                        var isSingleRightAlt = !IsCompanionModifierDown();
+                        // 部分键盘布局会把右 Alt 上报成 Ctrl + Alt（AltGr）。
+                        // 该 Ctrl 由系统附带，并不代表用户真的按了组合键；若把它当作组合键放行，
+                        // Chromium 会收到 Alt 并把网页内输入焦点切到地址栏。右 Alt 已被产品保留为语音快捷键，
+                        // 因而仅 Shift/Win 可取消本次单键触发。
+                        var isSingleRightAlt = !HasBlockingCompanionModifier();
                         Interlocked.Exchange(ref _isRightAltCandidate, isSingleRightAlt ? 1 : 0);
                         Interlocked.Exchange(ref _suppressRightAltUntilUp, isSingleRightAlt ? 1 : 0);
                     }
@@ -131,9 +134,9 @@ internal sealed class RightAltHotKeyMonitor : IDisposable
                (data.VirtualKeyCode == VkControl && (data.Flags & LlkhfExtended) != 0);
     }
 
-    private static bool IsCompanionModifierDown()
+    private static bool HasBlockingCompanionModifier()
     {
-        return IsKeyDown(VkControl) || IsKeyDown(VkShift) || IsKeyDown(VkLeftWindows) || IsKeyDown(VkRightWindows);
+        return IsKeyDown(VkShift) || IsKeyDown(VkLeftWindows) || IsKeyDown(VkRightWindows);
     }
 
     private static bool IsKeyDown(uint virtualKey) => (GetAsyncKeyState((int)virtualKey) & 0x8000) != 0;

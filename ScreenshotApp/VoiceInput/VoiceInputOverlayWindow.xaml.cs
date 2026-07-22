@@ -30,6 +30,10 @@ public partial class VoiceInputOverlayWindow : Window
     internal void EnsureTopmostWithoutActivation()
     {
         var windowHandle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+        // WPF 的 Topmost 只保证处于顶层窗口带；先切换一次属性可将提示窗重新排到
+        // 同一顶层带最前方，再由 Win32 调用确保整个过程不会激活窗口。
+        Topmost = false;
+        Topmost = true;
         NativeMethods.KeepWindowTopmostWithoutActivating(windowHandle);
     }
 
