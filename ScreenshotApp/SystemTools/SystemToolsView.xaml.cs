@@ -47,6 +47,7 @@ public partial class SystemToolsView : UserControl
         RelationsBubbleListBox.ItemsSource = _relationships;
         EnvironmentListBox.ItemsSource = _environmentVariables;
         PathEntriesListBox.ItemsSource = _pathEntries;
+        PathEntriesListBox.PreviewMouseLeftButtonDown += PathEntriesListBox_PreviewMouseLeftButtonDown;
         _portAutoRefreshTimer = new DispatcherTimer();
         _portAutoRefreshTimer.Tick += AutoRefreshPorts_Tick;
         EnvironmentScopeComboBox.SelectedIndex = 0;
@@ -499,13 +500,28 @@ public partial class SystemToolsView : UserControl
         if (!SystemToolsService.TryOpenProcessDirectory(path, out var error)) MessageBox.Show(error, "无法打开目录", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
-    private void EndProcess_Click(object sender, RoutedEventArgs e)
+    private async void EndProcess_Click(object sender, RoutedEventArgs e)
     {
         var entry = GetEntryFromMenu(sender);
         var processId = entry switch { ProcessEntry process => process.ProcessId, PortEntry port => port.ProcessId, _ => 0 };
         var name = entry switch { ProcessEntry process => process.Name, PortEntry port => port.ProcessName, _ => "该进程" };
-        if (processId <= 0 || MessageBox.Show($"确定结束 {name}（PID {processId}）吗？\n\n未保存的数据可能丢失。", "确认结束进程", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
-        if (!SystemToolsService.TryEndProcess(processId, out var error)) MessageBox.Show(error, "结束进程失败", MessageBoxButton.OK, MessageBoxImage.Warning);
+        if (processId <= 0)
+        {
+            MessageBox.Show("未能读取该行对应的 PID，请刷新列表后重试。", "无法结束进程", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        if (MessageBox.Show($"确定结束 {name}（PID {processId}）吗？\n\n未保存的数据可能丢失；权限不足时将请求管理员授权。", "确认结束进程", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+        var result = await Task.Run(() => SystemToolsService.TryEndProcessWithElevation(processId, out var error) ? null : error);
+        if (!string.IsNullOrWhiteSpace(result))
+        {
+            MessageBox.Show(result, "结束进程失败", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        else
+        {
+            MessageBox.Show($"已结束 {name}（PID {processId}）。", "进程管理", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
         _ = RefreshProcessesAsync();
         _ = RefreshPortsAsync();
     }
@@ -531,8 +547,16 @@ public partial class SystemToolsView : UserControl
         if ((sender as FrameworkElement)?.DataContext is not ServiceEntry service) return;
         var verb = start ? "启动" : "停止";
         if (MessageBox.Show($"确定{verb}服务“{service.DisplayName}”吗？", $"确认{verb}服务", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
-        var result = await Task.Run(() => SystemToolsService.TryControlService(service.Name, start, out var error) ? null : error);
-        if (!string.IsNullOrWhiteSpace(result)) MessageBox.Show(result, $"{verb}服务失败", MessageBoxButton.OK, MessageBoxImage.Warning);
+        var result = await Task.Run(() => SystemToolsService.TryControlServiceWithElevation(service.Name, start, out var error) ? null : error);
+        if (!string.IsNullOrWhiteSpace(result))
+        {
+            MessageBox.Show(result, $"{verb}服务失败", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        else
+        {
+            MessageBox.Show($"服务“{service.DisplayName}”已{verb}。", "服务管理", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
         await RefreshServicesAsync();
     }
 
@@ -597,14 +621,16 @@ public partial class SystemToolsView : UserControl
     {
         using var dialog = new System.Windows.Forms.FolderBrowserDialog { Description = "选择要加入 Path 的目录", UseDescriptionForTitle = true };
         if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK || string.IsNullOrWhiteSpace(dialog.SelectedPath)) return;
-        _pathEntries.Add(new PathEntry(dialog.SelectedPath));
-        PathEntriesListBox.SelectedIndex = _pathEntries.Count - 1;
+        var entry = new PathEntry(dialog.SelectedPath);
+        _pathEntries.Add(entry);
+        SelectAndRevealPathEntry(entry);
     }
 
     private void AddPathEntry_Click(object sender, RoutedEventArgs e)
     {
-        _pathEntries.Add(new PathEntry(string.Empty));
-        PathEntriesListBox.SelectedIndex = _pathEntries.Count - 1;
+        var entry = new PathEntry(string.Empty);
+        _pathEntries.Add(entry);
+        SelectAndRevealPathEntry(entry);
     }
 
     private void MovePathEntryUp_Click(object sender, RoutedEventArgs e) => MovePathEntry(-1);
@@ -614,20 +640,52 @@ public partial class SystemToolsView : UserControl
     {
         var index = PathEntriesListBox.SelectedIndex;
         var nextIndex = index + offset;
-        if (index < 0 || nextIndex < 0 || nextIndex >= _pathEntries.Count) return;
+        if (index < 0)
+        {
+            MessageBox.Show("请先选中要移动的 Path 条目。", "Path 编辑", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        if (nextIndex < 0 || nextIndex >= _pathEntries.Count) return;
+        var entry = _pathEntries[index];
         _pathEntries.Move(index, nextIndex);
-        PathEntriesListBox.SelectedIndex = nextIndex;
+        SelectAndRevealPathEntry(entry);
     }
 
     private void RemovePathEntry_Click(object sender, RoutedEventArgs e)
     {
         var index = PathEntriesListBox.SelectedIndex;
-        if (index < 0) return;
+        if (index < 0)
+        {
+            MessageBox.Show("请先选中要移除的 Path 条目。", "Path 编辑", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
         _pathEntries.RemoveAt(index);
-        PathEntriesListBox.SelectedIndex = Math.Min(index, _pathEntries.Count - 1);
+        if (_pathEntries.Count > 0)
+        {
+            SelectAndRevealPathEntry(_pathEntries[Math.Min(index, _pathEntries.Count - 1)]);
+        }
     }
 
     private void PathEntriesListBox_SelectionChanged(object sender, SelectionChangedEventArgs e) { }
+
+    private void PathEntriesListBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource is not DependencyObject source) return;
+        if (ItemsControl.ContainerFromElement(PathEntriesListBox, source) is ListBoxItem item)
+        {
+            item.IsSelected = true;
+        }
+    }
+
+    private void SelectAndRevealPathEntry(PathEntry entry)
+    {
+        PathEntriesListBox.SelectedItem = entry;
+        Dispatcher.BeginInvoke(
+            new Action(() => PathEntriesListBox.ScrollIntoView(entry)),
+            DispatcherPriority.Loaded);
+    }
 
     private bool IsPathEditorActive => PathValueEditor.Visibility == Visibility.Visible;
 
@@ -791,14 +849,25 @@ public partial class SystemToolsView : UserControl
 
     private static object? GetEntryFromMenu(object sender)
     {
-        if ((sender as FrameworkElement)?.DataContext is { } entry)
+        static object? Normalize(object? value) => value switch
         {
-            return entry is ProcessListRow processRow ? processRow.Process : entry;
+            ProcessListRow processRow => processRow.Process,
+            ProcessEntry process => process,
+            PortEntry port => port,
+            _ => null
+        };
+
+        var menuItem = sender as MenuItem;
+        var directEntry = Normalize(menuItem?.DataContext);
+        if (directEntry is not null) return directEntry;
+
+        var contextMenu = menuItem is null ? null : ItemsControl.ItemsControlFromItemContainer(menuItem) as ContextMenu;
+        if (contextMenu?.PlacementTarget is FrameworkElement target)
+        {
+            return Normalize(target.DataContext);
         }
 
-        return ((sender as FrameworkElement)?.Parent as ContextMenu)?.PlacementTarget is FrameworkElement target
-            ? target.DataContext
-            : null;
+        return null;
     }
     private static void Replace<T>(ObservableCollection<T> collection, IEnumerable<T> values) { collection.Clear(); foreach (var value in values) collection.Add(value); }
 

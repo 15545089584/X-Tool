@@ -20,14 +20,14 @@ public partial class App : System.Windows.Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
-        if (e.Args.Length == 2 && string.Equals(e.Args[0], "--apply-machine-environment", StringComparison.Ordinal))
-        {
-            Shutdown(SystemToolsService.ApplyMachineEnvironmentWriteRequest(e.Args[1]));
-            return;
-        }
-
         base.OnStartup(e);
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+        if (e.Args.Length == 2 && string.Equals(e.Args[0], "--apply-elevated-system-action", StringComparison.Ordinal))
+        {
+            Shutdown(SystemToolsService.ApplyElevatedSystemActionRequest(e.Args[1]));
+            return;
+        }
 
         _singleInstanceCoordinator = new SingleInstanceCoordinator(
             SingleInstanceMutexName,

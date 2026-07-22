@@ -176,6 +176,19 @@ public static class SystemToolsService
         }
     }
 
+    public static bool TryEndProcessWithElevation(int processId, out string? error)
+    {
+        if (TryEndProcess(processId, out error) || IsRunningAsAdministrator())
+        {
+            return error is null;
+        }
+
+        return RunElevatedSystemAction(
+            new ElevatedSystemActionRequest("EndProcess", ProcessId: processId),
+            "管理员结束进程失败",
+            out error);
+    }
+
     public static bool TryOpenProcessDirectory(string path, out string? error)
     {
         try
@@ -210,6 +223,24 @@ public static class SystemToolsService
 
         error = null;
         return true;
+    }
+
+    public static bool TryControlServiceWithElevation(string serviceName, bool start, out string? error)
+    {
+        if (TryControlService(serviceName, start, out error) || IsRunningAsAdministrator())
+        {
+            return error is null;
+        }
+
+        if (!RequiresElevation(error))
+        {
+            return false;
+        }
+
+        return RunElevatedSystemAction(
+            new ElevatedSystemActionRequest("ControlService", Name: serviceName, Start: start),
+            $"管理员{(start ? "启动" : "停止")}服务失败",
+            out error);
     }
 
     public static bool TrySaveEnvironmentVariable(string name, string value, EnvironmentVariableTarget target, out string? error)
@@ -247,61 +278,14 @@ public static class SystemToolsService
             return TrySaveEnvironmentVariable(name, value, EnvironmentVariableTarget.Machine, out error);
         }
 
-        var requestPath = Path.Combine(Path.GetTempPath(), $"xtool-environment-{Guid.NewGuid():N}.json");
-        try
-        {
-            File.WriteAllText(
-                requestPath,
-                JsonSerializer.Serialize(new ElevatedEnvironmentWriteRequest(name, value)),
-                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-            var executablePath = Environment.ProcessPath;
-            if (string.IsNullOrWhiteSpace(executablePath) || !File.Exists(executablePath))
-            {
-                error = "未能找到 X-Tool 可执行文件，无法请求管理员授权";
-                return false;
-            }
-
-            using var process = Process.Start(new ProcessStartInfo(executablePath, $"--apply-machine-environment \"{requestPath}\"")
-            {
-                UseShellExecute = true,
-                Verb = "runas",
-                WindowStyle = ProcessWindowStyle.Hidden
-            });
-            if (process is null)
-            {
-                error = "无法启动管理员授权进程";
-                return false;
-            }
-
-            process.WaitForExit();
-            if (process.ExitCode == 0)
-            {
-                error = null;
-                return true;
-            }
-
-            error = process.ExitCode == 1223 ? "已取消管理员授权，未保存系统环境变量" : "管理员保存失败，请确认账户拥有管理员权限";
-            return false;
-        }
-        catch (Win32Exception exception) when (exception.NativeErrorCode == 1223)
-        {
-            error = "已取消管理员授权，未保存系统环境变量";
-            return false;
-        }
-        catch (Exception exception)
-        {
-            error = exception.Message;
-            return false;
-        }
-        finally
-        {
-            try { File.Delete(requestPath); }
-            catch { /* 管理员子进程可能刚清理完临时文件。 */ }
-        }
+        return RunElevatedSystemAction(
+            new ElevatedSystemActionRequest("SetMachineEnvironment", Name: name, Value: value),
+            "管理员保存系统环境变量失败",
+            out error);
     }
 
-    /// <summary>供经 UAC 启动的无界面子进程调用，仅处理临时文件中的一项系统变量写入。</summary>
-    public static int ApplyMachineEnvironmentWriteRequest(string requestPath)
+    /// <summary>供经 UAC 启动的无界面子进程调用，只执行临时文件中声明的一项受控操作。</summary>
+    public static int ApplyElevatedSystemActionRequest(string requestPath)
     {
         try
         {
@@ -310,10 +294,20 @@ public static class SystemToolsService
                 return 2;
             }
 
-            var request = JsonSerializer.Deserialize<ElevatedEnvironmentWriteRequest>(File.ReadAllText(requestPath, Encoding.UTF8));
-            return request is not null && TrySaveEnvironmentVariable(request.Name, request.Value, EnvironmentVariableTarget.Machine, out _)
-                ? 0
-                : 5;
+            var request = JsonSerializer.Deserialize<ElevatedSystemActionRequest>(File.ReadAllText(requestPath, Encoding.UTF8));
+            if (request is null)
+            {
+                return 2;
+            }
+
+            var succeeded = request.Action switch
+            {
+                "SetMachineEnvironment" => TrySaveEnvironmentVariable(request.Name ?? string.Empty, request.Value ?? string.Empty, EnvironmentVariableTarget.Machine, out _),
+                "EndProcess" => TryEndProcess(request.ProcessId, out _),
+                "ControlService" => TryControlService(request.Name ?? string.Empty, request.Start, out _),
+                _ => false
+            };
+            return succeeded ? 0 : 5;
         }
         catch
         {
@@ -332,7 +326,66 @@ public static class SystemToolsService
         return new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator);
     }
 
-    private sealed record ElevatedEnvironmentWriteRequest(string Name, string Value);
+    private static bool RunElevatedSystemAction(ElevatedSystemActionRequest request, string failureMessage, out string? error)
+    {
+        var requestPath = Path.Combine(Path.GetTempPath(), $"xtool-system-action-{Guid.NewGuid():N}.json");
+        try
+        {
+            File.WriteAllText(requestPath, JsonSerializer.Serialize(request), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            var executablePath = Environment.ProcessPath;
+            if (string.IsNullOrWhiteSpace(executablePath) || !File.Exists(executablePath))
+            {
+                error = "未能找到 X-Tool 可执行文件，无法请求管理员授权";
+                return false;
+            }
+
+            using var process = Process.Start(new ProcessStartInfo(executablePath, $"--apply-elevated-system-action \"{requestPath}\"")
+            {
+                UseShellExecute = true,
+                Verb = "runas",
+                WindowStyle = ProcessWindowStyle.Hidden
+            });
+            if (process is null)
+            {
+                error = "无法启动管理员授权进程";
+                return false;
+            }
+
+            process.WaitForExit();
+            if (process.ExitCode == 0)
+            {
+                error = null;
+                return true;
+            }
+
+            error = failureMessage;
+            return false;
+        }
+        catch (Win32Exception exception) when (exception.NativeErrorCode == 1223)
+        {
+            error = "已取消管理员授权，操作未执行";
+            return false;
+        }
+        catch (Exception exception)
+        {
+            error = exception.Message;
+            return false;
+        }
+        finally
+        {
+            try { File.Delete(requestPath); }
+            catch { /* 管理员子进程可能已经清理临时文件。 */ }
+        }
+    }
+
+    private static bool RequiresElevation(string? error)
+    {
+        return !string.IsNullOrWhiteSpace(error) &&
+               (error.Contains("权限", StringComparison.OrdinalIgnoreCase) ||
+                error.Contains("Access is denied", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private sealed record ElevatedSystemActionRequest(string Action, string? Name = null, string? Value = null, int ProcessId = 0, bool Start = false);
 
     private static string RunCommand(string fileName, string arguments)
     {
