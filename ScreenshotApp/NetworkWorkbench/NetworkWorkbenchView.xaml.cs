@@ -51,6 +51,8 @@ public partial class NetworkWorkbenchView : UserControl
     private string _trafficRange = "Realtime";
     private bool _historyControlsInitialized;
     private int _historyRefreshTicks;
+    private DateTime _lastAdaptersRefreshAt = DateTime.MinValue;
+    private DateTime _lastConnectionsRefreshAt = DateTime.MinValue;
 
     public NetworkWorkbenchView()
     {
@@ -109,12 +111,13 @@ public partial class NetworkWorkbenchView : UserControl
     {
         if (sender is not Button button || button.Tag is not string tab) return;
         SelectTab(tab);
-        if (tab == "Adapters") await RefreshAdaptersAsync();
+        if (tab == "Overview") UpdateTrafficChart();
+        if (tab == "Adapters" && DateTime.UtcNow - _lastAdaptersRefreshAt > TimeSpan.FromSeconds(5)) await RefreshAdaptersAsync();
         if (tab == "Connections")
         {
             // 用户主动切换到连接页后才按需请求 ETW 管理员授权，避免后台或启动时弹出 UAC。
             await EnsureExactTrafficEnabledAsync();
-            await RefreshConnectionsAsync();
+            if (DateTime.UtcNow - _lastConnectionsRefreshAt > TimeSpan.FromSeconds(3)) await RefreshConnectionsAsync();
         }
         if (tab == "Proxy") await LoadProxyAsync(updateSnapshot: false);
         if (tab == "Profiles") ReloadProfiles();
@@ -212,7 +215,7 @@ public partial class NetworkWorkbenchView : UserControl
 
             AddHistory(_downloadHistory, download);
             AddHistory(_uploadHistory, upload);
-            if (_trafficRange == "Realtime") UpdateTrafficChart();
+            if (_trafficRange == "Realtime" && _activeTab == "Overview") UpdateTrafficChart();
             _previousOverview = snapshot;
         }
         catch (Exception exception)
@@ -532,6 +535,7 @@ public partial class NetworkWorkbenchView : UserControl
         var items = await Task.Run(NetworkWorkbenchService.GetAdapters);
         _adapters.Clear();
         foreach (var item in items) _adapters.Add(item);
+        _lastAdaptersRefreshAt = DateTime.UtcNow;
     }
 
     private async void RefreshAdapters_Click(object sender, RoutedEventArgs e)
@@ -591,6 +595,7 @@ public partial class NetworkWorkbenchView : UserControl
                 })
                 .ToArray();
             ApplyConnectionFilter();
+            _lastConnectionsRefreshAt = DateTime.UtcNow;
         }
         finally
         {
