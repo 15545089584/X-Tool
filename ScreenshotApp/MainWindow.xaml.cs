@@ -1116,7 +1116,7 @@ public partial class MainWindow : Window
 
     private void VoiceInputHotKeyMonitor_TranslationPressed(object? sender, EventArgs e)
     {
-        Dispatcher.BeginInvoke(() => _ = StartVoiceTranslationPreviewAsync());
+        Dispatcher.BeginInvoke(() => _ = TranslateAndFinishVoiceInputAsync());
     }
 
     private void CancelVoiceInput()
@@ -1218,27 +1218,24 @@ public partial class MainWindow : Window
         }
     }
 
-    private async Task StartVoiceTranslationPreviewAsync()
+    private async Task TranslateAndFinishVoiceInputAsync()
     {
         if (!_voiceInputService.IsRecording)
         {
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(_voiceInputCommittedText))
-        {
-            ShowToast("请先说出需要翻译的中文内容");
-            return;
-        }
-
         if (!TranslationEngineProvider.ChineseToEnglish.IsReady)
         {
             ShowToast("中译英离线模型未安装，暂不能启用英文输入预览");
-            return;
+        }
+        else
+        {
+            _voiceTranslationPreviewActive = true;
         }
 
-        _voiceTranslationPreviewActive = true;
-        await RefreshVoiceTranslationPreviewAsync(_voiceInputCommittedText);
+        // 翻译键用于锁定这一段口述：先停止采集并进行最终识别，不能继续让环境声改写原句。
+        await FinishVoiceInputAsync();
     }
 
     private async Task RefreshVoiceTranslationPreviewAsync(string sourceText)
@@ -1262,7 +1259,7 @@ public partial class MainWindow : Window
                 },
                 cancellation.Token);
             if (cancellation.IsCancellationRequested || !_voiceTranslationPreviewActive ||
-                !_voiceInputService.IsRecording || !string.Equals(sourceText, _voiceInputCommittedText, StringComparison.Ordinal))
+                !string.Equals(sourceText, _voiceInputCommittedText, StringComparison.Ordinal))
             {
                 return;
             }
@@ -1270,7 +1267,7 @@ public partial class MainWindow : Window
             _voiceInputTranslatedText = result.TranslatedText.Trim();
             if (string.IsNullOrWhiteSpace(_voiceInputTranslatedText))
             {
-                ShowToast("未能生成英文翻译，请继续说话后重试");
+                ShowToast("未能生成英文翻译，请重新开始语音输入后重试");
                 return;
             }
 
@@ -1334,7 +1331,8 @@ public partial class MainWindow : Window
             var outputText = text.Trim();
             if (_voiceTranslationPreviewActive)
             {
-                await RefreshVoiceTranslationPreviewAsync(text);
+                _voiceInputCommittedText = outputText;
+                await RefreshVoiceTranslationPreviewAsync(outputText);
                 if (string.IsNullOrWhiteSpace(_voiceInputTranslatedText))
                 {
                     ShowToast("英文翻译尚未完成，未执行粘贴");
