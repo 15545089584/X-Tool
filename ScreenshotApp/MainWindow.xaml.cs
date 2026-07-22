@@ -1399,11 +1399,13 @@ public partial class MainWindow : Window
 
             return false;
         }
-        if (!await EnsurePasteTargetReadyAsync(_voiceInputPasteTarget))
+        // 语音浮窗从创建起就不激活目标应用。若用户录音期间主动切换了窗口，
+        // 不强行恢复浏览器等应用：它们往往会把内部焦点默认切到地址栏，导致误粘贴。
+        if (!NativeMethods.IsWindowForeground(_voiceInputPasteTarget))
         {
             if (showSuccess)
             {
-                ShowToast("识别结果已复制，请手动粘贴");
+                ShowToast("原输入窗口焦点已变化，识别结果已复制，请手动粘贴");
             }
 
             return false;
@@ -1510,6 +1512,7 @@ public partial class MainWindow : Window
             Dispatcher.BeginInvoke(PositionVoiceInputOverlay, DispatcherPriority.Loaded);
         }
 
+        _voiceInputOverlay.EnsureTopmostWithoutActivation();
         _voiceInputOverlay.UpdateStatus(title, detail);
     }
 

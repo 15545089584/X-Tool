@@ -17,7 +17,20 @@ public partial class VoiceInputOverlayWindow : Window
             WaveBar0, WaveBar1, WaveBar2, WaveBar3, WaveBar4, WaveBar5, WaveBar6, WaveBar7, WaveBar8,
             WaveBar9, WaveBar10, WaveBar11, WaveBar12, WaveBar13, WaveBar14, WaveBar15, WaveBar16
         };
-        Loaded += (_, _) => NativeMethods.MakeWindowNonActivating(new System.Windows.Interop.WindowInteropHelper(this).Handle);
+        // 在窗口真正显示前设置扩展样式，不能等到 Loaded 后才处理，否则会短暂抢走网页输入框焦点。
+        SourceInitialized += (_, _) =>
+        {
+            var windowHandle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+            NativeMethods.MakeWindowNonActivating(windowHandle);
+            NativeMethods.KeepWindowTopmostWithoutActivating(windowHandle);
+        };
+    }
+
+    /// <summary>在系统面板等顶层窗口出现后，重新确认提示窗的顶层顺序。</summary>
+    internal void EnsureTopmostWithoutActivation()
+    {
+        var windowHandle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+        NativeMethods.KeepWindowTopmostWithoutActivating(windowHandle);
     }
 
     internal void UpdateStatus(string title, string detail)

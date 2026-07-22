@@ -14,6 +14,8 @@ internal static class NativeMethods
     internal const uint ModShift = 0x0004;
     internal const uint ModAlt = 0x0001;
     internal const uint ModWin = 0x0008;
+    internal const uint SwpNoSize = 0x0001;
+    internal const uint SwpNoMove = 0x0002;
     internal const uint SwpNoActivate = 0x0010;
     internal const int HwndTopmost = -1;
     internal const uint MonitorDefaultToNearest = 0x00000002;
@@ -360,6 +362,24 @@ internal static class NativeMethods
         {
             _ = SetWindowLong32(windowHandle, GwlExStyle, unchecked((int)newStyle));
         }
+    }
+
+    /// <summary>将提示窗重新置于顶层，但不夺取当前输入焦点。</summary>
+    internal static void KeepWindowTopmostWithoutActivating(IntPtr windowHandle)
+    {
+        if (windowHandle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        _ = SetWindowPos(
+            windowHandle,
+            new IntPtr(HwndTopmost),
+            0,
+            0,
+            0,
+            0,
+            SwpNoMove | SwpNoSize | SwpNoActivate);
     }
 
     internal static bool SendMouseWheel(int wheelDelta)
