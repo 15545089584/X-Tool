@@ -11,18 +11,21 @@ public partial class NetworkWorkbenchView : UserControl
 {
     private readonly ObservableCollection<NetworkDiagnosticResult> _diagnostics = new();
     private readonly ObservableCollection<NetworkAdapterEntry> _adapters = new();
-    private readonly ObservableCollection<PortEntry> _connections = new();
+    private readonly ObservableCollection<NetworkConnectionRow> _connections = new();
     private readonly ObservableCollection<NetworkProfile> _profiles = new();
     private readonly Queue<double> _downloadHistory = new();
     private readonly Queue<double> _uploadHistory = new();
     private readonly DispatcherTimer _overviewTimer;
-    private IReadOnlyList<PortEntry> _allConnections = Array.Empty<PortEntry>();
+    private IReadOnlyList<NetworkConnectionRow> _allConnections = Array.Empty<NetworkConnectionRow>();
     private NetworkOverviewSnapshot? _previousOverview;
     private ProxySettingsSnapshot _proxySnapshot = new(false, string.Empty, string.Empty, string.Empty, true);
     private CancellationTokenSource? _diagnosticCancellation;
     private bool _initialized;
     private bool _refreshingOverview;
     private bool _refreshingConnections;
+    private string _connectionSortKey = "LocalAddress";
+    private bool _connectionsAscending = true;
+    private bool _connectionHeaderSortActive;
     private string _activeTab = "Overview";
 
     public NetworkWorkbenchView()
@@ -145,6 +148,8 @@ public partial class NetworkWorkbenchView : UserControl
         var height = TrafficCanvas.ActualHeight;
         if (width <= 1 || height <= 1) return;
         var max = Math.Max(1024d, _downloadHistory.Concat(_uploadHistory).DefaultIfEmpty(0).Max());
+        TrafficAxisMaxText.Text = FormatByteRate(max);
+        TrafficAxisMidText.Text = FormatByteRate(max / 2d);
         DownloadPolyline.Points = BuildPoints(_downloadHistory, width, height, max);
         UploadPolyline.Points = BuildPoints(_uploadHistory, width, height, max);
     }
@@ -178,7 +183,15 @@ public partial class NetworkWorkbenchView : UserControl
         _refreshingConnections = true;
         try
         {
-            _allConnections = await Task.Run(SystemToolsService.GetPorts);
+            var portsTask = Task.Run(SystemToolsService.GetPorts);
+            var processesTask = Task.Run(SystemToolsService.GetProcesses);
+            await Task.WhenAll(portsTask, processesTask);
+            var trafficByProcess = processesTask.Result
+                .GroupBy(item => item.ProcessId)
+                .ToDictionary(group => group.Key, group => group.Sum(item => item.NetworkBitsPerSecond));
+            _allConnections = portsTask.Result
+                .Select(item => new NetworkConnectionRow(item, trafficByProcess.GetValueOrDefault(item.ProcessId)))
+                .ToArray();
             ApplyConnectionFilter();
         }
         finally
@@ -189,16 +202,32 @@ public partial class NetworkWorkbenchView : UserControl
 
     private void ApplyConnectionFilter()
     {
-        var keyword = ConnectionFilterTextBox.Text.Trim();
-        var filtered = string.IsNullOrWhiteSpace(keyword)
-            ? _allConnections
-            : _allConnections.Where(item =>
+        var keyword = ConnectionFilterTextBox?.Text.Trim() ?? string.Empty;
+        var activeOnly = ActiveConnectionsOnlyCheckBox?.IsChecked == true;
+        var showListening = ShowListeningConnectionsCheckBox?.IsChecked != false;
+        var showIpv6 = ShowIpv6ConnectionsCheckBox?.IsChecked != false;
+        IEnumerable<NetworkConnectionRow> filtered = _allConnections.Where(item =>
+                (!activeOnly || item.IsActiveConnection) &&
+                (activeOnly || showListening || !item.IsListening) &&
+                (showIpv6 || !item.IsIpv6) &&
+                (string.IsNullOrWhiteSpace(keyword) ||
                 item.Protocol.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
                 item.LocalAddress.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
                 item.RemoteAddress.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
                 item.ProcessName.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
                 item.ProcessId.ToString().Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
-                item.State.Contains(keyword, StringComparison.OrdinalIgnoreCase)).ToArray();
+                item.TrafficText.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
+                item.State.Contains(keyword, StringComparison.OrdinalIgnoreCase)));
+        filtered = _connectionSortKey switch
+        {
+            "Protocol" => Sort(filtered, item => item.Protocol, _connectionsAscending),
+            "RemoteAddress" => Sort(filtered, item => item.RemoteAddress, _connectionsAscending),
+            "Process" => Sort(filtered, item => item.ProcessName, _connectionsAscending),
+            "ProcessId" => Sort(filtered, item => item.ProcessId, _connectionsAscending),
+            "Traffic" => Sort(filtered, item => item.TrafficBitsPerSecond, _connectionsAscending),
+            "State" => Sort(filtered, item => item.State, _connectionsAscending),
+            _ => Sort(filtered, item => item.LocalAddress, _connectionsAscending)
+        };
         _connections.Clear();
         foreach (var item in filtered) _connections.Add(item);
         ConnectionsSummaryText.Text = $"显示 {_connections.Count} / {_allConnections.Count} 项";
@@ -210,6 +239,42 @@ public partial class NetworkWorkbenchView : UserControl
     }
 
     private async void RefreshConnections_Click(object sender, RoutedEventArgs e) => await RefreshConnectionsAsync();
+
+    private void ConnectionDisplayOption_Changed(object sender, RoutedEventArgs e)
+    {
+        if (ConnectionsListBox is not null) ApplyConnectionFilter();
+    }
+
+    private void ConnectionColumnHeader_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: string key }) return;
+        _connectionsAscending = string.Equals(_connectionSortKey, key, StringComparison.OrdinalIgnoreCase)
+            ? !_connectionsAscending
+            : key != "Traffic";
+        _connectionSortKey = key;
+        _connectionHeaderSortActive = true;
+        UpdateConnectionHeaderIndicators();
+        ApplyConnectionFilter();
+    }
+
+    private void UpdateConnectionHeaderIndicators()
+    {
+        foreach (var (button, key, title) in new[]
+                 {
+                     (ProtocolSortHeader, "Protocol", "协议"),
+                     (LocalAddressSortHeader, "LocalAddress", "本地端点"),
+                     (RemoteAddressSortHeader, "RemoteAddress", "远程端点"),
+                     (ProcessSortHeader, "Process", "进程"),
+                     (PidSortHeader, "ProcessId", "PID"),
+                     (TrafficSortHeader, "Traffic", "进程流量"),
+                     (StateSortHeader, "State", "状态")
+                 })
+        {
+            button.Content = title + (_connectionHeaderSortActive && string.Equals(_connectionSortKey, key, StringComparison.OrdinalIgnoreCase)
+                ? (_connectionsAscending ? " ↑" : " ↓")
+                : string.Empty);
+        }
+    }
 
     private async void RunDiagnostic_Click(object sender, RoutedEventArgs e)
     {
@@ -363,5 +428,30 @@ public partial class NetworkWorkbenchView : UserControl
         if (bits >= 1_000_000) return $"{bits / 1_000_000d:F0} Mbps";
         if (bits >= 1_000) return $"{bits / 1_000d:F0} Kbps";
         return bits <= 0 ? "—" : $"{bits} bps";
+    }
+
+    private static IEnumerable<T> Sort<T, TKey>(IEnumerable<T> values, Func<T, TKey> selector, bool ascending)
+        => ascending ? values.OrderBy(selector) : values.OrderByDescending(selector);
+
+    /// <summary>把端点记录与同 PID 的实时流量采样合并，端口表本身不提供逐连接字节计数。</summary>
+    private sealed record NetworkConnectionRow(PortEntry Entry, double TrafficBitsPerSecond)
+    {
+        public string Protocol => Entry.Protocol;
+        public string LocalAddress => Entry.LocalAddress;
+        public string RemoteAddress => Entry.RemoteAddress;
+        public string State => Entry.State;
+        public int ProcessId => Entry.ProcessId;
+        public string ProcessName => Entry.ProcessName;
+        public bool IsIpv6 => Entry.IsIpv6;
+        public bool IsListening => State.Contains("LISTEN", StringComparison.OrdinalIgnoreCase) || State.Contains("监听", StringComparison.OrdinalIgnoreCase);
+        public bool IsActiveConnection => !IsListening && !string.IsNullOrWhiteSpace(RemoteAddress) && RemoteAddress is not "0.0.0.0:0" and not "[::]:0" and not "*:*";
+        public string TrafficText => TrafficBitsPerSecond switch
+        {
+            >= 1_000_000_000 => $"{TrafficBitsPerSecond / 1_000_000_000d:F2} Gbps",
+            >= 1_000_000 => $"{TrafficBitsPerSecond / 1_000_000d:F2} Mbps",
+            >= 1_000 => $"{TrafficBitsPerSecond / 1_000d:F1} Kbps",
+            > 0 => $"{TrafficBitsPerSecond:F0} bps",
+            _ => "0 bps"
+        };
     }
 }
