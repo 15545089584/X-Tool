@@ -1,6 +1,9 @@
 using ScreenshotApp.SystemTools;
 using System.Collections.ObjectModel;
+using System.IO;
+using System.Net;
 using System.Net.NetworkInformation;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -38,6 +41,10 @@ public partial class NetworkWorkbenchView : UserControl
     private double _downloadRateTotal;
     private double _uploadRateTotal;
     private int _trafficSampleCount;
+    private int _connectionRefreshTicks;
+    private readonly Dictionary<int, double> _processTrafficTotals = new();
+    private DateTime _lastConnectionSampleAt = DateTime.Now;
+    private NetworkProfile? _profileRestorePoint;
 
     public NetworkWorkbenchView()
     {
@@ -47,7 +54,7 @@ public partial class NetworkWorkbenchView : UserControl
         ConnectionsListBox.ItemsSource = _connections;
         ProfilesListBox.ItemsSource = _profiles;
         _overviewTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-        _overviewTimer.Tick += async (_, _) => await RefreshOverviewAsync();
+        _overviewTimer.Tick += OverviewTimer_Tick;
         _networkChangeDebounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(450) };
         _networkChangeDebounceTimer.Tick += NetworkChangeDebounceTimer_Tick;
         TrafficCanvas.SizeChanged += (_, _) => UpdateTrafficChart();
@@ -75,6 +82,12 @@ public partial class NetworkWorkbenchView : UserControl
 
     private void NetworkAddressChanged(object? sender, EventArgs e) => ScheduleNetworkChangeRefresh();
     private void NetworkAvailabilityChanged(object? sender, NetworkAvailabilityEventArgs e) => ScheduleNetworkChangeRefresh();
+
+    private async void OverviewTimer_Tick(object? sender, EventArgs e)
+    {
+        await RefreshOverviewAsync();
+        if (_activeTab == "Connections" && ++_connectionRefreshTicks % 3 == 0) await RefreshConnectionsAsync();
+    }
 
     private void ScheduleNetworkChangeRefresh()
     {
@@ -322,8 +335,15 @@ public partial class NetworkWorkbenchView : UserControl
             var trafficByProcess = processesTask.Result
                 .GroupBy(item => item.ProcessId)
                 .ToDictionary(group => group.Key, group => group.Sum(item => item.NetworkBitsPerSecond));
+            var now = DateTime.Now;
+            var elapsedSeconds = Math.Clamp((now - _lastConnectionSampleAt).TotalSeconds, 0, 30);
+            foreach (var (processId, bitsPerSecond) in trafficByProcess)
+            {
+                _processTrafficTotals[processId] = _processTrafficTotals.GetValueOrDefault(processId) + Math.Max(0, bitsPerSecond) / 8d * elapsedSeconds;
+            }
+            _lastConnectionSampleAt = now;
             _allConnections = portsTask.Result
-                .Select(item => new NetworkConnectionRow(item, trafficByProcess.GetValueOrDefault(item.ProcessId)))
+                .Select(item => new NetworkConnectionRow(item, trafficByProcess.GetValueOrDefault(item.ProcessId), _processTrafficTotals.GetValueOrDefault(item.ProcessId)))
                 .ToArray();
             ApplyConnectionFilter();
         }
@@ -358,6 +378,7 @@ public partial class NetworkWorkbenchView : UserControl
             "Process" => Sort(filtered, item => item.ProcessName, _connectionsAscending),
             "ProcessId" => Sort(filtered, item => item.ProcessId, _connectionsAscending),
             "Traffic" => Sort(filtered, item => item.TrafficBitsPerSecond, _connectionsAscending),
+            "TotalTraffic" => Sort(filtered, item => item.TotalTrafficBytes, _connectionsAscending),
             "State" => Sort(filtered, item => item.State, _connectionsAscending),
             _ => Sort(filtered, item => item.LocalAddress, _connectionsAscending)
         };
@@ -399,7 +420,8 @@ public partial class NetworkWorkbenchView : UserControl
                      (RemoteAddressSortHeader, "RemoteAddress", "远程端点"),
                      (ProcessSortHeader, "Process", "进程"),
                      (PidSortHeader, "ProcessId", "PID"),
-                     (TrafficSortHeader, "Traffic", "进程流量"),
+                     (TrafficSortHeader, "Traffic", "进程速率"),
+                     (TotalTrafficSortHeader, "TotalTraffic", "会话累计"),
                      (StateSortHeader, "State", "状态")
                  })
         {
@@ -430,8 +452,16 @@ public partial class NetworkWorkbenchView : UserControl
         CancelDiagnosticButton.IsEnabled = true;
         try
         {
-            var result = await NetworkWorkbenchService.RunDiagnosticAsync(kind, target, port, _diagnosticCancellation.Token);
-            _diagnostics.Insert(0, result);
+            if (kind == "Full")
+            {
+                var results = await NetworkWorkbenchService.RunFullDiagnosticAsync(target, port, _diagnosticCancellation.Token);
+                foreach (var result in results.Reverse()) _diagnostics.Insert(0, result);
+            }
+            else
+            {
+                var result = await NetworkWorkbenchService.RunDiagnosticAsync(kind, target, port, _diagnosticCancellation.Token);
+                _diagnostics.Insert(0, result);
+            }
         }
         finally
         {
@@ -444,6 +474,29 @@ public partial class NetworkWorkbenchView : UserControl
     private void CancelDiagnostic_Click(object sender, RoutedEventArgs e) => _diagnosticCancellation?.Cancel();
     private void ClearDiagnostics_Click(object sender, RoutedEventArgs e) => _diagnostics.Clear();
 
+    private void ExportDiagnostics_Click(object sender, RoutedEventArgs e)
+    {
+        if (_diagnostics.Count == 0)
+        {
+            MessageBox.Show("当前没有可导出的诊断记录。", "导出诊断报告", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        var dialog = new Microsoft.Win32.SaveFileDialog { Filter = "文本报告 (*.txt)|*.txt", FileName = $"X-Tool-网络诊断-{DateTime.Now:yyyyMMdd-HHmmss}.txt" };
+        if (dialog.ShowDialog() != true) return;
+        File.WriteAllText(dialog.FileName, NetworkWorkbenchService.BuildDiagnosticReport(_diagnostics), new UTF8Encoding(false));
+        MessageBox.Show("诊断报告已导出。", "导出完成", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    private void ExportConnections_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.SaveFileDialog { Filter = "CSV 文件 (*.csv)|*.csv", FileName = $"X-Tool-网络连接-{DateTime.Now:yyyyMMdd-HHmmss}.csv" };
+        if (dialog.ShowDialog() != true) return;
+        static string Csv(string value) => $"\"{value.Replace("\"", "\"\"")}\"";
+        var lines = new List<string> { "协议,本地端点,远程端点,进程,PID,进程估算速率,会话估算累计,状态" };
+        lines.AddRange(_connections.Select(item => string.Join(",", new[] { Csv(item.Protocol), Csv(item.LocalAddress), Csv(item.RemoteAddress), Csv(item.ProcessName), item.ProcessId.ToString(), Csv(item.TrafficText), Csv(item.TotalTrafficText), Csv(item.State) })));
+        File.WriteAllLines(dialog.FileName, lines, new UTF8Encoding(true));
+    }
+
     private async Task LoadProxyAsync(bool updateSnapshot = true)
     {
         var proxy = await Task.Run(NetworkWorkbenchService.GetCurrentUserProxy);
@@ -451,6 +504,12 @@ public partial class NetworkWorkbenchView : UserControl
         if (updateSnapshot) _proxySnapshot = proxy;
         WriteProxyEditor(proxy);
         WinHttpProxyText.Text = string.IsNullOrWhiteSpace(winHttp) ? "未读取到 WinHTTP 代理信息" : winHttp.Trim();
+        var adapter = (await Task.Run(NetworkWorkbenchService.GetAdapters)).FirstOrDefault(item => item.IsPrimary);
+        var ipv4Dns = (adapter?.DnsServers ?? string.Empty).Split('·', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(value => IPAddress.TryParse(value, out var address) && address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+            .Take(2).ToArray();
+        PrimaryDnsTextBox.Text = ipv4Dns.ElementAtOrDefault(0) ?? string.Empty;
+        SecondaryDnsTextBox.Text = ipv4Dns.ElementAtOrDefault(1) ?? string.Empty;
         ProxyChangeHintText.Text = updateSnapshot ? "已保留当前页面快照；保存后的修改可在本次页面中恢复。" : "已重新读取当前用户代理设置。";
     }
 
@@ -502,6 +561,110 @@ public partial class NetworkWorkbenchView : UserControl
         await RefreshOverviewAsync(force: true);
     }
 
+    private async void TestProxy_Click(object sender, RoutedEventArgs e)
+    {
+        var result = await NetworkWorkbenchService.TestCurrentProxyAsync(CancellationToken.None);
+        _diagnostics.Insert(0, result);
+        MessageBox.Show(result.Detail, result.Succeeded ? "代理检测成功" : "代理检测失败", MessageBoxButton.OK,
+            result.Succeeded ? MessageBoxImage.Information : MessageBoxImage.Warning);
+    }
+
+    private async void TestDns_Click(object sender, RoutedEventArgs e)
+    {
+        var result = await NetworkWorkbenchService.RunDiagnosticAsync("DNS", "www.microsoft.com", 443, CancellationToken.None);
+        _diagnostics.Insert(0, result);
+        MessageBox.Show(result.Detail, result.Succeeded ? "DNS 检测成功" : "DNS 检测失败", MessageBoxButton.OK,
+            result.Succeeded ? MessageBoxImage.Information : MessageBoxImage.Warning);
+    }
+
+    private async void SyncWinHttpProxy_Click(object sender, RoutedEventArgs e)
+    {
+        if (MessageBox.Show("将当前用户代理同步到机器级 WinHTTP 吗？这会影响使用 WinHTTP 的系统组件，并请求管理员授权。", "同步 WinHTTP", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        var error = await Task.Run(() => SystemToolsService.TrySyncWinHttpProxyWithElevation(false, out var value) ? null : value);
+        if (error is not null) MessageBox.Show(error, "同步 WinHTTP 失败", MessageBoxButton.OK, MessageBoxImage.Error);
+        await LoadProxyAsync(updateSnapshot: false);
+    }
+
+    private async void ResetWinHttpProxy_Click(object sender, RoutedEventArgs e)
+    {
+        if (MessageBox.Show("清除机器级 WinHTTP 代理并恢复直连吗？这会请求管理员授权。", "清除 WinHTTP", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        var error = await Task.Run(() => SystemToolsService.TrySyncWinHttpProxyWithElevation(true, out var value) ? null : value);
+        if (error is not null) MessageBox.Show(error, "清除 WinHTTP 失败", MessageBoxButton.OK, MessageBoxImage.Error);
+        await LoadProxyAsync(updateSnapshot: false);
+    }
+
+    private async void SaveDns_Click(object sender, RoutedEventArgs e)
+    {
+        var adapter = NetworkWorkbenchService.GetAdapters().FirstOrDefault(item => item.IsPrimary);
+        if (adapter is null) { MessageBox.Show("当前没有可配置的主用物理网卡。", "保存 DNS", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
+        var primary = PrimaryDnsTextBox.Text.Trim();
+        var secondary = SecondaryDnsTextBox.Text.Trim();
+        if (string.IsNullOrWhiteSpace(primary)) { MessageBox.Show("请输入主 DNS，或使用“自动获取”。", "保存 DNS", MessageBoxButton.OK, MessageBoxImage.Information); return; }
+        if (MessageBox.Show($"将网卡“{adapter.Name}”的 IPv4 DNS 设置为 {primary}{(string.IsNullOrWhiteSpace(secondary) ? string.Empty : $" / {secondary}")} 吗？", "保存 DNS", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        await ApplyDnsAsync(adapter.Name, primary, secondary, "保存 DNS");
+    }
+
+    private async void ResetDns_Click(object sender, RoutedEventArgs e)
+    {
+        var adapter = NetworkWorkbenchService.GetAdapters().FirstOrDefault(item => item.IsPrimary);
+        if (adapter is null) { MessageBox.Show("当前没有可配置的主用物理网卡。", "自动 DNS", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
+        if (MessageBox.Show($"让网卡“{adapter.Name}”恢复自动获取 IPv4 DNS 吗？", "自动 DNS", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        await ApplyDnsAsync(adapter.Name, string.Empty, string.Empty, "恢复自动 DNS");
+    }
+
+    private async Task ApplyDnsAsync(string adapterName, string primary, string secondary, string title)
+    {
+        var error = await Task.Run(() => SystemToolsService.TrySetNetworkAdapterDnsWithElevation(adapterName, primary, secondary, out var value) ? null : value);
+        if (error is not null) MessageBox.Show(error, $"{title}失败", MessageBoxButton.OK, MessageBoxImage.Error);
+        else MessageBox.Show($"{title}已完成。", title, MessageBoxButton.OK, MessageBoxImage.Information);
+        NetworkWorkbenchService.InvalidateNetworkCaches();
+        await Task.WhenAll(LoadProxyAsync(updateSnapshot: false), RefreshOverviewAsync(force: true), RefreshAdaptersAsync());
+    }
+
+    private NetworkAdapterEntry? GetAdapterFromMenu(object sender)
+    {
+        if (sender is not MenuItem item) return null;
+        if (item.DataContext is NetworkAdapterEntry adapter) return adapter;
+        var menu = ItemsControl.ItemsControlFromItemContainer(item) as ContextMenu;
+        return (menu?.PlacementTarget as FrameworkElement)?.DataContext as NetworkAdapterEntry;
+    }
+
+    private async void EnableAdapter_Click(object sender, RoutedEventArgs e) => await SetAdapterStateAsync(GetAdapterFromMenu(sender), true);
+    private async void DisableAdapter_Click(object sender, RoutedEventArgs e) => await SetAdapterStateAsync(GetAdapterFromMenu(sender), false);
+
+    private async Task SetAdapterStateAsync(NetworkAdapterEntry? adapter, bool enabled)
+    {
+        if (adapter is null) return;
+        if (!enabled && adapter.IsPrimary && MessageBox.Show("这是当前主用物理网卡，禁用后网络会立即断开。仍要继续吗？", "禁用主用网卡", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+        if (enabled && adapter.IsUp || !enabled && !adapter.IsUp) { MessageBox.Show($"网卡当前已经{(enabled ? "启用" : "禁用")}。", "网卡管理", MessageBoxButton.OK, MessageBoxImage.Information); return; }
+        var error = await Task.Run(() => SystemToolsService.TrySetNetworkAdapterStateWithElevation(adapter.Name, enabled, out var value) ? null : value);
+        if (error is not null) MessageBox.Show(error, "网卡操作失败", MessageBoxButton.OK, MessageBoxImage.Error);
+        await RefreshNetworkStateAfterActionAsync();
+    }
+
+    private async void RenewAdapterDhcp_Click(object sender, RoutedEventArgs e)
+    {
+        var adapter = GetAdapterFromMenu(sender); if (adapter is null) return;
+        if (MessageBox.Show($"释放并重新获取网卡“{adapter.Name}”的 DHCP 地址吗？网络会短暂中断。", "续租 DHCP", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        var error = await Task.Run(() => SystemToolsService.TryRenewNetworkAdapterDhcpWithElevation(adapter.Name, out var value) ? null : value);
+        if (error is not null) MessageBox.Show(error, "续租 DHCP 失败", MessageBoxButton.OK, MessageBoxImage.Error);
+        await RefreshNetworkStateAfterActionAsync();
+    }
+
+    private async void ResetAdapterDns_Click(object sender, RoutedEventArgs e)
+    {
+        var adapter = GetAdapterFromMenu(sender); if (adapter is null) return;
+        if (MessageBox.Show($"让网卡“{adapter.Name}”恢复自动获取 IPv4 DNS 吗？", "恢复自动 DNS", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        await ApplyDnsAsync(adapter.Name, string.Empty, string.Empty, "恢复自动 DNS");
+    }
+
+    private async Task RefreshNetworkStateAfterActionAsync()
+    {
+        NetworkWorkbenchService.InvalidateNetworkCaches();
+        await Task.Delay(500);
+        await Task.WhenAll(RefreshAdaptersAsync(), RefreshOverviewAsync(force: true));
+    }
+
     private void ReloadProfiles()
     {
         _profiles.Clear();
@@ -519,7 +682,7 @@ public partial class NetworkWorkbenchView : UserControl
         }
         var existing = _profiles.FirstOrDefault(item => string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase));
         if (existing is not null) _profiles.Remove(existing);
-        _profiles.Insert(0, new NetworkProfile(name, ReadProxyEditor(), DateTime.Now));
+        _profiles.Insert(0, NetworkWorkbenchService.CaptureProfile(name, ReadProxyEditor()));
         NetworkWorkbenchService.SaveProfiles(_profiles);
         ProfilesSummaryText.Text = $"{_profiles.Count} 个方案";
     }
@@ -529,17 +692,59 @@ public partial class NetworkWorkbenchView : UserControl
     private async void ApplyProfile_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is not NetworkProfile profile) return;
-        if (MessageBox.Show($"应用网络方案“{profile.Name}”吗？", "应用网络方案", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        var difference = NetworkWorkbenchService.BuildProfileDifference(profile);
+        if (MessageBox.Show($"应用网络方案“{profile.Name}”吗？\n\n将发生以下变化：\n{difference}\n\n应用前会创建本次恢复点；DNS 修改可能请求管理员授权。", "应用网络方案", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        _profileRestorePoint = NetworkWorkbenchService.CaptureProfile("应用前恢复点", NetworkWorkbenchService.GetCurrentUserProxy());
         if (!NetworkWorkbenchService.TrySaveCurrentUserProxy(profile.Proxy, out var error))
         {
             MessageBox.Show(error ?? "应用失败。", "应用网络方案失败", MessageBoxButton.OK, MessageBoxImage.Error);
             return;
         }
+        if (profile.Adapter is not null)
+        {
+            var dns = GetIpv4Dns(profile.Adapter.DnsServers);
+            error = await Task.Run(() => SystemToolsService.TrySetNetworkAdapterDnsWithElevation(profile.Adapter.Name, dns.ElementAtOrDefault(0) ?? string.Empty, dns.ElementAtOrDefault(1) ?? string.Empty, out var value) ? null : value);
+            if (error is not null)
+            {
+                NetworkWorkbenchService.TrySaveCurrentUserProxy(_profileRestorePoint.Proxy, out _);
+                MessageBox.Show($"DNS 应用失败，已回退当前用户代理：\n{error}", "应用网络方案失败", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+        }
         WriteProxyEditor(profile.Proxy);
-        SelectTab("Proxy");
-        ProxyChangeHintText.Text = $"已应用网络方案“{profile.Name}”。";
+        ProxyChangeHintText.Text = $"已应用网络方案“{profile.Name}”，可在网络方案页恢复应用前配置。";
+        NetworkWorkbenchService.InvalidateNetworkCaches();
         await RefreshOverviewAsync(force: true);
     }
+
+    private async void RestoreProfileSnapshot_Click(object sender, RoutedEventArgs e)
+    {
+        if (_profileRestorePoint is null)
+        {
+            MessageBox.Show("本次运行尚未应用网络方案，没有可恢复的应用前配置。", "恢复网络配置", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        if (MessageBox.Show("恢复最近一次应用网络方案前的代理与 DNS 配置吗？", "恢复网络配置", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        if (!NetworkWorkbenchService.TrySaveCurrentUserProxy(_profileRestorePoint.Proxy, out var error))
+        {
+            MessageBox.Show(error ?? "恢复代理失败。", "恢复网络配置失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+        if (_profileRestorePoint.Adapter is not null)
+        {
+            var dns = GetIpv4Dns(_profileRestorePoint.Adapter.DnsServers);
+            error = await Task.Run(() => SystemToolsService.TrySetNetworkAdapterDnsWithElevation(_profileRestorePoint.Adapter.Name, dns.ElementAtOrDefault(0) ?? string.Empty, dns.ElementAtOrDefault(1) ?? string.Empty, out var value) ? null : value);
+        }
+        if (error is not null) MessageBox.Show(error, "恢复 DNS 失败", MessageBoxButton.OK, MessageBoxImage.Error);
+        else MessageBox.Show("已恢复应用前的代理与 DNS 配置。", "恢复完成", MessageBoxButton.OK, MessageBoxImage.Information);
+        NetworkWorkbenchService.InvalidateNetworkCaches();
+        await Task.WhenAll(LoadProxyAsync(updateSnapshot: false), RefreshOverviewAsync(force: true), RefreshAdaptersAsync());
+    }
+
+    private static string[] GetIpv4Dns(string dnsText) => dnsText
+        .Split('·', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Where(value => IPAddress.TryParse(value, out var address) && address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+        .Take(2).ToArray();
 
     private void DeleteProfile_Click(object sender, RoutedEventArgs e)
     {
@@ -580,7 +785,7 @@ public partial class NetworkWorkbenchView : UserControl
         => ascending ? values.OrderBy(selector) : values.OrderByDescending(selector);
 
     /// <summary>把端点记录与同 PID 的实时流量采样合并，端口表本身不提供逐连接字节计数。</summary>
-    private sealed record NetworkConnectionRow(PortEntry Entry, double TrafficBitsPerSecond)
+    private sealed record NetworkConnectionRow(PortEntry Entry, double TrafficBitsPerSecond, double TotalTrafficBytes)
     {
         public string Protocol => Entry.Protocol;
         public string LocalAddress => Entry.LocalAddress;
@@ -599,5 +804,6 @@ public partial class NetworkWorkbenchView : UserControl
             > 0 => $"{TrafficBitsPerSecond:F0} bps",
             _ => "0 bps"
         };
+        public string TotalTrafficText => FormatBytes(TotalTrafficBytes);
     }
 }

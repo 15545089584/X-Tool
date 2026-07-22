@@ -2,6 +2,8 @@ using System.Diagnostics;
 using System.ComponentModel;
 using System.Globalization;
 using System.IO;
+using System.Net;
+using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Text;
@@ -307,6 +309,36 @@ public static class SystemToolsService
             out error);
     }
 
+    /// <summary>按需请求管理员权限修改网卡启用状态。</summary>
+    public static bool TrySetNetworkAdapterStateWithElevation(string adapterName, bool enabled, out string? error)
+        => RunElevatedSystemAction(
+            new ElevatedSystemActionRequest("SetNetworkAdapterState", Name: adapterName, Start: enabled),
+            $"管理员{(enabled ? "启用" : "禁用")}网卡失败",
+            out error);
+
+    /// <summary>按需请求管理员权限释放并续租指定网卡的 DHCP 地址。</summary>
+    public static bool TryRenewNetworkAdapterDhcpWithElevation(string adapterName, out string? error)
+        => RunElevatedSystemAction(
+            new ElevatedSystemActionRequest("RenewNetworkAdapterDhcp", Name: adapterName),
+            "管理员续租 DHCP 失败",
+            out error);
+
+    /// <summary>按需请求管理员权限设置指定网卡的 IPv4 DNS；主 DNS 为空时恢复自动获取。</summary>
+    public static bool TrySetNetworkAdapterDnsWithElevation(string adapterName, string primaryDns, string secondaryDns, out string? error)
+        => RunElevatedSystemAction(
+            new ElevatedSystemActionRequest("SetNetworkAdapterDns", Name: adapterName, Value: primaryDns, ExtraValue: secondaryDns),
+            "管理员保存 DNS 失败",
+            out error);
+
+    public static bool TryFlushDnsWithElevation(out string? error)
+        => RunElevatedSystemAction(new ElevatedSystemActionRequest("FlushDns"), "清理 DNS 缓存失败", out error);
+
+    public static bool TrySyncWinHttpProxyWithElevation(bool reset, out string? error)
+        => RunElevatedSystemAction(
+            new ElevatedSystemActionRequest(reset ? "ResetWinHttpProxy" : "SyncWinHttpProxy"),
+            reset ? "清除 WinHTTP 代理失败" : "同步 WinHTTP 代理失败",
+            out error);
+
     /// <summary>供经 UAC 启动的无界面子进程调用，只执行临时文件中声明的一项受控操作。</summary>
     public static int ApplyElevatedSystemActionRequest(string requestPath)
     {
@@ -329,6 +361,12 @@ public static class SystemToolsService
                 "SetMachineEnvironment" => TrySaveEnvironmentVariable(request.Name ?? string.Empty, request.Value ?? string.Empty, EnvironmentVariableTarget.Machine, out actionError),
                 "EndProcesses" => TryEndProcesses(request.ProcessIds ?? Array.Empty<int>(), out actionError),
                 "ControlService" => TryControlService(request.Name ?? string.Empty, request.Start, out actionError),
+                "SetNetworkAdapterState" => TrySetNetworkAdapterState(request.Name ?? string.Empty, request.Start, out actionError),
+                "RenewNetworkAdapterDhcp" => TryRenewNetworkAdapterDhcp(request.Name ?? string.Empty, out actionError),
+                "SetNetworkAdapterDns" => TrySetNetworkAdapterDns(request.Name ?? string.Empty, request.Value ?? string.Empty, request.ExtraValue ?? string.Empty, out actionError),
+                "FlushDns" => TryRunSystemCommand("ipconfig.exe", "/flushdns", out actionError),
+                "SyncWinHttpProxy" => TryRunSystemCommand("netsh.exe", "winhttp import proxy source=ie", out actionError),
+                "ResetWinHttpProxy" => TryRunSystemCommand("netsh.exe", "winhttp reset proxy", out actionError),
                 _ => false
             };
             if (!succeeded && string.IsNullOrWhiteSpace(actionError)) actionError = "不支持的管理员操作";
@@ -430,7 +468,51 @@ public static class SystemToolsService
                 error.Contains("Access is denied", StringComparison.OrdinalIgnoreCase));
     }
 
-    private sealed record ElevatedSystemActionRequest(string Action, string? Name = null, string? Value = null, int[]? ProcessIds = null, bool Start = false, string? ResultPath = null);
+    private static bool TrySetNetworkAdapterState(string adapterName, bool enabled, out string? error)
+        => TryRunSystemCommand("netsh.exe", $"interface set interface name=\"{EscapeCommandValue(adapterName)}\" admin={(enabled ? "enabled" : "disabled")}", out error);
+
+    private static bool TryRenewNetworkAdapterDhcp(string adapterName, out string? error)
+    {
+        if (!TryRunSystemCommand("ipconfig.exe", $"/release \"{EscapeCommandValue(adapterName)}\"", out error)) return false;
+        return TryRunSystemCommand("ipconfig.exe", $"/renew \"{EscapeCommandValue(adapterName)}\"", out error);
+    }
+
+    private static bool TrySetNetworkAdapterDns(string adapterName, string primaryDns, string secondaryDns, out string? error)
+    {
+        if (string.IsNullOrWhiteSpace(adapterName))
+        {
+            error = "网卡名称不能为空";
+            return false;
+        }
+        if (string.IsNullOrWhiteSpace(primaryDns))
+        {
+            return TryRunSystemCommand("netsh.exe", $"interface ipv4 set dnsservers name=\"{EscapeCommandValue(adapterName)}\" source=dhcp", out error);
+        }
+        if (!IPAddress.TryParse(primaryDns, out var primary) || primary.AddressFamily != AddressFamily.InterNetwork ||
+            (!string.IsNullOrWhiteSpace(secondaryDns) && (!IPAddress.TryParse(secondaryDns, out var secondary) || secondary.AddressFamily != AddressFamily.InterNetwork)))
+        {
+            error = "DNS 必须是有效的 IPv4 地址";
+            return false;
+        }
+        if (!TryRunSystemCommand("netsh.exe", $"interface ipv4 set dnsservers name=\"{EscapeCommandValue(adapterName)}\" source=static address=\"{primaryDns}\" validate=no", out error)) return false;
+        return string.IsNullOrWhiteSpace(secondaryDns) || TryRunSystemCommand("netsh.exe", $"interface ipv4 add dnsservers name=\"{EscapeCommandValue(adapterName)}\" address=\"{secondaryDns}\" index=2 validate=no", out error);
+    }
+
+    private static bool TryRunSystemCommand(string fileName, string arguments, out string? error)
+    {
+        var result = RunCommandWithExitCode(fileName, arguments);
+        if (result.ExitCode == 0)
+        {
+            error = null;
+            return true;
+        }
+        error = string.IsNullOrWhiteSpace(result.Output) ? $"{fileName} 返回错误代码 {result.ExitCode}" : result.Output.Trim();
+        return false;
+    }
+
+    private static string EscapeCommandValue(string value) => value.Replace("\"", string.Empty).Trim();
+
+    private sealed record ElevatedSystemActionRequest(string Action, string? Name = null, string? Value = null, string? ExtraValue = null, int[]? ProcessIds = null, bool Start = false, string? ResultPath = null);
     private sealed record ElevatedSystemActionResult(bool Succeeded, string? Error);
 
     private static string RunCommand(string fileName, string arguments)

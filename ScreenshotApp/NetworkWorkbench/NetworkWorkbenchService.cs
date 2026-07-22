@@ -279,6 +279,86 @@ public static class NetworkWorkbenchService
         }
     }
 
+    /// <summary>按默认路由、DNS、目标端口、HTTP 与当前代理分层执行完整诊断。</summary>
+    public static async Task<IReadOnlyList<NetworkDiagnosticResult>> RunFullDiagnosticAsync(string target, int port, CancellationToken cancellationToken)
+    {
+        var results = new List<NetworkDiagnosticResult>();
+        var overview = await GetOverviewAsync(cancellationToken);
+        results.Add(new NetworkDiagnosticResult(DateTime.Now, "默认路由", overview.ActiveAdapterName,
+            overview.HasPhysicalConnection && overview.Gateway != "—",
+            $"网卡 {overview.ActiveAdapterName} · IPv4 {overview.IPv4Address} · 网关 {overview.Gateway} · {overview.ConnectivityProbeText}", 0));
+
+        foreach (var kind in new[] { "DNS", "TCP", "HTTP" })
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            results.Add(await RunDiagnosticAsync(kind, target, port, cancellationToken));
+        }
+        results.Add(await TestCurrentProxyAsync(cancellationToken));
+        return results;
+    }
+
+    public static async Task<NetworkDiagnosticResult> TestCurrentProxyAsync(CancellationToken cancellationToken)
+    {
+        var proxy = GetCurrentUserProxy();
+        if (!proxy.Enabled)
+        {
+            return new NetworkDiagnosticResult(DateTime.Now, "代理", "当前用户代理", true,
+                string.IsNullOrWhiteSpace(proxy.PacUrl) ? "手动代理已关闭" : $"使用 PAC：{proxy.PacUrl}", 0);
+        }
+        var endpoint = ParseProxyEndpoint(proxy.Server);
+        if (endpoint is null)
+        {
+            return new NetworkDiagnosticResult(DateTime.Now, "代理", proxy.Server, false, "无法解析代理服务器地址和端口", 0);
+        }
+        return await RunDiagnosticAsync("TCP", endpoint.Value.Host, endpoint.Value.Port, cancellationToken) with
+        {
+            Kind = "代理",
+            Target = proxy.Server
+        };
+    }
+
+    public static NetworkProfile CaptureProfile(string name, ProxySettingsSnapshot proxy)
+    {
+        var adapter = GetAdapters().FirstOrDefault(item => item.IsPrimary);
+        var snapshot = adapter is null ? null : new NetworkAdapterConfigurationSnapshot(
+            adapter.Id, adapter.Name, adapter.IPv4Address, adapter.Gateway, adapter.DnsServers, adapter.DhcpText, adapter.Mtu);
+        return new NetworkProfile(name, proxy, DateTime.Now, snapshot);
+    }
+
+    public static string BuildProfileDifference(NetworkProfile profile)
+    {
+        var currentProxy = GetCurrentUserProxy();
+        var currentAdapter = GetAdapters().FirstOrDefault(item => item.IsPrimary);
+        var changes = new List<string>();
+        if (currentProxy != profile.Proxy) changes.Add($"当前用户代理：{FormatProxySummary(currentProxy)} → {FormatProxySummary(profile.Proxy)}");
+        if (profile.Adapter is not null)
+        {
+            if (currentAdapter is null) changes.Add($"目标网卡：当前无主用物理网卡 → {profile.Adapter.Name}");
+            else
+            {
+                if (!string.Equals(currentAdapter.Name, profile.Adapter.Name, StringComparison.OrdinalIgnoreCase)) changes.Add($"主用网卡：{currentAdapter.Name} → {profile.Adapter.Name}");
+                if (!string.Equals(currentAdapter.DnsServers, profile.Adapter.DnsServers, StringComparison.OrdinalIgnoreCase)) changes.Add($"DNS：{currentAdapter.DnsServers} → {profile.Adapter.DnsServers}");
+                if (!string.Equals(currentAdapter.DhcpText, profile.Adapter.DhcpText, StringComparison.OrdinalIgnoreCase)) changes.Add($"地址方式：{currentAdapter.DhcpText} → {profile.Adapter.DhcpText}");
+            }
+        }
+        return changes.Count == 0 ? "当前配置已与该方案一致。" : string.Join(Environment.NewLine, changes);
+    }
+
+    public static string BuildDiagnosticReport(IEnumerable<NetworkDiagnosticResult> results)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("X-Tool 网络诊断报告");
+        builder.AppendLine($"生成时间：{DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+        builder.AppendLine(new string('=', 64));
+        foreach (var result in results.OrderBy(item => item.Time))
+        {
+            builder.AppendLine($"[{result.Time:HH:mm:ss}] {result.Kind} | {result.Target} | {result.StatusText} | {result.ElapsedText}");
+            builder.AppendLine(result.Detail);
+            builder.AppendLine();
+        }
+        return builder.ToString();
+    }
+
     public static IReadOnlyList<NetworkProfile> LoadProfiles()
     {
         try
@@ -293,6 +373,15 @@ public static class NetworkWorkbenchService
     {
         Directory.CreateDirectory(Path.GetDirectoryName(ProfilesPath)!);
         File.WriteAllText(ProfilesPath, JsonSerializer.Serialize(profiles, new JsonSerializerOptions { WriteIndented = true }), new UTF8Encoding(false));
+    }
+
+    private static (string Host, int Port)? ParseProxyEndpoint(string value)
+    {
+        var first = value.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() ?? string.Empty;
+        var equalIndex = first.IndexOf('=');
+        if (equalIndex >= 0) first = first[(equalIndex + 1)..];
+        if (!first.Contains("://", StringComparison.Ordinal)) first = $"http://{first}";
+        return Uri.TryCreate(first, UriKind.Absolute, out var uri) && uri.Port > 0 ? (uri.Host, uri.Port) : null;
     }
 
     private static WifiDetails GetWifiDetails()
@@ -492,8 +581,16 @@ public sealed record NetworkDiagnosticResult(DateTime Time, string Kind, string 
     public string StatusText => Succeeded ? "成功" : "失败";
     public string ElapsedText => $"{ElapsedMilliseconds:N0} ms";
 }
-public sealed record NetworkProfile(string Name, ProxySettingsSnapshot Proxy, DateTime UpdatedAt)
+public sealed record NetworkAdapterConfigurationSnapshot(string Id, string Name, string IPv4Address, string Gateway, string DnsServers, string DhcpText, int Mtu);
+public sealed record NetworkProfile(string Name, ProxySettingsSnapshot Proxy, DateTime UpdatedAt, NetworkAdapterConfigurationSnapshot? Adapter = null)
 {
     public string UpdatedAtText => UpdatedAt.ToString("yyyy-MM-dd HH:mm");
-    public string Summary => Proxy.Enabled ? $"代理 {Proxy.Server}" : string.IsNullOrWhiteSpace(Proxy.PacUrl) ? "直连" : $"PAC {Proxy.PacUrl}";
+    public string Summary
+    {
+        get
+        {
+            var proxyText = Proxy.Enabled ? $"代理 {Proxy.Server}" : string.IsNullOrWhiteSpace(Proxy.PacUrl) ? "直连" : $"PAC {Proxy.PacUrl}";
+            return Adapter is null ? proxyText : $"{proxyText} · {Adapter.Name} · DNS {Adapter.DnsServers}";
+        }
+    }
 }
