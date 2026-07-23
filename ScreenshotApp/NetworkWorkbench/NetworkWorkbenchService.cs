@@ -39,6 +39,14 @@ public static class NetworkWorkbenchService
     {
         Timeout = TimeSpan.FromSeconds(3)
     };
+    private static readonly HttpClient SystemConnectivityClient = new(new SocketsHttpHandler
+    {
+        UseProxy = true,
+        ConnectTimeout = TimeSpan.FromSeconds(2)
+    })
+    {
+        Timeout = TimeSpan.FromSeconds(3)
+    };
     private static readonly string[] VirtualAdapterKeywords =
     {
         "virtual", "vpn", "radmin", "hyper-v", "vmware", "vbox", "virtualbox",
@@ -56,9 +64,10 @@ public static class NetworkWorkbenchService
         var active = adapters.FirstOrDefault(item => item.IsPrimary);
         var hasPhysicalConnection = active is not null;
         var hasVirtualConnection = adapters.Any(item => item.IsUp && item.IsVirtual);
+        var proxy = GetCurrentUserProxy();
         var probe = active is null
             ? ConnectivityProbeSnapshot.Empty with { CapturedAt = DateTime.Now }
-            : await GetConnectivityProbeAsync(active, cancellationToken);
+            : await GetConnectivityProbeAsync(active, proxy, cancellationToken);
         var internetAvailable = probe.HttpSucceeded;
         var connectivityText = internetAvailable
             ? "互联网已连接"
@@ -72,7 +81,6 @@ public static class NetworkWorkbenchService
         var wifi = active?.InterfaceType == NetworkInterfaceType.Wireless80211.ToString()
             ? GetWifiDetails()
             : WifiDetails.Empty;
-        var proxy = GetCurrentUserProxy();
         return new NetworkOverviewSnapshot(
             connectivityText,
             internetAvailable,
@@ -519,7 +527,10 @@ public static class NetworkWorkbenchService
         return proxy.AutoDetect ? "自动检测" : "直连（代理已关闭）";
     }
 
-    private static async Task<ConnectivityProbeSnapshot> GetConnectivityProbeAsync(NetworkAdapterEntry adapter, CancellationToken cancellationToken)
+    private static async Task<ConnectivityProbeSnapshot> GetConnectivityProbeAsync(
+        NetworkAdapterEntry adapter,
+        ProxySettingsSnapshot proxy,
+        CancellationToken cancellationToken)
     {
         if (string.Equals(_cachedConnectivityProbe.AdapterId, adapter.Id, StringComparison.OrdinalIgnoreCase) &&
             DateTime.UtcNow - _connectivityProbeCacheTime < TimeSpan.FromSeconds(5))
@@ -539,7 +550,7 @@ public static class NetworkWorkbenchService
             var probeGeneration = Volatile.Read(ref _connectivityProbeGeneration);
             var gatewayTask = ProbeGatewayAsync(adapter.Gateway, cancellationToken);
             var dnsTask = ProbeDnsAsync(cancellationToken);
-            var httpTask = ProbeHttpAsync(cancellationToken);
+            var httpTask = ProbeHttpAsync(proxy, cancellationToken);
             await Task.WhenAll(gatewayTask, dnsTask, httpTask);
 
             var gateway = await gatewayTask;
@@ -554,6 +565,7 @@ public static class NetworkWorkbenchService
                 gateway.ElapsedMilliseconds,
                 dns.ElapsedMilliseconds,
                 http.ElapsedMilliseconds,
+                http.Route,
                 DateTime.Now);
             if (probeGeneration == Volatile.Read(ref _connectivityProbeGeneration))
             {
@@ -593,18 +605,75 @@ public static class NetworkWorkbenchService
         catch { return new(false, watch.ElapsedMilliseconds); }
     }
 
-    private static async Task<ProbeResult> ProbeHttpAsync(CancellationToken cancellationToken)
+    private static async Task<HttpProbeResult> ProbeHttpAsync(ProxySettingsSnapshot proxy, CancellationToken cancellationToken)
+    {
+        using var probeCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var directTask = ProbeHttpClientAsync(DirectConnectivityClient, "直连", probeCancellation.Token);
+        var effectiveTask = ProbeEffectiveHttpAsync(proxy, probeCancellation.Token);
+        var firstTask = await Task.WhenAny(directTask, effectiveTask);
+        var first = await firstTask;
+        var secondTask = ReferenceEquals(firstTask, directTask) ? effectiveTask : directTask;
+        if (first.Succeeded)
+        {
+            probeCancellation.Cancel();
+            try { await secondTask; } catch { }
+            return first;
+        }
+
+        var second = await secondTask;
+        probeCancellation.Cancel();
+        return second.Succeeded ? second : first;
+    }
+
+    private static async Task<HttpProbeResult> ProbeEffectiveHttpAsync(
+        ProxySettingsSnapshot proxy,
+        CancellationToken cancellationToken)
+    {
+        var proxyUri = proxy.Enabled ? TryCreateProxyUri(proxy.Server) : null;
+        if (proxyUri is null)
+        {
+            return await ProbeHttpClientAsync(SystemConnectivityClient, "系统网络路径", cancellationToken);
+        }
+
+        using var handler = new SocketsHttpHandler
+        {
+            UseProxy = true,
+            Proxy = new WebProxy(proxyUri),
+            ConnectTimeout = TimeSpan.FromSeconds(2)
+        };
+        using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(3) };
+        return await ProbeHttpClientAsync(client, "当前用户代理", cancellationToken);
+    }
+
+    private static async Task<HttpProbeResult> ProbeHttpClientAsync(
+        HttpClient client,
+        string route,
+        CancellationToken cancellationToken)
     {
         var watch = Stopwatch.StartNew();
         try
         {
-            using var response = await DirectConnectivityClient.GetAsync(
+            using var response = await client.GetAsync(
                 "http://www.msftconnecttest.com/connecttest.txt",
                 HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken);
-            return new(response.IsSuccessStatusCode, watch.ElapsedMilliseconds);
+            return new(response.IsSuccessStatusCode, watch.ElapsedMilliseconds, route);
         }
-        catch { return new(false, watch.ElapsedMilliseconds); }
+        catch { return new(false, watch.ElapsedMilliseconds, route); }
+    }
+
+    private static Uri? TryCreateProxyUri(string server)
+    {
+        if (string.IsNullOrWhiteSpace(server)) return null;
+        var entries = server.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var candidate = entries
+            .Select(entry => entry.Split('=', 2, StringSplitOptions.TrimEntries))
+            .OrderByDescending(parts => parts.Length == 2 && parts[0].Equals("http", StringComparison.OrdinalIgnoreCase))
+            .Select(parts => parts.Length == 2 ? parts[1] : parts[0])
+            .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+        if (string.IsNullOrWhiteSpace(candidate)) return null;
+        if (!candidate.Contains("://", StringComparison.Ordinal)) candidate = $"http://{candidate}";
+        return Uri.TryCreate(candidate, UriKind.Absolute, out var uri) ? uri : null;
     }
 
     private static int TryGetBestInterfaceIndex()
@@ -651,15 +720,16 @@ public static class NetworkWorkbenchService
     }
 
     private sealed record ConnectivityProbeSnapshot(string AdapterId, bool GatewaySucceeded, bool DnsSucceeded, bool HttpSucceeded,
-        long GatewayLatencyMs, long DnsLatencyMs, long HttpLatencyMs, DateTime CapturedAt)
+        long GatewayLatencyMs, long DnsLatencyMs, long HttpLatencyMs, string HttpRoute, DateTime CapturedAt)
     {
-        public static ConnectivityProbeSnapshot Empty { get; } = new(string.Empty, false, false, false, -1, -1, -1, DateTime.MinValue);
+        public static ConnectivityProbeSnapshot Empty { get; } = new(string.Empty, false, false, false, -1, -1, -1, string.Empty, DateTime.MinValue);
         public string Summary => string.IsNullOrWhiteSpace(AdapterId)
             ? "未执行联网探测"
-            : $"网关 {(GatewaySucceeded ? $"可达 {GatewayLatencyMs} ms" : "未响应")} · DNS {(DnsSucceeded ? $"正常 {DnsLatencyMs} ms" : "失败")} · HTTP {(HttpSucceeded ? $"正常 {HttpLatencyMs} ms" : "失败")}";
+            : $"网关 {(GatewaySucceeded ? $"可达 {GatewayLatencyMs} ms" : "未响应")} · DNS {(DnsSucceeded ? $"正常 {DnsLatencyMs} ms" : "失败")} · HTTP {(HttpSucceeded ? $"正常 {HttpLatencyMs} ms（{HttpRoute}）" : "失败")}";
     }
 
     private readonly record struct ProbeResult(bool Succeeded, long ElapsedMilliseconds);
+    private readonly record struct HttpProbeResult(bool Succeeded, long ElapsedMilliseconds, string Route);
 }
 
 public sealed record NetworkOverviewSnapshot(string ConnectivityText, bool IsInternetAvailable, bool HasPhysicalConnection, string ActiveAdapterId, string ActiveAdapterName, string ActiveAdapterDescription, string ActiveAdapterType, string IPv4Address, string IPv6Address, string Gateway, string DnsServers, string DhcpText, long LinkSpeedBitsPerSecond, long BytesReceived, long BytesSent, string WifiSsid, string WifiSignal, string WifiChannel, string WifiReceiveRate, string WifiTransmitRate, string WifiBssid, string WifiRadioType, string WifiAuthentication, string WifiChannelWidth, string ProxyText, string ConnectionDetail, string ConnectivityProbeText, DateTime ConnectivityProbeCapturedAt, long GatewayLatencyMs, long DnsLatencyMs, long HttpLatencyMs, int ActivePhysicalAdapterCount, DateTime CapturedAt);

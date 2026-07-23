@@ -164,7 +164,7 @@
                             <StackPanel><TextBlock FontSize="17" FontWeight="SemiBold" Text="路由表" /><TextBlock Margin="0,4,0,0" FontSize="10" Foreground="#7890A6" Text="查看 Windows 当前 IPv4 / IPv6 路由、接口与默认下一跳。" /></StackPanel>
                             <StackPanel HorizontalAlignment="Right" Orientation="Horizontal"><TextBlock x:Name="RoutesReadStatusText" Margin="0,0,12,0" VerticalAlignment="Center" FontSize="10" Foreground="#7890A6" Text="等待读取" /><Button Width="92" Style="{StaticResource NetworkButton}" Content="重新读取" Click="RefreshDeepNetwork_Click" /><Button Width="88" Margin="8,0,0,0" Style="{StaticResource NetworkButton}" Content="取消任务" Click="CancelDeepTask_Click" /></StackPanel>
                         </Grid>
-                        <TextBox x:Name="RoutesTextBox" Grid.Row="2" Style="{StaticResource NetworkReadOnlyTextBox}" />
+                        <TextBox x:Name="RoutesTextBox" Grid.Row="2" Padding="22,18" FontSize="13" Foreground="#385A78" Style="{StaticResource NetworkReadOnlyTextBox}" />
                     </Grid>
                 </Border>
             </Grid>
@@ -176,7 +176,7 @@
                             <StackPanel><TextBlock FontSize="17" FontWeight="SemiBold" Text="Windows 防火墙" /><TextBlock Margin="0,4,0,0" FontSize="10" Foreground="#7890A6" Text="只读展示域、专用和公用配置文件的启用状态、策略与日志设置。" /></StackPanel>
                             <StackPanel HorizontalAlignment="Right" Orientation="Horizontal"><TextBlock x:Name="FirewallReadStatusText" Margin="0,0,12,0" VerticalAlignment="Center" FontSize="10" Foreground="#7890A6" Text="等待读取" /><Button Width="92" Style="{StaticResource NetworkButton}" Content="重新读取" Click="RefreshDeepNetwork_Click" /><Button Width="88" Margin="8,0,0,0" Style="{StaticResource NetworkButton}" Content="取消任务" Click="CancelDeepTask_Click" /></StackPanel>
                         </Grid>
-                        <TextBox x:Name="FirewallTextBox" Grid.Row="2" Style="{StaticResource NetworkReadOnlyTextBox}" />
+                        <TextBox x:Name="FirewallTextBox" Grid.Row="2" Padding="22,18" FontSize="13" Foreground="#385A78" Style="{StaticResource NetworkReadOnlyTextBox}" />
                     </Grid>
                 </Border>
             </Grid>
