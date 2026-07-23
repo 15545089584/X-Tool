@@ -74,7 +74,6 @@ public partial class NetworkWorkbenchView : UserControl
         TrafficCanvas.SizeChanged += (_, _) => UpdateTrafficChart();
         Loaded += NetworkWorkbenchView_Loaded;
         Unloaded += NetworkWorkbenchView_Unloaded;
-        SelectDiagnosticSection("Records");
         SelectTab("Overview");
     }
 
@@ -120,6 +119,7 @@ public partial class NetworkWorkbenchView : UserControl
         if (tab == "Overview") UpdateTrafficChart();
         if (tab == "Adapters" && DateTime.UtcNow - _lastAdaptersRefreshAt > TimeSpan.FromSeconds(5)) await RefreshAdaptersAsync();
         if (tab == "Wifi" && DateTime.UtcNow - _lastDeepNetworkRefreshAt > TimeSpan.FromSeconds(5)) await RefreshDeepNetworkAsync();
+        if (tab is "Routes" or "Firewall" or "Repair" && DateTime.UtcNow - _lastDeepNetworkRefreshAt > TimeSpan.FromSeconds(5)) await RefreshDeepNetworkAsync();
         if (tab == "Connections")
         {
             // 用户主动切换到连接页后才按需请求 ETW 管理员授权，避免后台或启动时弹出 UAC。
@@ -135,13 +135,16 @@ public partial class NetworkWorkbenchView : UserControl
         _activeTab = tab;
         OverviewPanel.Visibility = tab == "Overview" ? Visibility.Visible : Visibility.Collapsed;
         DiagnosticsPanel.Visibility = tab == "Diagnostics" ? Visibility.Visible : Visibility.Collapsed;
+        RoutesPanel.Visibility = tab == "Routes" ? Visibility.Visible : Visibility.Collapsed;
+        FirewallPanel.Visibility = tab == "Firewall" ? Visibility.Visible : Visibility.Collapsed;
+        RepairPanel.Visibility = tab == "Repair" ? Visibility.Visible : Visibility.Collapsed;
         ProxyPanel.Visibility = tab == "Proxy" ? Visibility.Visible : Visibility.Collapsed;
         AdaptersPanel.Visibility = tab == "Adapters" ? Visibility.Visible : Visibility.Collapsed;
         WifiPanel.Visibility = tab == "Wifi" ? Visibility.Visible : Visibility.Collapsed;
         ConnectionsPanel.Visibility = tab == "Connections" ? Visibility.Visible : Visibility.Collapsed;
         ProfilesPanel.Visibility = tab == "Profiles" ? Visibility.Visible : Visibility.Collapsed;
 
-        foreach (var button in new[] { OverviewTabButton, DiagnosticsTabButton, ProxyTabButton, AdaptersTabButton, WifiTabButton, ConnectionsTabButton, ProfilesTabButton })
+        foreach (var button in new[] { OverviewTabButton, DiagnosticsTabButton, RoutesTabButton, FirewallTabButton, RepairTabButton, ProxyTabButton, AdaptersTabButton, WifiTabButton, ConnectionsTabButton, ProfilesTabButton })
         {
             var active = string.Equals(button.Tag?.ToString(), tab, StringComparison.Ordinal);
             button.Background = BrushFrom(active ? "#4D7CFE" : "#86FFFFFF");
@@ -575,32 +578,6 @@ public partial class NetworkWorkbenchView : UserControl
         }
     }
 
-    private async void DiagnosticSection_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is not Button { Tag: string section }) return;
-        SelectDiagnosticSection(section);
-        if (section is "Routes" or "Repair" && DateTime.UtcNow - _lastDeepNetworkRefreshAt > TimeSpan.FromSeconds(5))
-        {
-            await RefreshDeepNetworkAsync();
-        }
-    }
-
-    private void SelectDiagnosticSection(string section)
-    {
-        DiagnosticRecordsSection.Visibility = section == "Records" ? Visibility.Visible : Visibility.Collapsed;
-        RouteFirewallSection.Visibility = section == "Routes" ? Visibility.Visible : Visibility.Collapsed;
-        RepairSection.Visibility = section == "Repair" ? Visibility.Visible : Visibility.Collapsed;
-        DiagnosticRecordActions.Visibility = section == "Records" ? Visibility.Visible : Visibility.Collapsed;
-        DeepReadActions.Visibility = section == "Records" ? Visibility.Collapsed : Visibility.Visible;
-        foreach (var button in new[] { DiagnosticRecordsSectionButton, RouteFirewallSectionButton, RepairSectionButton })
-        {
-            var active = string.Equals(button.Tag?.ToString(), section, StringComparison.Ordinal);
-            button.Background = BrushFrom(active ? "#4D7CFE" : "#BFFFFFFF");
-            button.Foreground = BrushFrom(active ? "#FFFFFF" : "#456784");
-            button.BorderBrush = BrushFrom(active ? "#4D7CFE" : "#B5C9E5F6");
-        }
-    }
-
     private async Task RefreshDeepNetworkAsync(bool force = false)
     {
         if (!force && DateTime.UtcNow - _lastDeepNetworkRefreshAt < TimeSpan.FromSeconds(5)) return;
@@ -608,7 +585,7 @@ public partial class NetworkWorkbenchView : UserControl
         _deepNetworkCancellation?.Dispose();
         _deepNetworkCancellation = new CancellationTokenSource();
         var token = _deepNetworkCancellation.Token;
-        DeepReadStatusText.Text = "正在读取路由、防火墙和无线环境…";
+        SetDeepReadStatus("正在读取路由、防火墙和连接解释…");
         WifiRefreshStatusText.Text = "正在读取 Windows WLAN 信息…";
         RefreshWifiButton.IsEnabled = false;
         try
@@ -623,23 +600,30 @@ public partial class NetworkWorkbenchView : UserControl
                 .FirstOrDefault(item => item.IsPrimary)?.IPv4Address ?? string.Empty;
             if (string.IsNullOrWhiteSpace(LanAddressTextBox.Text)) LanAddressTextBox.Text = primaryAddress;
             _lastDeepNetworkRefreshAt = DateTime.UtcNow;
-            DeepReadStatusText.Text = $"更新于 {DateTime.Now:HH:mm:ss}";
+            SetDeepReadStatus($"更新于 {DateTime.Now:HH:mm:ss}");
             WifiRefreshStatusText.Text = $"更新于 {DateTime.Now:HH:mm:ss}";
         }
         catch (OperationCanceledException)
         {
-            DeepReadStatusText.Text = "读取已取消";
+            SetDeepReadStatus("读取已取消");
             WifiRefreshStatusText.Text = "读取已取消";
         }
         catch (Exception exception)
         {
-            DeepReadStatusText.Text = $"读取失败：{exception.Message}";
+            SetDeepReadStatus($"读取失败：{exception.Message}");
             WifiRefreshStatusText.Text = $"读取失败：{exception.Message}";
         }
         finally
         {
             RefreshWifiButton.IsEnabled = true;
         }
+    }
+
+    private void SetDeepReadStatus(string text)
+    {
+        RoutesReadStatusText.Text = text;
+        FirewallReadStatusText.Text = text;
+        RepairReadStatusText.Text = text;
     }
 
     private async void RefreshDeepNetwork_Click(object sender, RoutedEventArgs e) => await RefreshDeepNetworkAsync(force: true);
