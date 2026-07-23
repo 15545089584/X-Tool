@@ -19,6 +19,7 @@ public partial class NetworkWorkbenchView : UserControl
     private readonly ObservableCollection<NetworkConnectionRow> _connections = new();
     private readonly ObservableCollection<NetworkProfile> _profiles = new();
     private readonly ObservableCollection<NetworkTimelineEvent> _timelineEvents = new();
+    private readonly ObservableCollection<LanDeviceEntry> _lanDevices = new();
     private readonly Queue<double> _downloadHistory = new();
     private readonly Queue<double> _uploadHistory = new();
     private readonly List<double> _historicalDownload = new();
@@ -30,6 +31,7 @@ public partial class NetworkWorkbenchView : UserControl
     private NetworkOverviewSnapshot? _previousOverview;
     private ProxySettingsSnapshot _proxySnapshot = new(false, string.Empty, string.Empty, string.Empty, true);
     private CancellationTokenSource? _diagnosticCancellation;
+    private CancellationTokenSource? _deepNetworkCancellation;
     private bool _initialized;
     private bool _refreshingConnections;
     private string _connectionSortKey = "LocalAddress";
@@ -53,6 +55,7 @@ public partial class NetworkWorkbenchView : UserControl
     private int _historyRefreshTicks;
     private DateTime _lastAdaptersRefreshAt = DateTime.MinValue;
     private DateTime _lastConnectionsRefreshAt = DateTime.MinValue;
+    private DateTime _lastDeepNetworkRefreshAt = DateTime.MinValue;
 
     public NetworkWorkbenchView()
     {
@@ -64,12 +67,14 @@ public partial class NetworkWorkbenchView : UserControl
         ConnectionsListBox.ItemsSource = _connections;
         ProfilesListBox.ItemsSource = _profiles;
         NetworkEventsListBox.ItemsSource = _timelineEvents;
+        LanDevicesListBox.ItemsSource = _lanDevices;
         _monitorCoordinator.SampleAvailable += MonitorCoordinator_SampleAvailable;
         _monitorCoordinator.TimelineEventAvailable += MonitorCoordinator_TimelineEventAvailable;
         _monitorCoordinator.MonitorFailed += MonitorCoordinator_MonitorFailed;
         TrafficCanvas.SizeChanged += (_, _) => UpdateTrafficChart();
         Loaded += NetworkWorkbenchView_Loaded;
         Unloaded += NetworkWorkbenchView_Unloaded;
+        SelectDiagnosticSection("Records");
         SelectTab("Overview");
     }
 
@@ -82,6 +87,7 @@ public partial class NetworkWorkbenchView : UserControl
     private async void NetworkWorkbenchView_Unloaded(object sender, RoutedEventArgs e)
     {
         await _monitorCoordinator.StopAsync();
+        _deepNetworkCancellation?.Cancel();
         _exactTrafficClient.Dispose();
     }
 
@@ -113,6 +119,7 @@ public partial class NetworkWorkbenchView : UserControl
         SelectTab(tab);
         if (tab == "Overview") UpdateTrafficChart();
         if (tab == "Adapters" && DateTime.UtcNow - _lastAdaptersRefreshAt > TimeSpan.FromSeconds(5)) await RefreshAdaptersAsync();
+        if (tab == "Wifi" && DateTime.UtcNow - _lastDeepNetworkRefreshAt > TimeSpan.FromSeconds(5)) await RefreshDeepNetworkAsync();
         if (tab == "Connections")
         {
             // 用户主动切换到连接页后才按需请求 ETW 管理员授权，避免后台或启动时弹出 UAC。
@@ -130,10 +137,11 @@ public partial class NetworkWorkbenchView : UserControl
         DiagnosticsPanel.Visibility = tab == "Diagnostics" ? Visibility.Visible : Visibility.Collapsed;
         ProxyPanel.Visibility = tab == "Proxy" ? Visibility.Visible : Visibility.Collapsed;
         AdaptersPanel.Visibility = tab == "Adapters" ? Visibility.Visible : Visibility.Collapsed;
+        WifiPanel.Visibility = tab == "Wifi" ? Visibility.Visible : Visibility.Collapsed;
         ConnectionsPanel.Visibility = tab == "Connections" ? Visibility.Visible : Visibility.Collapsed;
         ProfilesPanel.Visibility = tab == "Profiles" ? Visibility.Visible : Visibility.Collapsed;
 
-        foreach (var button in new[] { OverviewTabButton, DiagnosticsTabButton, ProxyTabButton, AdaptersTabButton, ConnectionsTabButton, ProfilesTabButton })
+        foreach (var button in new[] { OverviewTabButton, DiagnosticsTabButton, ProxyTabButton, AdaptersTabButton, WifiTabButton, ConnectionsTabButton, ProfilesTabButton })
         {
             var active = string.Equals(button.Tag?.ToString(), tab, StringComparison.Ordinal);
             button.Background = BrushFrom(active ? "#4D7CFE" : "#86FFFFFF");
@@ -200,6 +208,13 @@ public partial class NetworkWorkbenchView : UserControl
             OverviewWifiText.Text = snapshot.WifiSsid;
             OverviewWifiSignalText.Text = $"{snapshot.WifiSignal} / 信道 {snapshot.WifiChannel} · {snapshot.WifiRadioType}";
             OverviewWifiSignalText.ToolTip = $"BSSID {snapshot.WifiBssid}\n安全 {snapshot.WifiAuthentication}\n信道宽度 {snapshot.WifiChannelWidth}";
+            WifiSsidText.Text = snapshot.WifiSsid;
+            WifiRadioText.Text = $"无线制式 {snapshot.WifiRadioType}";
+            WifiSignalText.Text = snapshot.WifiSignal;
+            WifiChannelText.Text = $"信道 {snapshot.WifiChannel}";
+            WifiBssidText.Text = snapshot.WifiBssid;
+            WifiSecurityText.Text = snapshot.WifiAuthentication;
+            WifiWidthText.Text = $"信道宽度 {snapshot.WifiChannelWidth}";
             OverviewProxyText.Text = snapshot.ProxyText;
             OverviewIpv6Text.Text = snapshot.IPv6Address;
             OverviewProbeText.Text = snapshot.ConnectivityProbeText;
@@ -560,9 +575,135 @@ public partial class NetworkWorkbenchView : UserControl
         }
     }
 
-    private void OpenNetworkDeepTools_Click(object sender, RoutedEventArgs e)
+    private async void DiagnosticSection_Click(object sender, RoutedEventArgs e)
     {
-        new NetworkDeepToolsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
+        if (sender is not Button { Tag: string section }) return;
+        SelectDiagnosticSection(section);
+        if (section is "Routes" or "Repair" && DateTime.UtcNow - _lastDeepNetworkRefreshAt > TimeSpan.FromSeconds(5))
+        {
+            await RefreshDeepNetworkAsync();
+        }
+    }
+
+    private void SelectDiagnosticSection(string section)
+    {
+        DiagnosticRecordsSection.Visibility = section == "Records" ? Visibility.Visible : Visibility.Collapsed;
+        RouteFirewallSection.Visibility = section == "Routes" ? Visibility.Visible : Visibility.Collapsed;
+        RepairSection.Visibility = section == "Repair" ? Visibility.Visible : Visibility.Collapsed;
+        DiagnosticRecordActions.Visibility = section == "Records" ? Visibility.Visible : Visibility.Collapsed;
+        DeepReadActions.Visibility = section == "Records" ? Visibility.Collapsed : Visibility.Visible;
+        foreach (var button in new[] { DiagnosticRecordsSectionButton, RouteFirewallSectionButton, RepairSectionButton })
+        {
+            var active = string.Equals(button.Tag?.ToString(), section, StringComparison.Ordinal);
+            button.Background = BrushFrom(active ? "#4D7CFE" : "#BFFFFFFF");
+            button.Foreground = BrushFrom(active ? "#FFFFFF" : "#456784");
+            button.BorderBrush = BrushFrom(active ? "#4D7CFE" : "#B5C9E5F6");
+        }
+    }
+
+    private async Task RefreshDeepNetworkAsync(bool force = false)
+    {
+        if (!force && DateTime.UtcNow - _lastDeepNetworkRefreshAt < TimeSpan.FromSeconds(5)) return;
+        _deepNetworkCancellation?.Cancel();
+        _deepNetworkCancellation?.Dispose();
+        _deepNetworkCancellation = new CancellationTokenSource();
+        var token = _deepNetworkCancellation.Token;
+        DeepReadStatusText.Text = "正在读取路由、防火墙和无线环境…";
+        WifiRefreshStatusText.Text = "正在读取 Windows WLAN 信息…";
+        RefreshWifiButton.IsEnabled = false;
+        try
+        {
+            var snapshot = await NetworkDeepToolsService.ReadAsync(token);
+            RoutesTextBox.Text = snapshot.Routes;
+            FirewallTextBox.Text = snapshot.FirewallProfiles;
+            ExplanationTextBox.Text = snapshot.Explanation;
+            WifiInterfaceTextBox.Text = snapshot.WifiInterface;
+            NearbyWifiTextBox.Text = snapshot.NearbyWifi;
+            var primaryAddress = (await Task.Run(NetworkWorkbenchService.GetAdapters))
+                .FirstOrDefault(item => item.IsPrimary)?.IPv4Address ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(LanAddressTextBox.Text)) LanAddressTextBox.Text = primaryAddress;
+            _lastDeepNetworkRefreshAt = DateTime.UtcNow;
+            DeepReadStatusText.Text = $"更新于 {DateTime.Now:HH:mm:ss}";
+            WifiRefreshStatusText.Text = $"更新于 {DateTime.Now:HH:mm:ss}";
+        }
+        catch (OperationCanceledException)
+        {
+            DeepReadStatusText.Text = "读取已取消";
+            WifiRefreshStatusText.Text = "读取已取消";
+        }
+        catch (Exception exception)
+        {
+            DeepReadStatusText.Text = $"读取失败：{exception.Message}";
+            WifiRefreshStatusText.Text = $"读取失败：{exception.Message}";
+        }
+        finally
+        {
+            RefreshWifiButton.IsEnabled = true;
+        }
+    }
+
+    private async void RefreshDeepNetwork_Click(object sender, RoutedEventArgs e) => await RefreshDeepNetworkAsync(force: true);
+    private async void RefreshWifi_Click(object sender, RoutedEventArgs e) => await RefreshDeepNetworkAsync(force: true);
+
+    private void CancelDeepTask_Click(object sender, RoutedEventArgs e)
+    {
+        _deepNetworkCancellation?.Cancel();
+        if (_activeTab == "Wifi") LanStatusText.Text = "任务已取消";
+    }
+
+    private async void ScanLan_Click(object sender, RoutedEventArgs e)
+    {
+        _deepNetworkCancellation?.Cancel();
+        _deepNetworkCancellation?.Dispose();
+        _deepNetworkCancellation = new CancellationTokenSource();
+        _lanDevices.Clear();
+        LanStatusText.Text = "正在扫描当前私有 /24（最多 254 个地址）…";
+        try
+        {
+            var devices = await NetworkDeepToolsService.ScanPrivateLanAsync(LanAddressTextBox.Text.Trim(), _deepNetworkCancellation.Token);
+            foreach (var device in devices) _lanDevices.Add(device);
+            LanStatusText.Text = $"发现 {devices.Count} 台响应设备";
+        }
+        catch (OperationCanceledException)
+        {
+            LanStatusText.Text = "扫描已取消";
+        }
+        catch (Exception exception)
+        {
+            LanStatusText.Text = exception.Message;
+        }
+    }
+
+    private async void NetworkRepair_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: string action }) return;
+        var command = action switch
+        {
+            "FlushDns" => "ipconfig /flushdns",
+            "Winsock" => "netsh winsock reset（需要重启）",
+            "TcpIp" => "netsh int ip reset（需要重启）",
+            "BlockPort" => $"创建 X-Tool 临时出站阻止规则，TCP {FirewallPortTextBox.Text}",
+            _ => $"删除 X-Tool 临时出站阻止规则，TCP {FirewallPortTextBox.Text}"
+        };
+        if (MessageBox.Show(Window.GetWindow(this), $"即将执行：\n{command}\n\n该操作可能短暂影响网络；重置操作需要重启 Windows 才完全生效。是否继续？",
+                "确认网络修复", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+        var result = await Task.Run(() => ExecuteNetworkRepair(action));
+        MessageBox.Show(Window.GetWindow(this), result ?? "操作已完成。", result is null ? "网络修复" : "操作失败",
+            MessageBoxButton.OK, result is null ? MessageBoxImage.Information : MessageBoxImage.Warning);
+        await RefreshDeepNetworkAsync(force: true);
+    }
+
+    private string? ExecuteNetworkRepair(string action)
+    {
+        bool ok;
+        string? error;
+        if (action == "FlushDns") ok = SystemToolsService.TryFlushDnsWithElevation(out error);
+        else if (action == "Winsock") ok = SystemToolsService.TryResetWinsockWithElevation(out error);
+        else if (action == "TcpIp") ok = SystemToolsService.TryResetTcpIpWithElevation(out error);
+        else if (!int.TryParse(FirewallPortTextBox.Dispatcher.Invoke(() => FirewallPortTextBox.Text), out var port)) return "请输入有效端口。";
+        else if (action == "BlockPort") ok = SystemToolsService.TryCreateTemporaryFirewallBlockRuleWithElevation(port, out error);
+        else ok = SystemToolsService.TryRemoveXToolFirewallRuleWithElevation(port, out error);
+        return ok ? null : error ?? "操作未完成。";
     }
 
     private async Task RefreshConnectionsAsync()

@@ -92,7 +92,7 @@ git log -5 --oneline
 
 ### 网络工作台（第三阶段已完成）
 
-- 一级导航“网络工作台”包含网络总览、连接诊断、代理与 DNS、网卡与 Wi-Fi、流量与连接、网络方案六个页面；整体沿用浅色毛玻璃设计。
+- 一级导航“网络工作台”包含网络总览、连接诊断、代理与 DNS、网卡、Wi-Fi、流量与连接、网络方案七个页面；整体沿用浅色毛玻璃设计。
 - 网络总览使用 Windows 默认路由选择主用物理网卡，以默认网关、DNS、直连 HTTP 三层探测判断联网状态；网络变化事件会使缓存失效并刷新。曲线支持实时、15 分钟、1 小时、24 小时、7 天、30 天和 90 天，显示坐标、平均值、峰值和累计流量。
 - `NetworkMonitorCoordinator` 统一管理自动刷新、网络变化事件、即时刷新、速率差分、持久化和告警；切页停止后台循环，返回恢复，手动与自动刷新共用单飞门，避免重复探测或 UI 卡死。
 - `NetworkHistoryStore` 使用本地 SQLite、WAL 和单写入队列保存分钟流量、网关/DNS/HTTP 探测及网络事件；数据库位于 `%LocalAppData%\X-Tool\Network\network-history.db`。保留期可选 1、7、30、90 天，支持二次确认清除和 CSV 历史导出。
@@ -100,9 +100,9 @@ git log -5 --oneline
 - 连接诊断支持 Ping、DNS、TCP、HTTP、路由追踪和可取消的完整诊断；完整诊断覆盖默认路由、DNS、目标 TCP/HTTP 与代理，可导出 UTF-8 报告。耗时操作不得在 UI 线程同步等待。
 - 流量与连接支持搜索、筛选、表头排序、实时速率与会话累计。默认明确显示“系统 I/O 估算”；用户点击“启用精确监测”并通过 UAC 后，由独立辅助进程通过 Kernel TCP/IP ETW 采集 TCP/UDP、IPv4/IPv6 字节，按 `PID + 启动时间 + 协议 + 本地端点 + 远端端点` 聚合，不读取数据包正文，离开页面或退出应用会停止辅助进程。
 - 代理与 DNS 支持当前用户代理、PAC、WinHTTP 与主用网卡 DNS 的读取和管理；机器级操作通过一次性 UAC 子进程完成，不要求主程序长期管理员运行。
-- 网卡与 Wi-Fi 区分物理与虚拟接口，展示地址、网关、DNS、MTU、接口跃点、BSSID、信号、信道、制式、安全类型与周边 BSSID；网卡写操作均有影响提示、确认和错误反馈。
-- “网络深度工具”只读展示 IPv4/IPv6 路由、默认路由、防火墙配置和连接解释链；安全修复包括清理 DNS、重置 Winsock/TCP-IP，以及仅创建/删除 `X-Tool 临时阻止 TCP <端口>` 专用防火墙规则，执行前展示命令与影响并逐项请求 UAC。
-- 局域网发现仅允许当前私有 IPv4 `/24`，并发上限 24，可取消；返回响应主机、反向名称和常用服务端口，拒绝公共或外部网段。
+- 网卡页专注物理与虚拟接口，展示地址、网关、DNS、MTU 与接口跃点；网卡写操作均有影响提示、确认和错误反馈。
+- Wi-Fi 已作为独立页面，展示 SSID、制式、信号、信道、BSSID、安全类型、当前无线接口与周边 BSSID；局域网发现也归入该页，仅允许当前私有 IPv4 `/24`，并发上限 24，可取消，拒绝公共或外部网段。
+- 原“网络深度工具”弹窗已拆入现有页面：连接诊断内新增“路由与防火墙”“连接解释与修复”分区，只读展示 IPv4/IPv6 路由、防火墙配置和连接解释链；安全修复包括清理 DNS、重置 Winsock/TCP-IP，以及仅创建/删除 `X-Tool 临时阻止 TCP <端口>` 专用防火墙规则，执行前展示命令与影响并逐项请求 UAC。
 - 网络方案支持代理、DNS、DHCP/静态 IPv4、前缀、MTU 和接口跃点快照；字段可选应用，网卡不匹配时阻止执行，应用后自动探测并可立即回滚。恢复点跨重启保留 24 小时，支持不含凭据的 UTF-8 JSON 导入导出。
 - ETW 依赖 NuGet `Microsoft.Diagnostics.Tracing.TraceEvent` 3.1.21，以兼容当前 .NET 6 目标。完整实现与验收边界见根目录 `NETWORK-WORKBENCH-PHASE3.md`。
 
@@ -342,7 +342,7 @@ git log -5 --oneline
 | 统一监测与历史库 | `ScreenshotApp\NetworkWorkbench\NetworkMonitorCoordinator.cs`、`NetworkHistoryStore.cs` |
 | ETW 精确流量 | `ScreenshotApp\NetworkWorkbench\NetworkEtwTrafficCollector.cs` |
 | 网络告警配置 | `ScreenshotApp\NetworkWorkbench\NetworkAlertSettingsWindow.xaml(.cs)` |
-| 网络深度诊断 | `ScreenshotApp\NetworkWorkbench\NetworkDeepToolsWindow.xaml(.cs)`、`NetworkDeepToolsService.cs` |
+| 网络深度诊断与 Wi-Fi | `ScreenshotApp\NetworkWorkbench\NetworkWorkbenchView.xaml(.cs)`、`NetworkDeepToolsService.cs` |
 | Win32 接口 | `ScreenshotApp\Capture\NativeMethods.cs` |
 
 ## 八、当前已知限制与建议顺序
