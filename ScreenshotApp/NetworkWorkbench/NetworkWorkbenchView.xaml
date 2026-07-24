@@ -61,18 +61,18 @@
             </Border>
         </Grid>
 
-        <UniformGrid Grid.Row="2" Columns="10">
-            <Button x:Name="OverviewTabButton" Margin="0,0,8,0" Style="{StaticResource NetworkTab}" Tag="Overview" Click="TabButton_Click" Content="网络总览" />
-            <Button x:Name="DiagnosticsTabButton" Margin="0,0,8,0" Style="{StaticResource NetworkTab}" Tag="Diagnostics" Click="TabButton_Click" Content="连接诊断" />
-            <Button x:Name="RoutesTabButton" Margin="0,0,8,0" Style="{StaticResource NetworkTab}" Tag="Routes" Click="TabButton_Click" Content="路由" />
-            <Button x:Name="FirewallTabButton" Margin="0,0,8,0" Style="{StaticResource NetworkTab}" Tag="Firewall" Click="TabButton_Click" Content="防火墙" />
-            <Button x:Name="RepairTabButton" Margin="0,0,8,0" Style="{StaticResource NetworkTab}" Tag="Repair" Click="TabButton_Click" Content="连接解释与修复" />
-            <Button x:Name="ProxyTabButton" Margin="0,0,8,0" Style="{StaticResource NetworkTab}" Tag="Proxy" Click="TabButton_Click" Content="代理与 DNS" />
-            <Button x:Name="AdaptersTabButton" Margin="0,0,8,0" Style="{StaticResource NetworkTab}" Tag="Adapters" Click="TabButton_Click" Content="网卡" />
-            <Button x:Name="WifiTabButton" Margin="0,0,8,0" Style="{StaticResource NetworkTab}" Tag="Wifi" Click="TabButton_Click" Content="Wi-Fi" />
-            <Button x:Name="ConnectionsTabButton" Margin="0,0,8,0" Style="{StaticResource NetworkTab}" Tag="Connections" Click="TabButton_Click" Content="流量与连接" />
-            <Button x:Name="ProfilesTabButton" Style="{StaticResource NetworkTab}" Tag="Profiles" Click="TabButton_Click" Content="网络方案" />
-        </UniformGrid>
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="104" /><ColumnDefinition Width="8" /><ColumnDefinition Width="110" /><ColumnDefinition Width="8" /><ColumnDefinition Width="116" /><ColumnDefinition Width="8" /><ColumnDefinition Width="90" /><ColumnDefinition Width="8" /><ColumnDefinition Width="90" /><ColumnDefinition Width="8" /><ColumnDefinition Width="120" /><ColumnDefinition Width="8" /><ColumnDefinition Width="104" /><ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Button x:Name="OverviewTabButton" Style="{StaticResource NetworkTab}" Tag="Overview" Click="TabButton_Click" Content="网络总览" />
+            <Button x:Name="DiagnosticsTabButton" Grid.Column="2" Style="{StaticResource NetworkTab}" Tag="Diagnostics" Click="TabButton_Click" Content="连接诊断" />
+            <Button x:Name="ProxyTabButton" Grid.Column="4" Style="{StaticResource NetworkTab}" Tag="Proxy" Click="TabButton_Click" Content="代理与 DNS" />
+            <Button x:Name="AdaptersTabButton" Grid.Column="6" Style="{StaticResource NetworkTab}" Tag="Adapters" Click="TabButton_Click" Content="网卡" />
+            <Button x:Name="WifiTabButton" Grid.Column="8" Style="{StaticResource NetworkTab}" Tag="Wifi" Click="TabButton_Click" Content="Wi-Fi" />
+            <Button x:Name="ConnectionsTabButton" Grid.Column="10" Style="{StaticResource NetworkTab}" Tag="Connections" Click="TabButton_Click" Content="流量与连接" />
+            <Button x:Name="ProfilesTabButton" Grid.Column="12" Style="{StaticResource NetworkTab}" Tag="Profiles" Click="TabButton_Click" Content="网络方案" />
+        </Grid>
 
         <Grid Grid.Row="4">
             <Grid x:Name="OverviewPanel">
@@ -147,49 +147,23 @@
                 <Border Grid.Row="2" Padding="16" Style="{StaticResource NetworkCard}">
                     <Grid><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                         <Grid>
-                            <TextBlock VerticalAlignment="Center" FontSize="16" FontWeight="SemiBold" Foreground="#405F7C" Text="诊断记录" />
-                            <StackPanel HorizontalAlignment="Right" Orientation="Horizontal"><Button Width="88" Style="{StaticResource NetworkButton}" Content="导出报告" Click="ExportDiagnostics_Click" /><Button x:Name="CancelDiagnosticButton" Width="88" Margin="8,0,0,0" Style="{StaticResource NetworkButton}" Content="取消任务" Click="CancelDiagnostic_Click" IsEnabled="False" /><Button Width="88" Margin="8,0,0,0" Style="{StaticResource NetworkButton}" Content="清空记录" Click="ClearDiagnostics_Click" /></StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <Button x:Name="DiagnosticRecordsSectionButton" Style="{StaticResource NetworkChipButton}" Tag="Records" Click="DiagnosticSection_Click" Content="诊断记录" />
+                                <Button x:Name="RouteFirewallSectionButton" Margin="8,0,0,0" Style="{StaticResource NetworkChipButton}" Tag="Routes" Click="DiagnosticSection_Click" Content="路由与防火墙" />
+                                <Button x:Name="RepairSectionButton" Margin="8,0,0,0" Style="{StaticResource NetworkChipButton}" Tag="Repair" Click="DiagnosticSection_Click" Content="连接解释与修复" />
+                            </StackPanel>
+                            <StackPanel x:Name="DiagnosticRecordActions" HorizontalAlignment="Right" Orientation="Horizontal"><Button Width="88" Style="{StaticResource NetworkButton}" Content="导出报告" Click="ExportDiagnostics_Click" /><Button x:Name="CancelDiagnosticButton" Width="88" Margin="8,0,0,0" Style="{StaticResource NetworkButton}" Content="取消任务" Click="CancelDiagnostic_Click" IsEnabled="False" /><Button Width="88" Margin="8,0,0,0" Style="{StaticResource NetworkButton}" Content="清空记录" Click="ClearDiagnostics_Click" /></StackPanel>
+                            <StackPanel x:Name="DeepReadActions" HorizontalAlignment="Right" Orientation="Horizontal" Visibility="Collapsed"><TextBlock x:Name="DeepReadStatusText" Margin="0,0,12,0" VerticalAlignment="Center" FontSize="10" Foreground="#7890A6" Text="等待读取" /><Button Width="92" Style="{StaticResource NetworkButton}" Content="重新读取" Click="RefreshDeepNetwork_Click" /><Button Width="88" Margin="8,0,0,0" Style="{StaticResource NetworkButton}" Content="取消任务" Click="CancelDeepTask_Click" /></StackPanel>
                         </Grid>
-                        <Grid Grid.Row="2">
+                        <Grid x:Name="DiagnosticRecordsSection" Grid.Row="2">
                             <ListBox x:Name="DiagnosticResultsListBox" Style="{StaticResource NetworkList}"><ListBox.ItemTemplate><DataTemplate><Border Padding="12,10" Background="#55FFFFFF" CornerRadius="9"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="66" /><ColumnDefinition Width="86" /><ColumnDefinition Width="150" /><ColumnDefinition Width="76" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><TextBlock VerticalAlignment="Top" FontSize="10" Foreground="#7890A6" Text="{Binding TimeText}" /><TextBlock Grid.Column="1" VerticalAlignment="Top" FontSize="11" FontWeight="SemiBold" Foreground="#4D7CFE" Text="{Binding Kind}" /><TextBlock Grid.Column="2" VerticalAlignment="Top" FontSize="11" Foreground="#45627E" Text="{Binding Target}" TextTrimming="CharacterEllipsis" /><StackPanel Grid.Column="3"><TextBlock FontSize="11" Foreground="#567EA9" Text="{Binding StatusText}" /><TextBlock Margin="0,3,0,0" FontSize="9" Foreground="#7890A6" Text="{Binding ElapsedText}" /></StackPanel><TextBlock Grid.Column="4" FontSize="10" Foreground="#526F8B" Text="{Binding Detail}" TextWrapping="Wrap" /></Grid></Border></DataTemplate></ListBox.ItemTemplate></ListBox>
                         </Grid>
-                    </Grid>
-                </Border>
-            </Grid>
-
-            <Grid x:Name="RoutesPanel" Visibility="Collapsed">
-                <Border Padding="18" Style="{StaticResource NetworkCard}">
-                    <Grid><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-                        <Grid>
-                            <StackPanel><TextBlock FontSize="17" FontWeight="SemiBold" Text="路由表" /><TextBlock Margin="0,4,0,0" FontSize="10" Foreground="#7890A6" Text="查看 Windows 当前 IPv4 / IPv6 路由、接口与默认下一跳。" /></StackPanel>
-                            <StackPanel HorizontalAlignment="Right" Orientation="Horizontal"><TextBlock x:Name="RoutesReadStatusText" Margin="0,0,12,0" VerticalAlignment="Center" FontSize="10" Foreground="#7890A6" Text="等待读取" /><Button Width="92" Style="{StaticResource NetworkButton}" Content="重新读取" Click="RefreshDeepNetwork_Click" /><Button Width="88" Margin="8,0,0,0" Style="{StaticResource NetworkButton}" Content="取消任务" Click="CancelDeepTask_Click" /></StackPanel>
+                        <Grid x:Name="RouteFirewallSection" Grid.Row="2" Visibility="Collapsed"><Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="12" /><ColumnDefinition /></Grid.ColumnDefinitions>
+                            <Grid><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="*" /></Grid.RowDefinitions><TextBlock FontSize="14" FontWeight="SemiBold" Foreground="#405F7C" Text="IPv4 / IPv6 路由表" /><TextBox x:Name="RoutesTextBox" Grid.Row="2" Style="{StaticResource NetworkReadOnlyTextBox}" /></Grid>
+                            <Grid Grid.Column="2"><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="*" /></Grid.RowDefinitions><TextBlock FontSize="14" FontWeight="SemiBold" Foreground="#405F7C" Text="Windows 防火墙配置文件" /><TextBox x:Name="FirewallTextBox" Grid.Row="2" Style="{StaticResource NetworkReadOnlyTextBox}" /></Grid>
                         </Grid>
-                        <TextBox x:Name="RoutesTextBox" Grid.Row="2" Padding="22,18" FontSize="13" Foreground="#385A78" Style="{StaticResource NetworkReadOnlyTextBox}" />
-                    </Grid>
-                </Border>
-            </Grid>
-
-            <Grid x:Name="FirewallPanel" Visibility="Collapsed">
-                <Border Padding="18" Style="{StaticResource NetworkCard}">
-                    <Grid><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-                        <Grid>
-                            <StackPanel><TextBlock FontSize="17" FontWeight="SemiBold" Text="Windows 防火墙" /><TextBlock Margin="0,4,0,0" FontSize="10" Foreground="#7890A6" Text="只读展示域、专用和公用配置文件的启用状态、策略与日志设置。" /></StackPanel>
-                            <StackPanel HorizontalAlignment="Right" Orientation="Horizontal"><TextBlock x:Name="FirewallReadStatusText" Margin="0,0,12,0" VerticalAlignment="Center" FontSize="10" Foreground="#7890A6" Text="等待读取" /><Button Width="92" Style="{StaticResource NetworkButton}" Content="重新读取" Click="RefreshDeepNetwork_Click" /><Button Width="88" Margin="8,0,0,0" Style="{StaticResource NetworkButton}" Content="取消任务" Click="CancelDeepTask_Click" /></StackPanel>
-                        </Grid>
-                        <TextBox x:Name="FirewallTextBox" Grid.Row="2" Padding="22,18" FontSize="13" Foreground="#385A78" Style="{StaticResource NetworkReadOnlyTextBox}" />
-                    </Grid>
-                </Border>
-            </Grid>
-
-            <Grid x:Name="RepairPanel" Visibility="Collapsed">
-                <Border Padding="18" Style="{StaticResource NetworkCard}">
-                    <Grid><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-                        <Grid>
-                            <StackPanel><TextBlock FontSize="17" FontWeight="SemiBold" Text="连接解释与修复" /><TextBlock Margin="0,4,0,0" FontSize="10" Foreground="#7890A6" Text="解释当前连接路径；修复操作执行前会展示命令与影响，并按需申请管理员权限。" /></StackPanel>
-                            <StackPanel HorizontalAlignment="Right" Orientation="Horizontal"><TextBlock x:Name="RepairReadStatusText" Margin="0,0,12,0" VerticalAlignment="Center" FontSize="10" Foreground="#7890A6" Text="等待读取" /><Button Width="92" Style="{StaticResource NetworkButton}" Content="重新读取" Click="RefreshDeepNetwork_Click" /><Button Width="88" Margin="8,0,0,0" Style="{StaticResource NetworkButton}" Content="取消任务" Click="CancelDeepTask_Click" /></StackPanel>
-                        </Grid>
-                        <Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition Width="1.15*" /><ColumnDefinition Width="14" /><ColumnDefinition Width="0.85*" /></Grid.ColumnDefinitions>
-                            <TextBox x:Name="ExplanationTextBox" Style="{StaticResource NetworkReadOnlyTextBox}" TextWrapping="Wrap" HorizontalScrollBarVisibility="Disabled" />
+                        <Grid x:Name="RepairSection" Grid.Row="2" Visibility="Collapsed"><Grid.ColumnDefinitions><ColumnDefinition Width="1.15*" /><ColumnDefinition Width="14" /><ColumnDefinition Width="0.85*" /></Grid.ColumnDefinitions>
+                            <Grid><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="*" /></Grid.RowDefinitions><TextBlock FontSize="14" FontWeight="SemiBold" Foreground="#405F7C" Text="当前连接解释链" /><TextBox x:Name="ExplanationTextBox" Grid.Row="2" Style="{StaticResource NetworkReadOnlyTextBox}" TextWrapping="Wrap" HorizontalScrollBarVisibility="Disabled" /></Grid>
                             <Border Grid.Column="2" Padding="16" Background="#48FFFFFF" BorderBrush="#93CDE4F5" BorderThickness="1" CornerRadius="12"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="Auto" /></Grid.RowDefinitions><TextBlock FontSize="14" FontWeight="SemiBold" Foreground="#405F7C" Text="安全修复" /><TextBlock Grid.Row="2" FontSize="10" Foreground="#7890A6" Text="执行前会展示命令与影响，确认后才按需申请管理员权限。" TextWrapping="Wrap" />
                                 <UniformGrid Grid.Row="4" Columns="3"><Button Margin="0,0,6,0" Style="{StaticResource NetworkButton}" Content="清理 DNS" Tag="FlushDns" Click="NetworkRepair_Click" /><Button Margin="3,0" Style="{StaticResource NetworkButton}" Content="重置 Winsock" Tag="Winsock" Click="NetworkRepair_Click" /><Button Margin="6,0,0,0" Style="{StaticResource NetworkButton}" Content="重置 TCP/IP" Tag="TcpIp" Click="NetworkRepair_Click" /></UniformGrid>
                                 <Grid Grid.Row="6"><Grid.ColumnDefinitions><ColumnDefinition Width="86" /><ColumnDefinition Width="8" /><ColumnDefinition Width="*" /><ColumnDefinition Width="8" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><TextBox x:Name="FirewallPortTextBox" Style="{StaticResource NetworkTextBox}" Text="443" ToolTip="TCP 远程端口" /><Button Grid.Column="2" Style="{StaticResource NetworkButton}" Content="临时阻止端口" Tag="BlockPort" Click="NetworkRepair_Click" /><Button Grid.Column="4" Style="{StaticResource NetworkDangerChipButton}" Content="删除临时规则" Tag="RemoveRule" Click="NetworkRepair_Click" /></Grid>
