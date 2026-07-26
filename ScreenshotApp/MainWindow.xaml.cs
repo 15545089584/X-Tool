@@ -52,7 +52,7 @@ public partial class MainWindow : Window
     private string? _lastExternalClipboardSignature;
     private ClipboardPickerWindow? _clipboardPicker;
     private IntPtr _clipboardPasteTarget;
-    private readonly VoiceInputService _voiceInputService;
+    private readonly VoiceInputService _voiceInputService = new();
     private VoiceInputOverlayWindow? _voiceInputOverlay;
     private IntPtr _voiceInputPasteTarget;
     private CancellationTokenSource? _voiceInputCancellation;
@@ -69,7 +69,6 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        _voiceInputService = new VoiceInputService(_preferences.VoiceInputPreferGpu);
         _historyStore = new ScreenshotHistoryStore(_preferences);
         _ = GlobalShortcut.TryParse(_preferences.ScreenshotShortcut, GlobalShortcut.ScreenshotDefault, out _screenshotShortcut);
         _ = GlobalShortcut.TryParse(_preferences.ClipboardShortcut, GlobalShortcut.ClipboardDefault, out _clipboardShortcut);
@@ -80,7 +79,7 @@ public partial class MainWindow : Window
         VoiceInputEnabledCheckBox.IsChecked = _preferences.VoiceInputEnabled;
         VoiceInputPasteAutomaticallyCheckBox.IsChecked = _preferences.VoiceInputPasteAutomatically;
         VoiceInputModelStatusText.Text = _voiceInputService.IsModelAvailable
-            ? $"标准中文离线模型已就绪 · 优先后端：{_voiceInputService.PreferredBackendDescription}"
+            ? "标准中文离线模型已就绪"
             : "本地模型缺失，请修复或重新安装 X-Tool";
         _voiceInputService.AutoStopRequested += VoiceInputService_AutoStopRequested;
         _voiceInputService.SoundLevelChanged += VoiceInputService_SoundLevelChanged;
@@ -1344,7 +1343,6 @@ public partial class MainWindow : Window
         {
             ShowVoiceInputOverlay("正在识别…", "所有音频仅在本机内存中处理");
             var text = await _voiceInputService.StopAndRecognizeAsync(cancellation.Token);
-            VoiceInputModelStatusText.Text = $"标准中文离线模型已就绪 · 当前后端：{_voiceInputService.ActiveBackendDescription}";
             if (string.IsNullOrWhiteSpace(text))
             {
                 text = _voiceInputCommittedText;

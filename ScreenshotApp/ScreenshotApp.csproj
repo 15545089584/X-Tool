@@ -13,8 +13,6 @@
     <!-- WPF 仍通过 manifest 配置 PerMonitorV2；WinForms 只承载托盘图标。 -->
     <NoWarn>$(NoWarn);WFAC010</NoWarn>
     <DefaultItemExcludes>$(DefaultItemExcludes);obj-scroll-test\**;bin-scroll-test\**</DefaultItemExcludes>
-    <!-- CUDA 运行时不存在时仍可正常构建，运行时自动走 CPU。 -->
-    <EnableVoiceInputCuda Condition="'$(EnableVoiceInputCuda)' == ''">true</EnableVoiceInputCuda>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(ScrollCaptureTestMode)' == 'true'">
@@ -78,31 +76,5 @@
       <TargetPath>models\voice-input\default\%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
     </Content>
   </ItemGroup>
-
-  <ItemGroup>
-    <!-- 官方 CUDA 运行时不进入 Git；存在时覆盖 x64 CPU 原生库，使 SenseVoice 可请求 CUDA EP。 -->
-    <VoiceInputCudaRuntime Include="VoiceInput\Runtime\win-x64-cuda12-cudnn9\sherpa-onnx-v1.13.4-cuda-12.x-cudnn-9.x-win-x64-cuda\lib\*.dll" />
-    <VoiceInputCudaCudnn Include="VoiceInput\Runtime\cudnn\nvidia\cudnn\bin\*.dll" />
-    <VoiceInputCudaLicense Include="VoiceInput\Runtime\cudnn\nvidia_cudnn_cu12-9.24.0.43.dist-info\licenses\License.txt" />
-  </ItemGroup>
-
-  <Target Name="CopyVoiceInputCudaRuntime" AfterTargets="CopyFilesToOutputDirectory"
-          Condition="'$(EnableVoiceInputCuda)' == 'true' and '$(OS)' == 'Windows_NT' and '@(VoiceInputCudaRuntime)' != ''">
-    <MakeDir Directories="$(OutDir)runtimes\win-x64\native" />
-    <Copy SourceFiles="@(VoiceInputCudaRuntime)"
-          DestinationFolder="$(OutDir)runtimes\win-x64\native"
-          SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(VoiceInputCudaCudnn)"
-          DestinationFolder="$(OutDir)runtimes\win-x64\native"
-          SkipUnchangedFiles="true" />
-    <MakeDir Directories="$(OutDir)licenses\voice-input" />
-    <Copy SourceFiles="@(VoiceInputCudaLicense)"
-          DestinationFolder="$(OutDir)licenses\voice-input"
-          SkipUnchangedFiles="true"
-          Condition="'@(VoiceInputCudaLicense)' != ''" />
-    <WriteLinesToFile File="$(OutDir)runtimes\win-x64\native\xtool-voice-cuda-runtime.txt"
-                      Lines="SenseVoice CUDA 12.x + cuDNN 9.x runtime bundled by X-Tool."
-                      Overwrite="true" />
-  </Target>
 
 </Project>
