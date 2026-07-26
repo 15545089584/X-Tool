@@ -100,8 +100,13 @@ internal sealed class VoiceInputService : IDisposable
         _waveIn.DataAvailable += WaveIn_DataAvailable;
         _waveIn.RecordingStopped += WaveIn_RecordingStopped;
         _waveIn.StartRecording();
-        _partialRecognitionCancellation = new CancellationTokenSource();
-        _partialRecognitionTask = RunPartialRecognitionAsync(_partialRecognitionCancellation.Token);
+        // CUDA 会在独立推理流上使用 cuDNN 上下文。录音期间的高频预识别会造成
+        // 连续 GPU 解码；正式确认时只保留一次完整识别，避免多轮预览与最终识别交错。
+        if (!(_preferGpu && IsCudaRuntimeAvailable))
+        {
+            _partialRecognitionCancellation = new CancellationTokenSource();
+            _partialRecognitionTask = RunPartialRecognitionAsync(_partialRecognitionCancellation.Token);
+        }
     }
 
     internal async Task<string> StopAndRecognizeAsync(CancellationToken cancellationToken)
