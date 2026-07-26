@@ -1106,9 +1106,11 @@ public partial class MainWindow : Window
             shortcut.NativeModifiers,
             shortcut.VirtualKey);
 
-    private void VoiceInputHotKeyMonitor_Pressed(object? sender, EventArgs e)
+    private void VoiceInputHotKeyMonitor_Pressed(object? sender, VoiceHotKeyPressedEventArgs e)
     {
-        Dispatcher.BeginInvoke(() => _ = ToggleVoiceInputAsync());
+        // 低级键盘钩子里的前台窗口才是用户按下右 Alt 时的原始目标。
+        // 不要等到 UI 队列执行后再重新读取，否则有机会把非激活浮窗或其它瞬时窗口当成目标。
+        Dispatcher.BeginInvoke(() => _ = ToggleVoiceInputAsync(e.ForegroundWindow));
     }
 
     private void VoiceInputHotKeyMonitor_EscapePressed(object? sender, EventArgs e)
@@ -1159,7 +1161,7 @@ public partial class MainWindow : Window
         ShowToast("语音输入已取消");
     }
 
-    private async Task ToggleVoiceInputAsync()
+    private async Task ToggleVoiceInputAsync(IntPtr capturedPasteTarget = default)
     {
         if (!_preferences.VoiceInputEnabled)
         {
@@ -1181,7 +1183,9 @@ public partial class MainWindow : Window
 
         try
         {
-            _voiceInputPasteTarget = NativeMethods.GetForegroundWindow();
+            _voiceInputPasteTarget = capturedPasteTarget != IntPtr.Zero
+                ? capturedPasteTarget
+                : NativeMethods.GetForegroundWindow();
             _voiceInputCancellation?.Cancel();
             _voiceInputCancellation?.Dispose();
             _voiceInputCancellation = new CancellationTokenSource();

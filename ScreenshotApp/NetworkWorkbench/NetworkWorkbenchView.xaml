@@ -18,6 +18,9 @@
         <Style x:Key="NetworkChipButton" TargetType="Button" BasedOn="{StaticResource NetworkButton}">
             <Setter Property="Height" Value="32" /><Setter Property="MinWidth" Value="72" /><Setter Property="Padding" Value="14,0" /><Setter Property="Background" Value="#BFFFFFFF" /><Setter Property="BorderBrush" Value="#B5C9E5F6" /><Setter Property="Foreground" Value="#456784" /><Setter Property="FontSize" Value="11" /><Setter Property="FontWeight" Value="SemiBold" />
         </Style>
+        <Style x:Key="NetworkDiagnosticSectionButton" TargetType="Button" BasedOn="{StaticResource NetworkButton}">
+            <Setter Property="Height" Value="44" /><Setter Property="Padding" Value="18,0" /><Setter Property="Background" Value="#BFFFFFFF" /><Setter Property="BorderBrush" Value="#B5C9E5F6" /><Setter Property="Foreground" Value="#456784" /><Setter Property="FontSize" Value="12" /><Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
         <Style x:Key="NetworkDangerChipButton" TargetType="Button" BasedOn="{StaticResource NetworkChipButton}"><Setter Property="MinWidth" Value="50" /><Setter Property="Foreground" Value="#C25A65" /><Setter Property="Background" Value="#9FFFF8FA" /><Setter Property="BorderBrush" Value="#B6F0C4CA" /></Style>
         <Style x:Key="NetworkTab" TargetType="Button" BasedOn="{StaticResource NetworkButton}"><Setter Property="Height" Value="42" /><Setter Property="Padding" Value="12,0" /><Setter Property="FontWeight" Value="SemiBold" /></Style>
         <Style x:Key="NetworkTextBox" TargetType="TextBox">
@@ -148,9 +151,9 @@
                     <Grid><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                         <Grid>
                             <StackPanel Orientation="Horizontal">
-                                <Button x:Name="DiagnosticRecordsSectionButton" Style="{StaticResource NetworkChipButton}" Tag="Records" Click="DiagnosticSection_Click" Content="诊断记录" />
-                                <Button x:Name="RouteFirewallSectionButton" Margin="8,0,0,0" Style="{StaticResource NetworkChipButton}" Tag="Routes" Click="DiagnosticSection_Click" Content="路由与防火墙" />
-                                <Button x:Name="RepairSectionButton" Margin="8,0,0,0" Style="{StaticResource NetworkChipButton}" Tag="Repair" Click="DiagnosticSection_Click" Content="连接解释与修复" />
+                                <Button x:Name="DiagnosticRecordsSectionButton" Width="120" Style="{StaticResource NetworkDiagnosticSectionButton}" Tag="Records" Click="DiagnosticSection_Click" Content="诊断记录" />
+                                <Button x:Name="RouteFirewallSectionButton" Width="142" Margin="10,0,0,0" Style="{StaticResource NetworkDiagnosticSectionButton}" Tag="Routes" Click="DiagnosticSection_Click" Content="路由与防火墙" />
+                                <Button x:Name="RepairSectionButton" Width="168" Margin="10,0,0,0" Style="{StaticResource NetworkDiagnosticSectionButton}" Tag="Repair" Click="DiagnosticSection_Click" Content="连接解释与修复" />
                             </StackPanel>
                             <StackPanel x:Name="DiagnosticRecordActions" HorizontalAlignment="Right" Orientation="Horizontal"><Button Width="88" Style="{StaticResource NetworkButton}" Content="导出报告" Click="ExportDiagnostics_Click" /><Button x:Name="CancelDiagnosticButton" Width="88" Margin="8,0,0,0" Style="{StaticResource NetworkButton}" Content="取消任务" Click="CancelDiagnostic_Click" IsEnabled="False" /><Button Width="88" Margin="8,0,0,0" Style="{StaticResource NetworkButton}" Content="清空记录" Click="ClearDiagnostics_Click" /></StackPanel>
                             <StackPanel x:Name="DeepReadActions" HorizontalAlignment="Right" Orientation="Horizontal" Visibility="Collapsed"><TextBlock x:Name="DeepReadStatusText" Margin="0,0,12,0" VerticalAlignment="Center" FontSize="10" Foreground="#7890A6" Text="等待读取" /><Button Width="92" Style="{StaticResource NetworkButton}" Content="重新读取" Click="RefreshDeepNetwork_Click" /><Button Width="88" Margin="8,0,0,0" Style="{StaticResource NetworkButton}" Content="取消任务" Click="CancelDeepTask_Click" /></StackPanel>

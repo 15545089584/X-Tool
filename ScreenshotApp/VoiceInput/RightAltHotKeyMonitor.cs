@@ -2,6 +2,17 @@ using System.Runtime.InteropServices;
 
 namespace ScreenshotApp.VoiceInput;
 
+/// <summary>右 Alt 抬起时记录的原前台窗口，避免异步派发后错误采集 X-Tool 自己的窗口。</summary>
+internal sealed class VoiceHotKeyPressedEventArgs : EventArgs
+{
+    internal VoiceHotKeyPressedEventArgs(IntPtr foregroundWindow)
+    {
+        ForegroundWindow = foregroundWindow;
+    }
+
+    internal IntPtr ForegroundWindow { get; }
+}
+
 /// <summary>监听右 Alt 单键，并在触发热键时拦截原始按键消息以保留目标输入框焦点。</summary>
 internal sealed class RightAltHotKeyMonitor : IDisposable
 {
@@ -37,7 +48,7 @@ internal sealed class RightAltHotKeyMonitor : IDisposable
 
     internal bool IsInstalled => _hook != IntPtr.Zero;
 
-    internal event EventHandler? Pressed;
+    internal event EventHandler<VoiceHotKeyPressedEventArgs>? Pressed;
     internal event EventHandler? EscapePressed;
     internal event EventHandler? TranslationPressed;
 
@@ -103,7 +114,7 @@ internal sealed class RightAltHotKeyMonitor : IDisposable
                     if (shouldTrigger)
                     {
                         // 在抬键后才显示浮窗，前台窗口已稳定，避免浏览器的 Alt 菜单抢占焦点。
-                        Pressed?.Invoke(this, EventArgs.Empty);
+                        Pressed?.Invoke(this, new VoiceHotKeyPressedEventArgs(GetForegroundWindow()));
                     }
 
                     if (shouldSuppress)
@@ -162,6 +173,9 @@ internal sealed class RightAltHotKeyMonitor : IDisposable
 
     [DllImport("user32.dll")]
     private static extern IntPtr CallNextHookEx(IntPtr hookHandle, int code, IntPtr message, IntPtr data);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
 
     [DllImport("user32.dll")]
     private static extern short GetAsyncKeyState(int virtualKey);
