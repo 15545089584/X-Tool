@@ -30,6 +30,9 @@ public sealed class AppPreferences
 
     public bool VoiceInputPasteAutomatically { get; set; } = true;
 
+    /// <summary>优先使用随 Release 一起部署的 NVIDIA CUDA 后端；运行时缺失时保持 CPU 路径。</summary>
+    public bool VoiceInputPreferGpu { get; set; } = true;
+
     /// <summary>是否在当前 Windows 用户登录后自动启动 X-Tool。</summary>
     public bool StartWithWindows { get; set; }
 

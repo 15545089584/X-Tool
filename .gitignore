@@ -27,6 +27,8 @@ ScreenshotApp/Models/VoiceInput/default/model.int8.onnx
 ScreenshotApp/Models/VoiceInput/default/test_wavs/
 ScreenshotApp/Models/VoiceInput/default/export-onnx.py
 ScreenshotApp/Models/VoiceInput/sensevoice.tar.bz2
+# CUDA 与 cuDNN 原生运行时随 Release 分发但不纳入源码仓库（本机完整依赖约 1.4 GB）。
+ScreenshotApp/VoiceInput/Runtime/
 
 # 常见本地临时文件
 *.user

@@ -22,10 +22,18 @@ internal sealed class VoiceInputService : IDisposable
     private CancellationTokenSource? _partialRecognitionCancellation;
     private Task? _partialRecognitionTask;
 
+    private readonly bool _preferGpu;
+    private string _activeBackendDescription = "CPU";
+
     internal event EventHandler? AutoStopRequested;
     internal event Action<double>? SoundLevelChanged;
     internal event Action<string>? RecordingFaulted;
     internal event Action<string>? PartialResultAvailable;
+
+    internal VoiceInputService(bool preferGpu)
+    {
+        _preferGpu = preferGpu;
+    }
 
     internal bool IsRecording => _waveIn is not null;
 
@@ -50,6 +58,18 @@ internal sealed class VoiceInputService : IDisposable
     internal bool IsModelAvailable =>
         File.Exists(Path.Combine(ModelDirectory, "model.int8.onnx")) &&
         File.Exists(Path.Combine(ModelDirectory, "tokens.txt"));
+
+    /// <summary>CUDA 原生运行时由 Release 构建复制到 win-x64 目录；缺失时保持 CPU 路径。</summary>
+    internal bool IsCudaRuntimeAvailable =>
+        Environment.Is64BitProcess &&
+        File.Exists(Path.Combine(AppContext.BaseDirectory, "runtimes", "win-x64", "native", "xtool-voice-cuda-runtime.txt")) &&
+        File.Exists(Path.Combine(AppContext.BaseDirectory, "runtimes", "win-x64", "native", "onnxruntime_providers_cuda.dll"));
+
+    internal string PreferredBackendDescription => _preferGpu && IsCudaRuntimeAvailable
+        ? "CUDA（NVIDIA GPU）"
+        : "CPU";
+
+    internal string ActiveBackendDescription => _activeBackendDescription;
 
     internal void Start()
     {
@@ -286,9 +306,24 @@ internal sealed class VoiceInputService : IDisposable
         config.ModelConfig.SenseVoice.Model = Path.Combine(ModelDirectory, "model.int8.onnx");
         config.ModelConfig.SenseVoice.Language = "auto";
         config.ModelConfig.SenseVoice.UseInverseTextNormalization = 1;
+        // CUDA 运行时不存在时不请求 GPU，保证普通设备仍可稳定使用本地语音输入。
+        var useCuda = _preferGpu && IsCudaRuntimeAvailable;
+        config.ModelConfig.Provider = useCuda ? "cuda" : "cpu";
         config.ModelConfig.NumThreads = Math.Clamp(Environment.ProcessorCount / 2, 1, 4);
         config.ModelConfig.Debug = 0;
-        _recognizer = new OfflineRecognizer(config);
+        try
+        {
+            _recognizer = new OfflineRecognizer(config);
+            _activeBackendDescription = useCuda ? "CUDA（NVIDIA GPU）" : "CPU";
+        }
+        catch when (useCuda)
+        {
+            // 驱动或 CUDA 初始化异常时，当前会话自动降级，不阻断离线语音输入。
+            config.ModelConfig.Provider = "cpu";
+            _recognizer = new OfflineRecognizer(config);
+            _activeBackendDescription = "CPU（CUDA 初始化失败后回退）";
+        }
+
         return _recognizer;
     }
 
