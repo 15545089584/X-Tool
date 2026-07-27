@@ -275,8 +275,8 @@ public partial class NetworkWorkbenchView : UserControl
         SetPathStatus(PathDeviceStatusDot, PathDeviceStatusText, hasAdapter ? "#61C995" : "#EF7E83", hasAdapter ? $"↓ {FormatByteRate(download)}\n↑ {FormatByteRate(upload)}" : "本机未接入网络");
 
         PathGatewayDetailText.Text = snapshot.Gateway;
-        PathGatewayLinkText.Text = FormatLatency(snapshot.GatewayLatencyMs);
-        SetLatencyPathStatus(PathGatewayStatusDot, PathGatewayStatusText, snapshot.GatewayLatencyMs, 100, "网关可达", "网关延迟偏高", "网关未响应");
+        PathGatewayLinkText.Text = "本地路由";
+        SetLatencyPathStatus(PathGatewayStatusDot, PathGatewayStatusText, PathGatewayLatencyText, snapshot.GatewayLatencyMs, 100, "网关可达", "网关延迟偏高", "网关未响应");
 
         var proxyEnabled = snapshot.ProxyText.Contains("手动代理", StringComparison.Ordinal) || snapshot.ProxyText.Contains("PAC", StringComparison.Ordinal);
         PathProxyDetailText.Text = proxyEnabled ? GetProxyEndpointDisplay(snapshot.ProxyText) : "直连（未启用代理）";
@@ -284,49 +284,61 @@ public partial class NetworkWorkbenchView : UserControl
         {
             PathProxyLinkText.Text = "直连";
             SetPathStatus(PathProxyStatusDot, PathProxyStatusText, "#9AAEC0", "直接连接");
+            SetPathLatency(PathProxyLatencyText, -1, "#9AAEC0");
         }
         else if (snapshot.EffectiveHttpSucceeded)
         {
-            PathProxyLinkText.Text = $"代理探测 {FormatLatency(snapshot.EffectiveHttpLatencyMs)}";
-            SetPathStatus(PathProxyStatusDot, PathProxyStatusText, "#8A63D8", $"代理路径可达 · {snapshot.EffectiveHttpLatencyMs} ms");
+            PathProxyLinkText.Text = "代理转发";
+            SetPathStatus(PathProxyStatusDot, PathProxyStatusText, "#8A63D8", "代理路径可达");
+            SetPathLatency(PathProxyLatencyText, snapshot.EffectiveHttpLatencyMs, "#8A63D8");
         }
         else if (snapshot.DirectHttpSucceeded)
         {
             PathProxyLinkText.Text = "代理失败";
             SetPathStatus(PathProxyStatusDot, PathProxyStatusText, "#F0B15A", "代理不可达 · 直连可用");
+            SetPathLatency(PathProxyLatencyText, -1, "#F0B15A");
         }
         else
         {
             PathProxyLinkText.Text = "代理失败";
             SetPathStatus(PathProxyStatusDot, PathProxyStatusText, "#EF7E83", "代理路径不可达");
+            SetPathLatency(PathProxyLatencyText, -1, "#EF7E83");
         }
 
         PathInternetDetailText.Text = string.IsNullOrWhiteSpace(snapshot.DnsServers) ? "未读取 DNS" : snapshot.DnsServers.Replace(" · ", Environment.NewLine, StringComparison.Ordinal);
-        PathInternetLinkText.Text = $"DNS {FormatLatency(snapshot.DnsLatencyMs)}";
-        SetLatencyPathStatus(PathInternetStatusDot, PathInternetStatusText, snapshot.DnsLatencyMs, 250, "DNS 正常", "DNS 延迟偏高", "DNS 解析失败");
+        PathInternetLinkText.Text = "HTTP";
+        SetLatencyPathStatus(PathInternetStatusDot, PathInternetStatusText, PathInternetLatencyText, snapshot.DnsLatencyMs, 250, "DNS 正常", "DNS 延迟偏高", "DNS 解析失败");
 
         PathServiceDetailText.Text = snapshot.IsInternetAvailable
             ? $"HTTP：{BuildHttpPathSummary(snapshot)}"
             : "HTTP 连通性探测失败";
-        PathInternetLinkText.Text = $"HTTP {FormatLatency(snapshot.HttpLatencyMs)}";
-        SetLatencyPathStatus(PathServiceStatusDot, PathServiceStatusText, snapshot.HttpLatencyMs, 600, "服务可达", "服务响应偏慢", "目标服务不可达");
+        SetLatencyPathStatus(PathServiceStatusDot, PathServiceStatusText, PathServiceLatencyText, snapshot.HttpLatencyMs, 600, "服务可达", "服务响应偏慢", "目标服务不可达");
     }
 
-    private void SetLatencyPathStatus(Ellipse dot, TextBlock text, long latency, long warningThreshold, string successText, string warningText, string failedText)
+    private void SetLatencyPathStatus(Ellipse dot, TextBlock text, TextBlock latencyText, long latency, long warningThreshold, string successText, string warningText, string failedText)
     {
         if (latency < 0)
         {
             SetPathStatus(dot, text, "#EF7E83", failedText);
+            SetPathLatency(latencyText, -1, "#EF7E83");
             return;
         }
 
-        SetPathStatus(dot, text, latency >= warningThreshold ? "#F0B15A" : "#61C995", latency >= warningThreshold ? $"{warningText} · {latency} ms" : $"{successText} · {latency} ms");
+        var color = latency >= warningThreshold ? "#F0B15A" : "#61C995";
+        SetPathStatus(dot, text, color, latency >= warningThreshold ? warningText : successText);
+        SetPathLatency(latencyText, latency, color);
     }
 
     private static void SetPathStatus(Ellipse dot, TextBlock text, string color, string message)
     {
         dot.Fill = BrushFrom(color);
         text.Text = message;
+        text.Foreground = BrushFrom(color);
+    }
+
+    private static void SetPathLatency(TextBlock text, long latency, string color)
+    {
+        text.Text = latency >= 0 ? $"{latency} ms" : "—";
         text.Foreground = BrushFrom(color);
     }
 
@@ -346,7 +358,7 @@ public partial class NetworkWorkbenchView : UserControl
         var effective = snapshot.EffectiveHttpSucceeded
             ? $"{snapshot.EffectiveHttpRoute} {snapshot.EffectiveHttpLatencyMs} ms"
             : $"{snapshot.EffectiveHttpRoute}失败";
-        return $"{direct} · {effective}";
+        return $"{direct}{Environment.NewLine}{effective}";
     }
 
     private void ResetTrafficSession(string adapterId)
