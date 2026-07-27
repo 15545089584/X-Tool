@@ -45,7 +45,6 @@ public partial class NetworkWorkbenchView : UserControl
     private double _peakUploadRate;
     private double _downloadRateTotal;
     private double _uploadRateTotal;
-    private double _realtimeChartScale = 1024d;
     private int _trafficSampleCount;
     private int _connectionRefreshTicks;
     private readonly Dictionary<int, double> _processTrafficTotals = new();
@@ -276,7 +275,6 @@ public partial class NetworkWorkbenchView : UserControl
         _peakUploadRate = 0;
         _downloadRateTotal = 0;
         _uploadRateTotal = 0;
-        _realtimeChartScale = 1024d;
         _trafficSampleCount = 0;
     }
 
@@ -495,33 +493,103 @@ public partial class NetworkWorkbenchView : UserControl
         var width = TrafficCanvas.ActualWidth;
         var height = TrafficCanvas.ActualHeight;
         if (width <= 1 || height <= 1) return;
-        var downloadSource = _trafficRange == "Realtime" ? _downloadHistory.AsEnumerable() : _historicalDownload;
-        var uploadSource = _trafficRange == "Realtime" ? _uploadHistory.AsEnumerable() : _historicalUpload;
-        var currentPeak = Math.Max(1024d, downloadSource.Concat(uploadSource).Where(double.IsFinite).DefaultIfEmpty(0).Max());
-        var max = _trafficRange == "Realtime" ? GetRealtimeChartScale(currentPeak) : currentPeak;
-        TrafficAxisMaxText.Text = FormatByteRate(max);
-        TrafficAxisMidText.Text = FormatByteRate(max / 2d);
-        var downloadPoints = BuildPoints(downloadSource, width, height, max);
-        var uploadPoints = BuildPoints(uploadSource, width, height, max);
+        var downloadSource = (_trafficRange == "Realtime" ? _downloadHistory.AsEnumerable() : _historicalDownload).ToArray();
+        var uploadSource = (_trafficRange == "Realtime" ? _uploadHistory.AsEnumerable() : _historicalUpload).ToArray();
+        var values = downloadSource.Concat(uploadSource).Where(value => double.IsFinite(value) && value >= 0).ToArray();
+        var scale = _trafficRange == "Realtime"
+            ? CreateAdaptiveRealtimeScale(values)
+            : CreateLinearScale(values);
+        UpdateTrafficAxis(scale, height);
+        DrawTrafficGrid(width, height, scale);
+        var downloadPoints = BuildPoints(downloadSource, width, height, scale);
+        var uploadPoints = BuildPoints(uploadSource, width, height, scale);
         TrafficCanvas.Children.Clear();
         DrawTrafficSeries(downloadPoints, BrushFrom("#4D7CFE"), 2.8);
         DrawTrafficSeries(uploadPoints, BrushFrom("#A55FEF"), 2.5);
         TrafficCanvas.InvalidateVisual();
     }
 
-    private double GetRealtimeChartScale(double currentPeak)
+    private static TrafficChartScale CreateLinearScale(IEnumerable<double> values)
     {
-        // 峰值进入窗口时立即扩展；峰值离开窗口后缓慢收缩，避免整条曲线因重标尺突然跳变。
-        if (currentPeak >= _realtimeChartScale)
+        var peak = Math.Max(1024d, values.DefaultIfEmpty(0).Max());
+        return new TrafficChartScale(peak, peak, false);
+    }
+
+    private static TrafficChartScale CreateAdaptiveRealtimeScale(IReadOnlyCollection<double> values)
+    {
+        var linearScale = CreateLinearScale(values);
+        // 样本尚少时维持线性刻度，避免刚启动就因单个点频繁改变读图方式。
+        if (values.Count < 12)
         {
-            _realtimeChartScale = currentPeak;
-        }
-        else
-        {
-            _realtimeChartScale = Math.Max(currentPeak, Math.Max(1024d, _realtimeChartScale * 0.985d));
+            return linearScale;
         }
 
-        return _realtimeChartScale;
+        var ordered = values.OrderBy(value => value).ToArray();
+        var percentile90 = ordered[Math.Clamp((int)Math.Ceiling(ordered.Length * 0.90d) - 1, 0, ordered.Length - 1)];
+        var normalCeiling = RoundTrafficScale(Math.Max(1024d, percentile90 * 1.25d));
+        // 仅在尖峰至少是常态上限的两倍时启用分段轴；平稳流量仍保持熟悉的线性图。
+        return linearScale.Peak > normalCeiling * 2d
+            ? new TrafficChartScale(normalCeiling, linearScale.Peak, true)
+            : linearScale;
+    }
+
+    private static double RoundTrafficScale(double value)
+    {
+        var exponent = Math.Pow(10d, Math.Floor(Math.Log10(Math.Max(1d, value))));
+        var normalized = value / exponent;
+        var rounded = normalized <= 1d ? 1d : normalized <= 2d ? 2d : normalized <= 2.5d ? 2.5d : normalized <= 5d ? 5d : 10d;
+        return rounded * exponent;
+    }
+
+    private void UpdateTrafficAxis(TrafficChartScale scale, double height)
+    {
+        TrafficAxisMaxText.Text = FormatByteRate(scale.Peak);
+        TrafficAxisMidText.Text = FormatByteRate(scale.LinearCeiling / 2d);
+        TrafficAxisMinText.Text = "0 B/s";
+        TrafficAxisAdaptiveText.Visibility = scale.IsAdaptive ? Visibility.Visible : Visibility.Collapsed;
+        TrafficAxisAdaptiveText.Text = $"常态 {FormatByteRate(scale.LinearCeiling)}";
+
+        SetAxisLabelPosition(TrafficAxisMaxText, 0d);
+        if (scale.IsAdaptive)
+        {
+            SetAxisLabelPosition(TrafficAxisAdaptiveText, height * (1d - TrafficChartScale.LinearHeightRatio));
+            SetAxisLabelPosition(TrafficAxisMidText, height * (1d - TrafficChartScale.LinearHeightRatio / 2d));
+        }
+        else SetAxisLabelPosition(TrafficAxisMidText, height / 2d);
+        SetAxisLabelPosition(TrafficAxisMinText, height - 12d);
+    }
+
+    private static void SetAxisLabelPosition(FrameworkElement label, double top)
+    {
+        Canvas.SetTop(label, Math.Max(0d, top - 5d));
+    }
+
+    private void DrawTrafficGrid(double width, double height, TrafficChartScale scale)
+    {
+        TrafficGridCanvas.Children.Clear();
+        DrawTrafficGridLine(width, 0d);
+        if (scale.IsAdaptive)
+        {
+            DrawTrafficGridLine(width, height * (1d - TrafficChartScale.LinearHeightRatio), true);
+            DrawTrafficGridLine(width, height * (1d - TrafficChartScale.LinearHeightRatio / 2d));
+        }
+        else DrawTrafficGridLine(width, height / 2d);
+        DrawTrafficGridLine(width, height - 1d);
+    }
+
+    private void DrawTrafficGridLine(double width, double y, bool emphasize = false)
+    {
+        TrafficGridCanvas.Children.Add(new Line
+        {
+            X1 = 0,
+            Y1 = y,
+            X2 = width,
+            Y2 = y,
+            Stroke = BrushFrom(emphasize ? "#78A9C9E6" : "#42A9C9E6"),
+            StrokeThickness = emphasize ? 1.2d : 1d,
+            StrokeDashArray = emphasize ? new DoubleCollection { 3d, 2d } : null,
+            SnapsToDevicePixels = true
+        });
     }
 
     private void DrawTrafficSeries(PointCollection points, Brush stroke, double thickness)
@@ -543,14 +611,14 @@ public partial class NetworkWorkbenchView : UserControl
         }
     }
 
-    private static PointCollection BuildPoints(IEnumerable<double> source, double width, double height, double max)
+    private static PointCollection BuildPoints(IEnumerable<double> source, double width, double height, TrafficChartScale scale)
     {
         var values = source.ToArray();
         var points = new PointCollection();
         if (values.Length == 0) return points;
         if (values.Length == 1)
         {
-            var y = height - Math.Min(height, values[0] / max * (height - 5)) - 2;
+            var y = MapTrafficValueToY(values[0], height, scale);
             points.Add(new Point(0, y));
             points.Add(new Point(width, y));
             return points;
@@ -558,10 +626,34 @@ public partial class NetworkWorkbenchView : UserControl
         for (var index = 0; index < values.Length; index++)
         {
             var x = index * width / (values.Length - 1);
-            var y = height - Math.Min(height, values[index] / max * (height - 5)) - 2;
+            var y = MapTrafficValueToY(values[index], height, scale);
             points.Add(new Point(x, y));
         }
         return points;
+    }
+
+    private static double MapTrafficValueToY(double value, double height, TrafficChartScale scale)
+    {
+        value = Math.Max(0d, value);
+        var drawableHeight = Math.Max(1d, height - 5d);
+        double normalized;
+        if (!scale.IsAdaptive || value <= scale.LinearCeiling)
+        {
+            normalized = Math.Min(1d, value / scale.LinearCeiling) * (scale.IsAdaptive ? TrafficChartScale.LinearHeightRatio : 1d);
+        }
+        else
+        {
+            var peakRatio = Math.Max(1d, scale.Peak / scale.LinearCeiling);
+            var compressed = Math.Log(Math.Max(1d, value / scale.LinearCeiling)) / Math.Log(peakRatio);
+            normalized = TrafficChartScale.LinearHeightRatio + Math.Clamp(compressed, 0d, 1d) * (1d - TrafficChartScale.LinearHeightRatio);
+        }
+
+        return height - Math.Min(height, normalized * drawableHeight) - 2d;
+    }
+
+    private sealed record TrafficChartScale(double LinearCeiling, double Peak, bool IsAdaptive)
+    {
+        internal const double LinearHeightRatio = 0.76d;
     }
 
     private async Task RefreshAdaptersAsync()
