@@ -45,6 +45,7 @@ public partial class NetworkWorkbenchView : UserControl
     private double _peakUploadRate;
     private double _downloadRateTotal;
     private double _uploadRateTotal;
+    private double _realtimeChartScale = 1024d;
     private int _trafficSampleCount;
     private int _connectionRefreshTicks;
     private readonly Dictionary<int, double> _processTrafficTotals = new();
@@ -275,6 +276,7 @@ public partial class NetworkWorkbenchView : UserControl
         _peakUploadRate = 0;
         _downloadRateTotal = 0;
         _uploadRateTotal = 0;
+        _realtimeChartScale = 1024d;
         _trafficSampleCount = 0;
     }
 
@@ -495,7 +497,8 @@ public partial class NetworkWorkbenchView : UserControl
         if (width <= 1 || height <= 1) return;
         var downloadSource = _trafficRange == "Realtime" ? _downloadHistory.AsEnumerable() : _historicalDownload;
         var uploadSource = _trafficRange == "Realtime" ? _uploadHistory.AsEnumerable() : _historicalUpload;
-        var max = Math.Max(1024d, downloadSource.Concat(uploadSource).Where(double.IsFinite).DefaultIfEmpty(0).Max());
+        var currentPeak = Math.Max(1024d, downloadSource.Concat(uploadSource).Where(double.IsFinite).DefaultIfEmpty(0).Max());
+        var max = _trafficRange == "Realtime" ? GetRealtimeChartScale(currentPeak) : currentPeak;
         TrafficAxisMaxText.Text = FormatByteRate(max);
         TrafficAxisMidText.Text = FormatByteRate(max / 2d);
         var downloadPoints = BuildPoints(downloadSource, width, height, max);
@@ -504,6 +507,21 @@ public partial class NetworkWorkbenchView : UserControl
         DrawTrafficSeries(downloadPoints, BrushFrom("#4D7CFE"), 2.8);
         DrawTrafficSeries(uploadPoints, BrushFrom("#A55FEF"), 2.5);
         TrafficCanvas.InvalidateVisual();
+    }
+
+    private double GetRealtimeChartScale(double currentPeak)
+    {
+        // 峰值进入窗口时立即扩展；峰值离开窗口后缓慢收缩，避免整条曲线因重标尺突然跳变。
+        if (currentPeak >= _realtimeChartScale)
+        {
+            _realtimeChartScale = currentPeak;
+        }
+        else
+        {
+            _realtimeChartScale = Math.Max(currentPeak, Math.Max(1024d, _realtimeChartScale * 0.985d));
+        }
+
+        return _realtimeChartScale;
     }
 
     private void DrawTrafficSeries(PointCollection points, Brush stroke, double thickness)
