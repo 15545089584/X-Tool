@@ -19,7 +19,8 @@ public partial class NetworkWorkbenchView : UserControl
     private readonly ObservableCollection<NetworkConnectionRow> _connections = new();
     private readonly ObservableCollection<NetworkProfile> _profiles = new();
     private readonly ObservableCollection<NetworkTimelineEvent> _timelineEvents = new();
-    private readonly ObservableCollection<LanDeviceEntry> _lanDevices = new();
+    private readonly ObservableCollection<WifiNetworkEntry> _wifiNetworks = new();
+    private readonly ObservableCollection<WifiPropertyRow> _wifiProperties = new();
     private readonly Queue<double> _downloadHistory = new();
     private readonly Queue<double> _uploadHistory = new();
     private readonly List<double> _historicalDownload = new();
@@ -67,7 +68,8 @@ public partial class NetworkWorkbenchView : UserControl
         ConnectionsListBox.ItemsSource = _connections;
         ProfilesListBox.ItemsSource = _profiles;
         NetworkEventsListBox.ItemsSource = _timelineEvents;
-        LanDevicesListBox.ItemsSource = _lanDevices;
+        WifiNetworksListBox.ItemsSource = _wifiNetworks;
+        WifiPropertiesListBox.ItemsSource = _wifiProperties;
         _monitorCoordinator.SampleAvailable += MonitorCoordinator_SampleAvailable;
         _monitorCoordinator.TimelineEventAvailable += MonitorCoordinator_TimelineEventAvailable;
         _monitorCoordinator.MonitorFailed += MonitorCoordinator_MonitorFailed;
@@ -859,11 +861,7 @@ public partial class NetworkWorkbenchView : UserControl
             RoutesTextBox.Text = snapshot.Routes;
             FirewallTextBox.Text = snapshot.FirewallProfiles;
             ExplanationTextBox.Text = snapshot.Explanation;
-            WifiInterfaceTextBox.Text = snapshot.WifiInterface;
-            NearbyWifiTextBox.Text = snapshot.NearbyWifi;
-            var primaryAddress = (await Task.Run(NetworkWorkbenchService.GetAdapters))
-                .FirstOrDefault(item => item.IsPrimary)?.IPv4Address ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(LanAddressTextBox.Text)) LanAddressTextBox.Text = primaryAddress;
+            UpdateWifiEnvironment(snapshot.WifiEnvironment);
             _lastDeepNetworkRefreshAt = DateTime.UtcNow;
             DeepReadStatusText.Text = $"更新于 {DateTime.Now:HH:mm:ss}";
             WifiRefreshStatusText.Text = $"更新于 {DateTime.Now:HH:mm:ss}";
@@ -887,33 +885,16 @@ public partial class NetworkWorkbenchView : UserControl
     private async void RefreshDeepNetwork_Click(object sender, RoutedEventArgs e) => await RefreshDeepNetworkAsync(force: true);
     private async void RefreshWifi_Click(object sender, RoutedEventArgs e) => await RefreshDeepNetworkAsync(force: true);
 
-    private void CancelDeepTask_Click(object sender, RoutedEventArgs e)
-    {
-        _deepNetworkCancellation?.Cancel();
-        if (_activeTab == "Wifi") LanStatusText.Text = "任务已取消";
-    }
+    private void CancelDeepTask_Click(object sender, RoutedEventArgs e) => _deepNetworkCancellation?.Cancel();
 
-    private async void ScanLan_Click(object sender, RoutedEventArgs e)
+    private void UpdateWifiEnvironment(WifiEnvironmentSnapshot environment)
     {
-        _deepNetworkCancellation?.Cancel();
-        _deepNetworkCancellation?.Dispose();
-        _deepNetworkCancellation = new CancellationTokenSource();
-        _lanDevices.Clear();
-        LanStatusText.Text = "正在扫描当前私有 /24（最多 254 个地址）…";
-        try
-        {
-            var devices = await NetworkDeepToolsService.ScanPrivateLanAsync(LanAddressTextBox.Text.Trim(), _deepNetworkCancellation.Token);
-            foreach (var device in devices) _lanDevices.Add(device);
-            LanStatusText.Text = $"发现 {devices.Count} 台响应设备";
-        }
-        catch (OperationCanceledException)
-        {
-            LanStatusText.Text = "扫描已取消";
-        }
-        catch (Exception exception)
-        {
-            LanStatusText.Text = exception.Message;
-        }
+        _wifiNetworks.Clear();
+        foreach (var network in environment.Networks) _wifiNetworks.Add(network);
+        _wifiProperties.Clear();
+        foreach (var property in environment.Properties) _wifiProperties.Add(property);
+        WifiNetworksEmptyText.Visibility = _wifiNetworks.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        WifiPropertiesEmptyText.Visibility = _wifiProperties.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private async void NetworkRepair_Click(object sender, RoutedEventArgs e)
