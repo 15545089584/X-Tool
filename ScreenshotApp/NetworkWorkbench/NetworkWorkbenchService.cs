@@ -115,6 +115,11 @@ public static class NetworkWorkbenchService
             probe.GatewayLatencyMs,
             probe.DnsLatencyMs,
             probe.HttpLatencyMs,
+            probe.DirectHttpSucceeded,
+            probe.DirectHttpLatencyMs,
+            probe.EffectiveHttpSucceeded,
+            probe.EffectiveHttpLatencyMs,
+            probe.EffectiveHttpRoute,
             adapters.Count(item => item.IsUp && !item.IsVirtual),
             DateTime.Now);
     }
@@ -564,8 +569,13 @@ public static class NetworkWorkbenchService
                 http.Succeeded,
                 gateway.ElapsedMilliseconds,
                 dns.ElapsedMilliseconds,
-                http.ElapsedMilliseconds,
+                http.LatencyMilliseconds,
                 http.Route,
+                http.Direct.Succeeded,
+                http.Direct.ElapsedMilliseconds,
+                http.Effective.Succeeded,
+                http.Effective.ElapsedMilliseconds,
+                http.Effective.Route,
                 DateTime.Now);
             if (probeGeneration == Volatile.Read(ref _connectivityProbeGeneration))
             {
@@ -605,24 +615,13 @@ public static class NetworkWorkbenchService
         catch { return new(false, watch.ElapsedMilliseconds); }
     }
 
-    private static async Task<HttpProbeResult> ProbeHttpAsync(ProxySettingsSnapshot proxy, CancellationToken cancellationToken)
+    private static async Task<HttpProbeComparisonResult> ProbeHttpAsync(ProxySettingsSnapshot proxy, CancellationToken cancellationToken)
     {
-        using var probeCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var directTask = ProbeHttpClientAsync(DirectConnectivityClient, "直连", probeCancellation.Token);
-        var effectiveTask = ProbeEffectiveHttpAsync(proxy, probeCancellation.Token);
-        var firstTask = await Task.WhenAny(directTask, effectiveTask);
-        var first = await firstTask;
-        var secondTask = ReferenceEquals(firstTask, directTask) ? effectiveTask : directTask;
-        if (first.Succeeded)
-        {
-            probeCancellation.Cancel();
-            try { await secondTask; } catch { }
-            return first;
-        }
-
-        var second = await secondTask;
-        probeCancellation.Cancel();
-        return second.Succeeded ? second : first;
+        // 保留直连与系统路径的完整结果，不能以先返回的一项推断当前有效路径。
+        var directTask = ProbeHttpClientAsync(DirectConnectivityClient, "直连", cancellationToken);
+        var effectiveTask = ProbeEffectiveHttpAsync(proxy, cancellationToken);
+        await Task.WhenAll(directTask, effectiveTask);
+        return new HttpProbeComparisonResult(await directTask, await effectiveTask);
     }
 
     private static async Task<HttpProbeResult> ProbeEffectiveHttpAsync(
@@ -720,19 +719,34 @@ public static class NetworkWorkbenchService
     }
 
     private sealed record ConnectivityProbeSnapshot(string AdapterId, bool GatewaySucceeded, bool DnsSucceeded, bool HttpSucceeded,
-        long GatewayLatencyMs, long DnsLatencyMs, long HttpLatencyMs, string HttpRoute, DateTime CapturedAt)
+        long GatewayLatencyMs, long DnsLatencyMs, long HttpLatencyMs, string HttpRoute,
+        bool DirectHttpSucceeded, long DirectHttpLatencyMs, bool EffectiveHttpSucceeded, long EffectiveHttpLatencyMs,
+        string EffectiveHttpRoute, DateTime CapturedAt)
     {
-        public static ConnectivityProbeSnapshot Empty { get; } = new(string.Empty, false, false, false, -1, -1, -1, string.Empty, DateTime.MinValue);
+        public static ConnectivityProbeSnapshot Empty { get; } = new(string.Empty, false, false, false, -1, -1, -1, string.Empty, false, -1, false, -1, string.Empty, DateTime.MinValue);
         public string Summary => string.IsNullOrWhiteSpace(AdapterId)
             ? "未执行联网探测"
-            : $"网关 {(GatewaySucceeded ? $"可达 {GatewayLatencyMs} ms" : "未响应")} · DNS {(DnsSucceeded ? $"正常 {DnsLatencyMs} ms" : "失败")} · HTTP {(HttpSucceeded ? $"正常 {HttpLatencyMs} ms（{HttpRoute}）" : "失败")}";
+            : $"网关 {(GatewaySucceeded ? $"可达 {GatewayLatencyMs} ms" : "未响应")} · DNS {(DnsSucceeded ? $"正常 {DnsLatencyMs} ms" : "失败")} · HTTP {BuildHttpSummary()}";
+
+        private string BuildHttpSummary()
+        {
+            var direct = DirectHttpSucceeded ? $"直连 {DirectHttpLatencyMs} ms" : "直连失败";
+            var effective = EffectiveHttpSucceeded ? $"{EffectiveHttpRoute} {EffectiveHttpLatencyMs} ms" : $"{EffectiveHttpRoute}失败";
+            return HttpSucceeded ? $"正常（{direct} · {effective}）" : $"失败（{direct} · {effective}）";
+        }
     }
 
     private readonly record struct ProbeResult(bool Succeeded, long ElapsedMilliseconds);
     private readonly record struct HttpProbeResult(bool Succeeded, long ElapsedMilliseconds, string Route);
+    private readonly record struct HttpProbeComparisonResult(HttpProbeResult Direct, HttpProbeResult Effective)
+    {
+        public bool Succeeded => Direct.Succeeded || Effective.Succeeded;
+        public long LatencyMilliseconds => Effective.Succeeded ? Effective.ElapsedMilliseconds : Direct.ElapsedMilliseconds;
+        public string Route => Effective.Succeeded ? Effective.Route : Direct.Route;
+    }
 }
 
-public sealed record NetworkOverviewSnapshot(string ConnectivityText, bool IsInternetAvailable, bool HasPhysicalConnection, string ActiveAdapterId, string ActiveAdapterName, string ActiveAdapterDescription, string ActiveAdapterType, string IPv4Address, string IPv6Address, string Gateway, string DnsServers, string DhcpText, long LinkSpeedBitsPerSecond, long BytesReceived, long BytesSent, string WifiSsid, string WifiSignal, string WifiChannel, string WifiReceiveRate, string WifiTransmitRate, string WifiBssid, string WifiRadioType, string WifiAuthentication, string WifiChannelWidth, string ProxyText, string ConnectionDetail, string ConnectivityProbeText, DateTime ConnectivityProbeCapturedAt, long GatewayLatencyMs, long DnsLatencyMs, long HttpLatencyMs, int ActivePhysicalAdapterCount, DateTime CapturedAt);
+public sealed record NetworkOverviewSnapshot(string ConnectivityText, bool IsInternetAvailable, bool HasPhysicalConnection, string ActiveAdapterId, string ActiveAdapterName, string ActiveAdapterDescription, string ActiveAdapterType, string IPv4Address, string IPv6Address, string Gateway, string DnsServers, string DhcpText, long LinkSpeedBitsPerSecond, long BytesReceived, long BytesSent, string WifiSsid, string WifiSignal, string WifiChannel, string WifiReceiveRate, string WifiTransmitRate, string WifiBssid, string WifiRadioType, string WifiAuthentication, string WifiChannelWidth, string ProxyText, string ConnectionDetail, string ConnectivityProbeText, DateTime ConnectivityProbeCapturedAt, long GatewayLatencyMs, long DnsLatencyMs, long HttpLatencyMs, bool DirectHttpSucceeded, long DirectHttpLatencyMs, bool EffectiveHttpSucceeded, long EffectiveHttpLatencyMs, string EffectiveHttpRoute, int ActivePhysicalAdapterCount, DateTime CapturedAt);
 
 public sealed record NetworkAdapterEntry(string Id, string Name, string Description, string InterfaceType, bool IsUp, bool IsPrimary, string IPv4Address, int IPv4PrefixLength, string IPv6Address, string Gateway, string DnsServers, string DhcpText, long LinkSpeedBitsPerSecond, long BytesReceived, long BytesSent, string MacAddress, int Mtu, bool IsVirtual, int InterfaceIndex, int InterfaceMetric)
 {
