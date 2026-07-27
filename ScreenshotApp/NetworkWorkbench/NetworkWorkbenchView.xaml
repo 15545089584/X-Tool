@@ -79,8 +79,8 @@
 
         <Grid Grid.Row="4">
             <ScrollViewer x:Name="OverviewScrollViewer" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
-            <Grid x:Name="OverviewPanel" MinHeight="822">
-                <Grid.RowDefinitions><RowDefinition Height="244" /><RowDefinition Height="16" /><RowDefinition Height="108" /><RowDefinition Height="14" /><RowDefinition Height="420" /></Grid.RowDefinitions>
+            <Grid x:Name="OverviewPanel" MinHeight="762">
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="16" /><RowDefinition Height="108" /><RowDefinition Height="14" /><RowDefinition Height="420" /></Grid.RowDefinitions>
                 <Border Padding="20" Style="{StaticResource NetworkCard}">
                     <Grid><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                         <Grid><StackPanel><TextBlock FontSize="19" FontWeight="SemiBold" Text="连接路径" /><TextBlock Margin="0,5,0,0" FontSize="12" Foreground="#7890A6" Text="根据本机网卡、网关、DNS 与 HTTP 连通性探测实时更新" /></StackPanel><Border HorizontalAlignment="Right" VerticalAlignment="Center" Padding="11,6" Background="#58EAF4FF" BorderBrush="#8CCDE5F5" BorderThickness="1" CornerRadius="10"><StackPanel Orientation="Horizontal"><Ellipse Width="9" Height="9" Fill="#61C995" /><TextBlock Margin="6,0,0,0" FontSize="11" Foreground="#52718E" Text="路径状态依据实时探测" /></StackPanel></Border></Grid>
