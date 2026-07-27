@@ -897,7 +897,8 @@ public partial class NetworkWorkbenchView : UserControl
         _wifiNetworks.Clear();
         foreach (var network in environment.Networks) _wifiNetworks.Add(network);
         WifiNetworksListBox.SelectedItem = _wifiNetworks.FirstOrDefault(network => network.IsConnected);
-        ShowWifiProperties(_currentWifiProperties, isConnected: true);
+        ShowWifiProperties(_currentWifiProperties, isConnected: true,
+            _wifiNetworks.FirstOrDefault(network => network.IsConnected)?.Ssid ?? environment.Properties.FirstOrDefault(item => item.Label == "SSID")?.Value ?? "—");
         _updatingWifiEnvironment = false;
         WifiNetworksEmptyText.Visibility = _wifiNetworks.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
@@ -905,15 +906,16 @@ public partial class NetworkWorkbenchView : UserControl
     private void WifiNetworksListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_updatingWifiEnvironment || WifiNetworksListBox.SelectedItem is not WifiNetworkEntry network) return;
-        ShowWifiProperties(network.IsConnected ? _currentWifiProperties : BuildAvailableWifiProperties(network), network.IsConnected);
+        ShowWifiProperties(network.IsConnected ? _currentWifiProperties : BuildAvailableWifiProperties(network), network.IsConnected, network.Ssid);
     }
 
-    private void ShowWifiProperties(IEnumerable<WifiPropertyRow> properties, bool isConnected)
+    private void ShowWifiProperties(IEnumerable<WifiPropertyRow> properties, bool isConnected, string ssid)
     {
         _wifiProperties.Clear();
         foreach (var property in properties) _wifiProperties.Add(property);
         WifiPropertiesEmptyText.Visibility = _wifiProperties.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        WifiPropertiesTitleText.Text = isConnected ? "当前 Wi-Fi 属性" : "所选 Wi-Fi 属性";
+        var titlePrefix = isConnected ? "当前" : "所选";
+        WifiPropertiesTitleText.Text = $"{titlePrefix} Wi-Fi 属性 · {ssid}";
         WifiPropertiesHintText.Text = isConnected
             ? "基于当前接入的 Windows WLAN 接口与网络适配器实时读取。"
             : "未连接网络仅显示其广播可读取的信息。";
