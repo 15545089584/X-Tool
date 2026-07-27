@@ -272,7 +272,7 @@ public partial class NetworkWorkbenchView : UserControl
         var hasAdapter = snapshot.HasPhysicalConnection && !string.IsNullOrWhiteSpace(snapshot.ActiveAdapterName);
         PathDeviceDetailText.Text = hasAdapter ? snapshot.ActiveAdapterName : "未检测到物理网卡";
         PathLocalLinkText.Text = FormatBitRate(snapshot.LinkSpeedBitsPerSecond);
-        SetPathStatus(PathDeviceStatusDot, PathDeviceStatusText, hasAdapter ? "#61C995" : "#EF7E83", hasAdapter ? $"↓{FormatByteRate(download)} ↑{FormatByteRate(upload)}" : "本机未接入网络");
+        SetPathStatus(PathDeviceStatusDot, PathDeviceStatusText, hasAdapter ? "#61C995" : "#EF7E83", hasAdapter ? $"↓ {FormatByteRate(download)}\n↑ {FormatByteRate(upload)}" : "本机未接入网络");
 
         PathGatewayDetailText.Text = snapshot.Gateway;
         PathGatewayLinkText.Text = FormatLatency(snapshot.GatewayLatencyMs);
@@ -280,7 +280,7 @@ public partial class NetworkWorkbenchView : UserControl
 
         var proxyEnabled = snapshot.ProxyText.Contains("手动代理", StringComparison.Ordinal) || snapshot.ProxyText.Contains("PAC", StringComparison.Ordinal);
         var probeUsesProxy = snapshot.ConnectivityProbeText.Contains("代理", StringComparison.Ordinal);
-        PathProxyDetailText.Text = proxyEnabled ? snapshot.ProxyText : "直连（未启用代理）";
+        PathProxyDetailText.Text = proxyEnabled ? GetProxyEndpointDisplay(snapshot.ProxyText) : "直连（未启用代理）";
         if (!proxyEnabled)
         {
             PathProxyLinkText.Text = "直连";
@@ -302,7 +302,7 @@ public partial class NetworkWorkbenchView : UserControl
             SetPathStatus(PathProxyStatusDot, PathProxyStatusText, "#F0B15A", "代理未作为有效路径");
         }
 
-        PathInternetDetailText.Text = string.IsNullOrWhiteSpace(snapshot.DnsServers) ? "未读取 DNS" : snapshot.DnsServers;
+        PathInternetDetailText.Text = string.IsNullOrWhiteSpace(snapshot.DnsServers) ? "未读取 DNS" : snapshot.DnsServers.Replace(" · ", Environment.NewLine, StringComparison.Ordinal);
         PathInternetLinkText.Text = $"DNS {FormatLatency(snapshot.DnsLatencyMs)}";
         SetLatencyPathStatus(PathInternetStatusDot, PathInternetStatusText, snapshot.DnsLatencyMs, 250, "DNS 正常", "DNS 延迟偏高", "DNS 解析失败");
 
@@ -330,6 +330,12 @@ public partial class NetworkWorkbenchView : UserControl
     }
 
     private static string FormatLatency(long latency) => latency >= 0 ? $"{latency} ms" : "失败";
+
+    private static string GetProxyEndpointDisplay(string proxyText)
+    {
+        var separator = proxyText.IndexOf('·');
+        return separator >= 0 && separator < proxyText.Length - 1 ? proxyText[(separator + 1)..].Trim() : proxyText;
+    }
 
     private void ResetTrafficSession(string adapterId)
     {
