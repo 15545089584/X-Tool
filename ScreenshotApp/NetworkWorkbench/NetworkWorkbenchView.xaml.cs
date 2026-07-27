@@ -272,7 +272,16 @@ public partial class NetworkWorkbenchView : UserControl
         var hasAdapter = snapshot.HasPhysicalConnection && !string.IsNullOrWhiteSpace(snapshot.ActiveAdapterName);
         PathDeviceDetailText.Text = hasAdapter ? snapshot.ActiveAdapterName : "未检测到物理网卡";
         PathLocalLinkText.Text = FormatBitRate(snapshot.LinkSpeedBitsPerSecond);
-        SetPathStatus(PathDeviceStatusDot, PathDeviceStatusText, hasAdapter ? "#61C995" : "#EF7E83", hasAdapter ? $"↓ {FormatByteRate(download)}\n↑ {FormatByteRate(upload)}" : "本机未接入网络");
+        if (hasAdapter)
+        {
+            SetDeviceRateRow(PathDeviceDownloadLabelText, PathDeviceDownloadRateText, "↓ 下行", FormatByteRate(download), "#61C995");
+            SetDeviceRateRow(PathDeviceUploadLabelText, PathDeviceUploadRateText, "↑ 上行", FormatByteRate(upload), "#61C995");
+        }
+        else
+        {
+            SetDeviceRateRow(PathDeviceDownloadLabelText, PathDeviceDownloadRateText, "状态", "未接入网络", "#EF7E83");
+            SetDeviceRateRow(PathDeviceUploadLabelText, PathDeviceUploadRateText, string.Empty, string.Empty, "#EF7E83");
+        }
 
         PathGatewayDetailText.Text = snapshot.Gateway;
         PathGatewayLinkText.Text = "本地路由";
@@ -340,6 +349,14 @@ public partial class NetworkWorkbenchView : UserControl
     {
         text.Text = latency >= 0 ? $"{latency} ms" : "—";
         text.Foreground = BrushFrom(color);
+    }
+
+    private static void SetDeviceRateRow(TextBlock label, TextBlock value, string labelText, string valueText, string color)
+    {
+        label.Text = labelText;
+        value.Text = valueText;
+        label.Foreground = BrushFrom(color);
+        value.Foreground = BrushFrom(color);
     }
 
     private static string FormatLatency(long latency) => latency >= 0 ? $"{latency} ms" : "失败";
