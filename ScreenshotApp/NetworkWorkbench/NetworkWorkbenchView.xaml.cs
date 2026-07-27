@@ -81,7 +81,8 @@ public partial class NetworkWorkbenchView : UserControl
     private void NetworkWorkbenchView_Loaded(object sender, RoutedEventArgs e)
     {
         _monitorCoordinator.AutoRefreshEnabled = AutoRefreshCheckBox.IsChecked == true;
-        if (IsVisible) _monitorCoordinator.Start();
+        // 网络监测属于应用级后台任务，页面初始隐藏或切换到其他工作台时也必须持续采样。
+        _monitorCoordinator.Start();
     }
 
     private async void NetworkWorkbenchView_Unloaded(object sender, RoutedEventArgs e)
@@ -93,11 +94,8 @@ public partial class NetworkWorkbenchView : UserControl
 
     private async void NetworkWorkbenchView_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
-        if (!IsVisible)
-        {
-            await _monitorCoordinator.StopAsync();
-            return;
-        }
+        // 切页仅隐藏界面，不能终止后台采集、历史落盘与网络事件记录。
+        if (!IsVisible) return;
 
         _monitorCoordinator.AutoRefreshEnabled = AutoRefreshCheckBox.IsChecked == true;
         _monitorCoordinator.Start();
@@ -111,6 +109,8 @@ public partial class NetworkWorkbenchView : UserControl
         {
             await RefreshOverviewAsync(force: true);
         }
+
+        if (_activeTab == "Overview") UpdateTrafficChart();
     }
 
     private async void TabButton_Click(object sender, RoutedEventArgs e)
@@ -160,8 +160,9 @@ public partial class NetworkWorkbenchView : UserControl
     {
         Dispatcher.BeginInvoke(async () =>
         {
-            if (!IsVisible) return;
+            // 即使页面隐藏也要累积实时曲线和最新状态；返回页面即可直接显示连续数据。
             ApplyOverviewSample(sample);
+            if (!IsVisible) return;
             if (_activeTab == "Connections" && ++_connectionRefreshTicks % 3 == 0) await RefreshConnectionsAsync();
             if (_trafficRange != "Realtime" && ++_historyRefreshTicks % 30 == 0) await RefreshTrafficHistoryAsync();
         });
