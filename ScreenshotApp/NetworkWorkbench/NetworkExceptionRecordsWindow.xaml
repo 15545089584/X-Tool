@@ -3,6 +3,12 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="路径异常记录" Width="620" Height="510" WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize" WindowStyle="None" AllowsTransparency="True" Background="Transparent">
+    <Window.Resources>
+        <Style TargetType="ScrollBar">
+            <Setter Property="Width" Value="12" /><Setter Property="Margin" Value="7,4,0,4" /><Setter Property="Background" Value="Transparent" />
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ScrollBar"><Grid Background="Transparent"><Track x:Name="PART_Track" Minimum="{TemplateBinding Minimum}" Maximum="{TemplateBinding Maximum}" Value="{TemplateBinding Value}" ViewportSize="{TemplateBinding ViewportSize}" Orientation="{TemplateBinding Orientation}" IsDirectionReversed="True"><Track.DecreaseRepeatButton><RepeatButton Command="ScrollBar.PageUpCommand" BorderThickness="0"><RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="#26D9EAF6" CornerRadius="6" /></ControlTemplate></RepeatButton.Template></RepeatButton></Track.DecreaseRepeatButton><Track.Thumb><Thumb MinHeight="36"><Thumb.Template><ControlTemplate TargetType="Thumb"><Border MinHeight="36" Margin="1" Background="#9BC6DDEA" BorderBrush="#C8FFFFFF" BorderThickness="1" CornerRadius="6"><Border.Effect><DropShadowEffect BlurRadius="5" ShadowDepth="1" Direction="270" Opacity="0.12" Color="#476581" /></Border.Effect></Border></ControlTemplate></Thumb.Template></Thumb></Track.Thumb><Track.IncreaseRepeatButton><RepeatButton Command="ScrollBar.PageDownCommand" BorderThickness="0"><RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="#26D9EAF6" CornerRadius="6" /></ControlTemplate></RepeatButton.Template></RepeatButton></Track.IncreaseRepeatButton></Track></Grid><ControlTemplate.Triggers><Trigger Property="Orientation" Value="Horizontal"><Setter Property="Height" Value="10" /><Setter Property="Width" Value="Auto" /><Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="False" /></Trigger><Trigger Property="IsMouseOver" Value="True"><Setter Property="Opacity" Value="0.84" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+        </Style>
+    </Window.Resources>
     <Border Margin="12" Padding="22" Background="#EEF8FCFF" BorderBrush="#B9D8EAF8" BorderThickness="1" CornerRadius="20">
         <Border.Effect><DropShadowEffect BlurRadius="24" ShadowDepth="5" Direction="270" Opacity="0.20" Color="#36536D" /></Border.Effect>
         <Grid>
@@ -12,13 +18,13 @@
                 <Button HorizontalAlignment="Right" VerticalAlignment="Top" Width="32" Height="32" Padding="0" Background="#66FFFFFF" BorderBrush="#A7CEE6F5" BorderThickness="1" Foreground="#607C96" FontSize="16" Content="×" Click="Close_Click" />
             </Grid>
             <Grid Grid.Row="2">
-                <ListBox x:Name="RecordsListBox" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <ListBox x:Name="RecordsListBox" Background="Transparent" BorderThickness="0" ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                     <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="Padding" Value="0" /><Setter Property="Margin" Value="0,0,0,7" /><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem"><ContentPresenter /></ControlTemplate></Setter.Value></Setter></Style></ListBox.ItemContainerStyle>
                     <ListBox.ItemTemplate><DataTemplate><Border Padding="13,10" Background="#8EFFFFFF" BorderBrush="#8DCEE2F1" BorderThickness="1" CornerRadius="12"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="5" /><ColumnDefinition Width="12" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><Border Grid.RowSpan="2" Background="{Binding AccentColor}" CornerRadius="3" /><StackPanel Grid.Column="2"><Grid><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#405F7C" Text="{Binding Title}" /><TextBlock HorizontalAlignment="Right" FontSize="10" Foreground="#7890A6" Text="{Binding TimeText}" /></Grid><TextBlock Margin="0,5,0,0" FontSize="11" Foreground="#607D98" Text="{Binding Detail}" TextWrapping="Wrap" /><TextBlock Margin="0,5,0,0" FontSize="10" Foreground="#91A4B6" Text="{Binding AdapterName, StringFormat=网卡：{0}}" /></StackPanel></Grid></Border></DataTemplate></ListBox.ItemTemplate>
                 </ListBox>
                 <StackPanel x:Name="EmptyPanel" HorizontalAlignment="Center" VerticalAlignment="Center"><TextBlock HorizontalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="28" Foreground="#8EACC4" Text="&#xE9CE;" /><TextBlock Margin="0,9,0,0" FontSize="13" Foreground="#607D98" Text="暂无路径异常记录" /><TextBlock Margin="0,4,0,0" FontSize="10" Foreground="#91A4B6" Text="后续出现中断、失败或高延迟时会显示在这里。" /></StackPanel>
             </Grid>
-            <Button Grid.Row="4" HorizontalAlignment="Right" Width="82" Height="34" Background="#4D7CFE" BorderBrush="#76A0FF" Foreground="White" Content="关闭" Click="Close_Click" />
+            <Button Grid.Row="4" HorizontalAlignment="Right" Width="82" Height="34" Background="#4D7CFE" BorderBrush="#76A0FF" Foreground="White" Click="Close_Click"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="SemiBold" Foreground="White" Text="关闭" /></Button>
         </Grid>
     </Border>
 </Window>

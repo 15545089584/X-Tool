@@ -79,8 +79,8 @@
 
         <Grid Grid.Row="4">
             <ScrollViewer x:Name="OverviewScrollViewer" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
-            <Grid x:Name="OverviewPanel" MinHeight="762">
-                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="16" /><RowDefinition Height="108" /><RowDefinition Height="14" /><RowDefinition Height="420" /></Grid.RowDefinitions>
+            <Grid x:Name="OverviewPanel" MinHeight="882">
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="16" /><RowDefinition Height="108" /><RowDefinition Height="14" /><RowDefinition Height="540" /></Grid.RowDefinitions>
                 <Border Padding="20" Style="{StaticResource NetworkCard}">
                     <Grid><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                         <Grid><StackPanel><TextBlock FontSize="19" FontWeight="SemiBold" Text="连接路径" /><TextBlock Margin="0,5,0,0" FontSize="12" Foreground="#7890A6" Text="根据本机网卡、网关、DNS 与 HTTP 连通性探测实时更新" /></StackPanel><Button HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource NetworkChipButton}" Content="异常记录" ToolTip="查看网关、DNS、代理与 HTTP 的异常及恢复记录" Click="PathExceptions_Click" /></Grid>
