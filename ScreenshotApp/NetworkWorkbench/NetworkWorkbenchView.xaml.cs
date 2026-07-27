@@ -274,13 +274,13 @@ public partial class NetworkWorkbenchView : UserControl
         PathLocalLinkText.Text = FormatBitRate(snapshot.LinkSpeedBitsPerSecond);
         if (hasAdapter)
         {
-            SetDeviceRateRow(PathDeviceDownloadLabelText, PathDeviceDownloadRateText, "↓ 下行", FormatByteRate(download), "#61C995");
-            SetDeviceRateRow(PathDeviceUploadLabelText, PathDeviceUploadRateText, "↑ 上行", FormatByteRate(upload), "#61C995");
+            SetDeviceRateRow(PathDeviceDownloadStatusDot, PathDeviceDownloadLabelText, PathDeviceDownloadRateText, "↓ 下行", FormatByteRate(download), "#61C995");
+            SetDeviceRateRow(PathDeviceUploadStatusDot, PathDeviceUploadLabelText, PathDeviceUploadRateText, "↑ 上行", FormatByteRate(upload), "#61C995");
         }
         else
         {
-            SetDeviceRateRow(PathDeviceDownloadLabelText, PathDeviceDownloadRateText, "状态", "未接入网络", "#EF7E83");
-            SetDeviceRateRow(PathDeviceUploadLabelText, PathDeviceUploadRateText, string.Empty, string.Empty, "#EF7E83");
+            SetDeviceRateRow(PathDeviceDownloadStatusDot, PathDeviceDownloadLabelText, PathDeviceDownloadRateText, "状态", "未接入网络", "#EF7E83");
+            SetDeviceRateRow(PathDeviceUploadStatusDot, PathDeviceUploadLabelText, PathDeviceUploadRateText, string.Empty, string.Empty, "#EF7E83");
         }
 
         PathGatewayDetailText.Text = snapshot.Gateway;
@@ -351,8 +351,9 @@ public partial class NetworkWorkbenchView : UserControl
         text.Foreground = BrushFrom(color);
     }
 
-    private static void SetDeviceRateRow(TextBlock label, TextBlock value, string labelText, string valueText, string color)
+    private static void SetDeviceRateRow(Ellipse dot, TextBlock label, TextBlock value, string labelText, string valueText, string color)
     {
+        dot.Fill = BrushFrom(color);
         label.Text = labelText;
         value.Text = valueText;
         label.Foreground = BrushFrom(color);
