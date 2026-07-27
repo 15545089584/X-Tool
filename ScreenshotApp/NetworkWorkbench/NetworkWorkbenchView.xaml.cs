@@ -279,9 +279,28 @@ public partial class NetworkWorkbenchView : UserControl
         SetLatencyPathStatus(PathGatewayStatusDot, PathGatewayStatusText, snapshot.GatewayLatencyMs, 100, "网关可达", "网关延迟偏高", "网关未响应");
 
         var proxyEnabled = snapshot.ProxyText.Contains("手动代理", StringComparison.Ordinal) || snapshot.ProxyText.Contains("PAC", StringComparison.Ordinal);
+        var probeUsesProxy = snapshot.ConnectivityProbeText.Contains("代理", StringComparison.Ordinal);
         PathProxyDetailText.Text = proxyEnabled ? snapshot.ProxyText : "直连（未启用代理）";
-        PathProxyLinkText.Text = proxyEnabled ? "系统代理" : "直连";
-        SetPathStatus(PathProxyStatusDot, PathProxyStatusText, proxyEnabled ? "#8A63D8" : "#9AAEC0", proxyEnabled ? (snapshot.IsInternetAvailable ? "代理路径可用" : "代理路径待确认") : "直接连接");
+        if (!proxyEnabled)
+        {
+            PathProxyLinkText.Text = "直连";
+            SetPathStatus(PathProxyStatusDot, PathProxyStatusText, "#9AAEC0", "直接连接");
+        }
+        else if (!snapshot.IsInternetAvailable)
+        {
+            PathProxyLinkText.Text = "未能转发";
+            SetPathStatus(PathProxyStatusDot, PathProxyStatusText, "#EF7E83", "代理路径不可用");
+        }
+        else if (probeUsesProxy)
+        {
+            PathProxyLinkText.Text = "代理转发";
+            SetPathStatus(PathProxyStatusDot, PathProxyStatusText, "#8A63D8", "代理路径已连通");
+        }
+        else
+        {
+            PathProxyLinkText.Text = "当前走直连";
+            SetPathStatus(PathProxyStatusDot, PathProxyStatusText, "#F0B15A", "代理未作为有效路径");
+        }
 
         PathInternetDetailText.Text = string.IsNullOrWhiteSpace(snapshot.DnsServers) ? "未读取 DNS" : snapshot.DnsServers;
         PathInternetLinkText.Text = $"DNS {FormatLatency(snapshot.DnsLatencyMs)}";
