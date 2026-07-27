@@ -21,6 +21,7 @@ public partial class NetworkWorkbenchView : UserControl
     private readonly ObservableCollection<NetworkTimelineEvent> _timelineEvents = new();
     private readonly ObservableCollection<WifiNetworkEntry> _wifiNetworks = new();
     private readonly ObservableCollection<WifiPropertyRow> _wifiProperties = new();
+    private readonly List<WifiPropertyRow> _currentWifiProperties = new();
     private readonly Queue<double> _downloadHistory = new();
     private readonly Queue<double> _uploadHistory = new();
     private readonly List<double> _historicalDownload = new();
@@ -57,6 +58,7 @@ public partial class NetworkWorkbenchView : UserControl
     private DateTime _lastAdaptersRefreshAt = DateTime.MinValue;
     private DateTime _lastConnectionsRefreshAt = DateTime.MinValue;
     private DateTime _lastDeepNetworkRefreshAt = DateTime.MinValue;
+    private bool _updatingWifiEnvironment;
 
     public NetworkWorkbenchView()
     {
@@ -889,12 +891,52 @@ public partial class NetworkWorkbenchView : UserControl
 
     private void UpdateWifiEnvironment(WifiEnvironmentSnapshot environment)
     {
+        _updatingWifiEnvironment = true;
+        _currentWifiProperties.Clear();
+        _currentWifiProperties.AddRange(environment.Properties);
         _wifiNetworks.Clear();
         foreach (var network in environment.Networks) _wifiNetworks.Add(network);
-        _wifiProperties.Clear();
-        foreach (var property in environment.Properties) _wifiProperties.Add(property);
+        WifiNetworksListBox.SelectedItem = _wifiNetworks.FirstOrDefault(network => network.IsConnected);
+        ShowWifiProperties(_currentWifiProperties, isConnected: true);
+        _updatingWifiEnvironment = false;
         WifiNetworksEmptyText.Visibility = _wifiNetworks.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void WifiNetworksListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_updatingWifiEnvironment || WifiNetworksListBox.SelectedItem is not WifiNetworkEntry network) return;
+        ShowWifiProperties(network.IsConnected ? _currentWifiProperties : BuildAvailableWifiProperties(network), network.IsConnected);
+    }
+
+    private void ShowWifiProperties(IEnumerable<WifiPropertyRow> properties, bool isConnected)
+    {
+        _wifiProperties.Clear();
+        foreach (var property in properties) _wifiProperties.Add(property);
         WifiPropertiesEmptyText.Visibility = _wifiProperties.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        WifiPropertiesTitleText.Text = isConnected ? "当前 Wi-Fi 属性" : "所选 Wi-Fi 属性";
+        WifiPropertiesHintText.Text = isConnected
+            ? "基于当前接入的 Windows WLAN 接口与网络适配器实时读取。"
+            : "未连接网络仅显示其广播可读取的信息。";
+    }
+
+    private static IReadOnlyList<WifiPropertyRow> BuildAvailableWifiProperties(WifiNetworkEntry network)
+    {
+        var band = int.TryParse(new string(network.Channel.Where(char.IsDigit).ToArray()), out var channel)
+            ? channel <= 14 ? "2.4 GHz" : channel <= 196 ? "5 GHz" : "6 GHz"
+            : "—";
+        return new[]
+        {
+            new WifiPropertyRow("SSID", network.Ssid),
+            new WifiPropertyRow("连接状态", "未连接（仅显示广播属性）"),
+            new WifiPropertyRow("信号强度", network.SignalText),
+            new WifiPropertyRow("安全类型", network.Security),
+            new WifiPropertyRow("协议", network.RadioType),
+            new WifiPropertyRow("网络频带", band),
+            new WifiPropertyRow("网络信道", network.Channel),
+            new WifiPropertyRow("接入点 BSSID", network.Bssid),
+            new WifiPropertyRow("IP / DNS / 网关", "连接后可读取"),
+            new WifiPropertyRow("链路速度", "连接后可读取")
+        };
     }
 
     private async void NetworkRepair_Click(object sender, RoutedEventArgs e)

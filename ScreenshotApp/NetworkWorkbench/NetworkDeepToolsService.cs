@@ -126,12 +126,13 @@ internal static class NetworkDeepToolsService
             if (!field.Success) continue;
             var key = field.Groups["key"].Value.Trim();
             var value = field.Groups["value"].Value.Trim();
-            if (key.Contains("信号", StringComparison.OrdinalIgnoreCase) || key.Contains("Signal", StringComparison.OrdinalIgnoreCase)) current.Signal = Math.Max(current.Signal, ParsePercent(value));
+            if (key.StartsWith("BSSID", StringComparison.OrdinalIgnoreCase)) current.Bssid = value;
+            else if (key.Contains("信号", StringComparison.OrdinalIgnoreCase) || key.Contains("Signal", StringComparison.OrdinalIgnoreCase)) current.Signal = Math.Max(current.Signal, ParsePercent(value));
             else if (key.Contains("身份验证", StringComparison.OrdinalIgnoreCase) || key.Contains("Authentication", StringComparison.OrdinalIgnoreCase)) current.Security = value;
             else if (key.Contains("无线电类型", StringComparison.OrdinalIgnoreCase) || key.Contains("Radio type", StringComparison.OrdinalIgnoreCase)) current.RadioType = value;
             else if (key.Contains("频道", StringComparison.OrdinalIgnoreCase) || key.Contains("通道", StringComparison.OrdinalIgnoreCase) || key.Contains("Channel", StringComparison.OrdinalIgnoreCase)) current.Channel = value;
         }
-        return networks.Values.Select(item => new WifiNetworkEntry(item.Ssid, item.Signal, item.Security, item.RadioType, item.Channel,
+        return networks.Values.Select(item => new WifiNetworkEntry(item.Ssid, item.Bssid, item.Signal, item.Security, item.RadioType, item.Channel,
                 string.Equals(item.Ssid, currentSsid, StringComparison.OrdinalIgnoreCase)))
             .OrderByDescending(item => item.IsConnected).ThenByDescending(item => item.SignalPercent).ThenBy(item => item.Ssid).ToArray();
     }
@@ -175,7 +176,7 @@ internal static class NetworkDeepToolsService
 internal sealed record NetworkDeepSnapshot(string Routes, string FirewallProfiles, string WifiInterface, string NearbyWifi, string Explanation, WifiEnvironmentSnapshot WifiEnvironment);
 internal sealed record WifiEnvironmentSnapshot(IReadOnlyList<WifiPropertyRow> Properties, IReadOnlyList<WifiNetworkEntry> Networks);
 internal sealed record WifiPropertyRow(string Label, string Value);
-internal sealed record WifiNetworkEntry(string Ssid, int SignalPercent, string Security, string RadioType, string Channel, bool IsConnected)
+internal sealed record WifiNetworkEntry(string Ssid, string Bssid, int SignalPercent, string Security, string RadioType, string Channel, bool IsConnected)
 {
     public string SignalText => SignalPercent > 0 ? $"{SignalPercent}%" : "信号未知";
     public string SignalColor => SignalPercent >= 70 ? "#61C995" : SignalPercent >= 45 ? "#F0B15A" : "#EF7E83";
@@ -189,6 +190,7 @@ internal sealed class NearbyWifiBuilder
     public string Security { get; set; } = "—";
     public string RadioType { get; set; } = "—";
     public string Channel { get; set; } = "—";
+    public string Bssid { get; set; } = "—";
 }
 internal sealed record LanDeviceEntry(string Address, string HostName, string Services)
 {
