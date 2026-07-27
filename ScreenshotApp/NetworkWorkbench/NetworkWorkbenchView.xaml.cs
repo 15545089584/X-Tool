@@ -226,6 +226,7 @@ public partial class NetworkWorkbenchView : UserControl
                 ? "尚未探测"
                 : $"{snapshot.ConnectivityProbeCapturedAt:HH:mm:ss} · {probeAge:F0} 秒前";
             TrafficUpdatedText.Text = $"{snapshot.ActiveAdapterName} · 更新于 {snapshot.CapturedAt:HH:mm:ss}";
+            UpdateConnectionPath(snapshot, download, upload);
             if (_trafficRange == "Realtime") TrafficStatsText.Text = BuildTrafficStatsText();
             ProxyDnsText.Text = snapshot.DnsServers;
 
@@ -265,6 +266,51 @@ public partial class NetworkWorkbenchView : UserControl
         history.Enqueue(double.IsFinite(value) && value >= 0 ? value : 0);
         while (history.Count > 60) history.Dequeue();
     }
+
+    private void UpdateConnectionPath(NetworkOverviewSnapshot snapshot, double download, double upload)
+    {
+        var hasAdapter = snapshot.HasPhysicalConnection && !string.IsNullOrWhiteSpace(snapshot.ActiveAdapterName);
+        PathDeviceDetailText.Text = hasAdapter ? snapshot.ActiveAdapterName : "未检测到物理网卡";
+        PathLocalLinkText.Text = FormatBitRate(snapshot.LinkSpeedBitsPerSecond);
+        SetPathStatus(PathDeviceStatusDot, PathDeviceStatusText, hasAdapter ? "#61C995" : "#EF7E83", hasAdapter ? $"↓{FormatByteRate(download)} ↑{FormatByteRate(upload)}" : "本机未接入网络");
+
+        PathGatewayDetailText.Text = snapshot.Gateway;
+        PathGatewayLinkText.Text = FormatLatency(snapshot.GatewayLatencyMs);
+        SetLatencyPathStatus(PathGatewayStatusDot, PathGatewayStatusText, snapshot.GatewayLatencyMs, 100, "网关可达", "网关延迟偏高", "网关未响应");
+
+        var proxyEnabled = snapshot.ProxyText.Contains("手动代理", StringComparison.Ordinal) || snapshot.ProxyText.Contains("PAC", StringComparison.Ordinal);
+        PathProxyDetailText.Text = proxyEnabled ? snapshot.ProxyText : "直连（未启用代理）";
+        PathProxyLinkText.Text = proxyEnabled ? "系统代理" : "直连";
+        SetPathStatus(PathProxyStatusDot, PathProxyStatusText, proxyEnabled ? "#8A63D8" : "#9AAEC0", proxyEnabled ? (snapshot.IsInternetAvailable ? "代理路径可用" : "代理路径待确认") : "直接连接");
+
+        PathInternetDetailText.Text = string.IsNullOrWhiteSpace(snapshot.DnsServers) ? "未读取 DNS" : snapshot.DnsServers;
+        PathInternetLinkText.Text = $"DNS {FormatLatency(snapshot.DnsLatencyMs)}";
+        SetLatencyPathStatus(PathInternetStatusDot, PathInternetStatusText, snapshot.DnsLatencyMs, 250, "DNS 正常", "DNS 延迟偏高", "DNS 解析失败");
+
+        PathServiceDetailText.Text = snapshot.IsInternetAvailable ? "HTTP 连通性探测成功" : "HTTP 连通性探测失败";
+        PathInternetLinkText.Text = $"HTTP {FormatLatency(snapshot.HttpLatencyMs)}";
+        SetLatencyPathStatus(PathServiceStatusDot, PathServiceStatusText, snapshot.HttpLatencyMs, 600, "服务可达", "服务响应偏慢", "目标服务不可达");
+    }
+
+    private void SetLatencyPathStatus(Ellipse dot, TextBlock text, long latency, long warningThreshold, string successText, string warningText, string failedText)
+    {
+        if (latency < 0)
+        {
+            SetPathStatus(dot, text, "#EF7E83", failedText);
+            return;
+        }
+
+        SetPathStatus(dot, text, latency >= warningThreshold ? "#F0B15A" : "#61C995", latency >= warningThreshold ? $"{warningText} · {latency} ms" : $"{successText} · {latency} ms");
+    }
+
+    private static void SetPathStatus(Ellipse dot, TextBlock text, string color, string message)
+    {
+        dot.Fill = BrushFrom(color);
+        text.Text = message;
+        text.Foreground = BrushFrom(color);
+    }
+
+    private static string FormatLatency(long latency) => latency >= 0 ? $"{latency} ms" : "失败";
 
     private void ResetTrafficSession(string adapterId)
     {
