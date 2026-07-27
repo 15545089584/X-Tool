@@ -1770,6 +1770,8 @@ public partial class MainWindow : Window
         {
             ImagePreviewBefore.Source = null;
             ImagePreviewAfter.Source = null;
+            ImagePreviewBeforeInfoText.Text = "等待添加图片";
+            ImagePreviewAfterInfoText.Text = "调整参数后实时更新";
             return;
         }
 
@@ -1782,6 +1784,25 @@ public partial class MainWindow : Window
         var previewScale = Math.Clamp(ImageScaleSlider.Value, 10, 100) / 100d;
         ImagePreviewAfter.RenderTransformOrigin = new Point(0.5, 0.5);
         ImagePreviewAfter.RenderTransform = new ScaleTransform(previewScale, previewScale);
+
+        var scalePercent = (int)Math.Round(ImageScaleSlider.Value);
+        ImagePreviewBeforeInfoText.Text = $"原图 {firstFile.DimensionDisplay} · {firstFile.FileSize}";
+        var outputDimensions = firstFile.PixelWidth > 0 && firstFile.PixelHeight > 0
+            ? $"{Math.Max(1, (int)Math.Round(firstFile.PixelWidth * scalePercent / 100d))} × {Math.Max(1, (int)Math.Round(firstFile.PixelHeight * scalePercent / 100d))}"
+            : "尺寸将在转换时确定";
+        ImagePreviewAfterInfoText.Text = $"输出 {outputDimensions} · {GetImagePreviewSettingText()}";
+    }
+
+    private string GetImagePreviewSettingText()
+    {
+        return GetSelectedImageFormat() switch
+        {
+            ImageOutputFormat.Jpeg => $"JPEG {Math.Round(ImageQualitySlider.Value)}%",
+            ImageOutputFormat.Png => "PNG 无损",
+            ImageOutputFormat.Bmp => "BMP 位图",
+            ImageOutputFormat.Tiff => "TIFF 高保真",
+            _ => string.Empty
+        };
     }
 
     private void UpdateImageConversionControls()
@@ -2124,13 +2145,15 @@ public partial class MainWindow : Window
 /// <summary>图片处理队列的展示项，缩略图只在用户主动选择文件后生成。</summary>
 internal sealed class ImageConversionQueueItem
 {
-    private ImageConversionQueueItem(string filePath, BitmapImage? thumbnail, string fileSize)
+    private ImageConversionQueueItem(string filePath, BitmapImage? thumbnail, string fileSize, int pixelWidth, int pixelHeight)
     {
         FilePath = filePath;
         FileName = Path.GetFileName(filePath);
         Extension = Path.GetExtension(filePath).TrimStart('.').ToUpperInvariant();
         FileSize = fileSize;
         Thumbnail = thumbnail;
+        PixelWidth = pixelWidth;
+        PixelHeight = pixelHeight;
     }
 
     public string FilePath { get; }
@@ -2138,10 +2161,28 @@ internal sealed class ImageConversionQueueItem
     public string Extension { get; }
     public string FileSize { get; }
     public BitmapImage? Thumbnail { get; }
+    public int PixelWidth { get; }
+    public int PixelHeight { get; }
+    public string DimensionDisplay => PixelWidth > 0 && PixelHeight > 0 ? $"{PixelWidth} × {PixelHeight}" : "尺寸未知";
 
     public static ImageConversionQueueItem Create(string filePath)
     {
         BitmapImage? thumbnail = null;
+        var pixelWidth = 0;
+        var pixelHeight = 0;
+        try
+        {
+            using var input = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            var decoder = BitmapDecoder.Create(input, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
+            var frame = decoder.Frames[0];
+            pixelWidth = frame.PixelWidth;
+            pixelHeight = frame.PixelHeight;
+        }
+        catch
+        {
+            // 尺寸读取失败时仍允许在后续转换阶段由系统解码器给出真实错误。
+        }
+
         try
         {
             thumbnail = new BitmapImage();
@@ -2158,7 +2199,7 @@ internal sealed class ImageConversionQueueItem
         }
 
         var length = new FileInfo(filePath).Length;
-        return new ImageConversionQueueItem(filePath, thumbnail, FormatFileSize(length));
+        return new ImageConversionQueueItem(filePath, thumbnail, FormatFileSize(length), pixelWidth, pixelHeight);
     }
 
     private static string FormatFileSize(long length) => length switch
