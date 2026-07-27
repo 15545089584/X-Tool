@@ -592,6 +592,24 @@ public partial class NetworkWorkbenchView : UserControl
         TrafficCanvas.InvalidateVisual();
     }
 
+    private async void PathExceptions_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var events = await _monitorCoordinator.GetTimelineEventsAsync(200);
+            var records = events.Where(IsPathExceptionRecord).ToArray();
+            var window = new NetworkExceptionRecordsWindow(records) { Owner = Window.GetWindow(this) };
+            window.ShowDialog();
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(Window.GetWindow(this), $"读取异常记录失败：{exception.Message}", "异常记录", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private static bool IsPathExceptionRecord(NetworkTimelineEvent entry)
+        => entry.Severity is "Warning" or "Error" || entry.EventType is "InternetRestored" or "LinkConnected";
+
     private static TrafficChartScale CreateLinearScale(IEnumerable<double> values)
     {
         var peak = Math.Max(1024d, values.DefaultIfEmpty(0).Max());

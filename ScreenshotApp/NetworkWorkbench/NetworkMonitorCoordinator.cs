@@ -23,8 +23,12 @@ internal sealed class NetworkMonitorCoordinator : IAsyncDisposable
     private int _persistTicks;
     private bool _networkEventsRegistered;
     private int _dnsFailureSamples;
+    private int _gatewayFailureSamples;
+    private int _proxyFailureSamples;
     private int _highUploadSamples;
     private DateTime _lastDnsAlert;
+    private DateTime _lastGatewayAlert;
+    private DateTime _lastProxyAlert;
     private DateTime _lastUploadAlert;
     private DateTime _lastHighLatencyAlert;
     private int _probePersistTicks;
@@ -267,13 +271,28 @@ internal sealed class NetworkMonitorCoordinator : IAsyncDisposable
     {
         var now = sample.Snapshot.CapturedAt;
         _dnsFailureSamples = sample.Snapshot.ConnectivityProbeText.Contains("DNS 失败", StringComparison.Ordinal) ? _dnsFailureSamples + 1 : 0;
+        _gatewayFailureSamples = sample.Snapshot.GatewayLatencyMs < 0 ? _gatewayFailureSamples + 1 : 0;
+        var proxyEnabled = sample.Snapshot.ProxyText.Contains("手动代理", StringComparison.Ordinal) || sample.Snapshot.ProxyText.Contains("PAC", StringComparison.Ordinal);
+        _proxyFailureSamples = proxyEnabled && !sample.Snapshot.EffectiveHttpSucceeded ? _proxyFailureSamples + 1 : 0;
         _highUploadSamples = sample.UploadRate >= _alertSettings.HighUploadMegabytesPerSecond * 1024 * 1024 ? _highUploadSamples + 1 : 0;
         if (IsQuietHour(now.Hour)) return;
+        if (_gatewayFailureSamples >= 3 && now - _lastGatewayAlert > TimeSpan.FromMinutes(10))
+        {
+            _lastGatewayAlert = now;
+            PublishEvent(new NetworkTimelineEvent(now, "GatewayProbeFailure", "Warning", "网关连续未响应",
+                "已连续 3 次探测不到默认网关；请检查 Wi-Fi、网线或路由器状态。", sample.Snapshot.ActiveAdapterId, sample.Snapshot.ActiveAdapterName));
+        }
         if (_dnsFailureSamples >= 3 && now - _lastDnsAlert > TimeSpan.FromMinutes(10))
         {
             _lastDnsAlert = now;
             PublishEvent(new NetworkTimelineEvent(now, "DnsProbeFailure", "Warning", "DNS 连续探测失败",
                 "已连续 3 次探测失败；建议先检查 DNS 配置或执行清理 DNS 缓存。", sample.Snapshot.ActiveAdapterId, sample.Snapshot.ActiveAdapterName));
+        }
+        if (_proxyFailureSamples >= 3 && now - _lastProxyAlert > TimeSpan.FromMinutes(10))
+        {
+            _lastProxyAlert = now;
+            PublishEvent(new NetworkTimelineEvent(now, "ProxyProbeFailure", "Warning", "代理路径连续不可达",
+                "已启用代理，但连续 3 次代理 HTTP 探测失败；可检查代理软件与节点状态。", sample.Snapshot.ActiveAdapterId, sample.Snapshot.ActiveAdapterName));
         }
         if (_highUploadSamples >= 3 && now - _lastUploadAlert > TimeSpan.FromMinutes(10))
         {
