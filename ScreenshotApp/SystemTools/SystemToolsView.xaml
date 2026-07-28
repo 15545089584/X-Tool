@@ -72,13 +72,13 @@
                                 <Border Margin="0,0,12,0" Padding="11,0" Background="#DDEBFFF0" BorderBrush="#8FD4E8B5" BorderThickness="1" CornerRadius="10">
                                     <StackPanel VerticalAlignment="Center" Orientation="Horizontal"><Ellipse Width="7" Height="7" Fill="#22B573" /><TextBlock x:Name="OverviewSensorStatusText" Margin="7,0,0,0" VerticalAlignment="Center" FontSize="11" Foreground="#3D7560" Text="正在连接" /></StackPanel>
                                 </Border>
-                                <Button Style="{StaticResource SystemPrimaryButton}" Click="RefreshOverview_Click"><TextBlock FontWeight="SemiBold" Foreground="White" Text="重新连接" /></Button>
+                                <Button Width="96" Height="40" Padding="0" Style="{StaticResource SystemPrimaryButton}" Click="RefreshOverview_Click"><TextBlock FontWeight="SemiBold" Foreground="White" Text="重新连接" /></Button>
                             </StackPanel>
                         </Grid>
                         <Grid Grid.Row="2">
                             <Grid.ColumnDefinitions><ColumnDefinition Width="1.45*" /><ColumnDefinition Width="16" /><ColumnDefinition Width="1*" /></Grid.ColumnDefinitions>
                             <Border Padding="18" Background="#54FFFFFF" BorderBrush="#8ED6E9F8" BorderThickness="1" CornerRadius="13">
-                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Hidden">
                                     <ItemsControl x:Name="OverviewInfoItems">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
@@ -100,7 +100,7 @@
                                 </ScrollViewer>
                             </Border>
                             <Border Grid.Column="2" Padding="16" Background="#62FFFFFF" BorderBrush="#98D3E7F7" BorderThickness="1" CornerRadius="13">
-                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Hidden">
                                     <StackPanel>
                                         <Grid><TextBlock FontSize="15" FontWeight="SemiBold" Foreground="#2E4B67" Text="实时传感器" /><TextBlock x:Name="OverviewUpdatedAtText" HorizontalAlignment="Right" FontSize="10" Foreground="#7890A6" Text="等待数据" /></Grid>
                                         <ItemsControl x:Name="OverviewMetricItems" Margin="0,12,0,0">
