@@ -104,13 +104,13 @@
                                                     <Grid Margin="0,0,8,0" VerticalAlignment="Center">
                                                         <Grid.ColumnDefinitions><ColumnDefinition Width="112" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                                                         <StackPanel VerticalAlignment="Center" Orientation="Horizontal">
-                                                            <Border Width="28" Height="28" VerticalAlignment="Center" Background="Transparent" BorderBrush="#40D4E8F8" BorderThickness="1" CornerRadius="9"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="{Binding Accent}" Text="{Binding Icon}" /></Border>
-                                                            <TextBlock Margin="8,0,0,0" VerticalAlignment="Center" FontSize="12" Foreground="#6683A0" Text="{Binding Title}" />
+                                                            <Border Width="30" Height="30" VerticalAlignment="Center" Background="Transparent" BorderBrush="#40D4E8F8" BorderThickness="1" CornerRadius="10"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="17" Foreground="{Binding Accent}" Text="{Binding Icon}" /></Border>
+                                                            <TextBlock Margin="9,0,0,0" VerticalAlignment="Center" FontSize="14" Foreground="#6683A0" Text="{Binding Title}" />
                                                         </StackPanel>
                                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                                            <TextBlock FontSize="14" FontWeight="SemiBold" LineHeight="17" Foreground="#2E4B67" Text="{Binding Primary}" TextWrapping="Wrap" />
-                                                            <TextBlock Margin="0,2,0,0" FontSize="11" LineHeight="15" Foreground="#3F607E" Text="{Binding Attributes}" TextWrapping="Wrap" />
-                                                            <TextBlock Margin="0,2,0,0" FontSize="10" LineHeight="14" Foreground="#68829B" Text="{Binding Secondary}" TextWrapping="Wrap" />
+                                                            <TextBlock FontSize="16" FontWeight="SemiBold" LineHeight="19" Foreground="#2E4B67" Text="{Binding Primary}" TextWrapping="Wrap" />
+                                                            <TextBlock Margin="0,2,0,0" FontSize="12" LineHeight="16" Foreground="#3F607E" Text="{Binding Attributes}" TextWrapping="Wrap" />
+                                                            <TextBlock Margin="0,2,0,0" FontSize="11" LineHeight="15" Foreground="#68829B" Text="{Binding Secondary}" TextWrapping="Wrap" />
                                                         </StackPanel>
                                                     </Grid>
                                                 </DataTemplate>
