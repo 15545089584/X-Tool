@@ -1474,6 +1474,19 @@ public partial class MainWindow : Window
             return false;
         }
 
+        // 右 Alt 的原始按键会被拦截以保护浏览器等应用的输入焦点。
+        // 留出一个短暂窗口让目标程序处理抬键和剪贴板更新，再检查一次前台状态，避免 Ctrl+V 偶发丢失。
+        await Task.Delay(75);
+        if (!NativeMethods.IsWindowForeground(_voiceInputPasteTarget))
+        {
+            if (showSuccess)
+            {
+                ShowToast("原输入窗口焦点已变化，识别结果已复制，请手动粘贴");
+            }
+
+            return false;
+        }
+
         // 部分剪贴板管理器会短暂改写内容；发送 Ctrl+V 前再次确认仍是本次识别结果。
         if (!ClipboardMatchesVoiceInputText(text) && !await SetVoiceInputClipboardTextAsync(text))
         {

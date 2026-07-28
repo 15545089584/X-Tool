@@ -1272,6 +1272,7 @@ public sealed record StorageOverview(
 {
     public long UsedBytes => Math.Max(0, TotalBytes - FreeBytes);
     public double UsedPercent => TotalBytes <= 0 ? 0 : Math.Clamp(UsedBytes * 100d / TotalBytes, 0, 100);
+    public double UsageRatio => UsedPercent / 100d;
     public string UsedText => StorageDisplay.FormatCapacity(UsedBytes);
     public string FreeText => StorageDisplay.FormatCapacity(FreeBytes);
     public string TotalText => StorageDisplay.FormatCapacity(TotalBytes);
@@ -1285,6 +1286,7 @@ public sealed record StorageVolumeEntry(string DriveName, string VolumeLabel, st
 {
     public long UsedBytes => Math.Max(0, TotalBytes - FreeBytes);
     public double UsedPercent => TotalBytes <= 0 ? 0 : Math.Clamp(UsedBytes * 100d / TotalBytes, 0, 100);
+    public double UsageRatio => UsedPercent / 100d;
     public string Title => string.Equals(VolumeLabel, "本地磁盘", StringComparison.Ordinal) ? $"{DriveName} 本地磁盘" : $"{VolumeLabel} ({DriveName})";
     public string DetailText => $"{FileSystem} · 已用 {UsedPercent:F0}%";
     public string UsedPercentText => $"{UsedPercent:F0}% 已用";
