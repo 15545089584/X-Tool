@@ -262,11 +262,12 @@ public partial class SystemToolsView : UserControl
     private void ApplyStartupFilter()
     {
         var keyword = StartupFilterTextBox.Text.Trim();
-        var items = string.IsNullOrWhiteSpace(keyword) ? _allStartupItems : _allStartupItems.Where(item =>
+        var items = (string.IsNullOrWhiteSpace(keyword) ? _allStartupItems : _allStartupItems.Where(item =>
             item.Name.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
             item.Command.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
-            item.Source.Contains(keyword, StringComparison.OrdinalIgnoreCase));
+            item.Source.Contains(keyword, StringComparison.OrdinalIgnoreCase))).ToArray();
         Replace(_startupItems, items);
+        StartupSummaryText.Text = $"显示 {items.Length} 个应用 · 已开启 {items.Count(item => item.IsEnabled)} 个";
     }
 
     private void OpenStartupLocation_Click(object sender, RoutedEventArgs e)
@@ -278,11 +279,20 @@ public partial class SystemToolsView : UserControl
 
     private async void ToggleStartup_Click(object sender, RoutedEventArgs e)
     {
+        var toggle = sender as ToggleButton;
         if ((sender as FrameworkElement)?.DataContext is not StartupEntry item || !item.CanToggle) return;
         var action = item.IsEnabled ? "禁用" : "启用";
-        if (MessageBox.Show($"确定{action}当前用户启动项“{item.Name}”吗？\n\n该操作仅影响登录后自动启动，不会删除程序文件。", $"确认{action}启动项", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+        if (MessageBox.Show($"确定{action}当前用户启动项“{item.Name}”吗？\n\n该操作仅影响登录后自动启动，不会删除程序文件。", $"确认{action}启动项", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+        {
+            if (toggle is not null) toggle.IsChecked = item.IsEnabled;
+            return;
+        }
         var error = await Task.Run(() => SystemToolsService.TrySetStartupItemEnabled(item, !item.IsEnabled, out var message) ? null : message);
-        if (!string.IsNullOrWhiteSpace(error)) MessageBox.Show(error, $"{action}启动项失败", MessageBoxButton.OK, MessageBoxImage.Warning);
+        if (!string.IsNullOrWhiteSpace(error))
+        {
+            if (toggle is not null) toggle.IsChecked = item.IsEnabled;
+            MessageBox.Show(error, $"{action}启动项失败", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
         else await RefreshStartupAsync();
     }
     private void PortFilterTextBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyPortFilter();

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.ComponentModel;
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.IO;
 using System.Net;
@@ -235,7 +236,7 @@ public static class SystemToolsService
         {
             foreach (var path in Directory.EnumerateFiles(startupFolder))
             {
-                entries.Add(new StartupEntry(Path.GetFileNameWithoutExtension(path), GetStartupDescription(path), "启动文件夹", startupFolder, true, false, ""));
+                entries.Add(new StartupEntry(Path.GetFileNameWithoutExtension(path), GetStartupDescription(path), "启动文件夹", startupFolder, true, false, "", path));
             }
         }
         return entries.OrderBy(item => item.Source).ThenBy(item => item.Name, StringComparer.OrdinalIgnoreCase).ToArray();
@@ -291,14 +292,14 @@ public static class SystemToolsService
             var command = key.GetValue(name)?.ToString() ?? string.Empty;
             var state = approved?.GetValue(name) as byte[];
             var enabled = state is not { Length: > 0 } || state[0] != 0x03;
-            entries.Add(new StartupEntry(name, GetStartupDescription(command), source, $"{root.Name}\\{subKey}", enabled, canToggle, subKey));
+            entries.Add(new StartupEntry(name, GetStartupDescription(command), source, $"{root.Name}\\{subKey}", enabled, canToggle, subKey, GetStartupExecutablePath(command)));
         }
     }
 
     /// <summary>将原始启动命令转为用户可读的发布者与影响说明，避免列表充满难读的命令行。</summary>
     private static string GetStartupDescription(string command)
     {
-        var executable = Regex.Match(command, "^\\s*\\\"(?<path>[^\\\"]+\\.exe)\\\"|^\\s*(?<path>[^\\s]+\\.exe)", RegexOptions.IgnoreCase).Groups["path"].Value;
+        var executable = GetStartupExecutablePath(command);
         if (!string.IsNullOrWhiteSpace(executable) && File.Exists(executable))
         {
             try
@@ -310,6 +311,10 @@ public static class SystemToolsService
         }
         return "发布者未知  |  启动影响未评估";
     }
+
+    /// <summary>从注册表启动命令中提取可执行文件路径，供发布者读取与图标提取复用。</summary>
+    private static string GetStartupExecutablePath(string command)
+        => Regex.Match(command, "^\\s*\\\"(?<path>[^\\\"]+\\.exe)\\\"|^\\s*(?<path>[^\\s]+\\.exe)", RegexOptions.IgnoreCase).Groups["path"].Value;
 
     private static string FormatBytes(long value)
     {
@@ -1065,8 +1070,45 @@ public sealed record HardwareOverview(IReadOnlyList<HardwarePropertyItem> Items,
 public sealed record HardwarePropertyItem(string Title, string Primary, string Attributes, string Secondary, string Accent, string Icon);
 
 /// <summary>启动项记录；仅当前用户注册表项允许在首版中安全启停。</summary>
-public sealed record StartupEntry(string Name, string Command, string Source, string Location, bool IsEnabled, bool CanToggle, string RegistrySubKey)
+public sealed record StartupEntry(string Name, string Command, string Source, string Location, bool IsEnabled, bool CanToggle, string RegistrySubKey, string IconPath)
 {
+    public System.Windows.Media.ImageSource? IconSource => StartupEntryIconProvider.Get(IconPath);
     public string StateText => IsEnabled ? "已启用" : "已禁用";
+    public string SwitchStateText => IsEnabled ? "开" : "关";
     public string ToggleText => IsEnabled ? "禁用" : "启用";
+    public string ToggleTooltip => CanToggle
+        ? (IsEnabled ? "关闭此应用的登录启动" : "开启此应用的登录启动")
+        : "此启动项来源仅支持查看和定位";
+}
+
+/// <summary>按可执行文件缓存启动项图标；图标读取失败时由界面显示通用应用图标。</summary>
+internal static class StartupEntryIconProvider
+{
+    private static readonly ConcurrentDictionary<string, Lazy<System.Windows.Media.ImageSource?>> IconCache = new(StringComparer.OrdinalIgnoreCase);
+
+    public static System.Windows.Media.ImageSource? Get(string iconPath)
+    {
+        if (string.IsNullOrWhiteSpace(iconPath)) return null;
+        return IconCache.GetOrAdd(iconPath, path => new Lazy<System.Windows.Media.ImageSource?>(() => Create(path))).Value;
+    }
+
+    private static System.Windows.Media.ImageSource? Create(string iconPath)
+    {
+        try
+        {
+            if (!File.Exists(iconPath)) return null;
+            using var icon = System.Drawing.Icon.ExtractAssociatedIcon(iconPath);
+            if (icon is null || icon.Handle == IntPtr.Zero) return null;
+            var image = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(
+                icon.Handle,
+                System.Windows.Int32Rect.Empty,
+                System.Windows.Media.Imaging.BitmapSizeOptions.FromWidthAndHeight(64, 64));
+            image.Freeze();
+            return image;
+        }
+        catch
+        {
+            return null;
+        }
+    }
 }
