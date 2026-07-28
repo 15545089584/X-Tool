@@ -91,7 +91,7 @@ public partial class SystemToolsView : UserControl
             }
             else await RefreshPortsAsync();
         };
-        Unloaded += (_, _) => { _portAutoRefreshTimer.Stop(); _hardwareSensorClient.Stop(); };
+        Unloaded += async (_, _) => { _portAutoRefreshTimer.Stop(); await _hardwareSensorClient.StopAsync(); };
     }
 
     private async Task RefreshPortsAsync()
@@ -161,8 +161,8 @@ public partial class SystemToolsView : UserControl
     {
         OverviewSensorStatusText.Text = "正在连接";
         OverviewUpdatedAtText.Text = "等待数据";
-        OverviewMetricItems.ItemsSource = CreateMetricPlaceholders();
-        OverviewTemperatureItems.ItemsSource = new[] { new SensorPanelItem("正在枚举温度传感器", "—", "#7890A6") };
+        ApplySensorDashboardPlaceholders();
+        OverviewTemperatureItems.ItemsSource = CreateTemperaturePlaceholders();
         try
         {
             var overview = await Task.Run(SystemToolsService.GetHardwareOverview);
@@ -179,29 +179,42 @@ public partial class SystemToolsView : UserControl
             var cpu = sensors.Where(IsCpu).ToArray();
             var gpu = sensors.Where(IsGpu).OrderBy(item => GpuOrder(item.HardwareType)).ToArray();
             var memory = sensors.Where(item => item.HardwareType == "Memory").ToArray();
-            OverviewMetricItems.ItemsSource = new[]
+            OverviewCpuSensorItems.ItemsSource = new[]
             {
-                CreateMetric("CPU 核心频率", Pick(cpu, "Clock", "Core Average", "CPU Core", "Core #1"), "#278DDA"),
-                CreateMetric("CPU 占用", Pick(cpu, "Load", "CPU Total", "Total"), "#278DDA"),
-                CreateMetric("CPU 功耗", Pick(cpu, "Power", "CPU Package", "Package"), "#278DDA"),
-                CreateMetric("GPU 核心频率", Pick(gpu, "Clock", "GPU Core", "Core"), "#7A63E8"),
-                CreateMetric("GPU 显存频率", Pick(gpu, "Clock", "GPU Memory", "Memory"), "#7A63E8"),
-                CreateMetric("GPU 占用", Pick(gpu, "Load", "GPU Core", "Core"), "#7A63E8"),
-                CreateMetric("GPU 功耗", Pick(gpu, "Power", "GPU Package", "GPU Power", "Package"), "#7A63E8"),
-                CreateMetric("内存占用", Pick(memory, "Load", "Memory", "Used"), "#18A982")
+                CreateMetric("CPU频率", Pick(cpu, "Clock", "Core Average", "CPU Core", "Core #1"), "#278DDA"),
+                CreateMetric("CPU电压", Pick(cpu, "Voltage", "CPU Core", "Vcore", "VID", "Core"), "#278DDA"),
+                CreateMetric("CPU占用", Pick(cpu, "Load", "CPU Total", "Total"), "#278DDA"),
+                CreateMetric("CPU热功耗", Pick(cpu, "Power", "CPU Package", "Package"), "#278DDA")
             };
-            var temperatures = CreateTemperatureItems(sensors);
-            OverviewTemperatureItems.ItemsSource = temperatures.Length == 0
-                ? new[] { new SensorPanelItem("当前硬件未提供温度读数", "—", "#7890A6") }
-                : temperatures;
+            OverviewGpuSensorItems.ItemsSource = new[]
+            {
+                CreateMetric("GPU频率", Pick(gpu, "Clock", "GPU Core", "Core"), "#7A63E8"),
+                CreateMetric("显存频率", Pick(gpu, "Clock", "GPU Memory", "Memory"), "#7A63E8"),
+                CreateMetric("GPU热功耗", Pick(gpu, "Power", "GPU Package", "GPU Power", "Package"), "#7A63E8")
+            };
+            OverviewMemorySensorItems.ItemsSource = new[] { CreateMetric("内存占用", Pick(memory, "Load", "Memory", "Used"), "#18A982") };
+            OverviewTemperatureItems.ItemsSource = CreateTemperatureMeters(sensors);
             OverviewSensorStatusText.Text = "监控中";
             OverviewUpdatedAtText.Text = $"更新于 {snapshot.CapturedAt.LocalDateTime:HH:mm:ss}";
         });
     }
 
-    private static SensorPanelItem[] CreateMetricPlaceholders()
-        => new[] { "CPU 核心频率", "CPU 占用", "CPU 功耗", "GPU 核心频率", "GPU 显存频率", "GPU 占用", "GPU 功耗", "内存占用" }
-            .Select(label => new SensorPanelItem(label, "—", "#7890A6")).ToArray();
+    private void ApplySensorDashboardPlaceholders()
+    {
+        OverviewCpuSensorItems.ItemsSource = new[] { "CPU频率", "CPU电压", "CPU占用", "CPU热功耗" }.Select(label => new SensorPanelItem(label, "—", "#7890A6")).ToArray();
+        OverviewGpuSensorItems.ItemsSource = new[] { "GPU频率", "显存频率", "GPU热功耗" }.Select(label => new SensorPanelItem(label, "—", "#7890A6")).ToArray();
+        OverviewMemorySensorItems.ItemsSource = new[] { new SensorPanelItem("内存占用", "—", "#7890A6") };
+    }
+
+    private static TemperatureMeterItem[] CreateTemperaturePlaceholders()
+        => new[]
+        {
+            new TemperatureMeterItem("处理器温度", "—", "#278DDA", 0),
+            new TemperatureMeterItem("显卡温度", "—", "#278DDA", 0),
+            new TemperatureMeterItem("主板温度", "—", "#E05260", 0),
+            new TemperatureMeterItem("硬盘温度", "—", "#18A982", 0),
+            new TemperatureMeterItem("内存条温度", "—", "#278DDA", 0)
+        };
 
     private static SensorPanelItem CreateMetric(string label, HardwareSensorValue? sensor, string accent)
         => new(label, sensor is null ? "—" : FormatSensorValue(sensor), accent);
@@ -217,26 +230,32 @@ public partial class SystemToolsView : UserControl
         return candidates.FirstOrDefault();
     }
 
-    private static SensorPanelItem[] CreateTemperatureItems(IEnumerable<HardwareSensorValue> sensors)
-        => sensors.Where(item => item.Type == "Temperature")
-            .GroupBy(item => item.HardwareIdentifier)
-            .Select(group => Pick(group, "Temperature", "CPU Package", "GPU Core", "Core Average", "System", "Composite", "Temperature") ?? group.First())
-            .OrderBy(item => TemperatureOrder(item.HardwareType))
-            .ThenBy(item => item.HardwareName, StringComparer.OrdinalIgnoreCase)
-            .Take(8)
-            .Select(item => new SensorPanelItem(TemperatureLabel(item), FormatSensorValue(item), TemperatureAccent(item.Value)))
-            .ToArray();
+    private static TemperatureMeterItem[] CreateTemperatureMeters(IReadOnlyList<HardwareSensorValue> sensors)
+    {
+        var cpu = sensors.Where(IsCpu).ToArray();
+        var gpu = sensors.Where(IsGpu).ToArray();
+        var motherboard = sensors.Where(item => item.HardwareType == "Motherboard").ToArray();
+        var storage = sensors.Where(item => item.HardwareType == "Storage").ToArray();
+        var memory = sensors.Where(item => item.HardwareType == "Memory").ToArray();
+        return new[]
+        {
+            CreateTemperatureMeter("处理器温度", Pick(cpu, "Temperature", "CPU Package", "Core Average", "Package", "Core"), "#278DDA"),
+            CreateTemperatureMeter("显卡温度", Pick(gpu, "Temperature", "GPU Core", "Core", "Hot Spot", "Temperature"), "#278DDA"),
+            CreateTemperatureMeter("主板温度", Pick(motherboard, "Temperature", "System", "Motherboard", "Temperature"), "#E05260"),
+            CreateTemperatureMeter("硬盘温度", Pick(storage, "Temperature", "Composite", "Temperature"), "#18A982"),
+            CreateTemperatureMeter("内存条温度", Pick(memory, "Temperature", "Temperature"), "#278DDA")
+        };
+    }
+
+    private static TemperatureMeterItem CreateTemperatureMeter(string label, HardwareSensorValue? sensor, string accent)
+    {
+        if (sensor is null || sensor.Value <= 0) return new TemperatureMeterItem(label, "—", accent, 0);
+        return new TemperatureMeterItem(label, FormatSensorValue(sensor), accent, Math.Clamp(sensor.Value, 0, 100));
+    }
 
     private static bool IsCpu(HardwareSensorValue sensor) => sensor.HardwareType == "Cpu";
     private static bool IsGpu(HardwareSensorValue sensor) => sensor.HardwareType is "GpuNvidia" or "GpuAmd" or "GpuIntel";
     private static int GpuOrder(string hardwareType) => hardwareType switch { "GpuNvidia" => 0, "GpuAmd" => 1, "GpuIntel" => 2, _ => 3 };
-    private static int TemperatureOrder(string hardwareType) => hardwareType switch { "Cpu" => 0, "GpuNvidia" or "GpuAmd" or "GpuIntel" => 1, "Motherboard" => 2, "Memory" => 3, "Storage" => 4, _ => 5 };
-    private static string TemperatureLabel(HardwareSensorValue sensor)
-    {
-        var prefix = sensor.HardwareType switch { "Cpu" => "CPU", "GpuNvidia" or "GpuAmd" or "GpuIntel" => "GPU", "Motherboard" => "主板", "Memory" => "内存", "Storage" => sensor.HardwareName, _ => sensor.HardwareName };
-        return $"{prefix} · {sensor.Name}";
-    }
-    private static string TemperatureAccent(float value) => value >= 85 ? "#E05260" : value >= 70 ? "#E38A35" : "#278DDA";
     private static string FormatSensorValue(HardwareSensorValue sensor)
     {
         var unit = sensor.Type switch { "Temperature" => "℃", "Load" => "%", "Clock" => " MHz", "Power" => " W", "Voltage" => " V", "Fan" => " RPM", _ => string.Empty };
@@ -346,7 +365,7 @@ public partial class SystemToolsView : UserControl
     private async void RefreshRelationships_Click(object sender, RoutedEventArgs e) => await RefreshRelationshipsAsync();
     private async void RefreshOverview_Click(object sender, RoutedEventArgs e)
     {
-        _hardwareSensorClient.Stop();
+        await _hardwareSensorClient.StopAsync();
         await RefreshOverviewAsync();
         await _hardwareSensorClient.StartAsync();
     }
@@ -1185,6 +1204,9 @@ public partial class SystemToolsView : UserControl
 
     /// <summary>高级监控右侧仪表项，数值颜色由硬件类别或温度阈值决定。</summary>
     private sealed record SensorPanelItem(string Label, string Value, string Accent);
+
+    /// <summary>温度仪表项保留真实读数与百分比进度，缺失传感器只显示占位而不伪造数据。</summary>
+    private sealed record TemperatureMeterItem(string Label, string Value, string Accent, double Percent);
 
     /// <summary>同名进程的汇总，避免多进程应用占满列表；展开后保留原始 PID 行。</summary>
     private sealed record ProcessGroup(string Name, IReadOnlyList<ProcessEntry> Items)
