@@ -76,7 +76,7 @@ public partial class NetworkWorkbenchView : UserControl
         _monitorCoordinator.TimelineEventAvailable += MonitorCoordinator_TimelineEventAvailable;
         _monitorCoordinator.MonitorFailed += MonitorCoordinator_MonitorFailed;
         TrafficCanvas.SizeChanged += (_, _) => UpdateTrafficChart();
-        WifiSignalMapCanvas.SizeChanged += (_, _) => UpdateWifiSignalMap();
+        WifiChannelDistributionCanvas.SizeChanged += (_, _) => UpdateWifiChannelDistribution();
         Loaded += NetworkWorkbenchView_Loaded;
         Unloaded += NetworkWorkbenchView_Unloaded;
         SelectDiagnosticSection("Records");
@@ -142,7 +142,7 @@ public partial class NetworkWorkbenchView : UserControl
         DiagnosticsPanel.Visibility = tab == "Diagnostics" ? Visibility.Visible : Visibility.Collapsed;
         ProxyPanel.Visibility = tab == "Proxy" ? Visibility.Visible : Visibility.Collapsed;
         AdaptersPanel.Visibility = tab == "Adapters" ? Visibility.Visible : Visibility.Collapsed;
-        WifiPanel.Visibility = tab == "Wifi" ? Visibility.Visible : Visibility.Collapsed;
+        WifiScrollViewer.Visibility = tab == "Wifi" ? Visibility.Visible : Visibility.Collapsed;
         ConnectionsPanel.Visibility = tab == "Connections" ? Visibility.Visible : Visibility.Collapsed;
         ProfilesPanel.Visibility = tab == "Profiles" ? Visibility.Visible : Visibility.Collapsed;
 
@@ -902,14 +902,14 @@ public partial class NetworkWorkbenchView : UserControl
             _wifiNetworks.FirstOrDefault(network => network.IsConnected)?.Ssid ?? environment.Properties.FirstOrDefault(item => item.Label == "SSID")?.Value ?? "—");
         _updatingWifiEnvironment = false;
         WifiNetworksEmptyText.Visibility = _wifiNetworks.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        UpdateWifiSignalMap();
+        UpdateWifiChannelDistribution();
     }
 
     private void WifiNetworksListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_updatingWifiEnvironment || WifiNetworksListBox.SelectedItem is not WifiNetworkEntry network) return;
         ShowWifiProperties(network.IsConnected ? _currentWifiProperties : BuildAvailableWifiProperties(network), network.IsConnected, network.Ssid);
-        UpdateWifiSignalMap();
+        UpdateWifiChannelDistribution();
     }
 
     private void ShowWifiProperties(IEnumerable<WifiPropertyRow> properties, bool isConnected, string ssid)
@@ -924,147 +924,179 @@ public partial class NetworkWorkbenchView : UserControl
             : "未连接网络仅显示其广播可读取的信息。";
     }
 
-    private void UpdateWifiSignalMap()
+    private void UpdateWifiChannelDistribution()
     {
-        if (WifiSignalMapCanvas is null) return;
+        if (WifiChannelDistributionCanvas is null) return;
 
-        var width = WifiSignalMapCanvas.ActualWidth;
-        var height = WifiSignalMapCanvas.ActualHeight;
-        if (width < 120 || height < 80) return;
+        var width = WifiChannelDistributionCanvas.ActualWidth;
+        var height = WifiChannelDistributionCanvas.ActualHeight;
+        if (width < 320 || height < 180) return;
 
-        WifiSignalMapCanvas.Children.Clear();
-        WifiSignalMapEmptyText.Visibility = _wifiNetworks.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        if (_wifiNetworks.Count == 0) return;
+        WifiChannelDistributionCanvas.Children.Clear();
+        var entries = _wifiNetworks
+            .Select(network => (Network: network, Channel: ParseWifiChannel(network.Channel)))
+            .Where(item => item.Channel > 0)
+            .ToArray();
+        var twoPointFour = entries.Where(item => item.Channel <= 14).ToArray();
+        var five = entries.Where(item => item.Channel is >= 32 and <= 196).ToArray();
+        var unsupportedCount = entries.Length - twoPointFour.Length - five.Length;
+        WifiChannelDistributionEmptyText.Visibility = entries.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        WifiChannelDistributionSummaryText.Text = unsupportedCount > 0
+            ? $"2.4 GHz {twoPointFour.Length} 个 · 5 GHz {five.Length} 个 · 其他 {unsupportedCount} 个"
+            : $"2.4 GHz {twoPointFour.Length} 个 · 5 GHz {five.Length} 个";
+        if (entries.Length == 0) return;
 
-        var center = new Point(width / 2, height / 2);
-        // 星图在宽屏中使用椭圆轨道，避免低矮容器把所有节点压缩到中心。
-        var horizontalRadius = Math.Max(140, width / 2 - 82);
-        var verticalRadius = Math.Max(34, height / 2 - 23);
-        var ringBrush = new SolidColorBrush(Color.FromArgb(105, 150, 190, 225));
-        foreach (var factor in new[] { 0.40, 0.70, 1.0 })
+        const double outerPadding = 18;
+        const double bandGap = 28;
+        var bandWidth = (width - outerPadding * 2 - bandGap) / 2;
+        var bandTop = 12d;
+        var bandHeight = height - 24;
+        DrawWifiChannelBand(twoPointFour, outerPadding, bandTop, bandWidth, bandHeight, 1, 14, "2.4 GHz 频段", new[] { 1, 6, 11, 14 });
+        DrawWifiChannelBand(five, outerPadding + bandWidth + bandGap, bandTop, bandWidth, bandHeight, 36, 177, "5 GHz 频段", new[] { 36, 64, 100, 149, 177 });
+    }
+
+    private void DrawWifiChannelBand(
+        IReadOnlyList<(WifiNetworkEntry Network, int Channel)> entries,
+        double left,
+        double top,
+        double width,
+        double height,
+        int minimumChannel,
+        int maximumChannel,
+        string title,
+        IReadOnlyList<int> ticks)
+    {
+        var canvas = WifiChannelDistributionCanvas;
+        var panel = new Border
         {
-            var ring = new Ellipse
+            Width = width,
+            Height = height,
+            Background = new SolidColorBrush(Color.FromArgb(42, 234, 247, 255)),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(118, 201, 228, 245)),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(13),
+            IsHitTestVisible = false
+        };
+        Canvas.SetLeft(panel, left);
+        Canvas.SetTop(panel, top);
+        canvas.Children.Add(panel);
+
+        var titleText = new TextBlock
+        {
+            Text = title,
+            FontSize = 12,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = new SolidColorBrush(Color.FromRgb(64, 95, 124)),
+            IsHitTestVisible = false
+        };
+        Canvas.SetLeft(titleText, left + 15);
+        Canvas.SetTop(titleText, top + 12);
+        canvas.Children.Add(titleText);
+
+        var plotLeft = left + 22;
+        var plotWidth = width - 44;
+        var baseline = top + height - 34;
+        var plotHeight = height - 82;
+        var baselineLine = new Line
+        {
+            X1 = plotLeft,
+            Y1 = baseline,
+            X2 = plotLeft + plotWidth,
+            Y2 = baseline,
+            Stroke = new SolidColorBrush(Color.FromArgb(140, 141, 183, 218)),
+            StrokeThickness = 1,
+            IsHitTestVisible = false
+        };
+        canvas.Children.Add(baselineLine);
+
+        foreach (var tick in ticks)
+        {
+            var x = GetWifiChannelPosition(tick, minimumChannel, maximumChannel, plotLeft, plotWidth);
+            var guide = new Line
             {
-                Width = horizontalRadius * factor * 2,
-                Height = verticalRadius * factor * 2,
-                Stroke = ringBrush,
+                X1 = x,
+                Y1 = top + 47,
+                X2 = x,
+                Y2 = baseline,
+                Stroke = new SolidColorBrush(Color.FromArgb(90, 154, 190, 222)),
                 StrokeThickness = 1,
                 StrokeDashArray = new DoubleCollection { 2, 4 },
-                Opacity = 0.72,
                 IsHitTestVisible = false
             };
-            Canvas.SetLeft(ring, center.X - ring.Width / 2);
-            Canvas.SetTop(ring, center.Y - ring.Height / 2);
-            WifiSignalMapCanvas.Children.Add(ring);
+            canvas.Children.Add(guide);
+            var tickText = new TextBlock
+            {
+                Width = 30,
+                Text = tick.ToString(),
+                TextAlignment = TextAlignment.Center,
+                FontSize = 9,
+                Foreground = new SolidColorBrush(Color.FromRgb(112, 138, 163)),
+                IsHitTestVisible = false
+            };
+            Canvas.SetLeft(tickText, x - 15);
+            Canvas.SetTop(tickText, baseline + 7);
+            canvas.Children.Add(tickText);
         }
 
         var selected = WifiNetworksListBox.SelectedItem as WifiNetworkEntry;
-        var nodes = _wifiNetworks.Take(12).ToArray();
-        for (var index = 0; index < nodes.Length; index++)
+        var channelSpan = Math.Max(1, maximumChannel - minimumChannel);
+        foreach (var (network, channel) in entries)
         {
-            var network = nodes[index];
             var strength = Math.Clamp(network.SignalPercent, 0, 100);
-            var distanceFactor = 0.50 + (100 - strength) / 100d * 0.50;
-            var angle = 2 * Math.PI * (index + 0.5) / nodes.Length - Math.PI / 2;
-            var point = new Point(
-                center.X + Math.Cos(angle) * horizontalRadius * distanceFactor,
-                center.Y + Math.Sin(angle) * verticalRadius * distanceFactor);
+            var x = GetWifiChannelPosition(channel, minimumChannel, maximumChannel, plotLeft, plotWidth);
+            var halfWidth = Math.Clamp(plotWidth * 2.5 / channelSpan, 18, 46);
+            var peak = baseline - Math.Max(22, plotHeight * strength / 100d);
             var color = GetWifiSignalColor(strength);
             var isSelected = ReferenceEquals(network, selected);
             var isConnected = network.IsConnected;
-            var nodeSize = isSelected ? 32d : isConnected ? 29d : 24d;
-
-            var spoke = new Line
+            var fillAlpha = isSelected ? (byte)148 : isConnected ? (byte)116 : (byte)67;
+            var mountain = new Polygon
             {
-                X1 = center.X,
-                Y1 = center.Y,
-                X2 = point.X,
-                Y2 = point.Y,
+                Points = new PointCollection
+                {
+                    new(x - halfWidth, baseline),
+                    new(x - halfWidth * 0.54, peak + (baseline - peak) * 0.26),
+                    new(x, peak),
+                    new(x + halfWidth * 0.54, peak + (baseline - peak) * 0.26),
+                    new(x + halfWidth, baseline)
+                },
+                Fill = new SolidColorBrush(Color.FromArgb(fillAlpha, color.Color.R, color.Color.G, color.Color.B)),
                 Stroke = color,
-                StrokeThickness = isSelected ? 2.2 : 1.2,
-                Opacity = isSelected ? 0.88 : 0.48,
-                StrokeDashArray = new DoubleCollection { 2, 3 },
-                IsHitTestVisible = false
+                StrokeThickness = isSelected ? 2.5 : isConnected ? 2 : 1.2,
+                ToolTip = $"{network.Ssid}\n信道 {channel} · 信号 {network.SignalText}\n{network.Security} · {network.RadioType}"
             };
-            WifiSignalMapCanvas.Children.Add(spoke);
+            canvas.Children.Add(mountain);
 
             if (isSelected || isConnected)
             {
-                var haloSize = nodeSize + 10;
-                var halo = new Ellipse
+                var peakLabel = new TextBlock
                 {
-                    Width = haloSize,
-                    Height = haloSize,
-                    Fill = new SolidColorBrush(Color.FromArgb(45, color.Color.R, color.Color.G, color.Color.B)),
-                    Stroke = color,
-                    StrokeThickness = 1,
-                    Opacity = 0.82,
+                    Width = 116,
+                    Text = $"{TrimWifiLabel(network.Ssid, 12)} · Ch {channel}",
+                    TextAlignment = TextAlignment.Center,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    FontSize = 9,
+                    FontWeight = FontWeights.SemiBold,
+                    Foreground = color,
+                    Background = new SolidColorBrush(Color.FromArgb(185, 255, 255, 255)),
+                    Padding = new Thickness(4, 2, 4, 2),
                     IsHitTestVisible = false
                 };
-                Canvas.SetLeft(halo, point.X - haloSize / 2);
-                Canvas.SetTop(halo, point.Y - haloSize / 2);
-                WifiSignalMapCanvas.Children.Add(halo);
+                Canvas.SetLeft(peakLabel, Math.Clamp(x - 58, left + 2, left + width - 118));
+                Canvas.SetTop(peakLabel, Math.Max(top + 47, peak - 23));
+                canvas.Children.Add(peakLabel);
             }
-
-            var node = new Ellipse
-            {
-                Width = nodeSize,
-                Height = nodeSize,
-                Fill = color,
-                Stroke = Brushes.White,
-                StrokeThickness = 2,
-                IsHitTestVisible = false
-            };
-            Canvas.SetLeft(node, point.X - nodeSize / 2);
-            Canvas.SetTop(node, point.Y - nodeSize / 2);
-            WifiSignalMapCanvas.Children.Add(node);
-
-            var label = new TextBlock
-            {
-                Width = 96,
-                Text = $"{TrimWifiLabel(network.Ssid, 10)} · {network.SignalText}",
-                TextAlignment = TextAlignment.Center,
-                TextTrimming = TextTrimming.CharacterEllipsis,
-                FontSize = isSelected ? 9 : 8,
-                FontWeight = isSelected || isConnected ? FontWeights.SemiBold : FontWeights.Normal,
-                Foreground = isSelected ? color : new SolidColorBrush(Color.FromRgb(76, 105, 132)),
-                IsHitTestVisible = false
-            };
-            Canvas.SetLeft(label, Math.Clamp(point.X - 48, 2, width - 98));
-            var labelTop = point.Y < center.Y
-                ? point.Y + nodeSize / 2 + 2
-                : point.Y - nodeSize / 2 - 15;
-            Canvas.SetTop(label, Math.Clamp(labelTop, 1, height - 17));
-            WifiSignalMapCanvas.Children.Add(label);
         }
-
-        var centerNode = new Ellipse
-        {
-            Width = 44,
-            Height = 44,
-            Fill = new SolidColorBrush(Color.FromRgb(77, 124, 254)),
-            Stroke = Brushes.White,
-            StrokeThickness = 2.5,
-            IsHitTestVisible = false
-        };
-        Canvas.SetLeft(centerNode, center.X - 22);
-        Canvas.SetTop(centerNode, center.Y - 22);
-        WifiSignalMapCanvas.Children.Add(centerNode);
-        var centerLabel = new TextBlock
-        {
-            Width = 44,
-            Text = "本机",
-            TextAlignment = TextAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-            FontSize = 10,
-            FontWeight = FontWeights.SemiBold,
-            Foreground = Brushes.White,
-            IsHitTestVisible = false
-        };
-        Canvas.SetLeft(centerLabel, center.X - 22);
-        Canvas.SetTop(centerLabel, center.Y - 7);
-        WifiSignalMapCanvas.Children.Add(centerLabel);
     }
+
+    private static int ParseWifiChannel(string value)
+    {
+        var digits = new string(value.TrimStart().TakeWhile(char.IsDigit).ToArray());
+        return int.TryParse(digits, out var channel) ? channel : 0;
+    }
+
+    private static double GetWifiChannelPosition(int channel, int minimumChannel, int maximumChannel, double left, double width) =>
+        left + (channel - minimumChannel) / (double)Math.Max(1, maximumChannel - minimumChannel) * width;
 
     private static SolidColorBrush GetWifiSignalColor(int signalPercent) => signalPercent switch
     {

@@ -220,8 +220,9 @@
                 </Grid></Border>
             </Grid>
 
-            <Grid x:Name="WifiPanel" Visibility="Collapsed">
-                <Grid.RowDefinitions><RowDefinition Height="104" /><RowDefinition Height="14" /><RowDefinition Height="*" /><RowDefinition Height="14" /><RowDefinition Height="210" /></Grid.RowDefinitions>
+            <ScrollViewer x:Name="WifiScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Visibility="Collapsed">
+            <Grid x:Name="WifiPanel" MinHeight="1092">
+                <Grid.RowDefinitions><RowDefinition Height="104" /><RowDefinition Height="14" /><RowDefinition Height="560" /><RowDefinition Height="14" /><RowDefinition Height="400" /></Grid.RowDefinitions>
                 <Grid>
                     <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="10" /><ColumnDefinition /><ColumnDefinition Width="10" /><ColumnDefinition /><ColumnDefinition Width="10" /><ColumnDefinition /></Grid.ColumnDefinitions>
                     <Border Padding="16" Style="{StaticResource NetworkCard}"><StackPanel><TextBlock Style="{StaticResource MetricTitle}" Text="当前 Wi-Fi" /><TextBlock x:Name="WifiSsidText" Style="{StaticResource MetricValue}" Text="—" /><TextBlock x:Name="WifiRadioText" Margin="0,5,0,0" FontSize="10" Foreground="#7890A6" Text="无线制式 —" /></StackPanel></Border>
@@ -236,28 +237,26 @@
                     </Grid></Border>
                     <Border Grid.Column="2" Padding="16" Style="{StaticResource NetworkCard}"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="*" /></Grid.RowDefinitions><StackPanel><TextBlock x:Name="WifiPropertiesTitleText" FontSize="16" FontWeight="SemiBold" Text="当前 Wi-Fi 属性" /><TextBlock x:Name="WifiPropertiesHintText" Margin="0,4,0,0" FontSize="10" Foreground="#7890A6" Text="基于当前接入的 Windows WLAN 接口与网络适配器实时读取。" /></StackPanel><Grid Grid.Row="2"><ListBox x:Name="WifiPropertiesListBox" Style="{StaticResource NetworkList}"><ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="Padding" Value="0" /><Setter Property="Margin" Value="0,0,0,2" /><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem"><ContentPresenter HorizontalAlignment="Stretch" /></ControlTemplate></Setter.Value></Setter></Style></ListBox.ItemContainerStyle><ListBox.ItemTemplate><DataTemplate><Grid MinHeight="25"><Grid.ColumnDefinitions><ColumnDefinition Width="112" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><TextBlock VerticalAlignment="Top" FontSize="10" Foreground="#71879E" Text="{Binding Label}" /><TextBlock Grid.Column="1" VerticalAlignment="Top" FontSize="10" Foreground="#45627E" Text="{Binding Value}" TextWrapping="Wrap" /></Grid></DataTemplate></ListBox.ItemTemplate></ListBox><TextBlock x:Name="WifiPropertiesEmptyText" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="11" Foreground="#7890A6" Text="当前没有已接入的 Wi-Fi 属性" Visibility="Collapsed" /></Grid></Grid></Border>
                 </Grid>
-                <Border Grid.Row="4" Padding="16,13" Style="{StaticResource NetworkCard}">
+                <Border Grid.Row="4" Padding="18,16" Style="{StaticResource NetworkCard}">
                     <Grid>
-                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                         <Grid>
                             <StackPanel>
-                                <TextBlock FontSize="16" FontWeight="SemiBold" Text="Wi-Fi 信号星图" />
-                                <TextBlock Margin="0,3,0,0" FontSize="10" Foreground="#7890A6" Text="节点相对距离代表信号强弱，不代表实际物理方位；当前连接与所选网络会高亮显示。" />
+                                <TextBlock FontSize="17" FontWeight="SemiBold" Text="Wi-Fi 频段与信道分布" />
+                                <TextBlock Margin="0,4,0,0" FontSize="10" Foreground="#7890A6" Text="每座半透明信号峰的中心为对应信道，峰高代表信号强弱；峰体重叠越多，通常意味着该频段的信道竞争越明显。" />
                             </StackPanel>
                             <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal">
-                                <Ellipse Width="8" Height="8" Margin="0,0,5,0" Fill="#54D39A" />
-                                <TextBlock Margin="0,0,12,0" VerticalAlignment="Center" FontSize="10" Foreground="#71879E" Text="强信号" />
-                                <Ellipse Width="8" Height="8" Margin="0,0,5,0" Fill="#F5B957" />
-                                <TextBlock VerticalAlignment="Center" FontSize="10" Foreground="#71879E" Text="较弱信号" />
+                                <Border Padding="8,4" Background="#70EAF7FF" BorderBrush="#93CDE4F5" BorderThickness="1" CornerRadius="8"><TextBlock x:Name="WifiChannelDistributionSummaryText" FontSize="10" Foreground="#53718E" Text="等待扫描 Wi-Fi" /></Border>
                             </StackPanel>
                         </Grid>
                         <Grid Grid.Row="2">
-                            <Canvas x:Name="WifiSignalMapCanvas" ClipToBounds="True" />
-                            <TextBlock x:Name="WifiSignalMapEmptyText" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="11" Foreground="#7890A6" Text="刷新 Wi-Fi 后将在此显示信号星图" Visibility="Collapsed" />
+                            <Canvas x:Name="WifiChannelDistributionCanvas" ClipToBounds="True" />
+                            <TextBlock x:Name="WifiChannelDistributionEmptyText" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="11" Foreground="#7890A6" Text="刷新 Wi-Fi 后将在此显示频段与信道分布" Visibility="Collapsed" />
                         </Grid>
                     </Grid>
                 </Border>
             </Grid>
+            </ScrollViewer>
 
             <Grid x:Name="ConnectionsPanel" Visibility="Collapsed">
                 <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="14" /><RowDefinition Height="*" /></Grid.RowDefinitions>
