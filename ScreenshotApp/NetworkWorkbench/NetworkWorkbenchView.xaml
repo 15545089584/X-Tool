@@ -67,14 +67,13 @@
 
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="104" /><ColumnDefinition Width="8" /><ColumnDefinition Width="120" /><ColumnDefinition Width="8" /><ColumnDefinition Width="116" /><ColumnDefinition Width="8" /><ColumnDefinition Width="90" /><ColumnDefinition Width="8" /><ColumnDefinition Width="90" /><ColumnDefinition Width="8" /><ColumnDefinition Width="104" /><ColumnDefinition Width="*" />
+                <ColumnDefinition Width="104" /><ColumnDefinition Width="8" /><ColumnDefinition Width="120" /><ColumnDefinition Width="8" /><ColumnDefinition Width="116" /><ColumnDefinition Width="8" /><ColumnDefinition Width="90" /><ColumnDefinition Width="8" /><ColumnDefinition Width="104" /><ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <Button x:Name="OverviewTabButton" Style="{StaticResource NetworkTab}" Tag="Overview" Click="TabButton_Click" Content="网络总览" />
-            <Button x:Name="RoutesFirewallTabButton" Grid.Column="2" Style="{StaticResource NetworkTab}" Tag="RoutesFirewall" Click="TabButton_Click" Content="路由与防火墙" />
+            <Button x:Name="NetworkInterfacesTabButton" Grid.Column="2" Style="{StaticResource NetworkTab}" Tag="NetworkInterfaces" Click="TabButton_Click" Content="网卡与路由" />
             <Button x:Name="ProxyTabButton" Grid.Column="4" Style="{StaticResource NetworkTab}" Tag="Proxy" Click="TabButton_Click" Content="代理与 DNS" />
-            <Button x:Name="AdaptersTabButton" Grid.Column="6" Style="{StaticResource NetworkTab}" Tag="Adapters" Click="TabButton_Click" Content="网卡" />
-            <Button x:Name="WifiTabButton" Grid.Column="8" Style="{StaticResource NetworkTab}" Tag="Wifi" Click="TabButton_Click" Content="Wi-Fi" />
-            <Button x:Name="ProfilesTabButton" Grid.Column="10" Style="{StaticResource NetworkTab}" Tag="Profiles" Click="TabButton_Click" Content="网络方案" />
+            <Button x:Name="WifiTabButton" Grid.Column="6" Style="{StaticResource NetworkTab}" Tag="Wifi" Click="TabButton_Click" Content="Wi-Fi" />
+            <Button x:Name="ProfilesTabButton" Grid.Column="8" Style="{StaticResource NetworkTab}" Tag="Profiles" Click="TabButton_Click" Content="网络方案" />
         </Grid>
 
         <Grid Grid.Row="4">
@@ -159,12 +158,14 @@
             </ScrollViewer>
 
             <Grid x:Name="RoutesFirewallPanel" Visibility="Collapsed">
-                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="14" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <Grid MinHeight="790">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="14" /><RowDefinition Height="250" /><RowDefinition Height="14" /><RowDefinition Height="480" /></Grid.RowDefinitions>
                 <Border Padding="16" Style="{StaticResource NetworkCard}">
                     <Grid>
                         <StackPanel>
-                            <TextBlock FontSize="17" FontWeight="SemiBold" Text="路由与防火墙" />
-                            <TextBlock Margin="0,4,0,0" FontSize="10" Foreground="#7890A6" Text="只读显示当前 IPv4 / IPv6 路由表及 Windows 防火墙配置；刷新不会修改系统设置。" />
+                            <TextBlock FontSize="17" FontWeight="SemiBold" Text="网卡、路由与防火墙" />
+                            <TextBlock Margin="0,4,0,0" FontSize="10" Foreground="#7890A6" Text="网卡信息与路由、防火墙配置均来自 Windows；路由和防火墙区域只读，刷新不会修改系统设置。" />
                         </StackPanel>
                         <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
                             <TextBlock x:Name="RoutesFirewallStatusText" Margin="0,0,12,0" VerticalAlignment="Center" FontSize="10" Foreground="#7890A6" Text="等待读取" />
@@ -173,10 +174,15 @@
                         </StackPanel>
                     </Grid>
                 </Border>
-                <Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="14" /><ColumnDefinition /></Grid.ColumnDefinitions>
+                <Border Grid.Row="2" Padding="16" Style="{StaticResource NetworkCard}"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="*" /></Grid.RowDefinitions><Grid><StackPanel><TextBlock FontSize="16" FontWeight="SemiBold" Text="网络接口" /><TextBlock Margin="0,4,0,0" FontSize="10" Foreground="#7890A6" Text="物理链路与虚拟接口分开标注；地址、网关、DNS、MTU 与累计流量均来自 Windows 网络接口。" /></StackPanel><StackPanel HorizontalAlignment="Right" Orientation="Horizontal"><TextBlock x:Name="AdapterRefreshStatusText" Margin="0,0,12,0" VerticalAlignment="Center" FontSize="10" Foreground="#7890A6" Text="等待刷新" /><Button x:Name="RefreshAdaptersButton" Width="96" Style="{StaticResource NetworkPrimaryButton}" Content="刷新网卡" Click="RefreshAdapters_Click" /></StackPanel></Grid>
+                    <ListBox x:Name="AdaptersListBox" Grid.Row="2" Style="{StaticResource NetworkList}"><ListBox.ItemTemplate><DataTemplate><Border Padding="14,11" Background="#50FFFFFF" CornerRadius="10"><Border.ContextMenu><ContextMenu><MenuItem Header="启用网卡" Click="EnableAdapter_Click" /><MenuItem Header="禁用网卡" Click="DisableAdapter_Click" /><Separator /><MenuItem Header="释放并续租 DHCP" Click="RenewAdapterDhcp_Click" /><MenuItem Header="恢复自动 DNS" Click="ResetAdapterDns_Click" /></ContextMenu></Border.ContextMenu><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="1.25*" /><ColumnDefinition Width="0.82*" /><ColumnDefinition Width="1.05*" /><ColumnDefinition Width="1.05*" /><ColumnDefinition Width="0.85*" /></Grid.ColumnDefinitions><StackPanel><StackPanel Orientation="Horizontal"><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#3F607F" Text="{Binding Name}" /><TextBlock Margin="8,0,0,0" FontSize="10" FontWeight="SemiBold" Foreground="#4D7CFE" Text="{Binding PrimaryText}" /></StackPanel><TextBlock Margin="0,3,0,0" FontSize="9" Foreground="#7890A6" Text="{Binding Description}" TextTrimming="CharacterEllipsis" /></StackPanel><StackPanel Grid.Column="1"><TextBlock FontSize="11" Foreground="#45627E" Text="{Binding StatusText}" /><TextBlock Margin="0,3,0,0" FontSize="9" Foreground="#7890A6" Text="{Binding LinkSpeedText}" /></StackPanel><StackPanel Grid.Column="2"><TextBlock FontSize="11" Foreground="#45627E" Text="{Binding IPv4Address}" /><TextBlock Margin="0,3,0,0" FontSize="9" Foreground="#7890A6" Text="{Binding DhcpText}" /></StackPanel><StackPanel Grid.Column="3"><TextBlock FontSize="11" Foreground="#45627E" Text="{Binding Gateway}" /><TextBlock Margin="0,3,0,0" FontSize="9" Foreground="#7890A6" Text="{Binding DnsServers}" TextTrimming="CharacterEllipsis" /></StackPanel><StackPanel Grid.Column="4"><TextBlock FontSize="10" Foreground="#45627E" Text="{Binding InterfaceType}" /><TextBlock Margin="0,3,0,0" FontSize="9" Foreground="#7890A6" Text="{Binding MacText}" /></StackPanel></Grid></Border></DataTemplate></ListBox.ItemTemplate></ListBox>
+                </Grid></Border>
+                <Grid Grid.Row="4"><Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="14" /><ColumnDefinition /></Grid.ColumnDefinitions>
                     <Border Padding="16" Style="{StaticResource NetworkCard}"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="*" /></Grid.RowDefinitions><TextBlock FontSize="14" FontWeight="SemiBold" Foreground="#405F7C" Text="IPv4 / IPv6 路由表" /><TextBox x:Name="RoutesTextBox" Grid.Row="2" Style="{StaticResource NetworkReadOnlyTextBox}" /></Grid></Border>
                     <Border Grid.Column="2" Padding="16" Style="{StaticResource NetworkCard}"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="*" /></Grid.RowDefinitions><TextBlock FontSize="14" FontWeight="SemiBold" Foreground="#405F7C" Text="Windows 防火墙配置文件" /><TextBox x:Name="FirewallTextBox" Grid.Row="2" Style="{StaticResource NetworkReadOnlyTextBox}" /></Grid></Border>
                 </Grid>
+                </Grid>
+                </ScrollViewer>
             </Grid>
 
             <Grid x:Name="ProxyPanel" Visibility="Collapsed">
@@ -195,12 +201,6 @@
                     <TextBlock Grid.Row="6" FontSize="13" FontWeight="SemiBold" Foreground="#45627E" Text="主用网卡 DNS" />
                     <StackPanel Grid.Row="8"><TextBlock x:Name="ProxyDnsText" Margin="0,0,0,6" FontSize="10" Foreground="#7890A6" Text="—" TextTrimming="CharacterEllipsis" /><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="8" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><TextBox x:Name="PrimaryDnsTextBox" Style="{StaticResource NetworkTextBox}" ToolTip="主 DNS，例如 1.1.1.1" /><TextBox x:Name="SecondaryDnsTextBox" Grid.Column="2" Style="{StaticResource NetworkTextBox}" ToolTip="备用 DNS，例如 8.8.8.8" /></Grid></StackPanel>
                     <Grid Grid.Row="10"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="8" /><ColumnDefinition Width="*" /><ColumnDefinition Width="8" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><Button Style="{StaticResource NetworkButton}" Content="测试 DNS" Click="TestDns_Click" /><Button Grid.Column="2" Style="{StaticResource NetworkButton}" Content="自动获取" Click="ResetDns_Click" /><Button Grid.Column="4" Style="{StaticResource NetworkPrimaryButton}" Content="保存 DNS" Click="SaveDns_Click" /></Grid>
-                </Grid></Border>
-            </Grid>
-
-            <Grid x:Name="AdaptersPanel" Visibility="Collapsed">
-                <Border Padding="16" Style="{StaticResource NetworkCard}"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="*" /></Grid.RowDefinitions><Grid><StackPanel><TextBlock FontSize="17" FontWeight="SemiBold" Text="网络接口" /><TextBlock Margin="0,4,0,0" FontSize="10" Foreground="#7890A6" Text="物理链路与虚拟接口分开标注；地址、网关、DNS、MTU 与累计流量均来自 Windows 网络接口。" /></StackPanel><StackPanel HorizontalAlignment="Right" Orientation="Horizontal"><TextBlock x:Name="AdapterRefreshStatusText" Margin="0,0,12,0" VerticalAlignment="Center" FontSize="10" Foreground="#7890A6" Text="等待刷新" /><Button x:Name="RefreshAdaptersButton" Width="96" Style="{StaticResource NetworkPrimaryButton}" Content="刷新网卡" Click="RefreshAdapters_Click" /></StackPanel></Grid>
-                    <ListBox x:Name="AdaptersListBox" Grid.Row="2" Style="{StaticResource NetworkList}"><ListBox.ItemTemplate><DataTemplate><Border Padding="14,11" Background="#50FFFFFF" CornerRadius="10"><Border.ContextMenu><ContextMenu><MenuItem Header="启用网卡" Click="EnableAdapter_Click" /><MenuItem Header="禁用网卡" Click="DisableAdapter_Click" /><Separator /><MenuItem Header="释放并续租 DHCP" Click="RenewAdapterDhcp_Click" /><MenuItem Header="恢复自动 DNS" Click="ResetAdapterDns_Click" /></ContextMenu></Border.ContextMenu><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="1.25*" /><ColumnDefinition Width="0.82*" /><ColumnDefinition Width="1.05*" /><ColumnDefinition Width="1.05*" /><ColumnDefinition Width="0.85*" /></Grid.ColumnDefinitions><StackPanel><StackPanel Orientation="Horizontal"><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#3F607F" Text="{Binding Name}" /><TextBlock Margin="8,0,0,0" FontSize="10" FontWeight="SemiBold" Foreground="#4D7CFE" Text="{Binding PrimaryText}" /></StackPanel><TextBlock Margin="0,3,0,0" FontSize="9" Foreground="#7890A6" Text="{Binding Description}" TextTrimming="CharacterEllipsis" /></StackPanel><StackPanel Grid.Column="1"><TextBlock FontSize="11" Foreground="#45627E" Text="{Binding StatusText}" /><TextBlock Margin="0,3,0,0" FontSize="9" Foreground="#7890A6" Text="{Binding LinkSpeedText}" /></StackPanel><StackPanel Grid.Column="2"><TextBlock FontSize="11" Foreground="#45627E" Text="{Binding IPv4Address}" /><TextBlock Margin="0,3,0,0" FontSize="9" Foreground="#7890A6" Text="{Binding DhcpText}" /></StackPanel><StackPanel Grid.Column="3"><TextBlock FontSize="11" Foreground="#45627E" Text="{Binding Gateway}" /><TextBlock Margin="0,3,0,0" FontSize="9" Foreground="#7890A6" Text="{Binding DnsServers}" TextTrimming="CharacterEllipsis" /></StackPanel><StackPanel Grid.Column="4"><TextBlock FontSize="10" Foreground="#45627E" Text="{Binding InterfaceType}" /><TextBlock Margin="0,3,0,0" FontSize="9" Foreground="#7890A6" Text="{Binding MacText}" /></StackPanel></Grid></Border></DataTemplate></ListBox.ItemTemplate></ListBox>
                 </Grid></Border>
             </Grid>
 

@@ -107,8 +107,8 @@ public partial class NetworkWorkbenchView : UserControl
         if (sender is not Button button || button.Tag is not string tab) return;
         SelectTab(tab);
         if (tab == "Overview") UpdateTrafficChart();
-        if (tab == "Adapters" && DateTime.UtcNow - _lastAdaptersRefreshAt > TimeSpan.FromSeconds(5)) await RefreshAdaptersAsync();
-        if ((tab == "Wifi" || tab == "RoutesFirewall") && DateTime.UtcNow - _lastDeepNetworkRefreshAt > TimeSpan.FromSeconds(5)) await RefreshDeepNetworkAsync();
+        if (tab == "NetworkInterfaces" && DateTime.UtcNow - _lastAdaptersRefreshAt > TimeSpan.FromSeconds(5)) await RefreshAdaptersAsync();
+        if ((tab == "Wifi" || tab == "NetworkInterfaces") && DateTime.UtcNow - _lastDeepNetworkRefreshAt > TimeSpan.FromSeconds(5)) await RefreshDeepNetworkAsync();
         if (tab == "Proxy") await LoadProxyAsync(updateSnapshot: false);
         if (tab == "Profiles") ReloadProfiles();
     }
@@ -117,13 +117,12 @@ public partial class NetworkWorkbenchView : UserControl
     {
         _activeTab = tab;
         OverviewPanel.Visibility = tab == "Overview" ? Visibility.Visible : Visibility.Collapsed;
-        RoutesFirewallPanel.Visibility = tab == "RoutesFirewall" ? Visibility.Visible : Visibility.Collapsed;
+        RoutesFirewallPanel.Visibility = tab == "NetworkInterfaces" ? Visibility.Visible : Visibility.Collapsed;
         ProxyPanel.Visibility = tab == "Proxy" ? Visibility.Visible : Visibility.Collapsed;
-        AdaptersPanel.Visibility = tab == "Adapters" ? Visibility.Visible : Visibility.Collapsed;
         WifiScrollViewer.Visibility = tab == "Wifi" ? Visibility.Visible : Visibility.Collapsed;
         ProfilesPanel.Visibility = tab == "Profiles" ? Visibility.Visible : Visibility.Collapsed;
 
-        foreach (var button in new[] { OverviewTabButton, RoutesFirewallTabButton, ProxyTabButton, AdaptersTabButton, WifiTabButton, ProfilesTabButton })
+        foreach (var button in new[] { OverviewTabButton, NetworkInterfacesTabButton, ProxyTabButton, WifiTabButton, ProfilesTabButton })
         {
             var active = string.Equals(button.Tag?.ToString(), tab, StringComparison.Ordinal);
             button.Background = BrushFrom(active ? "#4D7CFE" : "#86FFFFFF");
@@ -790,7 +789,7 @@ public partial class NetworkWorkbenchView : UserControl
         try
         {
             NetworkWorkbenchService.InvalidateNetworkCaches();
-            await Task.WhenAll(RefreshAdaptersAsync(), RefreshOverviewAsync(force: true));
+            await Task.WhenAll(RefreshAdaptersAsync(), RefreshDeepNetworkAsync(force: true), RefreshOverviewAsync(force: true));
             AdapterRefreshStatusText.Text = $"已于 {DateTime.Now:HH:mm:ss} 完成刷新 · {_adapters.Count} 个接口";
         }
         catch (Exception exception)
