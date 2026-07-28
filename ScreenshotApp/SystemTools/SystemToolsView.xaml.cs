@@ -20,7 +20,6 @@ public partial class SystemToolsView : UserControl
     private readonly ObservableCollection<EnvironmentVariableEntry> _environmentVariables = new();
     private readonly ObservableCollection<StartupEntry> _startupItems = new();
     private readonly HardwareSensorClient _hardwareSensorClient = new();
-    private SystemOverview? _overview;
     private IReadOnlyList<StartupEntry> _allStartupItems = Array.Empty<StartupEntry>();
     private readonly ObservableCollection<PathEntry> _pathEntries = new();
     private IReadOnlyList<PortEntry> _allPorts = Array.Empty<PortEntry>();
@@ -83,6 +82,7 @@ public partial class SystemToolsView : UserControl
                 await RefreshOverviewAsync();
                 await RefreshStartupAsync();
                 RefreshEnvironment();
+                _ = _hardwareSensorClient.StartAsync();
             }
             else await RefreshPortsAsync();
         };
@@ -152,32 +152,36 @@ public partial class SystemToolsView : UserControl
     }
 
     /// <summary>系统概览仅采集只读信息，始终放到后台线程避免磁盘枚举阻塞界面。</summary>
-    private async Task RefreshOverviewAsync()
+    private Task RefreshOverviewAsync()
     {
         OverviewInfoItems.ItemsSource = null;
         try
         {
-            var overview = await Task.Run(SystemToolsService.GetSystemOverview);
-            _overview = overview;
-            OverviewInfoItems.ItemsSource = overview.Items;
+            OverviewInfoItems.ItemsSource = new[] { new SystemInfoItem("Sensors", "高级实时监控", "正在等待管理员传感器助手…", "助手会自动读取当前机器支持的温度、负载、频率、功耗、电压与风扇数据。", "#4D7CFE", "\uE9D9") };
         }
         catch (Exception exception) { MessageBox.Show(exception.Message, "读取系统信息失败", MessageBoxButton.OK, MessageBoxImage.Warning); }
+        return Task.CompletedTask;
     }
 
     private void HardwareSensorClient_SnapshotReceived(object? sender, HardwareSensorSnapshot snapshot)
     {
         Dispatcher.BeginInvoke(() =>
         {
-            if (_overview is null || OverviewPanel.Visibility != Visibility.Visible) return;
-            var temperatures = snapshot.Sensors.Where(item => item.Type == "Temperature").Take(4).Select(item => $"{item.HardwareType} {item.Name} {item.Value:F0}℃");
-            var loads = snapshot.Sensors.Where(item => item.Type == "Load").Take(3).Select(item => $"{item.HardwareType} {item.Name} {item.Value:F0}%");
-            var detail = string.Join(" · ", temperatures.Concat(loads));
-            if (string.IsNullOrWhiteSpace(detail)) detail = "未检测到可用实时传感器";
-            var items = _overview.Items.Where(item => item.Key != "Sensors")
-                .Append(new SystemInfoItem("Sensors", "实时监控", $"更新于 {snapshot.CapturedAt.LocalDateTime:HH:mm:ss}", detail, "#4D7CFE", "\uE9D9"))
-                .ToArray();
+            if (OverviewPanel.Visibility != Visibility.Visible) return;
+            var items = snapshot.Sensors.GroupBy(item => item.HardwareType).OrderBy(item => item.Key).Select(group =>
+            {
+                var label = group.Key switch { "Cpu" => "CPU", "GpuNvidia" or "GpuAmd" or "GpuIntel" => "GPU", "Memory" => "内存", "Storage" => "存储", "Motherboard" => "主板", _ => group.Key };
+                var values = group.Where(item => item.Type is "Temperature" or "Load" or "Clock" or "Power" or "Voltage" or "Fan").Take(8).Select(FormatSensor);
+                return new SystemInfoItem(group.Key, label, $"{label} · 更新于 {snapshot.CapturedAt.LocalDateTime:HH:mm:ss}", string.Join("  ·  ", values), label == "GPU" ? "#8B6CFF" : "#4D7CFE", "\uE9D9");
+            }).ToArray();
             OverviewInfoItems.ItemsSource = items;
         });
+    }
+
+    private static string FormatSensor(HardwareSensorValue sensor)
+    {
+        var unit = sensor.Type switch { "Temperature" => "℃", "Load" => "%", "Clock" => " MHz", "Power" => " W", "Voltage" => " V", "Fan" => " RPM", _ => string.Empty };
+        return $"{sensor.Name} {sensor.Value:F1}{unit}";
     }
 
     private async Task RefreshStartupAsync()

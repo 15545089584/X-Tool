@@ -26,7 +26,7 @@ internal sealed class HardwareSensorClient : IDisposable
         _pipe = new NamedPipeServerStream(pipeName, PipeDirection.In, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
         try
         {
-            _helper = Process.Start(new ProcessStartInfo(helperPath, $"--pipe {pipeName}") { UseShellExecute = true, Verb = "runas", WindowStyle = ProcessWindowStyle.Hidden });
+            _helper = Process.Start(new ProcessStartInfo(helperPath, $"--pipe {pipeName} {Environment.ProcessId}") { UseShellExecute = true, Verb = "runas", WindowStyle = ProcessWindowStyle.Hidden });
             if (_helper is null) throw new InvalidOperationException("无法启动高级传感器助手。");
             await _pipe.WaitForConnectionAsync(_cancellation.Token).WaitAsync(TimeSpan.FromSeconds(20), _cancellation.Token);
             _ = ReadLoopAsync(_pipe, _cancellation.Token);
