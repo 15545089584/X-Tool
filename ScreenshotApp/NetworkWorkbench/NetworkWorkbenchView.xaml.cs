@@ -1093,6 +1093,7 @@ public partial class NetworkWorkbenchView : UserControl
 
         var selected = WifiNetworksListBox.SelectedItem as WifiNetworkEntry;
         var channelSpan = Math.Max(1, maximumChannel - minimumChannel);
+        var labelCandidates = new List<WifiPeakLabel>();
         foreach (var (network, channel) in entries)
         {
             var strength = Math.Clamp(network.SignalPercent, 0, 100);
@@ -1119,28 +1120,118 @@ public partial class NetworkWorkbenchView : UserControl
                 ToolTip = $"{network.Ssid}\n信道 {channel} · 信号 {network.SignalText}\n{network.Security} · {network.RadioType}"
             };
             canvas.Children.Add(mountain);
+            labelCandidates.Add(new WifiPeakLabel(network, channel, x, peak, color, isSelected, isConnected));
+        }
 
-            if (isSelected || isConnected)
+        DrawWifiPeakLabels(labelCandidates, left, top, width, baseline);
+    }
+
+    private void DrawWifiPeakLabels(
+        IReadOnlyList<WifiPeakLabel> candidates,
+        double left,
+        double top,
+        double width,
+        double baseline)
+    {
+        const double labelWidth = 116;
+        const double labelHeight = 17;
+        const int laneCount = 4;
+        var canvas = WifiChannelDistributionCanvas;
+        var placedBounds = new List<Rect>();
+        var overflow = new List<WifiPeakLabel>();
+
+        foreach (var candidate in candidates
+                     .OrderByDescending(item => item.IsSelected)
+                     .ThenByDescending(item => item.IsConnected)
+                     .ThenByDescending(item => item.Network.SignalPercent))
+        {
+            var labelLeft = Math.Clamp(candidate.X - labelWidth / 2, left + 3, left + width - labelWidth - 3);
+            var placementFound = false;
+            for (var lane = 0; lane < laneCount; lane++)
             {
-                var peakLabel = new TextBlock
-                {
-                    Width = 116,
-                    Text = $"{TrimWifiLabel(network.Ssid, 12)} · Ch {channel}",
-                    TextAlignment = TextAlignment.Center,
-                    TextTrimming = TextTrimming.CharacterEllipsis,
-                    FontSize = 9,
-                    FontWeight = FontWeights.SemiBold,
-                    Foreground = color,
-                    Background = new SolidColorBrush(Color.FromArgb(185, 255, 255, 255)),
-                    Padding = new Thickness(4, 2, 4, 2),
-                    IsHitTestVisible = false
-                };
-                Canvas.SetLeft(peakLabel, Math.Clamp(x - 58, left + 2, left + width - 118));
-                Canvas.SetTop(peakLabel, Math.Max(top + 47, peak - 23));
-                canvas.Children.Add(peakLabel);
+                var labelTop = top + 47 + lane * 21;
+                var labelBounds = new Rect(labelLeft, labelTop, labelWidth, labelHeight);
+                if (placedBounds.Any(bounds => bounds.IntersectsWith(labelBounds))) continue;
+
+                AddWifiPeakLabel(candidate, labelLeft, labelTop, labelWidth, labelHeight);
+                placedBounds.Add(labelBounds);
+                placementFound = true;
+                break;
             }
+
+            if (!placementFound) overflow.Add(candidate);
+        }
+
+        foreach (var group in overflow.GroupBy(item => item.Channel))
+        {
+            var first = group.First();
+            var labelLeft = Math.Clamp(first.X - labelWidth / 2, left + 3, left + width - labelWidth - 3);
+            var labelTop = baseline - labelHeight - 4;
+            var hiddenNetworks = group.Select(item => item.Network.Ssid).Distinct().ToArray();
+            var aggregateLabel = new TextBlock
+            {
+                Width = labelWidth,
+                Height = labelHeight,
+                Text = $"Ch {group.Key} · +{hiddenNetworks.Length} 个网络",
+                TextAlignment = TextAlignment.Center,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                FontSize = 8,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(Color.FromRgb(86, 113, 140)),
+                Background = new SolidColorBrush(Color.FromArgb(205, 245, 250, 255)),
+                Padding = new Thickness(4, 2, 4, 1),
+                ToolTip = $"信道 {group.Key} 因标签拥挤已合并：\n{string.Join("\n", hiddenNetworks)}"
+            };
+            Canvas.SetLeft(aggregateLabel, labelLeft);
+            Canvas.SetTop(aggregateLabel, labelTop);
+            canvas.Children.Add(aggregateLabel);
         }
     }
+
+    private void AddWifiPeakLabel(WifiPeakLabel candidate, double left, double top, double width, double height)
+    {
+        var canvas = WifiChannelDistributionCanvas;
+        var leader = new Line
+        {
+            X1 = candidate.X,
+            Y1 = top + height,
+            X2 = candidate.X,
+            Y2 = candidate.Peak,
+            Stroke = candidate.Color,
+            StrokeThickness = candidate.IsSelected || candidate.IsConnected ? 1.4 : 0.9,
+            StrokeDashArray = new DoubleCollection { 2, 2 },
+            Opacity = candidate.IsSelected || candidate.IsConnected ? 0.82 : 0.48,
+            IsHitTestVisible = false
+        };
+        canvas.Children.Add(leader);
+
+        var label = new TextBlock
+        {
+            Width = width,
+            Height = height,
+            Text = candidate.Network.Ssid,
+            TextAlignment = TextAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            FontSize = 8,
+            FontWeight = candidate.IsSelected || candidate.IsConnected ? FontWeights.SemiBold : FontWeights.Normal,
+            Foreground = candidate.Color,
+            Background = new SolidColorBrush(Color.FromArgb(candidate.IsSelected || candidate.IsConnected ? (byte)224 : (byte)190, 255, 255, 255)),
+            Padding = new Thickness(4, 2, 4, 1),
+            ToolTip = $"{candidate.Network.Ssid}\n信道 {candidate.Channel} · 信号 {candidate.Network.SignalText}"
+        };
+        Canvas.SetLeft(label, left);
+        Canvas.SetTop(label, top);
+        canvas.Children.Add(label);
+    }
+
+    private sealed record WifiPeakLabel(
+        WifiNetworkEntry Network,
+        int Channel,
+        double X,
+        double Peak,
+        SolidColorBrush Color,
+        bool IsSelected,
+        bool IsConnected);
 
     private static int ParseWifiChannel(string value)
     {
