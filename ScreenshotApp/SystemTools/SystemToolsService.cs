@@ -80,15 +80,19 @@ public static class SystemToolsService
         var graphics = QueryWmi(@"root\cimv2", "SELECT Name,AdapterCompatibility,AdapterRAM FROM Win32_VideoController")
             .Where(row => !GetText(row, "Name").Contains("Remote", StringComparison.OrdinalIgnoreCase))
             .OrderBy(row => GraphicsAdapterOrder(GetText(row, "Name"))).ToArray();
-        var graphicsPrimary = string.Join("\n", graphics.Select(row => CleanHardwareName(GetText(row, "Name", "未知图形适配器"))));
-        var graphicsDetails = string.Join("\n", graphics.Select(row =>
+        var graphicsItems = graphics.Select(row =>
         {
             var name = GetText(row, "Name");
             var vendor = GetText(row, "AdapterCompatibility", "未知厂商").Replace(" Corporation", string.Empty, StringComparison.OrdinalIgnoreCase);
             var memory = GetGraphicsMemoryBytes(name);
-            return memory > 0 ? $"{vendor}    显存  {FormatHardwareCapacity(memory)}" : $"{vendor}    共享系统内存";
-        }));
-        items.Add(new HardwarePropertyItem("显卡", string.IsNullOrWhiteSpace(graphicsPrimary) ? "图形适配器信息不可用" : graphicsPrimary, graphicsDetails, string.Empty, "#7D63F1", "\uE950"));
+            var detail = memory > 0 ? $"{vendor}    显存  {FormatHardwareCapacity(memory)}" : $"{vendor}    共享系统内存";
+            return new { Name = CleanHardwareName(GetText(row, "Name", "未知图形适配器")), Detail = detail };
+        }).ToArray();
+        var primaryGraphics = graphicsItems.FirstOrDefault();
+        var graphicsPrimary = primaryGraphics?.Name ?? "图形适配器信息不可用";
+        var graphicsDetails = primaryGraphics?.Detail ?? string.Empty;
+        var graphicsSecondary = string.Join("\n", graphicsItems.Skip(1).Select(item => $"{item.Name}    {item.Detail}"));
+        items.Add(new HardwarePropertyItem("显卡", graphicsPrimary, graphicsDetails, graphicsSecondary, "#7D63F1", "\uE950"));
 
         var board = QueryWmi(@"root\cimv2", "SELECT Manufacturer,Product,Version FROM Win32_BaseBoard").FirstOrDefault();
         items.Add(new HardwarePropertyItem("主板", GetText(board, "Product", "主板型号不可用"), $"{GetText(board, "Manufacturer", "未知厂商")}    版本  {GetText(board, "Version", "未知")}", string.Empty, "#F06D75", "\uE772"));
