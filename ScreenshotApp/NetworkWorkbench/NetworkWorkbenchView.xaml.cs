@@ -643,6 +643,12 @@ public partial class NetworkWorkbenchView : UserControl
         }
     }
 
+    private void OpenConnectionDiagnostics_Click(object sender, RoutedEventArgs e)
+    {
+        var window = new NetworkDiagnosticsWindow { Owner = Window.GetWindow(this) };
+        window.ShowDialog();
+    }
+
     private static bool IsPathExceptionRecord(NetworkTimelineEvent entry)
         => entry.Severity is "Warning" or "Error" || entry.EventType is "InternetRestored" or "LinkConnected";
 
