@@ -197,6 +197,52 @@ public static class SystemToolsService
         return drivers;
     }
 
+    /// <summary>读取本地卷与物理磁盘的容量快照，仅使用 Windows 的公开只读接口。</summary>
+    public static StorageOverview GetStorageOverview()
+    {
+        var volumes = new List<StorageVolumeEntry>();
+        foreach (var drive in DriveInfo.GetDrives().Where(item => item.DriveType == DriveType.Fixed))
+        {
+            try
+            {
+                if (!drive.IsReady) continue;
+                volumes.Add(new StorageVolumeEntry(
+                    drive.Name.TrimEnd('\\'),
+                    string.IsNullOrWhiteSpace(drive.VolumeLabel) ? "本地磁盘" : drive.VolumeLabel,
+                    string.IsNullOrWhiteSpace(drive.DriveFormat) ? "文件系统未知" : drive.DriveFormat,
+                    drive.TotalSize,
+                    drive.AvailableFreeSpace));
+            }
+            catch
+            {
+                // 个别驱动器可能在枚举期间断开，跳过后继续读取其余卷。
+            }
+        }
+
+        var physicalDisks = QueryWmi(@"root\cimv2", "SELECT Model,Size,MediaType,InterfaceType FROM Win32_DiskDrive")
+            .Select(row =>
+            {
+                var model = CleanHardwareName(GetText(row, "Model", "未知物理磁盘"));
+                var mediaType = model.Contains("NVMe", StringComparison.OrdinalIgnoreCase)
+                    ? "NVMe SSD"
+                    : GetText(row, "MediaType", "固定磁盘").Replace("Fixed hard disk media", "固定磁盘", StringComparison.OrdinalIgnoreCase);
+                return new PhysicalStorageEntry(
+                    model,
+                    GetText(row, "InterfaceType", "接口未知"),
+                    mediaType,
+                    GetLong(row, "Size"));
+            })
+            .Where(item => !string.IsNullOrWhiteSpace(item.Model))
+            .GroupBy(item => $"{item.Model}\u001F{item.CapacityBytes}", StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .OrderBy(item => item.Model, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var totalBytes = volumes.Sum(item => item.TotalBytes);
+        var freeBytes = volumes.Sum(item => item.FreeBytes);
+        return new StorageOverview(volumes, physicalDisks, totalBytes, freeBytes, DateTime.Now);
+    }
+
     private static IReadOnlyList<Dictionary<string, object?>> QueryWmi(string scopePath, string query)
     {
         var rows = new List<Dictionary<string, object?>>();
@@ -1172,4 +1218,95 @@ public sealed record DeviceDriverEntry(
     }
 
     public string SearchText => $"{DeviceName} {Category} {Provider} {Version} {InfName} {Signer} {DeviceId} {ErrorDescription}";
+}
+
+/// <summary>同一设备类别的驱动展示组，默认折叠以避免长驱动清单淹没设备页。</summary>
+public sealed class DeviceDriverCategoryGroup : INotifyPropertyChanged
+{
+    private bool _isExpanded;
+
+    public DeviceDriverCategoryGroup(string category, IReadOnlyList<DeviceDriverEntry> drivers, bool isExpanded)
+    {
+        Category = category;
+        Drivers = drivers;
+        _isExpanded = isExpanded;
+    }
+
+    public string Category { get; }
+    public IReadOnlyList<DeviceDriverEntry> Drivers { get; }
+    public int Count => Drivers.Count;
+    public int IssueCount => Drivers.Count(item => item.HasIssue);
+    public string Icon => Drivers.FirstOrDefault()?.Icon ?? "\uE9CE";
+    public string Accent => Drivers.FirstOrDefault()?.Accent ?? "#7890A6";
+    public string SummaryText => IssueCount > 0 ? $"{Count} 个驱动 · {IssueCount} 项需要注意" : $"{Count} 个驱动 · 状态正常";
+    public string IssueSummary => IssueCount > 0 ? $"{IssueCount} 项注意" : "状态正常";
+    public string IssueAccent => IssueCount > 0 ? "#E16670" : "#20B783";
+    public string ToggleText => IsExpanded ? "收起" : "展开";
+    public string ToggleIcon => IsExpanded ? "\uE70E" : "\uE70D";
+
+    public bool IsExpanded
+    {
+        get => _isExpanded;
+        set
+        {
+            if (_isExpanded == value) return;
+            _isExpanded = value;
+            OnPropertyChanged(nameof(IsExpanded));
+            OnPropertyChanged(nameof(ToggleText));
+            OnPropertyChanged(nameof(ToggleIcon));
+        }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    private void OnPropertyChanged(string propertyName) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+}
+
+/// <summary>存储页的只读容量快照，不包含 SMART、温度或健康评估。</summary>
+public sealed record StorageOverview(
+    IReadOnlyList<StorageVolumeEntry> Volumes,
+    IReadOnlyList<PhysicalStorageEntry> PhysicalDisks,
+    long TotalBytes,
+    long FreeBytes,
+    DateTime CapturedAt)
+{
+    public long UsedBytes => Math.Max(0, TotalBytes - FreeBytes);
+    public double UsedPercent => TotalBytes <= 0 ? 0 : Math.Clamp(UsedBytes * 100d / TotalBytes, 0, 100);
+    public string UsedText => StorageDisplay.FormatCapacity(UsedBytes);
+    public string FreeText => StorageDisplay.FormatCapacity(FreeBytes);
+    public string TotalText => StorageDisplay.FormatCapacity(TotalBytes);
+    public string UsageAccent => TotalBytes <= 0 ? "#7890A6" : UsedPercent >= 90 ? "#E16670" : UsedPercent >= 75 ? "#F3A847" : "#16B99B";
+    public string VolumeSummaryText => Volumes.Count == 0 ? "未发现已挂载的固定磁盘" : $"{Volumes.Count} 个已挂载本地卷 · {PhysicalDisks.Count} 块物理磁盘";
+    public string SummaryText => Volumes.Count == 0 ? "未读取到可用的本地卷" : $"{VolumeSummaryText} · 更新于 {CapturedAt:HH:mm:ss}";
+}
+
+/// <summary>一个已挂载固定磁盘的容量信息。</summary>
+public sealed record StorageVolumeEntry(string DriveName, string VolumeLabel, string FileSystem, long TotalBytes, long FreeBytes)
+{
+    public long UsedBytes => Math.Max(0, TotalBytes - FreeBytes);
+    public double UsedPercent => TotalBytes <= 0 ? 0 : Math.Clamp(UsedBytes * 100d / TotalBytes, 0, 100);
+    public string Title => string.Equals(VolumeLabel, "本地磁盘", StringComparison.Ordinal) ? $"{DriveName} 本地磁盘" : $"{VolumeLabel} ({DriveName})";
+    public string DetailText => $"{FileSystem} · 已用 {UsedPercent:F0}%";
+    public string UsedPercentText => $"{UsedPercent:F0}% 已用";
+    public string UsedText => StorageDisplay.FormatCapacity(UsedBytes);
+    public string FreeText => StorageDisplay.FormatCapacity(FreeBytes);
+    public string TotalText => StorageDisplay.FormatCapacity(TotalBytes);
+    public string UsageAccent => UsedPercent >= 90 ? "#E16670" : UsedPercent >= 75 ? "#F3A847" : "#16B99B";
+}
+
+/// <summary>Windows 识别到的物理磁盘摘要，不尝试把卷强行映射到单块磁盘。</summary>
+public sealed record PhysicalStorageEntry(string Model, string InterfaceType, string MediaType, long CapacityBytes)
+{
+    public string CapacityText => StorageDisplay.FormatCapacity(CapacityBytes);
+    public string DetailText => $"{InterfaceType} · {MediaType}";
+}
+
+internal static class StorageDisplay
+{
+    public static string FormatCapacity(long value)
+    {
+        if (value <= 0) return "—";
+        if (value >= 1024L * 1024 * 1024 * 1024) return $"{value / 1024d / 1024d / 1024d / 1024d:F1} TB";
+        return $"{value / 1024d / 1024d / 1024d:F0} GB";
+    }
 }

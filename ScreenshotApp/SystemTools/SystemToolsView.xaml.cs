@@ -19,7 +19,9 @@ public partial class SystemToolsView : UserControl
     private readonly ObservableCollection<SystemRelationshipEntry> _relationships = new();
     private readonly ObservableCollection<EnvironmentVariableEntry> _environmentVariables = new();
     private readonly ObservableCollection<PathEntry> _pathEntries = new();
-    private readonly ObservableCollection<DeviceDriverEntry> _drivers = new();
+    private readonly ObservableCollection<DeviceDriverCategoryGroup> _driverCategories = new();
+    private readonly ObservableCollection<StorageVolumeEntry> _storageVolumes = new();
+    private readonly ObservableCollection<PhysicalStorageEntry> _physicalStorage = new();
     private IReadOnlyList<PortEntry> _allPorts = Array.Empty<PortEntry>();
     private IReadOnlyList<ProcessEntry> _allProcesses = Array.Empty<ProcessEntry>();
     private IReadOnlyList<ServiceEntry> _allServices = Array.Empty<ServiceEntry>();
@@ -33,6 +35,7 @@ public partial class SystemToolsView : UserControl
     private bool _isRefreshingPorts;
     private bool _isRefreshingRelationships;
     private bool _isRefreshingDeviceInfo;
+    private bool _isRefreshingStorage;
     private bool _processesAscending = true;
     private bool _servicesAscending = true;
     private string _processSortKey = "Name";
@@ -56,7 +59,9 @@ public partial class SystemToolsView : UserControl
         RelationsBubbleListBox.ItemsSource = _relationships;
         EnvironmentListBox.ItemsSource = _environmentVariables;
         PathEntriesListBox.ItemsSource = _pathEntries;
-        DriverInfoItems.ItemsSource = _drivers;
+        DriverCategoryItems.ItemsSource = _driverCategories;
+        StorageVolumesItems.ItemsSource = _storageVolumes;
+        PhysicalStorageItems.ItemsSource = _physicalStorage;
         PathEntriesListBox.PreviewMouseLeftButtonDown += PathEntriesListBox_PreviewMouseLeftButtonDown;
         _portAutoRefreshTimer = new DispatcherTimer();
         _portAutoRefreshTimer.Tick += AutoRefreshPorts_Tick;
@@ -169,6 +174,32 @@ public partial class SystemToolsView : UserControl
         finally { _isRefreshingDeviceInfo = false; }
     }
 
+    /// <summary>读取 Windows 已挂载卷与物理磁盘的容量信息；保持只读，不接入实时传感器。</summary>
+    private async Task RefreshStorageAsync()
+    {
+        if (_isRefreshingStorage) return;
+        _isRefreshingStorage = true;
+        StorageSummaryText.Text = "正在读取本地卷与物理磁盘…";
+        try
+        {
+            var overview = await Task.Run(SystemToolsService.GetStorageOverview);
+            StorageOverviewPanel.DataContext = overview;
+            Replace(_storageVolumes, overview.Volumes);
+            Replace(_physicalStorage, overview.PhysicalDisks);
+            StorageSummaryText.Text = overview.SummaryText;
+            StorageVolumeEmptyState.Visibility = _storageVolumes.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            PhysicalStorageEmptyState.Visibility = _physicalStorage.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+        catch (Exception exception)
+        {
+            StorageSummaryText.Text = $"读取失败：{exception.Message}";
+        }
+        finally
+        {
+            _isRefreshingStorage = false;
+        }
+    }
+
     private void TabButton_Click(object sender, RoutedEventArgs e)
     {
         var section = (sender as FrameworkElement)?.Tag?.ToString() ?? "Ports";
@@ -184,6 +215,7 @@ public partial class SystemToolsView : UserControl
         else if (section == "Services") _ = RefreshServicesAsync();
         else if (section == "Relations") _ = RefreshRelationshipsAsync();
         else if (section == "Overview") _ = RefreshDeviceInfoAsync();
+        else if (section == "Storage") _ = RefreshStorageAsync();
         else if (section == "Environment") RefreshEnvironment();
     }
 
@@ -251,6 +283,7 @@ public partial class SystemToolsView : UserControl
     private async void RefreshServices_Click(object sender, RoutedEventArgs e) => await RefreshServicesAsync();
     private async void RefreshRelationships_Click(object sender, RoutedEventArgs e) => await RefreshRelationshipsAsync();
     private async void RefreshDeviceInfo_Click(object sender, RoutedEventArgs e) => await RefreshDeviceInfoAsync();
+    private async void RefreshStorage_Click(object sender, RoutedEventArgs e) => await RefreshStorageAsync();
     private void DriverFilterTextBox_TextChanged(object sender, TextChangedEventArgs e)
     {
         if (IsLoaded) ApplyDriverFilter();
@@ -258,6 +291,13 @@ public partial class SystemToolsView : UserControl
     private void DriverScopeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (IsLoaded) ApplyDriverFilter();
+    }
+    private void ToggleDriverCategory_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is DeviceDriverCategoryGroup category)
+        {
+            category.IsExpanded = !category.IsExpanded;
+        }
     }
     private void PortFilterTextBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyPortFilter();
     private void PortDisplayOption_Changed(object sender, RoutedEventArgs e)
@@ -633,12 +673,18 @@ public partial class SystemToolsView : UserControl
             })
             .Where(item => string.IsNullOrWhiteSpace(keyword) || item.SearchText.Contains(keyword, StringComparison.OrdinalIgnoreCase))
             .ToArray();
-        Replace(_drivers, drivers);
+        var expandMatches = !string.IsNullOrWhiteSpace(keyword) || string.Equals(scope, "Issues", StringComparison.OrdinalIgnoreCase);
+        var categories = drivers
+            .GroupBy(item => item.Category)
+            .OrderBy(group => group.Min(item => item.CategoryOrder))
+            .Select(group => new DeviceDriverCategoryGroup(group.Key, group.ToArray(), expandMatches))
+            .ToArray();
+        Replace(_driverCategories, categories);
         var issueCount = _allDrivers.Count(item => item.HasIssue);
         DriverSummaryText.Text = _allDrivers.Count == 0
             ? "未读取到 Windows PnP 驱动信息"
-            : $"显示 {_drivers.Count:N0} / {_allDrivers.Count:N0} 项 · {issueCount:N0} 项需要注意";
-        DriverEmptyState.Visibility = _drivers.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            : $"显示 {categories.Length:N0} 类 / {drivers.Length:N0} 项 · {issueCount:N0} 项需要注意";
+        DriverEmptyState.Visibility = drivers.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void OpenProcessDirectory_Click(object sender, RoutedEventArgs e)
