@@ -19,17 +19,20 @@ public partial class SystemToolsView : UserControl
     private readonly ObservableCollection<SystemRelationshipEntry> _relationships = new();
     private readonly ObservableCollection<EnvironmentVariableEntry> _environmentVariables = new();
     private readonly ObservableCollection<PathEntry> _pathEntries = new();
+    private readonly ObservableCollection<DeviceDriverEntry> _drivers = new();
     private IReadOnlyList<PortEntry> _allPorts = Array.Empty<PortEntry>();
     private IReadOnlyList<ProcessEntry> _allProcesses = Array.Empty<ProcessEntry>();
     private IReadOnlyList<ServiceEntry> _allServices = Array.Empty<ServiceEntry>();
     private IReadOnlyList<SystemRelationshipEntry> _allRelationships = Array.Empty<SystemRelationshipEntry>();
     private IReadOnlyList<EnvironmentVariableEntry> _allEnvironmentVariables = Array.Empty<EnvironmentVariableEntry>();
+    private IReadOnlyList<DeviceDriverEntry> _allDrivers = Array.Empty<DeviceDriverEntry>();
     private bool _portsAscending = true;
     private string _portSortKey = "Port";
     private bool _portHeaderSortActive;
     private readonly DispatcherTimer _portAutoRefreshTimer;
     private bool _isRefreshingPorts;
     private bool _isRefreshingRelationships;
+    private bool _isRefreshingDeviceInfo;
     private bool _processesAscending = true;
     private bool _servicesAscending = true;
     private string _processSortKey = "Name";
@@ -53,6 +56,7 @@ public partial class SystemToolsView : UserControl
         RelationsBubbleListBox.ItemsSource = _relationships;
         EnvironmentListBox.ItemsSource = _environmentVariables;
         PathEntriesListBox.ItemsSource = _pathEntries;
+        DriverInfoItems.ItemsSource = _drivers;
         PathEntriesListBox.PreviewMouseLeftButtonDown += PathEntriesListBox_PreviewMouseLeftButtonDown;
         _portAutoRefreshTimer = new DispatcherTimer();
         _portAutoRefreshTimer.Tick += AutoRefreshPorts_Tick;
@@ -73,7 +77,7 @@ public partial class SystemToolsView : UserControl
             ConfigureProcessColumns();
             if (EnvironmentOnly)
             {
-                await RefreshHardwareInfoAsync();
+                await RefreshDeviceInfoAsync();
                 RefreshEnvironment();
             }
             else await RefreshPortsAsync();
@@ -143,15 +147,26 @@ public partial class SystemToolsView : UserControl
         catch (Exception exception) { EnvironmentSummaryText.Text = $"读取失败：{exception.Message}"; }
     }
 
-    /// <summary>通过 Windows 的公开只读接口刷新静态硬件身份信息，无需管理员权限。</summary>
-    private async Task RefreshHardwareInfoAsync()
+    /// <summary>通过 Windows 的公开只读接口刷新静态设备与 PnP 驱动信息，无需管理员权限。</summary>
+    private async Task RefreshDeviceInfoAsync()
     {
+        if (_isRefreshingDeviceInfo) return;
+        _isRefreshingDeviceInfo = true;
+        DriverSummaryText.Text = "正在读取设备与驱动信息…";
         try
         {
-            var overview = await Task.Run(SystemToolsService.GetHardwareOverview);
-            OverviewInfoItems.ItemsSource = overview.Items;
+            var snapshot = await Task.Run(() =>
+            {
+                var overview = SystemToolsService.GetHardwareOverview();
+                var drivers = SystemToolsService.GetDeviceDrivers();
+                return (Overview: overview, Drivers: drivers);
+            });
+            OverviewInfoItems.ItemsSource = snapshot.Overview.Items;
+            _allDrivers = snapshot.Drivers;
+            ApplyDriverFilter();
         }
         catch (Exception exception) { MessageBox.Show(exception.Message, "读取系统信息失败", MessageBoxButton.OK, MessageBoxImage.Warning); }
+        finally { _isRefreshingDeviceInfo = false; }
     }
 
     private void TabButton_Click(object sender, RoutedEventArgs e)
@@ -162,16 +177,17 @@ public partial class SystemToolsView : UserControl
         ServicesPanel.Visibility = section == "Services" ? Visibility.Visible : Visibility.Collapsed;
         RelationsBubblePanel.Visibility = section == "Relations" ? Visibility.Visible : Visibility.Collapsed;
         OverviewPanel.Visibility = section == "Overview" ? Visibility.Visible : Visibility.Collapsed;
+        StoragePanel.Visibility = section == "Storage" ? Visibility.Visible : Visibility.Collapsed;
         EnvironmentPanel.Visibility = section == "Environment" ? Visibility.Visible : Visibility.Collapsed;
         SetActiveTab(section);
         if (section == "Processes") _ = RefreshProcessesAsync();
         else if (section == "Services") _ = RefreshServicesAsync();
         else if (section == "Relations") _ = RefreshRelationshipsAsync();
-        else if (section == "Overview") _ = RefreshHardwareInfoAsync();
+        else if (section == "Overview") _ = RefreshDeviceInfoAsync();
         else if (section == "Environment") RefreshEnvironment();
     }
 
-    /// <summary>资源管理保留观察与关联功能；系统工具承载静态硬件信息与环境变量配置。</summary>
+    /// <summary>资源管理保留观察与关联功能；系统工具承载设备、存储与环境变量功能。</summary>
     private void ConfigureModuleMode()
     {
         if (EnvironmentOnly)
@@ -181,23 +197,28 @@ public partial class SystemToolsView : UserControl
             ServicesTabButton.Visibility = Visibility.Collapsed;
             RelationsTabButton.Visibility = Visibility.Collapsed;
             OverviewTabButton.Visibility = Visibility.Visible;
+            StorageTabButton.Visibility = Visibility.Visible;
             Grid.SetColumn(OverviewTabButton, 0);
-            Grid.SetColumn(EnvironmentTabButton, 2);
+            Grid.SetColumn(StorageTabButton, 2);
+            Grid.SetColumn(EnvironmentTabButton, 4);
             AutoRefreshHostPanel.Visibility = Visibility.Collapsed;
             PortsPanel.Visibility = Visibility.Collapsed;
             ProcessesPanel.Visibility = Visibility.Collapsed;
             ServicesPanel.Visibility = Visibility.Collapsed;
             RelationsBubblePanel.Visibility = Visibility.Collapsed;
             EnvironmentPanel.Visibility = Visibility.Collapsed;
+            StoragePanel.Visibility = Visibility.Collapsed;
             OverviewPanel.Visibility = Visibility.Visible;
             SetActiveTab("Overview");
-            SetPageHeading("系统工具", "查看硬件信息与环境变量；所有写入操作都会在执行前明确确认。");
+            SetPageHeading("系统工具", "查看设备信息、存储空间与环境变量；所有写入操作都会在执行前明确确认。");
             return;
         }
 
         OverviewTabButton.Visibility = Visibility.Collapsed;
+        StorageTabButton.Visibility = Visibility.Collapsed;
         EnvironmentTabButton.Visibility = Visibility.Collapsed;
         OverviewPanel.Visibility = Visibility.Collapsed;
+        StoragePanel.Visibility = Visibility.Collapsed;
         AutoRefreshHostPanel.Visibility = Visibility.Visible;
         EnvironmentPanel.Visibility = Visibility.Collapsed;
         SetPageHeading("资源管理", "查看本机端口、进程、服务与关联关系；系统级操作会在执行时明确提示权限要求。");
@@ -206,7 +227,7 @@ public partial class SystemToolsView : UserControl
     private void SetPageHeading(string title, string subtitle)
     {
         var headers = FindVisualDescendants<TextBlock>(this)
-            .Where(item => item.FontSize is >= 14 && (item.Text == "系统工具" || item.Text == "查看硬件信息与环境变量；系统级操作会在执行时明确提示权限要求。"))
+            .Where(item => item.FontSize is >= 14 && (item.Text == "系统工具" || item.Text == "查看设备信息、存储空间与环境变量；系统级操作会在执行时明确提示权限要求。"))
             .ToArray();
         foreach (var header in headers)
         {
@@ -216,7 +237,7 @@ public partial class SystemToolsView : UserControl
 
     private void SetActiveTab(string section)
     {
-        foreach (var (button, name) in new[] { (PortsTabButton, "Ports"), (ProcessesTabButton, "Processes"), (ServicesTabButton, "Services"), (RelationsTabButton, "Relations"), (OverviewTabButton, "Overview"), (EnvironmentTabButton, "Environment") })
+        foreach (var (button, name) in new[] { (PortsTabButton, "Ports"), (ProcessesTabButton, "Processes"), (ServicesTabButton, "Services"), (RelationsTabButton, "Relations"), (OverviewTabButton, "Overview"), (StorageTabButton, "Storage"), (EnvironmentTabButton, "Environment") })
         {
             var active = name == section;
             button.Background = new SolidColorBrush(active ? Color.FromRgb(77, 124, 254) : Color.FromArgb(134, 255, 255, 255));
@@ -229,7 +250,15 @@ public partial class SystemToolsView : UserControl
     private async void RefreshProcesses_Click(object sender, RoutedEventArgs e) => await RefreshProcessesAsync();
     private async void RefreshServices_Click(object sender, RoutedEventArgs e) => await RefreshServicesAsync();
     private async void RefreshRelationships_Click(object sender, RoutedEventArgs e) => await RefreshRelationshipsAsync();
-    private async void RefreshHardwareInfo_Click(object sender, RoutedEventArgs e) => await RefreshHardwareInfoAsync();
+    private async void RefreshDeviceInfo_Click(object sender, RoutedEventArgs e) => await RefreshDeviceInfoAsync();
+    private void DriverFilterTextBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (IsLoaded) ApplyDriverFilter();
+    }
+    private void DriverScopeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (IsLoaded) ApplyDriverFilter();
+    }
     private void PortFilterTextBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyPortFilter();
     private void PortDisplayOption_Changed(object sender, RoutedEventArgs e)
     {
@@ -589,6 +618,27 @@ public partial class SystemToolsView : UserControl
         var keyword = EnvironmentFilterTextBox?.Text.Trim() ?? string.Empty;
         Replace(_environmentVariables, _allEnvironmentVariables.Where(item => string.IsNullOrWhiteSpace(keyword) || $"{item.Name} {item.Value}".Contains(keyword, StringComparison.OrdinalIgnoreCase)));
         EnvironmentSummaryText.Text = $"{(SelectedEnvironmentScope == EnvironmentVariableTarget.User ? "当前用户" : "系统")} · {_environmentVariables.Count:N0} 项";
+    }
+
+    /// <summary>设备页默认突出常用类别，同时保留异常项，避免把大量系统组件淹没在首屏。</summary>
+    private void ApplyDriverFilter()
+    {
+        var keyword = DriverFilterTextBox?.Text.Trim() ?? string.Empty;
+        var scope = SelectedTag(DriverScopeComboBox);
+        var drivers = _allDrivers.Where(item => scope switch
+            {
+                "Key" => item.IsKeyDevice || item.HasIssue,
+                "Issues" => item.HasIssue,
+                _ => true
+            })
+            .Where(item => string.IsNullOrWhiteSpace(keyword) || item.SearchText.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        Replace(_drivers, drivers);
+        var issueCount = _allDrivers.Count(item => item.HasIssue);
+        DriverSummaryText.Text = _allDrivers.Count == 0
+            ? "未读取到 Windows PnP 驱动信息"
+            : $"显示 {_drivers.Count:N0} / {_allDrivers.Count:N0} 项 · {issueCount:N0} 项需要注意";
+        DriverEmptyState.Visibility = _drivers.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void OpenProcessDirectory_Click(object sender, RoutedEventArgs e)

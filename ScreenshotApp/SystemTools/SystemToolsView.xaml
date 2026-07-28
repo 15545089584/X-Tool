@@ -20,14 +20,15 @@
     </UserControl.Resources>
     <Grid Margin="44,42,52,38">
         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="20" /><RowDefinition Height="42" /><RowDefinition Height="16" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-        <StackPanel><TextBlock FontSize="30" FontWeight="SemiBold" Text="系统工具" /><TextBlock Margin="0,8,0,0" FontSize="14" Foreground="#728195" Text="查看硬件信息与环境变量；系统级操作会在执行时明确提示权限要求。" /></StackPanel>
+        <StackPanel><TextBlock FontSize="30" FontWeight="SemiBold" Text="系统工具" /><TextBlock Margin="0,8,0,0" FontSize="14" Foreground="#728195" Text="查看设备信息、存储空间与环境变量；系统级操作会在执行时明确提示权限要求。" /></StackPanel>
         <Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition Width="122" /><ColumnDefinition Width="10" /><ColumnDefinition Width="122" /><ColumnDefinition Width="10" /><ColumnDefinition Width="122" /><ColumnDefinition Width="10" /><ColumnDefinition Width="122" /><ColumnDefinition Width="10" /><ColumnDefinition Width="122" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-            <Button x:Name="OverviewTabButton" Style="{StaticResource SystemTab}" Tag="Overview" Click="TabButton_Click" Visibility="Collapsed"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="硬件信息" /></Button>
+            <Button x:Name="OverviewTabButton" Style="{StaticResource SystemTab}" Tag="Overview" Click="TabButton_Click" Visibility="Collapsed"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="设备信息" /></Button>
             <Button x:Name="PortsTabButton" Style="{StaticResource SystemTab}" Tag="Ports" Click="TabButton_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="端口查看器" /></Button>
             <Button x:Name="ProcessesTabButton" Grid.Column="2" Style="{StaticResource SystemTab}" Tag="Processes" Click="TabButton_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="进程管理" /></Button>
             <Button x:Name="ServicesTabButton" Grid.Column="4" Style="{StaticResource SystemTab}" Tag="Services" Click="TabButton_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="服务管理" /></Button>
             <Button x:Name="RelationsTabButton" Grid.Column="6" Style="{StaticResource SystemTab}" Tag="Relations" Click="TabButton_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="关联关系" /></Button>
-            <Button x:Name="EnvironmentTabButton" Grid.Column="2" Style="{StaticResource SystemTab}" Tag="Environment" Click="TabButton_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="环境变量" /></Button>
+            <Button x:Name="StorageTabButton" Grid.Column="2" Style="{StaticResource SystemTab}" Tag="Storage" Click="TabButton_Click" Visibility="Collapsed"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="存储" /></Button>
+            <Button x:Name="EnvironmentTabButton" Grid.Column="4" Style="{StaticResource SystemTab}" Tag="Environment" Click="TabButton_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="环境变量" /></Button>
             <Border x:Name="AutoRefreshHostPanel" Grid.Column="9" HorizontalAlignment="Right" Style="{StaticResource AutoRefreshHost}">
                 <Grid>
                     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="8" /><ColumnDefinition Width="84" /></Grid.ColumnDefinitions>
@@ -60,18 +61,17 @@
             </Grid>
             <Grid x:Name="OverviewPanel" Visibility="Collapsed">
                 <Border Padding="15" Style="{StaticResource SystemCard}">
-                    <Grid>
-                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-                        <Grid>
-                            <StackPanel>
-                                <TextBlock FontSize="18" FontWeight="SemiBold" Foreground="#2E4B67" Text="硬件信息" />
-                                <TextBlock Margin="0,2,0,0" FontSize="10" Foreground="#728BA3" Text="查看当前设备的系统与硬件配置；信息来自 Windows 的公开只读接口。" />
-                            </StackPanel>
-                            <Button HorizontalAlignment="Right" Width="96" Height="40" Padding="0" Style="{StaticResource SystemPrimaryButton}" Click="RefreshHardwareInfo_Click"><TextBlock FontWeight="SemiBold" Foreground="White" Text="刷新信息" /></Button>
-                        </Grid>
-                        <Grid Grid.Row="2" ClipToBounds="True">
-                            <Border Padding="10" Background="#54FFFFFF" BorderBrush="#8ED6E9F8" BorderThickness="1" CornerRadius="13">
-                                <Viewbox Stretch="Fill" StretchDirection="Both">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" CanContentScroll="False">
+                        <StackPanel>
+                            <Grid>
+                                <StackPanel>
+                                    <TextBlock FontSize="18" FontWeight="SemiBold" Foreground="#2E4B67" Text="设备信息" />
+                                    <TextBlock Margin="0,2,0,0" FontSize="10" Foreground="#728BA3" Text="查看当前设备的硬件配置及 Windows 识别到的 PnP 驱动；所有数据均为只读。" />
+                                </StackPanel>
+                                <Button HorizontalAlignment="Right" Width="110" Height="40" Padding="0" Style="{StaticResource SystemPrimaryButton}" Click="RefreshDeviceInfo_Click"><TextBlock FontWeight="SemiBold" Foreground="White" Text="刷新信息" /></Button>
+                            </Grid>
+                            <Border Margin="0,10,0,0" Padding="10" Background="#54FFFFFF" BorderBrush="#8ED6E9F8" BorderThickness="1" CornerRadius="13">
+                                <Viewbox Stretch="Uniform" StretchDirection="Both">
                                     <Grid Width="1400" Height="540">
                                         <ItemsControl x:Name="OverviewInfoItems" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
                                             <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="8" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
@@ -95,7 +95,86 @@
                                     </Grid>
                                 </Viewbox>
                             </Border>
-                        </Grid>
+                            <Border Margin="0,14,0,2" Padding="14" Background="#54FFFFFF" BorderBrush="#8ED6E9F8" BorderThickness="1" CornerRadius="13">
+                                <Grid>
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="38" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                                    <Grid>
+                                        <StackPanel>
+                                            <TextBlock FontSize="16" FontWeight="SemiBold" Foreground="#2E4B67" Text="驱动信息" />
+                                            <TextBlock Margin="0,2,0,0" FontSize="10" Foreground="#728BA3" Text="显示 Windows 已识别的 PnP 驱动；蓝牙、USB 与虚拟设备会独立列出，不强行映射到上方硬件摘要。" />
+                                        </StackPanel>
+                                        <TextBlock x:Name="DriverSummaryText" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" Foreground="#637E9B" Text="正在读取…" />
+                                    </Grid>
+                                    <Grid Grid.Row="2">
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="148" /><ColumnDefinition Width="10" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                        <ComboBox x:Name="DriverScopeComboBox" Height="38" Style="{StaticResource SystemComboBox}" SelectionChanged="DriverScopeComboBox_SelectionChanged">
+                                            <ComboBoxItem Tag="Key" IsSelected="True">关键设备</ComboBoxItem>
+                                            <ComboBoxItem Tag="All">全部设备</ComboBoxItem>
+                                            <ComboBoxItem Tag="Issues">异常项</ComboBoxItem>
+                                        </ComboBox>
+                                        <Grid Grid.Column="2">
+                                            <TextBox x:Name="DriverFilterTextBox" Height="38" Padding="34,0,12,0" VerticalContentAlignment="Center" Style="{StaticResource SystemTextBox}" TextChanged="DriverFilterTextBox_TextChanged" ToolTip="按设备、类别、提供商、版本或 INF 文件筛选" />
+                                            <TextBlock Margin="11,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center" FontSize="18" Foreground="#7690AA" IsHitTestVisible="False" Text="⌕" />
+                                        </Grid>
+                                    </Grid>
+                                    <Border Grid.Row="4" Background="#36E8F2FF" BorderBrush="#8ACCE2F5" BorderThickness="1" CornerRadius="11">
+                                        <Grid Margin="8">
+                                            <Grid.RowDefinitions><RowDefinition Height="30" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                            <Grid Margin="10,0,22,0">
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="2.1*" /><ColumnDefinition Width="1.2*" /><ColumnDefinition Width="1*" /><ColumnDefinition Width="112" /><ColumnDefinition Width="100" /></Grid.ColumnDefinitions>
+                                                <TextBlock Style="{StaticResource ColumnHeader}" Text="设备与类别" />
+                                                <TextBlock Grid.Column="1" Style="{StaticResource ColumnHeader}" Text="提供商 / INF" />
+                                                <TextBlock Grid.Column="2" Style="{StaticResource ColumnHeader}" Text="驱动版本" />
+                                                <TextBlock Grid.Column="3" Style="{StaticResource ColumnHeader}" Text="驱动日期" />
+                                                <TextBlock Grid.Column="4" HorizontalAlignment="Right" Style="{StaticResource ColumnHeader}" Text="状态" />
+                                            </Grid>
+                                            <ItemsControl x:Name="DriverInfoItems" Grid.Row="1">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border Margin="2,0,2,6" Padding="10,9" Background="#78FFFFFF" BorderBrush="#54D5E8F7" BorderThickness="1" CornerRadius="10">
+                                                            <Grid>
+                                                                <Grid.ColumnDefinitions><ColumnDefinition Width="2.1*" /><ColumnDefinition Width="1.2*" /><ColumnDefinition Width="1*" /><ColumnDefinition Width="112" /><ColumnDefinition Width="100" /></Grid.ColumnDefinitions>
+                                                                <StackPanel Orientation="Horizontal">
+                                                                    <Border Width="32" Height="32" VerticalAlignment="Center" Background="Transparent" BorderBrush="#35D4E8F8" BorderThickness="1" CornerRadius="10"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="{Binding Accent}" Text="{Binding Icon}" /></Border>
+                                                                    <StackPanel Margin="9,0,0,0" VerticalAlignment="Center">
+                                                                        <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#45627E" Text="{Binding DeviceName}" TextTrimming="CharacterEllipsis" ToolTip="{Binding DeviceName}" />
+                                                                        <TextBlock Margin="0,2,0,0" FontSize="10" Foreground="{Binding Accent}" Text="{Binding Category}" />
+                                                                    </StackPanel>
+                                                                </StackPanel>
+                                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                                    <TextBlock FontSize="11" Foreground="#567EA9" Text="{Binding Provider}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Provider}" />
+                                                                    <TextBlock Margin="0,2,0,0" FontSize="10" Foreground="#7890A6" Text="{Binding InfText}" TextTrimming="CharacterEllipsis" ToolTip="{Binding InfText}" />
+                                                                </StackPanel>
+                                                                <TextBlock Grid.Column="2" VerticalAlignment="Center" FontSize="11" Foreground="#567EA9" Text="{Binding Version}" TextTrimming="CharacterEllipsis" />
+                                                                <TextBlock Grid.Column="3" VerticalAlignment="Center" FontSize="11" Foreground="#617D98" Text="{Binding DriverDateText}" />
+                                                                <Border Grid.Column="4" Padding="8,5" HorizontalAlignment="Right" VerticalAlignment="Center" Background="#6FFFFFFF" BorderBrush="{Binding StatusAccent}" BorderThickness="1" CornerRadius="9"><TextBlock FontSize="10" FontWeight="SemiBold" Foreground="{Binding StatusAccent}" Text="{Binding StatusText}" /></Border>
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                            <StackPanel x:Name="DriverEmptyState" Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed">
+                                                <TextBlock HorizontalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="26" Foreground="#7690AA" Text="&#xE9D2;" />
+                                                <TextBlock Margin="0,7,0,0" HorizontalAlignment="Center" FontSize="12" FontWeight="SemiBold" Foreground="#45627E" Text="没有匹配的驱动信息" />
+                                                <TextBlock Margin="0,3,0,0" HorizontalAlignment="Center" FontSize="10" Foreground="#728195" Text="请调整筛选条件，或点击上方的刷新信息重新读取。" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
+            </Grid>
+            <Grid x:Name="StoragePanel" Visibility="Collapsed">
+                <Border Padding="15" Style="{StaticResource SystemCard}">
+                    <Grid>
+                        <StackPanel Width="420" HorizontalAlignment="Center" VerticalAlignment="Center" TextElement.Foreground="#45627E">
+                            <Border Width="72" Height="72" HorizontalAlignment="Center" Background="#54FFFFFF" BorderBrush="#8ED6E9F8" BorderThickness="1" CornerRadius="22"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="34" Foreground="#16B99B" Text="&#xEDA2;" /></Border>
+                            <TextBlock Margin="0,18,0,0" HorizontalAlignment="Center" FontSize="19" FontWeight="SemiBold" Text="存储空间" />
+                            <TextBlock Margin="0,7,0,0" HorizontalAlignment="Center" FontSize="12" Foreground="#728195" Text="存储空间功能正在准备中" />
+                            <TextBlock Margin="0,4,0,0" HorizontalAlignment="Center" FontSize="10" Foreground="#7890A6" Text="后续会在这里展示磁盘分区、可用空间与存储健康信息。" TextAlignment="Center" TextWrapping="Wrap" />
+                        </StackPanel>
                     </Grid>
                 </Border>
             </Grid>

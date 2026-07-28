@@ -139,6 +139,64 @@ public static class SystemToolsService
         return new HardwareOverview(items, DateTime.Now);
     }
 
+    /// <summary>读取 Windows 已识别的 PnP 驱动，并补充设备管理器提供的状态；仅使用公开只读 WMI 接口。</summary>
+    public static IReadOnlyList<DeviceDriverEntry> GetDeviceDrivers()
+    {
+        var statesByDeviceId = new Dictionary<string, PnpDeviceState>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in QueryWmi(
+                     @"root\cimv2",
+                     "SELECT DeviceID,PNPDeviceID,PNPClass,Status,ConfigManagerErrorCode,ErrorDescription FROM Win32_PnPEntity"))
+        {
+            var state = new PnpDeviceState(
+                GetText(row, "PNPClass"),
+                GetText(row, "Status"),
+                GetNullableInt(row, "ConfigManagerErrorCode"),
+                GetText(row, "ErrorDescription"));
+            foreach (var deviceId in new[] { GetText(row, "DeviceID"), GetText(row, "PNPDeviceID") }.Where(value => !string.IsNullOrWhiteSpace(value)))
+            {
+                statesByDeviceId[deviceId] = state;
+            }
+        }
+
+        var drivers = QueryWmi(
+                @"root\cimv2",
+                "SELECT DeviceName,FriendlyName,DeviceClass,DeviceID,DriverProviderName,DriverVersion,DriverDate,InfName,IsSigned,Signer,Manufacturer FROM Win32_PnPSignedDriver")
+            .Select(row =>
+            {
+                var deviceId = GetText(row, "DeviceID");
+                statesByDeviceId.TryGetValue(deviceId, out var state);
+                var deviceName = GetText(row, "DeviceName", GetText(row, "FriendlyName", "未命名设备"));
+                var category = GetDriverCategory(GetText(row, "DeviceClass"), state?.PnpClass ?? string.Empty, deviceName);
+                var provider = GetText(row, "DriverProviderName", GetText(row, "Manufacturer", "未知提供商"));
+                return new DeviceDriverEntry(
+                    deviceId,
+                    deviceName,
+                    category,
+                    provider,
+                    GetText(row, "DriverVersion", "未知版本"),
+                    FormatDriverDate(GetValue(row, "DriverDate")),
+                    GetText(row, "InfName"),
+                    GetBoolean(row, "IsSigned"),
+                    GetText(row, "Signer"),
+                    state?.ErrorCode,
+                    state?.Status ?? string.Empty,
+                    state?.ErrorDescription ?? string.Empty,
+                    state is not null);
+            })
+            .Where(item => !string.IsNullOrWhiteSpace(item.DeviceName))
+            .GroupBy(
+                item => string.IsNullOrWhiteSpace(item.DeviceId)
+                    ? $"{item.DeviceName}\u001F{item.InfName}\u001F{item.Version}"
+                    : $"{item.DeviceId}\u001F{item.InfName}\u001F{item.Version}",
+                StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .OrderByDescending(item => item.HasIssue)
+            .ThenBy(item => item.CategoryOrder)
+            .ThenBy(item => item.DeviceName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return drivers;
+    }
+
     private static IReadOnlyList<Dictionary<string, object?>> QueryWmi(string scopePath, string query)
     {
         var rows = new List<Dictionary<string, object?>>();
@@ -163,7 +221,45 @@ public static class SystemToolsService
     private static object? GetValue(Dictionary<string, object?>? row, string key) => row is not null && row.TryGetValue(key, out var value) ? value : null;
     private static string GetText(Dictionary<string, object?>? row, string key, string fallback = "") => GetValue(row, key)?.ToString()?.Trim() is { Length: > 0 } value ? value : fallback;
     private static int GetInt(Dictionary<string, object?>? row, string key) => int.TryParse(GetValue(row, key)?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) ? value : 0;
+    private static int? GetNullableInt(Dictionary<string, object?>? row, string key) => int.TryParse(GetValue(row, key)?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) ? value : null;
     private static long GetLong(Dictionary<string, object?>? row, string key) => long.TryParse(GetValue(row, key)?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) ? value : 0;
+    private static bool GetBoolean(Dictionary<string, object?>? row, string key)
+    {
+        var value = GetValue(row, key);
+        return value is bool boolean
+            ? boolean
+            : bool.TryParse(value?.ToString(), out var parsed) ? parsed : string.Equals(value?.ToString(), "1", StringComparison.Ordinal);
+    }
+
+    private static string FormatDriverDate(object? value)
+    {
+        if (value is DateTime date) return date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var text = value?.ToString()?.Trim() ?? string.Empty;
+        if (DateTime.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out var parsed)) return parsed.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        if (text.Length >= 14 && DateTime.TryParseExact(text[..14], "yyyyMMddHHmmss", CultureInfo.InvariantCulture, DateTimeStyles.None, out parsed)) return parsed.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        return string.IsNullOrWhiteSpace(text) ? "未知" : text;
+    }
+
+    private static string GetDriverCategory(string deviceClass, string pnpClass, string deviceName)
+    {
+        var category = $"{deviceClass} {pnpClass} {deviceName}".ToUpperInvariant();
+        if (category.Contains("DISPLAY", StringComparison.Ordinal)) return "显卡";
+        if (category.Contains("BLUETOOTH", StringComparison.Ordinal)) return "蓝牙";
+        if (category.Contains("NET", StringComparison.Ordinal)) return "网络";
+        if (category.Contains("AUDIO", StringComparison.Ordinal) || category.Contains("MEDIA", StringComparison.Ordinal)) return "音频";
+        if (category.Contains("SCSI", StringComparison.Ordinal) || category.Contains("HDC", StringComparison.Ordinal) || category.Contains("DISK", StringComparison.Ordinal) || category.Contains("VOLUME", StringComparison.Ordinal) || category.Contains("STORAGE", StringComparison.Ordinal)) return "存储";
+        if (category.Contains("MONITOR", StringComparison.Ordinal)) return "显示器";
+        if (category.Contains("CAMERA", StringComparison.Ordinal) || category.Contains("IMAGE", StringComparison.Ordinal)) return "摄像头";
+        if (category.Contains("KEYBOARD", StringComparison.Ordinal) || category.Contains("MOUSE", StringComparison.Ordinal) || category.Contains("HID", StringComparison.Ordinal)) return "输入设备";
+        if (category.Contains("USB", StringComparison.Ordinal)) return "USB";
+        if (category.Contains("PORT", StringComparison.Ordinal)) return "端口";
+        if (category.Contains("SYSTEM", StringComparison.Ordinal) || category.Contains("PROCESSOR", StringComparison.Ordinal) || category.Contains("FIRMWARE", StringComparison.Ordinal)) return "系统设备";
+        if (category.Contains("SOFTWARE", StringComparison.Ordinal)) return "软件组件";
+        return "其他";
+    }
+
+    private sealed record PnpDeviceState(string PnpClass, string Status, int? ErrorCode, string ErrorDescription);
+
     private static string CleanHardwareName(string value) => value.Replace("(R)", string.Empty, StringComparison.OrdinalIgnoreCase).Replace("(TM)", string.Empty, StringComparison.OrdinalIgnoreCase).Replace("  ", " ").Trim();
     private static int GraphicsAdapterOrder(string name) => name.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase) ? 0 : name.Contains("AMD", StringComparison.OrdinalIgnoreCase) ? 1 : name.Contains("Intel", StringComparison.OrdinalIgnoreCase) ? 2 : 3;
     private static string DecodeWmiText(object? value) => value is ushort[] words ? new string(words.Where(word => word > 0).Select(word => (char)word).ToArray()).Trim() : string.Empty;
@@ -976,3 +1072,104 @@ public sealed record SystemInfoItem(string Key, string Title, string Primary, st
 public sealed record HardwareOverview(IReadOnlyList<HardwarePropertyItem> Items, DateTime CapturedAt);
 
 public sealed record HardwarePropertyItem(string Title, string Primary, string Attributes, string Secondary, string Accent, string Icon);
+
+/// <summary>Windows PnP 驱动的只读展示项；状态来自设备管理器公开的配置状态。</summary>
+public sealed record DeviceDriverEntry(
+    string DeviceId,
+    string DeviceName,
+    string Category,
+    string Provider,
+    string Version,
+    string DriverDateText,
+    string InfName,
+    bool IsSigned,
+    string Signer,
+    int? ErrorCode,
+    string DeviceStatus,
+    string ErrorDescription,
+    bool HasDeviceState)
+{
+    public bool HasIssue => ErrorCode is > 0 ||
+                            (HasDeviceState && !string.IsNullOrWhiteSpace(DeviceStatus) && !string.Equals(DeviceStatus, "OK", StringComparison.OrdinalIgnoreCase));
+
+    public bool IsKeyDevice => Category is "显卡" or "网络" or "蓝牙" or "音频" or "存储" or "显示器" or "摄像头" or "输入设备" or "USB" or "端口";
+
+    public string Icon => Category switch
+    {
+        "显卡" => "\uE950",
+        "网络" => "\uE701",
+        "蓝牙" => "\uE702",
+        "音频" => "\uE767",
+        "存储" => "\uEDA2",
+        "显示器" => "\uE7F9",
+        "摄像头" => "\uE722",
+        "输入设备" => "\uE765",
+        "USB" => "\uE88E",
+        "端口" => "\uE8B7",
+        "系统设备" => "\uEEA1",
+        "软件组件" => "\uE950",
+        _ => "\uE9CE"
+    };
+
+    public string Accent => Category switch
+    {
+        "显卡" => "#7D63F1",
+        "网络" => "#2F9AF5",
+        "蓝牙" => "#4D7CFE",
+        "音频" => "#D97965",
+        "存储" => "#16B99B",
+        "显示器" => "#607D91",
+        "摄像头" => "#8B6CFF",
+        "输入设备" => "#168BBF",
+        "USB" => "#2F9AF5",
+        "端口" => "#4D7CFE",
+        "系统设备" => "#F06D75",
+        "软件组件" => "#7890A6",
+        _ => "#7890A6"
+    };
+
+    public int CategoryOrder => Category switch
+    {
+        "显卡" => 0,
+        "网络" => 1,
+        "蓝牙" => 2,
+        "音频" => 3,
+        "存储" => 4,
+        "显示器" => 5,
+        "摄像头" => 6,
+        "输入设备" => 7,
+        "USB" => 8,
+        "端口" => 9,
+        "系统设备" => 10,
+        "软件组件" => 11,
+        _ => 12
+    };
+
+    public string StatusText
+    {
+        get
+        {
+            if (ErrorCode == 0) return "正常";
+            if (ErrorCode == 14) return "需重启";
+            if (ErrorCode == 22) return "已禁用";
+            if (ErrorCode == 28) return "未安装驱动";
+            if (ErrorCode is > 0) return $"错误 {ErrorCode}";
+            if (!HasDeviceState) return "已识别";
+            if (string.Equals(DeviceStatus, "OK", StringComparison.OrdinalIgnoreCase)) return "正常";
+            return string.IsNullOrWhiteSpace(DeviceStatus) ? "状态未知" : DeviceStatus;
+        }
+    }
+
+    public string StatusAccent => HasIssue ? "#E16670" : StatusText == "正常" ? "#20B783" : "#4D7CFE";
+
+    public string InfText
+    {
+        get
+        {
+            var inf = string.IsNullOrWhiteSpace(InfName) ? "INF 未提供" : InfName;
+            return $"{inf} · {(IsSigned ? "已签名" : "签名未确认")}";
+        }
+    }
+
+    public string SearchText => $"{DeviceName} {Category} {Provider} {Version} {InfName} {Signer} {DeviceId} {ErrorDescription}";
+}
