@@ -75,7 +75,7 @@ internal static class NetworkDeepToolsService
             .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? "—";
         var adapter = adapters.FirstOrDefault(item => item.IsPrimary && item.InterfaceType == NetworkInterfaceType.Wireless80211.ToString())
             ?? adapters.FirstOrDefault(item => item.IsUp && item.InterfaceType == NetworkInterfaceType.Wireless80211.ToString());
-        var ssid = Find("SSID");
+        var ssid = DecodeWifiSsid(Find("SSID"));
         var channel = Find("频道", "通道", "Channel");
         var band = GetBand(channel);
         var description = adapter?.Description ?? Find("描述", "Description");
@@ -117,7 +117,7 @@ internal static class NetworkDeepToolsService
             var ssid = Regex.Match(line, @"^\s*SSID\s+\d+\s*[:：]\s*(?<value>.*)$", RegexOptions.IgnoreCase);
             if (ssid.Success)
             {
-                var name = string.IsNullOrWhiteSpace(ssid.Groups["value"].Value) ? "隐藏网络" : ssid.Groups["value"].Value.Trim();
+                var name = string.IsNullOrWhiteSpace(ssid.Groups["value"].Value) ? "隐藏网络" : DecodeWifiSsid(ssid.Groups["value"].Value.Trim());
                 if (!networks.TryGetValue(name, out current)) networks[name] = current = new NearbyWifiBuilder(name);
                 continue;
             }
@@ -141,6 +141,28 @@ internal static class NetworkDeepToolsService
     {
         var match = Regex.Match(value, @"\d+");
         return match.Success && int.TryParse(match.Value, out var number) ? Math.Clamp(number, 0, 100) : 0;
+    }
+
+    // Windows 的 WLAN 扫描对部分非 ASCII SSID 会返回 UTF-8 十六进制文本；仅在可严格解码且含非 ASCII 字符时还原。
+    private static string DecodeWifiSsid(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value == "—") return value;
+        var candidate = value.Trim();
+        if (candidate.Length < 6 || candidate.Length % 2 != 0 || !Regex.IsMatch(candidate, "^[0-9A-Fa-f]+$")) return candidate;
+        try
+        {
+            var decoded = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true)
+                .GetString(Convert.FromHexString(candidate));
+            return decoded.Any(character => character > 127) && !decoded.Any(char.IsControl) ? decoded : candidate;
+        }
+        catch (FormatException)
+        {
+            return candidate;
+        }
+        catch (DecoderFallbackException)
+        {
+            return candidate;
+        }
     }
 
     private static string GetBand(string channel)
