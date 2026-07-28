@@ -35,21 +35,30 @@ public static class SystemToolsService
         var totalMemory = hasMemory ? FormatBytes(memory.TotalPhys > long.MaxValue ? long.MaxValue : (long)memory.TotalPhys) : "未知";
         var availableMemory = hasMemory ? FormatBytes(memory.AvailPhys > long.MaxValue ? long.MaxValue : (long)memory.AvailPhys) : "未知";
         var uptime = TimeSpan.FromMilliseconds(Environment.TickCount64);
-        var drives = DriveInfo.GetDrives()
-            .Where(drive => drive.IsReady && drive.DriveType == DriveType.Fixed)
-            .Select(drive => new SystemDriveEntry(
-                drive.Name.TrimEnd('\\'),
-                string.IsNullOrWhiteSpace(drive.VolumeLabel) ? "本地磁盘" : drive.VolumeLabel,
-                drive.TotalSize <= 0 ? 0 : Math.Clamp((drive.TotalSize - drive.AvailableFreeSpace) * 100d / drive.TotalSize, 0, 100),
-                $"可用 {FormatBytes(drive.AvailableFreeSpace)} / 共 {FormatBytes(drive.TotalSize)}"))
-            .OrderBy(drive => drive.Name, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        return new SystemOverview(
-            $"{productName}{(string.IsNullOrWhiteSpace(displayVersion) ? string.Empty : " " + displayVersion)}\n内部版本 {build} · {(Environment.Is64BitOperatingSystem ? "64 位" : "32 位")}",
-            $"{Environment.MachineName}\n{Environment.ProcessorCount} 个逻辑处理器 · {(Environment.Is64BitProcess ? "X-Tool 64 位进程" : "X-Tool 32 位进程")}",
-            $"可用 {availableMemory} / 共 {totalMemory}\n已运行 {FormatUptime(uptime)} · {(IsRunningAsAdministrator() ? "当前已获管理员权限" : "当前为普通权限")}",
-            drives,
-            DateTime.Now);
+        var cpu = Registry.LocalMachine.OpenSubKey(@"HARDWARE\DESCRIPTION\System\CentralProcessor\0")?.GetValue("ProcessorNameString")?.ToString()?.Trim() ?? "处理器信息不可用";
+        var board = Registry.LocalMachine.OpenSubKey(@"HARDWARE\DESCRIPTION\System\BIOS");
+        var boardText = $"{board?.GetValue("BaseBoardManufacturer") ?? "未知厂商"} {board?.GetValue("BaseBoardProduct") ?? "未知型号"}".Trim();
+        var gpu = GetGraphicsNames();
+        var battery = System.Windows.Forms.SystemInformation.PowerStatus;
+        var batteryText = battery.BatteryLifePercent < 0 ? "未检测到电池（台式设备或权限限制）" : $"电量 {battery.BatteryLifePercent:P0} · {(battery.PowerLineStatus == System.Windows.Forms.PowerLineStatus.Online ? "正在接通电源" : "使用电池供电")}";
+        var items = new[]
+        {
+            new SystemInfoItem("Windows", "系统", $"{productName} {displayVersion}".Trim(), $"内部版本 {build} · {(Environment.Is64BitOperatingSystem ? "64 位" : "32 位")}", "#4D7CFE", "\uE770"),
+            new SystemInfoItem("处理器", "CPU", cpu, $"{Environment.ProcessorCount} 个逻辑处理器 · 当前为{(IsRunningAsAdministrator() ? "管理员" : "普通")}权限", "#3B9EFF", "\uE950"),
+            new SystemInfoItem("显卡", "GPU", gpu, "图形适配器信息来自 Windows 设备注册表", "#8B6CFF", "\uE7F4"),
+            new SystemInfoItem("主板", "主板", boardText, $"设备名称 {Environment.MachineName}", "#F06D75", "\uE950"),
+            new SystemInfoItem("内存", "内存", $"可用 {availableMemory} / 共 {totalMemory}", $"系统已运行 {FormatUptime(uptime)}", "#18B894", "\uE950"),
+            new SystemInfoItem("显示器", "显示器", System.Windows.SystemParameters.PrimaryScreenWidth > 0 ? $"主显示器 {System.Windows.SystemParameters.PrimaryScreenWidth:F0} × {System.Windows.SystemParameters.PrimaryScreenHeight:F0}" : "显示器信息不可用", "分辨率来自当前 Windows 显示设置", "#4D7CFE", "\uE7F4"),
+            new SystemInfoItem("电池", "电池", batteryText, "电池数据由 Windows 电源状态提供", "#F3A847", "\uEBA0")
+        };
+        return new SystemOverview(items, DateTime.Now);
+    }
+
+    private static string GetGraphicsNames()
+    {
+        using var adapters = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}");
+        if (adapters is null) return "显卡信息不可用";
+        return string.Join("\n", adapters.GetSubKeyNames().Where(name => name.Length == 4).Select(name => adapters.OpenSubKey(name)?.GetValue("DriverDesc")?.ToString()).Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.OrdinalIgnoreCase));
     }
 
     /// <summary>读取常见启动来源；只对当前用户 Run 项提供启停，避免误操作系统级任务或快捷方式。</summary>
@@ -63,7 +72,7 @@ public static class SystemToolsService
         {
             foreach (var path in Directory.EnumerateFiles(startupFolder))
             {
-                entries.Add(new StartupEntry(Path.GetFileNameWithoutExtension(path), path, "启动文件夹", startupFolder, true, false, ""));
+                entries.Add(new StartupEntry(Path.GetFileNameWithoutExtension(path), GetStartupDescription(path), "启动文件夹", startupFolder, true, false, ""));
             }
         }
         return entries.OrderBy(item => item.Source).ThenBy(item => item.Name, StringComparer.OrdinalIgnoreCase).ToArray();
@@ -119,8 +128,24 @@ public static class SystemToolsService
             var command = key.GetValue(name)?.ToString() ?? string.Empty;
             var state = approved?.GetValue(name) as byte[];
             var enabled = state is not { Length: > 0 } || state[0] != 0x03;
-            entries.Add(new StartupEntry(name, command, source, $"{root.Name}\\{subKey}", enabled, canToggle, subKey));
+            entries.Add(new StartupEntry(name, GetStartupDescription(command), source, $"{root.Name}\\{subKey}", enabled, canToggle, subKey));
         }
+    }
+
+    /// <summary>将原始启动命令转为用户可读的发布者与影响说明，避免列表充满难读的命令行。</summary>
+    private static string GetStartupDescription(string command)
+    {
+        var executable = Regex.Match(command, "^\\s*\\\"(?<path>[^\\\"]+\\.exe)\\\"|^\\s*(?<path>[^\\s]+\\.exe)", RegexOptions.IgnoreCase).Groups["path"].Value;
+        if (!string.IsNullOrWhiteSpace(executable) && File.Exists(executable))
+        {
+            try
+            {
+                var publisher = FileVersionInfo.GetVersionInfo(executable).CompanyName;
+                if (!string.IsNullOrWhiteSpace(publisher)) return $"{publisher}  |  启动影响未评估";
+            }
+            catch { }
+        }
+        return "发布者未知  |  启动影响未评估";
     }
 
     private static string FormatBytes(long value)
@@ -864,9 +889,9 @@ public sealed record SystemRelationshipEntry(ProcessEntry Process, IReadOnlyList
 public sealed record EnvironmentVariableEntry(string Name, string Value, EnvironmentVariableTarget Target);
 
 /// <summary>系统概览的只读快照，界面只渲染已采集数据。</summary>
-public sealed record SystemOverview(string WindowsText, string DeviceText, string MemoryText, IReadOnlyList<SystemDriveEntry> Drives, DateTime CapturedAt);
+public sealed record SystemOverview(IReadOnlyList<SystemInfoItem> Items, DateTime CapturedAt);
 
-public sealed record SystemDriveEntry(string Name, string Label, double UsedPercent, string CapacityText);
+public sealed record SystemInfoItem(string Key, string Title, string Primary, string Detail, string Accent, string Icon);
 
 /// <summary>启动项记录；仅当前用户注册表项允许在首版中安全启停。</summary>
 public sealed record StartupEntry(string Name, string Command, string Source, string Location, bool IsEnabled, bool CanToggle, string RegistrySubKey)

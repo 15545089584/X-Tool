@@ -150,17 +150,13 @@ public partial class SystemToolsView : UserControl
     /// <summary>系统概览仅采集只读信息，始终放到后台线程避免磁盘枚举阻塞界面。</summary>
     private async Task RefreshOverviewAsync()
     {
-        OverviewSummaryText.Text = "正在读取…";
+        OverviewInfoItems.ItemsSource = null;
         try
         {
             var overview = await Task.Run(SystemToolsService.GetSystemOverview);
-            OverviewWindowsText.Text = overview.WindowsText;
-            OverviewDeviceText.Text = overview.DeviceText;
-            OverviewMemoryText.Text = overview.MemoryText;
-            OverviewDrivesItems.ItemsSource = overview.Drives;
-            OverviewSummaryText.Text = $"{overview.Drives.Count} 个可用本地磁盘 · 更新于 {overview.CapturedAt:HH:mm:ss}";
+            OverviewInfoItems.ItemsSource = overview.Items;
         }
-        catch (Exception exception) { OverviewSummaryText.Text = $"读取失败：{exception.Message}"; }
+        catch (Exception exception) { MessageBox.Show(exception.Message, "读取系统信息失败", MessageBoxButton.OK, MessageBoxImage.Warning); }
     }
 
     private async Task RefreshStartupAsync()
