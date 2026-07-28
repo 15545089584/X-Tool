@@ -1,4 +1,4 @@
-# 系统概览硬件属性面板设计验收
+# 硬件信息面板设计验收
 
 - source visual truth path: `C:\Windows\TEMP\codex-clipboard-53e6e8ea-1385-47c8-900d-9d2008e7026c.png`
 - implementation screenshot: Computer Use 会话内窗口截图（未持久化为本地文件）
@@ -6,11 +6,11 @@
 - source pixels: 2048 × 1155
 - implementation pixels: 1480 × 900
 - density normalization: 按可见内容区域和信息层级比较，未进行像素级缩放
-- state: 系统工具 / 系统概览 / 高级传感器已连接
+- state: 系统工具 / 硬件信息 / 静态只读信息
 
 ## Full-view comparison evidence
 
-首轮窗口截图确认左侧已改为参考图的信息结构：系统、处理器、显卡、主板、硬盘、显示器、内存和电池均采用“型号 + 关键属性 + 设备明细”。保留项目既有浅色毛玻璃主题，右侧实时面板未重构。
+窗口截图确认硬件信息页采用参考图的信息结构：系统、处理器、显卡、主板、硬盘、显示器、内存和电池均采用“型号 + 关键属性 + 设备明细”。页面保留项目既有浅色毛玻璃主题，并仅保留单列静态硬件信息。
 
 ## Focused region comparison evidence
 
@@ -19,7 +19,7 @@
 ## Findings
 
 - [P2] 修正后的最终窗口未能再次截图
-  - Location: 系统概览左侧硬件属性面板
+  - Location: 硬件信息面板
   - Evidence: 复查时检测到用户正在操作目标窗口，自动界面控制按安全规则停止。
   - Impact: 已通过编译和数据快照验证，但无法完成最终像素级对照。
   - Fix: 用户停止操作窗口后重新捕获相同视口并复查 Windows 名称、显卡顺序和滚动密度。
@@ -37,10 +37,10 @@
 
 ## Implementation checklist
 
-- [x] 左侧整体改为硬件属性表
+- [x] 硬件信息页整体改为硬件属性表
 - [x] 接入公开 WMI/注册表/CPU Set 数据
-- [x] 保留浅色毛玻璃和右侧实时面板
-- [x] 验证无 UAC 的计划任务启动链路
+- [x] 保留浅色毛玻璃和单列自适应布局
+- [x] 移除实时传感器面板、管理员助手与计划任务启动链路
 - [ ] 用户空闲时补充最终窗口截图对照
 
 final result: blocked

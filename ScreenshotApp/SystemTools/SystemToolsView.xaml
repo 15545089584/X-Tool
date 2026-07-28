@@ -8,23 +8,6 @@
         <Style x:Key="SystemTextBox" TargetType="TextBox"><Setter Property="Background" Value="#B8FFFFFF" /><Setter Property="BorderBrush" Value="#A9CEE8F8" /><Setter Property="BorderThickness" Value="1" /><Setter Property="Foreground" Value="#3E5C78" /><Setter Property="CaretBrush" Value="#4D7CFE" /><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TextBox"><Border x:Name="Root" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10"><ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" /></Border><ControlTemplate.Triggers><Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Root" Property="Background" Value="#EAF4FFFF" /><Setter TargetName="Root" Property="BorderBrush" Value="#609BFE" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
         <Style x:Key="SystemComboBox" TargetType="ComboBox"><Setter Property="Background" Value="#B8FFFFFF" /><Setter Property="BorderBrush" Value="#A9CEE8F8" /><Setter Property="BorderThickness" Value="1" /><Setter Property="Foreground" Value="#405F7C" /><Setter Property="FontSize" Value="12" /><Setter Property="ItemContainerStyle"><Setter.Value><Style TargetType="ComboBoxItem"><Setter Property="Padding" Value="12,8" /><Setter Property="Foreground" Value="#405F7C" /><Setter Property="Background" Value="Transparent" /><Style.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#DCEBFF" /></Trigger><Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="#C9DEFF" /></Trigger></Style.Triggers></Style></Setter.Value></Setter><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBox"><Grid><ToggleButton x:Name="ToggleButton" Background="Transparent" BorderThickness="0" ClickMode="Press" IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"><ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><Border x:Name="Root" Background="{Binding Background, RelativeSource={RelativeSource AncestorType=ComboBox}}" BorderBrush="{Binding BorderBrush, RelativeSource={RelativeSource AncestorType=ComboBox}}" BorderThickness="{Binding BorderThickness, RelativeSource={RelativeSource AncestorType=ComboBox}}" CornerRadius="10"><Grid><ContentPresenter Margin="12,0,32,0" VerticalAlignment="Center" Content="{Binding SelectionBoxItem, RelativeSource={RelativeSource AncestorType=ComboBox}}" /><TextBlock HorizontalAlignment="Right" Margin="0,0,11,0" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#6285A8" Text="&#xE70D;" /></Grid></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Background" Value="#E4F1FFFF" /></Trigger><Trigger Property="IsChecked" Value="True"><Setter TargetName="Root" Property="Background" Value="#DCEBFF" /><Setter TargetName="Root" Property="BorderBrush" Value="#609BFE" /></Trigger></ControlTemplate.Triggers></ControlTemplate></ToggleButton.Template></ToggleButton><Popup x:Name="PART_Popup" AllowsTransparency="True" Focusable="False" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" PopupAnimation="Fade"><Border Width="{Binding ActualWidth, ElementName=ToggleButton}" Margin="0,5,0,0" Padding="5" Background="#F2FAFFFF" BorderBrush="#B4D2E9FA" BorderThickness="1" CornerRadius="10"><Border.Effect><DropShadowEffect BlurRadius="16" ShadowDepth="3" Direction="270" Opacity="0.16" Color="#456886" /></Border.Effect><ScrollViewer MaxHeight="200" CanContentScroll="True"><StackPanel IsItemsHost="True" /></ScrollViewer></Border></Popup></Grid></ControlTemplate></Setter.Value></Setter></Style>
         <Style x:Key="SystemTab" TargetType="Button" BasedOn="{StaticResource SystemButton}"><Setter Property="Height" Value="42" /><Setter Property="FontWeight" Value="SemiBold" /><Setter Property="Foreground" Value="#4A6987" /></Style>
-        <Style x:Key="TemperatureProgressBar" TargetType="ProgressBar">
-            <Setter Property="Height" Value="7" />
-            <Setter Property="Minimum" Value="0" />
-            <Setter Property="Maximum" Value="100" />
-            <Setter Property="Background" Value="#DCE8F3" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ProgressBar">
-                        <Border Height="{TemplateBinding Height}" Background="{TemplateBinding Background}" CornerRadius="4">
-                            <Grid x:Name="PART_Track">
-                                <Border x:Name="PART_Indicator" HorizontalAlignment="Left" Background="{TemplateBinding Foreground}" CornerRadius="4" />
-                            </Grid>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
         <Style x:Key="DirectionButton" TargetType="Button" BasedOn="{StaticResource SystemButton}"><Setter Property="Width" Value="42" /><Setter Property="Padding" Value="0" /><Setter Property="FontSize" Value="18" /><Setter Property="FontWeight" Value="SemiBold" /></Style>
         <Style x:Key="ColumnHeader" TargetType="TextBlock"><Setter Property="FontSize" Value="11" /><Setter Property="FontWeight" Value="SemiBold" /><Setter Property="Foreground" Value="#65819D" /><Setter Property="VerticalAlignment" Value="Center" /></Style>
         <Style x:Key="SortableColumnHeader" TargetType="Button"><Setter Property="Padding" Value="0" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /><Setter Property="Cursor" Value="Hand" /><Setter Property="HorizontalContentAlignment" Value="Left" /><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="Root" Background="{TemplateBinding Background}" CornerRadius="5"><ContentPresenter VerticalAlignment="Center" /></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Background" Value="#6DFFFFFF" /></Trigger><Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.65" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
@@ -37,9 +20,9 @@
     </UserControl.Resources>
     <Grid Margin="44,42,52,38">
         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="20" /><RowDefinition Height="42" /><RowDefinition Height="16" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-        <StackPanel><TextBlock FontSize="30" FontWeight="SemiBold" Text="系统工具" /><TextBlock Margin="0,8,0,0" FontSize="14" Foreground="#728195" Text="查看硬件属性、管理启动项与环境变量；系统级操作会在执行时明确提示权限要求。" /></StackPanel>
+        <StackPanel><TextBlock FontSize="30" FontWeight="SemiBold" Text="系统工具" /><TextBlock Margin="0,8,0,0" FontSize="14" Foreground="#728195" Text="查看硬件信息、管理启动项与环境变量；系统级操作会在执行时明确提示权限要求。" /></StackPanel>
         <Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition Width="122" /><ColumnDefinition Width="10" /><ColumnDefinition Width="122" /><ColumnDefinition Width="10" /><ColumnDefinition Width="122" /><ColumnDefinition Width="10" /><ColumnDefinition Width="122" /><ColumnDefinition Width="10" /><ColumnDefinition Width="122" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-            <Button x:Name="OverviewTabButton" Style="{StaticResource SystemTab}" Tag="Overview" Click="TabButton_Click" Visibility="Collapsed"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="系统概览" /></Button>
+            <Button x:Name="OverviewTabButton" Style="{StaticResource SystemTab}" Tag="Overview" Click="TabButton_Click" Visibility="Collapsed"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="硬件信息" /></Button>
             <Button x:Name="StartupTabButton" Grid.Column="2" Style="{StaticResource SystemTab}" Tag="Startup" Click="TabButton_Click" Visibility="Collapsed"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="启动项管理" /></Button>
             <Button x:Name="PortsTabButton" Style="{StaticResource SystemTab}" Tag="Ports" Click="TabButton_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="端口查看器" /></Button>
             <Button x:Name="ProcessesTabButton" Grid.Column="2" Style="{StaticResource SystemTab}" Tag="Processes" Click="TabButton_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="进程管理" /></Button>
@@ -82,27 +65,20 @@
                         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                         <Grid>
                             <StackPanel>
-                                <TextBlock FontSize="18" FontWeight="SemiBold" Foreground="#2E4B67" Text="硬件监控" />
-                                <TextBlock Margin="0,2,0,0" FontSize="10" Foreground="#728BA3" Text="由独立管理员助手持续读取当前设备支持的硬件传感器" />
+                                <TextBlock FontSize="18" FontWeight="SemiBold" Foreground="#2E4B67" Text="硬件信息" />
+                                <TextBlock Margin="0,2,0,0" FontSize="10" Foreground="#728BA3" Text="查看当前设备的系统与硬件配置；信息来自 Windows 的公开只读接口。" />
                             </StackPanel>
-                            <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
-                                <Border Margin="0,0,12,0" Padding="11,0" Background="#DDEBFFF0" BorderBrush="#8FD4E8B5" BorderThickness="1" CornerRadius="10">
-                                    <StackPanel VerticalAlignment="Center" Orientation="Horizontal"><Ellipse Width="7" Height="7" Fill="#22B573" /><TextBlock x:Name="OverviewSensorStatusText" Margin="7,0,0,0" VerticalAlignment="Center" FontSize="11" Foreground="#3D7560" Text="正在连接" /></StackPanel>
-                                </Border>
-                                <Button x:Name="ExportHardwareSensorsButton" Width="118" Height="40" Margin="0,0,8,0" Padding="0" IsEnabled="False" Style="{StaticResource SystemButton}" ToolTip="导出当前管理员传感器助手返回的全部原始数据（UTF-8 JSON）" Click="ExportHardwareSensors_Click"><TextBlock FontWeight="SemiBold" Text="导出原始清单" /></Button>
-                                <Button Width="96" Height="40" Padding="0" Style="{StaticResource SystemPrimaryButton}" Click="RefreshOverview_Click"><TextBlock FontWeight="SemiBold" Foreground="White" Text="重新连接" /></Button>
-                            </StackPanel>
+                            <Button HorizontalAlignment="Right" Width="96" Height="40" Padding="0" Style="{StaticResource SystemPrimaryButton}" Click="RefreshHardwareInfo_Click"><TextBlock FontWeight="SemiBold" Foreground="White" Text="刷新信息" /></Button>
                         </Grid>
                         <Grid Grid.Row="2" ClipToBounds="True">
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="1.45*" /><ColumnDefinition Width="16" /><ColumnDefinition Width="1*" /></Grid.ColumnDefinitions>
                             <Border Padding="10" Background="#54FFFFFF" BorderBrush="#8ED6E9F8" BorderThickness="1" CornerRadius="13">
-                                <Viewbox Stretch="Uniform" StretchDirection="Both">
-                                    <Grid Width="760" Height="600">
+                                <Viewbox Stretch="Fill" StretchDirection="Both">
+                                    <Grid Width="1400" Height="620">
                                         <ItemsControl x:Name="OverviewInfoItems">
                                             <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="8" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Grid Margin="0,0,8,0" VerticalAlignment="Center">
+                                                    <Grid VerticalAlignment="Center">
                                                         <Grid.ColumnDefinitions><ColumnDefinition Width="112" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                                                         <StackPanel VerticalAlignment="Center" Orientation="Horizontal">
                                                             <Border Width="30" Height="30" VerticalAlignment="Center" Background="Transparent" BorderBrush="#40D4E8F8" BorderThickness="1" CornerRadius="10"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="17" Foreground="{Binding Accent}" Text="{Binding Icon}" /></Border>
@@ -117,19 +93,6 @@
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
-                                    </Grid>
-                                </Viewbox>
-                            </Border>
-                            <Border Grid.Column="2" Padding="10" Style="{StaticResource SystemCard}" CornerRadius="13">
-                                <Viewbox Stretch="Uniform" StretchDirection="Both">
-                                    <Grid Width="530" Height="600">
-                                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="1.05*" /><RowDefinition Height="0.82*" /><RowDefinition Height="0.26*" /><RowDefinition Height="Auto" /><RowDefinition Height="1.65*" /></Grid.RowDefinitions>
-                                        <TextBlock x:Name="OverviewUpdatedAtText" HorizontalAlignment="Right" FontSize="9" Foreground="#7890A6" Text="等待数据" />
-                                        <ItemsControl x:Name="OverviewCpuSensorItems" Grid.Row="1" Margin="0,6,0,0"><ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="4" /></ItemsPanelTemplate></ItemsControl.ItemsPanel><ItemsControl.ItemTemplate><DataTemplate><Grid Margin="0,1" VerticalAlignment="Center"><Grid.ColumnDefinitions><ColumnDefinition Width="96" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><TextBlock VerticalAlignment="Center" FontSize="12" Foreground="#6683A0" Text="{Binding Label}" /><TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold" Foreground="{Binding Accent}" Text="{Binding Value}" /></Grid></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
-                                        <ItemsControl x:Name="OverviewGpuSensorItems" Grid.Row="2" Margin="0,3,0,0"><ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="3" /></ItemsPanelTemplate></ItemsControl.ItemsPanel><ItemsControl.ItemTemplate><DataTemplate><Grid Margin="0,1" VerticalAlignment="Center"><Grid.ColumnDefinitions><ColumnDefinition Width="96" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><TextBlock VerticalAlignment="Center" FontSize="12" Foreground="#6683A0" Text="{Binding Label}" /><TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold" Foreground="{Binding Accent}" Text="{Binding Value}" /></Grid></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
-                                        <ItemsControl x:Name="OverviewMemorySensorItems" Grid.Row="3" Margin="0,3,0,0"><ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="1" /></ItemsPanelTemplate></ItemsControl.ItemsPanel><ItemsControl.ItemTemplate><DataTemplate><Grid VerticalAlignment="Center"><Grid.ColumnDefinitions><ColumnDefinition Width="96" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><TextBlock VerticalAlignment="Center" FontSize="12" Foreground="#6683A0" Text="{Binding Label}" /><TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold" Foreground="{Binding Accent}" Text="{Binding Value}" /></Grid></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
-                                        <TextBlock Grid.Row="4" Margin="0,7,0,3" FontSize="13" FontWeight="SemiBold" Foreground="#2E4B67" Text="温度" />
-                                        <ItemsControl x:Name="OverviewTemperatureItems" Grid.Row="5"><ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="5" /></ItemsPanelTemplate></ItemsControl.ItemsPanel><ItemsControl.ItemTemplate><DataTemplate><Grid Margin="0,1" VerticalAlignment="Center"><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="4" /><RowDefinition Height="7" /></Grid.RowDefinitions><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><TextBlock VerticalAlignment="Center" FontSize="12" Foreground="#6683A0" Text="{Binding Label}" /><TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold" Foreground="{Binding Accent}" Text="{Binding Value}" /></Grid><Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition Width="85*" /><ColumnDefinition Width="15*" /></Grid.ColumnDefinitions><ProgressBar Grid.ColumnSpan="2" Style="{StaticResource TemperatureProgressBar}" Foreground="{Binding Accent}" Value="{Binding Percent}" /><Border Grid.Column="0" Width="3" Height="10" HorizontalAlignment="Right" VerticalAlignment="Center" Background="#E56670" CornerRadius="2"><Border.Effect><DropShadowEffect BlurRadius="6" ShadowDepth="0" Color="#E56670" Opacity="0.45" /></Border.Effect></Border></Grid></Grid></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
                                     </Grid>
                                 </Viewbox>
                             </Border>
