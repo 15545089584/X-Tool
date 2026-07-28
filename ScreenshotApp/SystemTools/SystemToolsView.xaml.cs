@@ -11,6 +11,8 @@ namespace ScreenshotApp.SystemTools;
 /// <summary>系统工具页面：所有高风险操作都保持在用户点击后的明确确认路径上。</summary>
 public partial class SystemToolsView : UserControl
 {
+    /// <summary>仅显示环境变量配置，用于一级“系统工具”入口。</summary>
+    public bool EnvironmentOnly { get; set; }
     private readonly ObservableCollection<PortEntry> _ports = new();
     private readonly ObservableCollection<ProcessListRow> _processes = new();
     private readonly ObservableCollection<ServiceEntry> _services = new();
@@ -63,7 +65,15 @@ public partial class SystemToolsView : UserControl
         ProcessesListBox.ItemContainerGenerator.StatusChanged += (_, _) => ConfigureProcessColumns();
         RelationsBubbleListBox.ItemContainerGenerator.StatusChanged += (_, _) => ConfigureRelationshipColumns();
         SetActiveTab("Ports");
-        Loaded += async (_, _) => { ConfigureInteractiveHeaders(); ConfigurePortColumns(); ConfigureProcessColumns(); await RefreshPortsAsync(); };
+        Loaded += async (_, _) =>
+        {
+            ConfigureModuleMode();
+            ConfigureInteractiveHeaders();
+            ConfigurePortColumns();
+            ConfigureProcessColumns();
+            if (EnvironmentOnly) RefreshEnvironment();
+            else await RefreshPortsAsync();
+        };
         Unloaded += (_, _) => _portAutoRefreshTimer.Stop();
     }
 
@@ -142,6 +152,42 @@ public partial class SystemToolsView : UserControl
         else if (section == "Services") _ = RefreshServicesAsync();
         else if (section == "Relations") _ = RefreshRelationshipsAsync();
         else if (section == "Environment") RefreshEnvironment();
+    }
+
+    /// <summary>资源管理保留观察与关联功能；系统工具单独承载环境变量配置。</summary>
+    private void ConfigureModuleMode()
+    {
+        if (EnvironmentOnly)
+        {
+            PortsTabButton.Visibility = Visibility.Collapsed;
+            ProcessesTabButton.Visibility = Visibility.Collapsed;
+            ServicesTabButton.Visibility = Visibility.Collapsed;
+            RelationsTabButton.Visibility = Visibility.Collapsed;
+            Grid.SetColumn(EnvironmentTabButton, 0);
+            PortsPanel.Visibility = Visibility.Collapsed;
+            ProcessesPanel.Visibility = Visibility.Collapsed;
+            ServicesPanel.Visibility = Visibility.Collapsed;
+            RelationsBubblePanel.Visibility = Visibility.Collapsed;
+            EnvironmentPanel.Visibility = Visibility.Visible;
+            SetActiveTab("Environment");
+            SetPageHeading("系统工具", "管理当前用户与系统环境变量；系统级写入会在执行时明确提示权限要求。");
+            return;
+        }
+
+        EnvironmentTabButton.Visibility = Visibility.Collapsed;
+        EnvironmentPanel.Visibility = Visibility.Collapsed;
+        SetPageHeading("资源管理", "查看本机端口、进程、服务与关联关系；系统级操作会在执行时明确提示权限要求。");
+    }
+
+    private void SetPageHeading(string title, string subtitle)
+    {
+        var headers = FindVisualDescendants<TextBlock>(this)
+            .Where(item => item.FontSize is >= 14 && (item.Text == "系统工具" || item.Text == "查看本机端口、进程、服务与环境变量；系统级操作会在执行时明确提示权限要求。"))
+            .ToArray();
+        foreach (var header in headers)
+        {
+            header.Text = header.FontSize >= 30 ? title : subtitle;
+        }
     }
 
     private void SetActiveTab(string section)

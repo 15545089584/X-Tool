@@ -248,6 +248,7 @@ public partial class MainWindow : Window
           EncodingConverterView.Visibility = page == "EncodingConverter" ? Visibility.Visible : Visibility.Collapsed;
         FileWorkbenchView.Visibility = page == "FileWorkbench" ? Visibility.Visible : Visibility.Collapsed;
         NetworkWorkbenchView.Visibility = page == "NetworkWorkbench" ? Visibility.Visible : Visibility.Collapsed;
+        ResourceManagementView.Visibility = page == "ResourceManagement" ? Visibility.Visible : Visibility.Collapsed;
         SystemToolsView.Visibility = page == "SystemTools" ? Visibility.Visible : Visibility.Collapsed;
         if (page == "ImageConverter")
         {
