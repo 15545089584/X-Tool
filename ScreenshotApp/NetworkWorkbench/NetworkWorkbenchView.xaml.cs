@@ -937,23 +937,24 @@ public partial class NetworkWorkbenchView : UserControl
         if (_wifiNetworks.Count == 0) return;
 
         var center = new Point(width / 2, height / 2);
-        var maxRadius = Math.Max(38, Math.Min(width, height) / 2 - 30);
+        // 星图在宽屏中使用椭圆轨道，避免低矮容器把所有节点压缩到中心。
+        var horizontalRadius = Math.Max(140, width / 2 - 82);
+        var verticalRadius = Math.Max(34, height / 2 - 23);
         var ringBrush = new SolidColorBrush(Color.FromArgb(105, 150, 190, 225));
-        foreach (var factor in new[] { 0.34, 0.67, 1.0 })
+        foreach (var factor in new[] { 0.40, 0.70, 1.0 })
         {
-            var size = maxRadius * factor * 2;
             var ring = new Ellipse
             {
-                Width = size,
-                Height = size,
+                Width = horizontalRadius * factor * 2,
+                Height = verticalRadius * factor * 2,
                 Stroke = ringBrush,
                 StrokeThickness = 1,
                 StrokeDashArray = new DoubleCollection { 2, 4 },
                 Opacity = 0.72,
                 IsHitTestVisible = false
             };
-            Canvas.SetLeft(ring, center.X - size / 2);
-            Canvas.SetTop(ring, center.Y - size / 2);
+            Canvas.SetLeft(ring, center.X - ring.Width / 2);
+            Canvas.SetTop(ring, center.Y - ring.Height / 2);
             WifiSignalMapCanvas.Children.Add(ring);
         }
 
@@ -963,9 +964,11 @@ public partial class NetworkWorkbenchView : UserControl
         {
             var network = nodes[index];
             var strength = Math.Clamp(network.SignalPercent, 0, 100);
-            var radius = 28 + (100 - strength) / 100d * (maxRadius - 28);
-            var angle = 2 * Math.PI * index / nodes.Length - Math.PI / 2;
-            var point = new Point(center.X + Math.Cos(angle) * radius, center.Y + Math.Sin(angle) * radius);
+            var distanceFactor = 0.50 + (100 - strength) / 100d * 0.50;
+            var angle = 2 * Math.PI * (index + 0.5) / nodes.Length - Math.PI / 2;
+            var point = new Point(
+                center.X + Math.Cos(angle) * horizontalRadius * distanceFactor,
+                center.Y + Math.Sin(angle) * verticalRadius * distanceFactor);
             var color = GetWifiSignalColor(strength);
             var isSelected = ReferenceEquals(network, selected);
             var isConnected = network.IsConnected;
@@ -1018,17 +1021,20 @@ public partial class NetworkWorkbenchView : UserControl
 
             var label = new TextBlock
             {
-                Width = 110,
-                Text = $"{TrimWifiLabel(network.Ssid, 13)}  {network.SignalText}",
+                Width = 96,
+                Text = $"{TrimWifiLabel(network.Ssid, 10)} · {network.SignalText}",
                 TextAlignment = TextAlignment.Center,
                 TextTrimming = TextTrimming.CharacterEllipsis,
-                FontSize = isSelected ? 10 : 9,
+                FontSize = isSelected ? 9 : 8,
                 FontWeight = isSelected || isConnected ? FontWeights.SemiBold : FontWeights.Normal,
                 Foreground = isSelected ? color : new SolidColorBrush(Color.FromRgb(76, 105, 132)),
                 IsHitTestVisible = false
             };
-            Canvas.SetLeft(label, Math.Clamp(point.X - 55, 2, width - 112));
-            Canvas.SetTop(label, Math.Clamp(point.Y + nodeSize / 2 + 2, 1, height - 18));
+            Canvas.SetLeft(label, Math.Clamp(point.X - 48, 2, width - 98));
+            var labelTop = point.Y < center.Y
+                ? point.Y + nodeSize / 2 + 2
+                : point.Y - nodeSize / 2 - 15;
+            Canvas.SetTop(label, Math.Clamp(labelTop, 1, height - 17));
             WifiSignalMapCanvas.Children.Add(label);
         }
 
