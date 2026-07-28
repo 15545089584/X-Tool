@@ -19,6 +19,8 @@ public partial class SystemToolsView : UserControl
     private readonly ObservableCollection<SystemRelationshipEntry> _relationships = new();
     private readonly ObservableCollection<EnvironmentVariableEntry> _environmentVariables = new();
     private readonly ObservableCollection<StartupEntry> _startupItems = new();
+    private readonly HardwareSensorClient _hardwareSensorClient = new();
+    private SystemOverview? _overview;
     private IReadOnlyList<StartupEntry> _allStartupItems = Array.Empty<StartupEntry>();
     private readonly ObservableCollection<PathEntry> _pathEntries = new();
     private IReadOnlyList<PortEntry> _allPorts = Array.Empty<PortEntry>();
@@ -55,6 +57,8 @@ public partial class SystemToolsView : UserControl
         RelationsBubbleListBox.ItemsSource = _relationships;
         EnvironmentListBox.ItemsSource = _environmentVariables;
         StartupListBox.ItemsSource = _startupItems;
+        _hardwareSensorClient.SnapshotReceived += HardwareSensorClient_SnapshotReceived;
+        _hardwareSensorClient.Failed += (_, message) => Dispatcher.BeginInvoke(() => { if (OverviewPanel.Visibility == Visibility.Visible) MessageBox.Show(message, "高级传感器", MessageBoxButton.OK, MessageBoxImage.Information); });
         PathEntriesListBox.ItemsSource = _pathEntries;
         PathEntriesListBox.PreviewMouseLeftButtonDown += PathEntriesListBox_PreviewMouseLeftButtonDown;
         _portAutoRefreshTimer = new DispatcherTimer();
@@ -82,7 +86,7 @@ public partial class SystemToolsView : UserControl
             }
             else await RefreshPortsAsync();
         };
-        Unloaded += (_, _) => _portAutoRefreshTimer.Stop();
+        Unloaded += (_, _) => { _portAutoRefreshTimer.Stop(); _hardwareSensorClient.Stop(); };
     }
 
     private async Task RefreshPortsAsync()
@@ -154,9 +158,26 @@ public partial class SystemToolsView : UserControl
         try
         {
             var overview = await Task.Run(SystemToolsService.GetSystemOverview);
+            _overview = overview;
             OverviewInfoItems.ItemsSource = overview.Items;
         }
         catch (Exception exception) { MessageBox.Show(exception.Message, "读取系统信息失败", MessageBoxButton.OK, MessageBoxImage.Warning); }
+    }
+
+    private void HardwareSensorClient_SnapshotReceived(object? sender, HardwareSensorSnapshot snapshot)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (_overview is null || OverviewPanel.Visibility != Visibility.Visible) return;
+            var temperatures = snapshot.Sensors.Where(item => item.Type == "Temperature").Take(4).Select(item => $"{item.HardwareType} {item.Name} {item.Value:F0}℃");
+            var loads = snapshot.Sensors.Where(item => item.Type == "Load").Take(3).Select(item => $"{item.HardwareType} {item.Name} {item.Value:F0}%");
+            var detail = string.Join(" · ", temperatures.Concat(loads));
+            if (string.IsNullOrWhiteSpace(detail)) detail = "未检测到可用实时传感器";
+            var items = _overview.Items.Where(item => item.Key != "Sensors")
+                .Append(new SystemInfoItem("Sensors", "实时监控", $"更新于 {snapshot.CapturedAt.LocalDateTime:HH:mm:ss}", detail, "#4D7CFE", "\uE9D9"))
+                .ToArray();
+            OverviewInfoItems.ItemsSource = items;
+        });
     }
 
     private async Task RefreshStartupAsync()
@@ -188,7 +209,11 @@ public partial class SystemToolsView : UserControl
         if (section == "Processes") _ = RefreshProcessesAsync();
         else if (section == "Services") _ = RefreshServicesAsync();
         else if (section == "Relations") _ = RefreshRelationshipsAsync();
-        else if (section == "Overview") _ = RefreshOverviewAsync();
+        else if (section == "Overview")
+        {
+            _ = RefreshOverviewAsync();
+            _ = _hardwareSensorClient.StartAsync();
+        }
         else if (section == "Startup") _ = RefreshStartupAsync();
         else if (section == "Environment") RefreshEnvironment();
     }

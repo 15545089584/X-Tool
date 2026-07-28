@@ -12,6 +12,8 @@
     <ApplicationIcon>Assets\XTool.ico</ApplicationIcon>
     <!-- WPF 仍通过 manifest 配置 PerMonitorV2；WinForms 只承载托盘图标。 -->
     <NoWarn>$(NoWarn);WFAC010</NoWarn>
+    <!-- 主程序仍锁定 net6；安装 net8 SDK 后避免构建工具重复输出已知生命周期提示。 -->
+    <CheckEolTargetFramework>false</CheckEolTargetFramework>
     <DefaultItemExcludes>$(DefaultItemExcludes);obj-scroll-test\**;bin-scroll-test\**</DefaultItemExcludes>
   </PropertyGroup>
 
@@ -37,6 +39,18 @@
     <!-- Windows ETW 网络事件解析，用于管理员授权后的逐进程精确流量采集。 -->
     <PackageReference Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="3.1.21" />
   </ItemGroup>
+
+  <Target Name="BuildHardwareSensorHelper" BeforeTargets="Build">
+    <!-- 不使用 ProjectReference，避免 net6 主程序与 net8 助手形成程序集引用。 -->
+    <Exec Command="dotnet build &quot;$(MSBuildProjectDirectory)\..\HardwareSensorHelper\HardwareSensorHelper.csproj&quot; -c $(Configuration)" />
+  </Target>
+
+  <Target Name="CopyHardwareSensorHelper" AfterTargets="Build" DependsOnTargets="BuildHardwareSensorHelper">
+    <ItemGroup>
+      <HardwareSensorHelperFiles Include="$(MSBuildProjectDirectory)\..\HardwareSensorHelper\bin\$(Configuration)\net8.0-windows\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(HardwareSensorHelperFiles)" DestinationFiles="@(HardwareSensorHelperFiles->'$(OutDir)tools\hardware-sensor\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
 
   <ItemGroup>
     <!-- WinForms 仅用于系统托盘；避免其全局 using 与 WPF 类型重名。 -->
