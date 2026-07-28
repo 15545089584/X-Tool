@@ -59,6 +59,7 @@ public partial class NetworkWorkbenchView : UserControl
     private DateTime _lastConnectionsRefreshAt = DateTime.MinValue;
     private DateTime _lastDeepNetworkRefreshAt = DateTime.MinValue;
     private bool _updatingWifiEnvironment;
+    private string _activeWifiBand = "2.4";
 
     public NetworkWorkbenchView()
     {
@@ -888,6 +889,13 @@ public partial class NetworkWorkbenchView : UserControl
     private async void RefreshDeepNetwork_Click(object sender, RoutedEventArgs e) => await RefreshDeepNetworkAsync(force: true);
     private async void RefreshWifi_Click(object sender, RoutedEventArgs e) => await RefreshDeepNetworkAsync(force: true);
 
+    private void WifiBandToggle_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: string band }) return;
+        _activeWifiBand = band;
+        UpdateWifiChannelDistribution();
+    }
+
     private void CancelDeepTask_Click(object sender, RoutedEventArgs e) => _deepNetworkCancellation?.Cancel();
 
     private void UpdateWifiEnvironment(WifiEnvironmentSnapshot environment)
@@ -940,19 +948,43 @@ public partial class NetworkWorkbenchView : UserControl
         var twoPointFour = entries.Where(item => item.Channel <= 14).ToArray();
         var five = entries.Where(item => item.Channel is >= 32 and <= 196).ToArray();
         var unsupportedCount = entries.Length - twoPointFour.Length - five.Length;
-        WifiChannelDistributionEmptyText.Visibility = entries.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         WifiChannelDistributionSummaryText.Text = unsupportedCount > 0
             ? $"2.4 GHz {twoPointFour.Length} 个 · 5 GHz {five.Length} 个 · 其他 {unsupportedCount} 个"
             : $"2.4 GHz {twoPointFour.Length} 个 · 5 GHz {five.Length} 个";
-        if (entries.Length == 0) return;
+        UpdateWifiBandToggleAppearance();
+
+        var activeEntries = _activeWifiBand == "5" ? five : twoPointFour;
+        WifiChannelDistributionEmptyText.Text = _activeWifiBand == "5"
+            ? "未扫描到 5 GHz Wi-Fi 网络"
+            : "未扫描到 2.4 GHz Wi-Fi 网络";
+        WifiChannelDistributionEmptyText.Visibility = activeEntries.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
 
         const double outerPadding = 18;
-        const double bandGap = 28;
-        var bandWidth = (width - outerPadding * 2 - bandGap) / 2;
         var bandTop = 12d;
         var bandHeight = height - 24;
-        DrawWifiChannelBand(twoPointFour, outerPadding, bandTop, bandWidth, bandHeight, 1, 14, "2.4 GHz 频段", new[] { 1, 6, 11, 14 });
-        DrawWifiChannelBand(five, outerPadding + bandWidth + bandGap, bandTop, bandWidth, bandHeight, 36, 177, "5 GHz 频段", new[] { 36, 64, 100, 149, 177 });
+        var bandWidth = width - outerPadding * 2;
+        if (_activeWifiBand == "5")
+        {
+            DrawWifiChannelBand(activeEntries, outerPadding, bandTop, bandWidth, bandHeight, 36, 177,
+                $"5 GHz 频段 · {activeEntries.Length} 个网络", new[] { 36, 64, 100, 149, 177 });
+        }
+        else
+        {
+            DrawWifiChannelBand(activeEntries, outerPadding, bandTop, bandWidth, bandHeight, 1, 14,
+                $"2.4 GHz 频段 · {activeEntries.Length} 个网络", new[] { 1, 6, 11, 14 });
+        }
+    }
+
+    private void UpdateWifiBandToggleAppearance()
+    {
+        var activeBackground = new SolidColorBrush(Color.FromRgb(77, 124, 254));
+        var inactiveBackground = new SolidColorBrush(Color.FromArgb(191, 255, 255, 255));
+        Wifi2Point4BandButton.Background = _activeWifiBand == "2.4" ? activeBackground : inactiveBackground;
+        Wifi2Point4BandButton.BorderBrush = _activeWifiBand == "2.4" ? activeBackground : new SolidColorBrush(Color.FromRgb(181, 201, 229));
+        Wifi2Point4BandButton.Foreground = _activeWifiBand == "2.4" ? Brushes.White : new SolidColorBrush(Color.FromRgb(69, 103, 132));
+        Wifi5BandButton.Background = _activeWifiBand == "5" ? activeBackground : inactiveBackground;
+        Wifi5BandButton.BorderBrush = _activeWifiBand == "5" ? activeBackground : new SolidColorBrush(Color.FromRgb(181, 201, 229));
+        Wifi5BandButton.Foreground = _activeWifiBand == "5" ? Brushes.White : new SolidColorBrush(Color.FromRgb(69, 103, 132));
     }
 
     private void DrawWifiChannelBand(
@@ -984,7 +1016,7 @@ public partial class NetworkWorkbenchView : UserControl
         var titleText = new TextBlock
         {
             Text = title,
-            FontSize = 12,
+            FontSize = 15,
             FontWeight = FontWeights.SemiBold,
             Foreground = new SolidColorBrush(Color.FromRgb(64, 95, 124)),
             IsHitTestVisible = false
@@ -996,18 +1028,18 @@ public partial class NetworkWorkbenchView : UserControl
         var verticalAxisHint = new TextBlock
         {
             Text = "纵轴：信号强度 (%)",
-            FontSize = 9,
+            FontSize = 10,
             Foreground = new SolidColorBrush(Color.FromRgb(112, 138, 163)),
             IsHitTestVisible = false
         };
-        Canvas.SetLeft(verticalAxisHint, left + width - 112);
-        Canvas.SetTop(verticalAxisHint, top + 15);
+        Canvas.SetLeft(verticalAxisHint, left + width - 126);
+        Canvas.SetTop(verticalAxisHint, top + 17);
         canvas.Children.Add(verticalAxisHint);
 
-        var plotLeft = left + 42;
-        var plotWidth = width - 64;
-        var baseline = top + height - 42;
-        var plotHeight = height - 82;
+        var plotLeft = left + 58;
+        var plotWidth = width - 86;
+        var baseline = top + height - 52;
+        var plotHeight = height - 112;
         var baselineLine = new Line
         {
             X1 = plotLeft,
@@ -1040,7 +1072,7 @@ public partial class NetworkWorkbenchView : UserControl
                 Width = 32,
                 Text = $"{percent}%",
                 TextAlignment = TextAlignment.Right,
-                FontSize = 8,
+                FontSize = 9,
                 Foreground = new SolidColorBrush(Color.FromRgb(112, 138, 163)),
                 IsHitTestVisible = false
             };
@@ -1055,7 +1087,7 @@ public partial class NetworkWorkbenchView : UserControl
             var guide = new Line
             {
                 X1 = x,
-                Y1 = top + 47,
+                Y1 = top + 58,
                 X2 = x,
                 Y2 = baseline,
                 Stroke = new SolidColorBrush(Color.FromArgb(90, 154, 190, 222)),
@@ -1069,7 +1101,7 @@ public partial class NetworkWorkbenchView : UserControl
                 Width = 30,
                 Text = tick.ToString(),
                 TextAlignment = TextAlignment.Center,
-                FontSize = 9,
+                FontSize = 10,
                 Foreground = new SolidColorBrush(Color.FromRgb(112, 138, 163)),
                 IsHitTestVisible = false
             };
@@ -1083,12 +1115,12 @@ public partial class NetworkWorkbenchView : UserControl
             Width = plotWidth,
             Text = "横轴：Wi-Fi 信道（Channel）",
             TextAlignment = TextAlignment.Center,
-            FontSize = 9,
+            FontSize = 10,
             Foreground = new SolidColorBrush(Color.FromRgb(112, 138, 163)),
             IsHitTestVisible = false
         };
         Canvas.SetLeft(horizontalAxisHint, plotLeft);
-        Canvas.SetTop(horizontalAxisHint, baseline + 21);
+        Canvas.SetTop(horizontalAxisHint, baseline + 24);
         canvas.Children.Add(horizontalAxisHint);
 
         var selected = WifiNetworksListBox.SelectedItem as WifiNetworkEntry;
@@ -1098,8 +1130,8 @@ public partial class NetworkWorkbenchView : UserControl
         {
             var strength = Math.Clamp(network.SignalPercent, 0, 100);
             var x = GetWifiChannelPosition(channel, minimumChannel, maximumChannel, plotLeft, plotWidth);
-            var halfWidth = Math.Clamp(plotWidth * 2.5 / channelSpan, 18, 46);
-            var peak = baseline - Math.Max(22, plotHeight * strength / 100d);
+            var halfWidth = Math.Clamp(plotWidth * 2.7 / channelSpan, 24, 68);
+            var peak = baseline - Math.Max(28, plotHeight * strength / 100d);
             var color = GetWifiSignalColor(strength);
             var isSelected = ReferenceEquals(network, selected);
             var isConnected = network.IsConnected;
@@ -1133,9 +1165,9 @@ public partial class NetworkWorkbenchView : UserControl
         double width,
         double baseline)
     {
-        const double labelWidth = 116;
-        const double labelHeight = 17;
-        const int laneCount = 4;
+        const double labelWidth = 132;
+        const double labelHeight = 19;
+        const int laneCount = 5;
         var canvas = WifiChannelDistributionCanvas;
         var placedBounds = new List<Rect>();
         var overflow = new List<WifiPeakLabel>();
@@ -1149,7 +1181,7 @@ public partial class NetworkWorkbenchView : UserControl
             var placementFound = false;
             for (var lane = 0; lane < laneCount; lane++)
             {
-                var labelTop = top + 47 + lane * 21;
+                var labelTop = top + 60 + lane * 25;
                 var labelBounds = new Rect(labelLeft, labelTop, labelWidth, labelHeight);
                 if (placedBounds.Any(bounds => bounds.IntersectsWith(labelBounds))) continue;
 
@@ -1166,7 +1198,7 @@ public partial class NetworkWorkbenchView : UserControl
         {
             var first = group.First();
             var labelLeft = Math.Clamp(first.X - labelWidth / 2, left + 3, left + width - labelWidth - 3);
-            var labelTop = baseline - labelHeight - 4;
+            var labelTop = baseline - labelHeight - 5;
             var hiddenNetworks = group.Select(item => item.Network.Ssid).Distinct().ToArray();
             var aggregateLabel = new TextBlock
             {
@@ -1175,11 +1207,11 @@ public partial class NetworkWorkbenchView : UserControl
                 Text = $"Ch {group.Key} · +{hiddenNetworks.Length} 个网络",
                 TextAlignment = TextAlignment.Center,
                 TextTrimming = TextTrimming.CharacterEllipsis,
-                FontSize = 8,
+                FontSize = 9,
                 FontWeight = FontWeights.SemiBold,
                 Foreground = new SolidColorBrush(Color.FromRgb(86, 113, 140)),
-                Background = new SolidColorBrush(Color.FromArgb(205, 245, 250, 255)),
-                Padding = new Thickness(4, 2, 4, 1),
+                Background = Brushes.Transparent,
+                Padding = new Thickness(0),
                 ToolTip = $"信道 {group.Key} 因标签拥挤已合并：\n{string.Join("\n", hiddenNetworks)}"
             };
             Canvas.SetLeft(aggregateLabel, labelLeft);
@@ -1212,11 +1244,11 @@ public partial class NetworkWorkbenchView : UserControl
             Text = candidate.Network.Ssid,
             TextAlignment = TextAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
-            FontSize = 8,
+            FontSize = 10,
             FontWeight = candidate.IsSelected || candidate.IsConnected ? FontWeights.SemiBold : FontWeights.Normal,
             Foreground = candidate.Color,
-            Background = new SolidColorBrush(Color.FromArgb(candidate.IsSelected || candidate.IsConnected ? (byte)224 : (byte)190, 255, 255, 255)),
-            Padding = new Thickness(4, 2, 4, 1),
+            Background = Brushes.Transparent,
+            Padding = new Thickness(0),
             ToolTip = $"{candidate.Network.Ssid}\n信道 {candidate.Channel} · 信号 {candidate.Network.SignalText}"
         };
         Canvas.SetLeft(label, left);

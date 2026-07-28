@@ -221,8 +221,8 @@
             </Grid>
 
             <ScrollViewer x:Name="WifiScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Visibility="Collapsed">
-            <Grid x:Name="WifiPanel" MinHeight="1092">
-                <Grid.RowDefinitions><RowDefinition Height="104" /><RowDefinition Height="14" /><RowDefinition Height="560" /><RowDefinition Height="14" /><RowDefinition Height="400" /></Grid.RowDefinitions>
+            <Grid x:Name="WifiPanel" MinHeight="1212">
+                <Grid.RowDefinitions><RowDefinition Height="104" /><RowDefinition Height="14" /><RowDefinition Height="560" /><RowDefinition Height="14" /><RowDefinition Height="520" /></Grid.RowDefinitions>
                 <Grid>
                     <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="10" /><ColumnDefinition /><ColumnDefinition Width="10" /><ColumnDefinition /><ColumnDefinition Width="10" /><ColumnDefinition /></Grid.ColumnDefinitions>
                     <Border Padding="16" Style="{StaticResource NetworkCard}"><StackPanel><TextBlock Style="{StaticResource MetricTitle}" Text="当前 Wi-Fi" /><TextBlock x:Name="WifiSsidText" Style="{StaticResource MetricValue}" Text="—" /><TextBlock x:Name="WifiRadioText" Margin="0,5,0,0" FontSize="10" Foreground="#7890A6" Text="无线制式 —" /></StackPanel></Border>
@@ -246,7 +246,9 @@
                                 <TextBlock Margin="0,4,0,0" FontSize="10" Foreground="#7890A6" Text="每座半透明信号峰的中心为对应信道，峰高代表信号强弱；峰体重叠越多，通常意味着该频段的信道竞争越明显。" />
                             </StackPanel>
                             <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal">
-                                <Border Padding="8,4" Background="#70EAF7FF" BorderBrush="#93CDE4F5" BorderThickness="1" CornerRadius="8"><TextBlock x:Name="WifiChannelDistributionSummaryText" FontSize="10" Foreground="#53718E" Text="等待扫描 Wi-Fi" /></Border>
+                                <Button x:Name="Wifi2Point4BandButton" Width="82" Style="{StaticResource NetworkChipButton}" Tag="2.4" Click="WifiBandToggle_Click" Content="2.4 GHz" />
+                                <Button x:Name="Wifi5BandButton" Width="76" Margin="7,0,0,0" Style="{StaticResource NetworkChipButton}" Tag="5" Click="WifiBandToggle_Click" Content="5 GHz" />
+                                <Border Margin="12,0,0,0" Padding="8,4" Background="#70EAF7FF" BorderBrush="#93CDE4F5" BorderThickness="1" CornerRadius="8"><TextBlock x:Name="WifiChannelDistributionSummaryText" FontSize="10" Foreground="#53718E" Text="等待扫描 Wi-Fi" /></Border>
                                 <StackPanel Margin="12,0,0,0" Orientation="Horizontal">
                                     <Ellipse Width="8" Height="8" Margin="0,0,4,0" Fill="#54D39A" /><TextBlock Margin="0,0,9,0" VerticalAlignment="Center" FontSize="10" Foreground="#71879E" Text="强 ≥75%" />
                                     <Ellipse Width="8" Height="8" Margin="0,0,4,0" Fill="#5EA4FF" /><TextBlock Margin="0,0,9,0" VerticalAlignment="Center" FontSize="10" Foreground="#71879E" Text="中 45–74%" />
