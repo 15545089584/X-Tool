@@ -9,6 +9,7 @@ using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Management;
 using Microsoft.Win32;
 
 namespace ScreenshotApp.SystemTools;
@@ -52,6 +53,164 @@ public static class SystemToolsService
             new SystemInfoItem("电池", "电池", batteryText, "电池数据由 Windows 电源状态提供", "#F3A847", "\uEBA0")
         };
         return new SystemOverview(items, DateTime.Now);
+    }
+
+    /// <summary>按照硬件类别采集可验证的公开属性；不可可靠读取的厂商私有字段保持缺省。</summary>
+    public static HardwareOverview GetHardwareOverview()
+    {
+        var items = new List<HardwarePropertyItem>();
+        using var currentVersion = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion");
+        var operatingSystem = QueryWmi(@"root\cimv2", "SELECT Caption FROM Win32_OperatingSystem").FirstOrDefault();
+        var productName = GetText(operatingSystem, "Caption", currentVersion?.GetValue("ProductName")?.ToString() ?? "Windows").Replace("Microsoft ", string.Empty, StringComparison.OrdinalIgnoreCase);
+        var displayVersion = currentVersion?.GetValue("DisplayVersion")?.ToString() ?? string.Empty;
+        var build = currentVersion?.GetValue("CurrentBuildNumber")?.ToString() ?? Environment.OSVersion.Version.Build.ToString(CultureInfo.InvariantCulture);
+        var ubr = currentVersion?.GetValue("UBR")?.ToString();
+        items.Add(new HardwarePropertyItem("系统", $"{productName} {(Environment.Is64BitOperatingSystem ? "64 位" : "32 位")}", $"版本号  {build}{(string.IsNullOrWhiteSpace(ubr) ? string.Empty : $".{ubr}")} ({displayVersion})", string.Empty, "#4D7CFE", "\uE770"));
+
+        var cpu = QueryWmi(@"root\cimv2", "SELECT Name,Manufacturer,NumberOfCores,NumberOfLogicalProcessors,MaxClockSpeed FROM Win32_Processor").FirstOrDefault();
+        var cpuName = CleanHardwareName(GetText(cpu, "Name", "处理器信息不可用"));
+        var cores = GetInt(cpu, "NumberOfCores");
+        var threads = GetInt(cpu, "NumberOfLogicalProcessors");
+        var hybrid = GetHybridCoreLayout();
+        var coreText = hybrid.Performance > 0 && hybrid.Efficiency > 0 ? $"核心数  {cores} ({hybrid.Performance}P+{hybrid.Efficiency}E)" : $"核心数  {cores}";
+        var baseClock = GetInt(cpu, "MaxClockSpeed");
+        var cpuAttributes = $"{coreText}    线程数  {threads}" + (baseClock > 0 ? $"    标称频率  {baseClock / 1000d:F2} GHz" : string.Empty);
+        items.Add(new HardwarePropertyItem("处理器", cpuName, cpuAttributes, string.Empty, "#2F9AF5", "\uE950"));
+
+        var graphics = QueryWmi(@"root\cimv2", "SELECT Name,AdapterCompatibility,AdapterRAM FROM Win32_VideoController")
+            .Where(row => !GetText(row, "Name").Contains("Remote", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(row => GraphicsAdapterOrder(GetText(row, "Name"))).ToArray();
+        var graphicsPrimary = string.Join("\n", graphics.Select(row => CleanHardwareName(GetText(row, "Name", "未知图形适配器"))));
+        var graphicsDetails = string.Join("\n", graphics.Select(row =>
+        {
+            var name = GetText(row, "Name");
+            var vendor = GetText(row, "AdapterCompatibility", "未知厂商").Replace(" Corporation", string.Empty, StringComparison.OrdinalIgnoreCase);
+            var memory = GetGraphicsMemoryBytes(name);
+            return memory > 0 ? $"{vendor}    显存  {FormatHardwareCapacity(memory)}" : $"{vendor}    共享系统内存";
+        }));
+        items.Add(new HardwarePropertyItem("显卡", string.IsNullOrWhiteSpace(graphicsPrimary) ? "图形适配器信息不可用" : graphicsPrimary, graphicsDetails, string.Empty, "#7D63F1", "\uE7F4"));
+
+        var board = QueryWmi(@"root\cimv2", "SELECT Manufacturer,Product,Version FROM Win32_BaseBoard").FirstOrDefault();
+        items.Add(new HardwarePropertyItem("主板", GetText(board, "Product", "主板型号不可用"), $"{GetText(board, "Manufacturer", "未知厂商")}    版本  {GetText(board, "Version", "未知")}", string.Empty, "#F06D75", "\uE950"));
+
+        var disks = QueryWmi(@"root\cimv2", "SELECT Model,Size,MediaType,InterfaceType FROM Win32_DiskDrive");
+        var diskPrimary = string.Join("\n", disks.Select(row => GetText(row, "Model", "未知磁盘")));
+        var diskDetails = string.Join("\n", disks.Select(row =>
+        {
+            var model = GetText(row, "Model");
+            var size = GetLong(row, "Size");
+            var type = model.Contains("NVMe", StringComparison.OrdinalIgnoreCase) ? "NVMe SSD" : GetText(row, "MediaType", "磁盘").Replace("Fixed hard disk media", "SSD / HDD", StringComparison.OrdinalIgnoreCase);
+            return $"实际容量  {FormatHardwareCapacity(size)}    类型  {type}";
+        }));
+        items.Add(new HardwarePropertyItem("硬盘", string.IsNullOrWhiteSpace(diskPrimary) ? "未检测到物理磁盘" : diskPrimary, diskDetails, string.Empty, "#16B99B", "\uEDA2"));
+
+        var monitor = QueryWmi(@"root\wmi", "SELECT ManufacturerName,UserFriendlyName FROM WmiMonitorID").FirstOrDefault();
+        var monitorName = DecodeWmiText(GetValue(monitor, "UserFriendlyName"));
+        var activeDisplay = QueryWmi(@"root\cimv2", "SELECT CurrentHorizontalResolution,CurrentVerticalResolution,CurrentRefreshRate FROM Win32_VideoController")
+            .FirstOrDefault(row => GetInt(row, "CurrentHorizontalResolution") > 0);
+        var width = GetInt(activeDisplay, "CurrentHorizontalResolution");
+        var height = GetInt(activeDisplay, "CurrentVerticalResolution");
+        var refresh = GetInt(activeDisplay, "CurrentRefreshRate");
+        var displayAttributes = width > 0 ? $"分辨率  {width} × {height}    刷新率  {refresh} Hz" : "当前显示参数不可用";
+        items.Add(new HardwarePropertyItem("显示器", string.IsNullOrWhiteSpace(monitorName) ? "主显示器" : monitorName, displayAttributes, string.Empty, "#607D91", "\uE7F4"));
+
+        var modules = QueryWmi(@"root\cimv2", "SELECT Manufacturer,PartNumber,Capacity,ConfiguredClockSpeed,SMBIOSMemoryType,DeviceLocator FROM Win32_PhysicalMemory");
+        var totalMemory = modules.Sum(row => GetLong(row, "Capacity"));
+        var memorySpeed = modules.Select(row => GetInt(row, "ConfiguredClockSpeed")).Where(value => value > 0).DefaultIfEmpty().Max();
+        var memoryType = MemoryTypeName(modules.Select(row => GetInt(row, "SMBIOSMemoryType")).FirstOrDefault(value => value > 0));
+        var channels = modules.Select(row => GetText(row, "DeviceLocator").Split('-')[0]).Where(value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+        var memoryAttributes = $"容量  {FormatHardwareCapacity(totalMemory)}    通道  {Math.Max(1, channels)}    频率  {memorySpeed} MHz    类型  {memoryType}";
+        var moduleLines = string.Join("\n", modules.Select(row => $"{GetText(row, "Manufacturer", "未知厂商")}  {GetText(row, "PartNumber").Trim()}  {FormatHardwareCapacity(GetLong(row, "Capacity"))}"));
+        items.Add(new HardwarePropertyItem("内存", memoryAttributes, moduleLines, string.Empty, "#168BBF", "\uE950"));
+
+        var battery = QueryWmi(@"root\cimv2", "SELECT Name,EstimatedChargeRemaining,BatteryStatus FROM Win32_Battery").FirstOrDefault();
+        if (battery is not null)
+        {
+            var fullCapacity = GetLong(QueryWmi(@"root\wmi", "SELECT FullChargedCapacity FROM BatteryFullChargedCapacity").FirstOrDefault(), "FullChargedCapacity");
+            var percent = GetInt(battery, "EstimatedChargeRemaining");
+            var status = System.Windows.Forms.SystemInformation.PowerStatus.PowerLineStatus == System.Windows.Forms.PowerLineStatus.Online ? "正在接通电源" : "使用电池供电";
+            var details = $"电量  {percent}%    {status}" + (fullCapacity > 0 ? $"    满充容量  {fullCapacity / 1000d:F1} Wh" : string.Empty);
+            items.Add(new HardwarePropertyItem("电池", GetText(battery, "Name", "电池"), details, string.Empty, "#F3A847", "\uEBA0"));
+        }
+        return new HardwareOverview(items, DateTime.Now);
+    }
+
+    private static IReadOnlyList<Dictionary<string, object?>> QueryWmi(string scopePath, string query)
+    {
+        var rows = new List<Dictionary<string, object?>>();
+        try
+        {
+            using var searcher = new ManagementObjectSearcher(new ManagementScope(scopePath), new ObjectQuery(query));
+            using var results = searcher.Get();
+            foreach (ManagementObject item in results)
+            {
+                using (item)
+                {
+                    var row = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+                    foreach (PropertyData property in item.Properties) row[property.Name] = property.Value;
+                    rows.Add(row);
+                }
+            }
+        }
+        catch { }
+        return rows;
+    }
+
+    private static object? GetValue(Dictionary<string, object?>? row, string key) => row is not null && row.TryGetValue(key, out var value) ? value : null;
+    private static string GetText(Dictionary<string, object?>? row, string key, string fallback = "") => GetValue(row, key)?.ToString()?.Trim() is { Length: > 0 } value ? value : fallback;
+    private static int GetInt(Dictionary<string, object?>? row, string key) => int.TryParse(GetValue(row, key)?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) ? value : 0;
+    private static long GetLong(Dictionary<string, object?>? row, string key) => long.TryParse(GetValue(row, key)?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) ? value : 0;
+    private static string CleanHardwareName(string value) => value.Replace("(R)", string.Empty, StringComparison.OrdinalIgnoreCase).Replace("(TM)", string.Empty, StringComparison.OrdinalIgnoreCase).Replace("  ", " ").Trim();
+    private static int GraphicsAdapterOrder(string name) => name.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase) ? 0 : name.Contains("AMD", StringComparison.OrdinalIgnoreCase) ? 1 : name.Contains("Intel", StringComparison.OrdinalIgnoreCase) ? 2 : 3;
+    private static string DecodeWmiText(object? value) => value is ushort[] words ? new string(words.Where(word => word > 0).Select(word => (char)word).ToArray()).Trim() : string.Empty;
+    private static string MemoryTypeName(int value) => value switch { 34 => "DDR5", 26 => "DDR4", 24 => "DDR3", _ => "内存" };
+    private static string FormatHardwareCapacity(long value) => value >= 1024L * 1024 * 1024 ? $"{value / 1024d / 1024d / 1024d:F0} GB" : FormatBytes(value);
+
+    private static long GetGraphicsMemoryBytes(string adapterName)
+    {
+        try
+        {
+            using var adapters = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}");
+            if (adapters is null) return 0;
+            foreach (var keyName in adapters.GetSubKeyNames())
+            {
+                using var adapter = adapters.OpenSubKey(keyName);
+                if (!string.Equals(adapter?.GetValue("DriverDesc")?.ToString(), adapterName, StringComparison.OrdinalIgnoreCase)) continue;
+                var value = adapter!.GetValue("HardwareInformation.qwMemorySize");
+                return value switch { long number => number, ulong number when number <= long.MaxValue => (long)number, byte[] bytes when bytes.Length >= 8 => BitConverter.ToInt64(bytes, 0), _ => 0 };
+            }
+        }
+        catch { }
+        return 0;
+    }
+
+    private static (int Performance, int Efficiency) GetHybridCoreLayout()
+    {
+        if (!GetSystemCpuSetInformation(IntPtr.Zero, 0, out var required, IntPtr.Zero, 0) && required == 0) return default;
+        var buffer = Marshal.AllocHGlobal((int)required);
+        try
+        {
+            if (!GetSystemCpuSetInformation(buffer, required, out required, IntPtr.Zero, 0)) return default;
+            var cores = new Dictionary<(ushort Group, byte Core), byte>();
+            var offset = 0;
+            while (offset + 20 <= required)
+            {
+                var size = Marshal.ReadInt32(buffer, offset);
+                if (size <= 0 || offset + size > required) break;
+                if (Marshal.ReadInt32(buffer, offset + 4) == 0)
+                {
+                    var group = (ushort)Marshal.ReadInt16(buffer, offset + 12);
+                    var core = Marshal.ReadByte(buffer, offset + 15);
+                    var efficiency = Marshal.ReadByte(buffer, offset + 18);
+                    cores[(group, core)] = efficiency;
+                }
+                offset += size;
+            }
+            var classes = cores.Values.Distinct().OrderBy(value => value).ToArray();
+            return classes.Length < 2 ? default : (cores.Values.Count(value => value == classes[^1]), cores.Values.Count(value => value == classes[0]));
+        }
+        catch { return default; }
+        finally { Marshal.FreeHGlobal(buffer); }
     }
 
     private static string GetGraphicsNames()
@@ -762,6 +921,9 @@ public static class SystemToolsService
     [DllImport("kernel32.dll", SetLastError = false)]
     private static extern bool GlobalMemoryStatusEx(ref MemoryStatusEx buffer);
 
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetSystemCpuSetInformation(IntPtr information, uint bufferLength, out uint returnedLength, IntPtr process, uint flags);
+
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
     private struct MemoryStatusEx
     {
@@ -892,6 +1054,11 @@ public sealed record EnvironmentVariableEntry(string Name, string Value, Environ
 public sealed record SystemOverview(IReadOnlyList<SystemInfoItem> Items, DateTime CapturedAt);
 
 public sealed record SystemInfoItem(string Key, string Title, string Primary, string Detail, string Accent, string Icon);
+
+/// <summary>按参考硬件面板组织的属性快照。</summary>
+public sealed record HardwareOverview(IReadOnlyList<HardwarePropertyItem> Items, DateTime CapturedAt);
+
+public sealed record HardwarePropertyItem(string Title, string Primary, string Attributes, string Secondary, string Accent, string Icon);
 
 /// <summary>启动项记录；仅当前用户注册表项允许在首版中安全启停。</summary>
 public sealed record StartupEntry(string Name, string Command, string Source, string Location, bool IsEnabled, bool CanToggle, string RegistrySubKey)

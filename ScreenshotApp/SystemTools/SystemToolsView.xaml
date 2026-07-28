@@ -20,7 +20,7 @@
     </UserControl.Resources>
     <Grid Margin="44,42,52,38">
         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="20" /><RowDefinition Height="42" /><RowDefinition Height="16" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-        <StackPanel><TextBlock FontSize="30" FontWeight="SemiBold" Text="系统工具" /><TextBlock Margin="0,8,0,0" FontSize="14" Foreground="#728195" Text="查看本机端口、进程、服务与环境变量；系统级操作会在执行时明确提示权限要求。" /></StackPanel>
+        <StackPanel><TextBlock FontSize="30" FontWeight="SemiBold" Text="系统工具" /><TextBlock Margin="0,8,0,0" FontSize="14" Foreground="#728195" Text="查看硬件属性、管理启动项与环境变量；系统级操作会在执行时明确提示权限要求。" /></StackPanel>
         <Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition Width="122" /><ColumnDefinition Width="10" /><ColumnDefinition Width="122" /><ColumnDefinition Width="10" /><ColumnDefinition Width="122" /><ColumnDefinition Width="10" /><ColumnDefinition Width="122" /><ColumnDefinition Width="10" /><ColumnDefinition Width="122" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
             <Button x:Name="OverviewTabButton" Style="{StaticResource SystemTab}" Tag="Overview" Click="TabButton_Click" Visibility="Collapsed"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="系统概览" /></Button>
             <Button x:Name="StartupTabButton" Grid.Column="2" Style="{StaticResource SystemTab}" Tag="Startup" Click="TabButton_Click" Visibility="Collapsed"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="启动项管理" /></Button>
@@ -82,15 +82,16 @@
                                     <ItemsControl x:Name="OverviewInfoItems">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
-                                                <Grid Margin="0,0,8,19">
-                                                    <Grid.ColumnDefinitions><ColumnDefinition Width="126" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                                <Grid Margin="0,0,8,22">
+                                                    <Grid.ColumnDefinitions><ColumnDefinition Width="132" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                                                     <StackPanel Orientation="Horizontal">
                                                         <Border Width="30" Height="30" VerticalAlignment="Top" Background="{Binding Accent}" CornerRadius="9"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="White" Text="{Binding Icon}" /></Border>
                                                         <TextBlock Margin="10,5,0,0" FontSize="13" Foreground="#6683A0" Text="{Binding Title}" />
                                                     </StackPanel>
                                                     <StackPanel Grid.Column="1">
-                                                        <TextBlock FontSize="15" FontWeight="SemiBold" Foreground="#2E4B67" Text="{Binding Primary}" TextWrapping="Wrap" />
-                                                        <TextBlock Margin="0,5,0,0" FontSize="11" Foreground="#587490" Text="{Binding Detail}" TextWrapping="Wrap" />
+                                                        <TextBlock FontSize="15" FontWeight="SemiBold" LineHeight="22" Foreground="#2E4B67" Text="{Binding Primary}" TextWrapping="Wrap" />
+                                                        <TextBlock Margin="0,5,0,0" FontSize="12" LineHeight="20" Foreground="#3F607E" Text="{Binding Attributes}" TextWrapping="Wrap" />
+                                                        <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="18" Foreground="#68829B" Text="{Binding Secondary}" TextWrapping="Wrap" />
                                                     </StackPanel>
                                                 </Grid>
                                             </DataTemplate>

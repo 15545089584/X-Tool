@@ -165,14 +165,8 @@ public partial class SystemToolsView : UserControl
         OverviewTemperatureItems.ItemsSource = new[] { new SensorPanelItem("正在枚举温度传感器", "—", "#7890A6") };
         try
         {
-            var overview = await Task.Run(SystemToolsService.GetSystemOverview);
-            OverviewInfoItems.ItemsSource = overview.Items.Select(item => item.Key switch
-            {
-                "Windows" => item with { Detail = string.Empty },
-                "处理器" => item with { Detail = $"{Environment.ProcessorCount} 个逻辑处理器" },
-                "显卡" or "主板" or "内存" or "显示器" or "电池" => item with { Detail = string.Empty },
-                _ => item
-            }).ToArray();
+            var overview = await Task.Run(SystemToolsService.GetHardwareOverview);
+            OverviewInfoItems.ItemsSource = overview.Items;
         }
         catch (Exception exception) { MessageBox.Show(exception.Message, "读取系统信息失败", MessageBoxButton.OK, MessageBoxImage.Warning); }
     }
