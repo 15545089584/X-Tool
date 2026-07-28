@@ -426,6 +426,7 @@ public partial class MainWindow : Window
         _captureInProgress = true;
         var wasVisible = IsVisible;
         var previousState = WindowState;
+        var restoreWindowAfterCapture = true;
 
         try
         {
@@ -455,6 +456,8 @@ public partial class MainWindow : Window
                 overlay.SelectedScreenBounds is Int32Rect scrollRegion)
             {
                 await CaptureScrollRegionAsync(scrollRegion);
+                // 长截图已完成，保持主界面隐藏，避免打断用户当前工作。
+                restoreWindowAfterCapture = false;
                 return;
             }
 
@@ -462,6 +465,8 @@ public partial class MainWindow : Window
             {
                 await SetClipboardImageWithRetryAsync(overlay.SelectedBitmap);
                 var savedPath = await TrySaveCaptureAsync(overlay.SelectedBitmap, false);
+                // 普通截图已完成，保持主界面隐藏，避免抢占前台焦点。
+                restoreWindowAfterCapture = false;
                 if (savedPath is not null)
                 {
                     ShowToast($"已保存到 {savedPath}");
@@ -482,7 +487,7 @@ public partial class MainWindow : Window
         }
         finally
         {
-            if (wasVisible)
+            if (wasVisible && restoreWindowAfterCapture)
             {
                 Show();
                 WindowState = previousState;
@@ -506,6 +511,7 @@ public partial class MainWindow : Window
         _captureInProgress = true;
         var wasVisible = IsVisible;
         var previousState = WindowState;
+        var restoreWindowAfterCapture = true;
 
         try
         {
@@ -523,6 +529,8 @@ public partial class MainWindow : Window
             }
 
             await CaptureScrollRegionAsync(screenRegion);
+            // 长截图已完成，保持主界面隐藏，避免抢占前台焦点。
+            restoreWindowAfterCapture = false;
         }
         catch (OperationCanceledException)
         {
@@ -534,7 +542,7 @@ public partial class MainWindow : Window
         }
         finally
         {
-            if (wasVisible)
+            if (wasVisible && restoreWindowAfterCapture)
             {
                 Show();
                 WindowState = previousState;
