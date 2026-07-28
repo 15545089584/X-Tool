@@ -34,8 +34,12 @@ public partial class SystemToolsView : UserControl
     private string _serviceSortKey = "Name";
     private bool _processHeaderSortActive;
     private bool _serviceHeaderSortActive;
+    private bool _relationshipsAscending = true;
+    private string _relationshipSortKey = "Memory";
+    private bool _relationshipHeaderSortActive;
     private readonly Dictionary<TextBlock, (string Key, string Title)> _processHeaders = new();
     private readonly Dictionary<TextBlock, (string Key, string Title)> _serviceHeaders = new();
+    private readonly Dictionary<TextBlock, (string Key, string Title)> _relationshipHeaders = new();
     private readonly HashSet<string> _expandedProcessGroups = new(StringComparer.OrdinalIgnoreCase);
 
     public SystemToolsView()
@@ -214,6 +218,17 @@ public partial class SystemToolsView : UserControl
     private void RelationshipScopeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (IsLoaded) ApplyRelationshipFilter();
+    }
+
+    private void RelationshipColumnHeader_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not TextBlock { Tag: string key }) return;
+        _relationshipsAscending = string.Equals(_relationshipSortKey, key, StringComparison.OrdinalIgnoreCase) ? !_relationshipsAscending : true;
+        _relationshipSortKey = key;
+        _relationshipHeaderSortActive = true;
+        UpdateRelationshipHeaderIndicators();
+        ApplyRelationshipFilter();
+        e.Handled = true;
     }
 
     private void RelationsListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -440,6 +455,16 @@ public partial class SystemToolsView : UserControl
             (string.IsNullOrWhiteSpace(keyword) ||
               $"{item.ProcessName} {item.ProcessId} {item.ProcessPath} {item.ServiceSummary} {string.Join(' ', item.Services.Select(service => service.Name + " " + service.DisplayName))} {string.Join(' ', item.NetworkEntries.Select(port => port.Protocol + " " + port.LocalAddress + " " + port.RemoteAddress + " " + port.State))}"
                  .Contains(keyword, StringComparison.OrdinalIgnoreCase)));
+        filtered = _relationshipSortKey switch
+        {
+            "Process" => Sort(filtered, item => item.ProcessName, _relationshipsAscending),
+            "Pid" => Sort(filtered, item => item.ProcessId, _relationshipsAscending),
+            "Ports" => Sort(filtered, item => item.NetworkEntries.Count, _relationshipsAscending),
+            "Services" => Sort(filtered, item => item.Services.Count, _relationshipsAscending),
+            "Network" => Sort(filtered, item => item.NetworkEntries.Count, _relationshipsAscending),
+            "Cpu" => Sort(filtered, item => item.CpuPercent, _relationshipsAscending),
+            _ => Sort(filtered, item => item.MemoryBytes, _relationshipsAscending)
+        };
         var visible = filtered.ToArray();
         Replace(_relationships, visible);
         ConfigureRelationshipColumns();
@@ -734,8 +759,10 @@ public partial class SystemToolsView : UserControl
     {
         RegisterHeaders(ProcessesPanel, new[] { "Name", "ProcessId", "Cpu", "Memory", "Disk", "Network", "Started" }, _processHeaders, ProcessColumnHeader_MouseLeftButtonUp);
         RegisterHeaders(ServicesPanel, new[] { "DisplayName", "Status" }, _serviceHeaders, ServiceColumnHeader_MouseLeftButtonUp);
+        RegisterHeaders(RelationsBubblePanel, new[] { "Process", "Pid", "Ports", "Services", "Network", "Cpu", "Memory" }, _relationshipHeaders, RelationshipColumnHeader_MouseLeftButtonUp);
         UpdateProcessHeaderIndicators();
         UpdateServiceHeaderIndicators();
+        UpdateRelationshipHeaderIndicators();
     }
 
     private static void RegisterHeaders(DependencyObject panel, IReadOnlyList<string> keys, IDictionary<TextBlock, (string Key, string Title)> registry, MouseButtonEventHandler handler)
@@ -782,6 +809,14 @@ public partial class SystemToolsView : UserControl
         foreach (var (header, data) in _serviceHeaders)
         {
             header.Text = data.Title + (_serviceHeaderSortActive && string.Equals(data.Key, _serviceSortKey, StringComparison.OrdinalIgnoreCase) ? (_servicesAscending ? " ↑" : " ↓") : string.Empty);
+        }
+    }
+
+    private void UpdateRelationshipHeaderIndicators()
+    {
+        foreach (var (header, data) in _relationshipHeaders)
+        {
+            header.Text = data.Title + (_relationshipHeaderSortActive && string.Equals(data.Key, _relationshipSortKey, StringComparison.OrdinalIgnoreCase) ? (_relationshipsAscending ? " ↑" : " ↓") : string.Empty);
         }
     }
 

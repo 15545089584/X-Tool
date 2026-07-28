@@ -160,7 +160,7 @@
             <Grid x:Name="RoutesFirewallPanel" Visibility="Collapsed">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <Grid MinHeight="790">
-                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="14" /><RowDefinition Height="250" /><RowDefinition Height="14" /><RowDefinition Height="480" /></Grid.RowDefinitions>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="14" /><RowDefinition Height="330" /><RowDefinition Height="14" /><RowDefinition Height="480" /></Grid.RowDefinitions>
                 <Border Padding="16" Style="{StaticResource NetworkCard}">
                     <Grid>
                         <StackPanel>
