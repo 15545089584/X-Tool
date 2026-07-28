@@ -46,8 +46,8 @@ public static class SystemToolsService
         {
             new SystemInfoItem("Windows", "系统", $"{productName} {displayVersion}".Trim(), $"内部版本 {build} · {(Environment.Is64BitOperatingSystem ? "64 位" : "32 位")}", "#4D7CFE", "\uE770"),
             new SystemInfoItem("处理器", "CPU", cpu, $"{Environment.ProcessorCount} 个逻辑处理器 · 当前为{(IsRunningAsAdministrator() ? "管理员" : "普通")}权限", "#3B9EFF", "\uEEA1"),
-            new SystemInfoItem("显卡", "GPU", gpu, "图形适配器信息来自 Windows 设备注册表", "#8B6CFF", "\uE7F3"),
-            new SystemInfoItem("主板", "主板", boardText, $"设备名称 {Environment.MachineName}", "#F06D75", "\uE950"),
+            new SystemInfoItem("显卡", "GPU", gpu, "图形适配器信息来自 Windows 设备注册表", "#8B6CFF", "\uE950"),
+            new SystemInfoItem("主板", "主板", boardText, $"设备名称 {Environment.MachineName}", "#F06D75", "\uE772"),
             new SystemInfoItem("内存", "内存", $"可用 {availableMemory} / 共 {totalMemory}", $"系统已运行 {FormatUptime(uptime)}", "#18B894", "\uEEA0"),
             new SystemInfoItem("显示器", "显示器", System.Windows.SystemParameters.PrimaryScreenWidth > 0 ? $"主显示器 {System.Windows.SystemParameters.PrimaryScreenWidth:F0} × {System.Windows.SystemParameters.PrimaryScreenHeight:F0}" : "显示器信息不可用", "分辨率来自当前 Windows 显示设置", "#4D7CFE", "\uE7F9"),
             new SystemInfoItem("电池", "电池", batteryText, "电池数据由 Windows 电源状态提供", "#F3A847", "\uE855")
@@ -88,10 +88,10 @@ public static class SystemToolsService
             var memory = GetGraphicsMemoryBytes(name);
             return memory > 0 ? $"{vendor}    显存  {FormatHardwareCapacity(memory)}" : $"{vendor}    共享系统内存";
         }));
-        items.Add(new HardwarePropertyItem("显卡", string.IsNullOrWhiteSpace(graphicsPrimary) ? "图形适配器信息不可用" : graphicsPrimary, graphicsDetails, string.Empty, "#7D63F1", "\uE7F3"));
+        items.Add(new HardwarePropertyItem("显卡", string.IsNullOrWhiteSpace(graphicsPrimary) ? "图形适配器信息不可用" : graphicsPrimary, graphicsDetails, string.Empty, "#7D63F1", "\uE950"));
 
         var board = QueryWmi(@"root\cimv2", "SELECT Manufacturer,Product,Version FROM Win32_BaseBoard").FirstOrDefault();
-        items.Add(new HardwarePropertyItem("主板", GetText(board, "Product", "主板型号不可用"), $"{GetText(board, "Manufacturer", "未知厂商")}    版本  {GetText(board, "Version", "未知")}", string.Empty, "#F06D75", "\uE950"));
+        items.Add(new HardwarePropertyItem("主板", GetText(board, "Product", "主板型号不可用"), $"{GetText(board, "Manufacturer", "未知厂商")}    版本  {GetText(board, "Version", "未知")}", string.Empty, "#F06D75", "\uE772"));
 
         var disks = QueryWmi(@"root\cimv2", "SELECT Model,Size,MediaType,InterfaceType FROM Win32_DiskDrive");
         var diskPrimary = string.Join("\n", disks.Select(row => GetText(row, "Model", "未知磁盘")));
