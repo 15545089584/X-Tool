@@ -74,15 +74,15 @@
                             <Border Padding="10" Background="#54FFFFFF" BorderBrush="#8ED6E9F8" BorderThickness="1" CornerRadius="13">
                                 <Viewbox Stretch="Fill" StretchDirection="Both">
                                     <Grid Width="1400" Height="620">
-                                        <ItemsControl x:Name="OverviewInfoItems">
+                                        <ItemsControl x:Name="OverviewInfoItems" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
                                             <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="8" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
                                                     <Grid VerticalAlignment="Center">
-                                                        <Grid.ColumnDefinitions><ColumnDefinition Width="112" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                                        <Grid.ColumnDefinitions><ColumnDefinition Width="152" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                                                         <StackPanel VerticalAlignment="Center" Orientation="Horizontal">
-                                                            <Border Width="30" Height="30" VerticalAlignment="Center" Background="Transparent" BorderBrush="#40D4E8F8" BorderThickness="1" CornerRadius="10"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="17" Foreground="{Binding Accent}" Text="{Binding Icon}" /></Border>
-                                                            <TextBlock Margin="9,0,0,0" VerticalAlignment="Center" FontSize="14" Foreground="#6683A0" Text="{Binding Title}" />
+                                                            <Border Width="38" Height="38" VerticalAlignment="Center" Background="Transparent" BorderBrush="#40D4E8F8" BorderThickness="1" CornerRadius="12"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="21" Foreground="{Binding Accent}" Text="{Binding Icon}" /></Border>
+                                                            <TextBlock Margin="12,0,0,0" VerticalAlignment="Center" FontSize="17" Foreground="#6683A0" Text="{Binding Title}" />
                                                         </StackPanel>
                                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                             <TextBlock FontSize="16" FontWeight="SemiBold" LineHeight="19" Foreground="#2E4B67" Text="{Binding Primary}" TextWrapping="Wrap" />
