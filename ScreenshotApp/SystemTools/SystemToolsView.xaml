@@ -82,7 +82,7 @@
                         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                         <Grid>
                             <StackPanel>
-                                <TextBlock FontSize="18" FontWeight="SemiBold" Foreground="#2E4B67" Text="高级硬件监控" />
+                                <TextBlock FontSize="18" FontWeight="SemiBold" Foreground="#2E4B67" Text="硬件监控" />
                                 <TextBlock Margin="0,2,0,0" FontSize="10" Foreground="#728BA3" Text="由独立管理员助手持续读取当前设备支持的硬件传感器" />
                             </StackPanel>
                             <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
@@ -102,7 +102,7 @@
                                                 <Grid Margin="0,0,6,4">
                                                     <Grid.ColumnDefinitions><ColumnDefinition Width="112" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                                                     <StackPanel Orientation="Horizontal">
-                                                        <Border Width="26" Height="26" VerticalAlignment="Top" Background="{Binding Accent}" CornerRadius="8"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="White" Text="{Binding Icon}" /></Border>
+                                                        <Border Width="28" Height="28" VerticalAlignment="Top" Background="#42FFFFFF" BorderBrush="#8FD4E8F8" BorderThickness="1" CornerRadius="9"><Border.Effect><DropShadowEffect BlurRadius="6" ShadowDepth="1" Direction="270" Opacity="0.06" Color="#476581" /></Border.Effect><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="{Binding Accent}" Text="{Binding Icon}" /></Border>
                                                         <TextBlock Margin="8,3,0,0" FontSize="12" Foreground="#6683A0" Text="{Binding Title}" />
                                                     </StackPanel>
                                                     <StackPanel Grid.Column="1">
@@ -116,37 +116,31 @@
                                     </ItemsControl>
                                 </ScrollViewer>
                             </Border>
-                            <Border Grid.Column="2" Padding="16" Style="{StaticResource SystemCard}" CornerRadius="13">
+                            <Border Grid.Column="2" Padding="12" Style="{StaticResource SystemCard}" CornerRadius="13">
                                 <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Hidden">
                                     <StackPanel>
-                                        <Grid>
-                                            <StackPanel Orientation="Horizontal">
-                                                <StackPanel Margin="0,0,22,0" Orientation="Horizontal"><TextBlock VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="#4D7CFE" Text="&#xE713;" /><TextBlock Margin="7,0,0,0" VerticalAlignment="Center" FontSize="14" FontWeight="SemiBold" Foreground="#45627E" Text="选择传感器" /></StackPanel>
-                                                <StackPanel Orientation="Horizontal"><TextBlock VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="#4D7CFE" Text="&#xE950;" /><TextBlock Margin="7,0,0,0" VerticalAlignment="Center" FontSize="14" FontWeight="SemiBold" Foreground="#45627E" Text="传感器详情" /></StackPanel>
-                                            </StackPanel>
-                                            <TextBlock x:Name="OverviewUpdatedAtText" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="10" Foreground="#7890A6" Text="等待数据" />
-                                        </Grid>
-                                        <ItemsControl x:Name="OverviewCpuSensorItems" Margin="0,22,0,0">
-                                            <ItemsControl.ItemTemplate><DataTemplate><Grid Margin="0,0,0,11"><Grid.ColumnDefinitions><ColumnDefinition Width="118" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><TextBlock VerticalAlignment="Center" FontSize="15" Foreground="#6683A0" Text="{Binding Label}" /><TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="16" FontWeight="SemiBold" Foreground="{Binding Accent}" Text="{Binding Value}" /></Grid></DataTemplate></ItemsControl.ItemTemplate>
+                                        <TextBlock x:Name="OverviewUpdatedAtText" HorizontalAlignment="Right" FontSize="9" Foreground="#7890A6" Text="等待数据" />
+                                        <ItemsControl x:Name="OverviewCpuSensorItems" Margin="0,6,0,0">
+                                            <ItemsControl.ItemTemplate><DataTemplate><Grid Margin="0,0,0,5"><Grid.ColumnDefinitions><ColumnDefinition Width="96" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><TextBlock VerticalAlignment="Center" FontSize="12" Foreground="#6683A0" Text="{Binding Label}" /><TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold" Foreground="{Binding Accent}" Text="{Binding Value}" /></Grid></DataTemplate></ItemsControl.ItemTemplate>
                                         </ItemsControl>
-                                        <ItemsControl x:Name="OverviewGpuSensorItems" Margin="0,13,0,0">
-                                            <ItemsControl.ItemTemplate><DataTemplate><Grid Margin="0,0,0,11"><Grid.ColumnDefinitions><ColumnDefinition Width="118" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><TextBlock VerticalAlignment="Center" FontSize="15" Foreground="#6683A0" Text="{Binding Label}" /><TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="16" FontWeight="SemiBold" Foreground="{Binding Accent}" Text="{Binding Value}" /></Grid></DataTemplate></ItemsControl.ItemTemplate>
+                                        <ItemsControl x:Name="OverviewGpuSensorItems" Margin="0,5,0,0">
+                                            <ItemsControl.ItemTemplate><DataTemplate><Grid Margin="0,0,0,5"><Grid.ColumnDefinitions><ColumnDefinition Width="96" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><TextBlock VerticalAlignment="Center" FontSize="12" Foreground="#6683A0" Text="{Binding Label}" /><TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold" Foreground="{Binding Accent}" Text="{Binding Value}" /></Grid></DataTemplate></ItemsControl.ItemTemplate>
                                         </ItemsControl>
-                                        <ItemsControl x:Name="OverviewMemorySensorItems" Margin="0,13,0,0">
-                                            <ItemsControl.ItemTemplate><DataTemplate><Grid Margin="0,0,0,2"><Grid.ColumnDefinitions><ColumnDefinition Width="118" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><TextBlock VerticalAlignment="Center" FontSize="15" Foreground="#6683A0" Text="{Binding Label}" /><TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="16" FontWeight="SemiBold" Foreground="{Binding Accent}" Text="{Binding Value}" /></Grid></DataTemplate></ItemsControl.ItemTemplate>
+                                        <ItemsControl x:Name="OverviewMemorySensorItems" Margin="0,5,0,0">
+                                            <ItemsControl.ItemTemplate><DataTemplate><Grid Margin="0,0,0,1"><Grid.ColumnDefinitions><ColumnDefinition Width="96" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><TextBlock VerticalAlignment="Center" FontSize="12" Foreground="#6683A0" Text="{Binding Label}" /><TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold" Foreground="{Binding Accent}" Text="{Binding Value}" /></Grid></DataTemplate></ItemsControl.ItemTemplate>
                                         </ItemsControl>
-                                        <StackPanel Margin="0,25,0,0" Orientation="Horizontal">
-                                            <Border Width="82" Height="32" Background="#4D7CFE" CornerRadius="9,0,0,9"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" Foreground="White" Text="实时" /></Border>
-                                            <Border Width="82" Height="32" Background="#E6F1FF" BorderBrush="#B1D5F1" BorderThickness="1" CornerRadius="0,9,9,0"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" Foreground="#4A6987" Text="曲线" /></Border>
+                                        <StackPanel Margin="0,10,0,0" Orientation="Horizontal">
+                                            <Border Width="68" Height="26" Background="#4D7CFE" CornerRadius="8,0,0,8"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold" Foreground="White" Text="实时" /></Border>
+                                            <Border Width="68" Height="26" Background="#E6F1FF" BorderBrush="#B1D5F1" BorderThickness="1" CornerRadius="0,8,8,0"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold" Foreground="#4A6987" Text="曲线" /></Border>
                                         </StackPanel>
-                                        <TextBlock Margin="0,24,0,12" FontSize="16" FontWeight="SemiBold" Foreground="#2E4B67" Text="温度" />
+                                        <TextBlock Margin="0,12,0,6" FontSize="13" FontWeight="SemiBold" Foreground="#2E4B67" Text="温度" />
                                         <ItemsControl x:Name="OverviewTemperatureItems">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Grid Margin="0,0,0,16">
-                                                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="10" /></Grid.RowDefinitions>
-                                                        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><TextBlock VerticalAlignment="Center" FontSize="15" Foreground="#6683A0" Text="{Binding Label}" /><TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="16" FontWeight="SemiBold" Foreground="{Binding Accent}" Text="{Binding Value}" /></Grid>
-                                                        <Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition Width="85*" /><ColumnDefinition Width="15*" /></Grid.ColumnDefinitions><ProgressBar Grid.ColumnSpan="2" Style="{StaticResource TemperatureProgressBar}" Foreground="{Binding Accent}" Value="{Binding Percent}" /><Border Grid.Column="0" Width="3" Height="12" HorizontalAlignment="Right" VerticalAlignment="Center" Background="#E56670" CornerRadius="2"><Border.Effect><DropShadowEffect BlurRadius="7" ShadowDepth="0" Color="#E56670" Opacity="0.55" /></Border.Effect></Border></Grid>
+                                                    <Grid Margin="0,0,0,6">
+                                                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="4" /><RowDefinition Height="7" /></Grid.RowDefinitions>
+                                                        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><TextBlock VerticalAlignment="Center" FontSize="12" Foreground="#6683A0" Text="{Binding Label}" /><TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold" Foreground="{Binding Accent}" Text="{Binding Value}" /></Grid>
+                                                        <Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition Width="85*" /><ColumnDefinition Width="15*" /></Grid.ColumnDefinitions><ProgressBar Grid.ColumnSpan="2" Style="{StaticResource TemperatureProgressBar}" Foreground="{Binding Accent}" Value="{Binding Percent}" /><Border Grid.Column="0" Width="3" Height="10" HorizontalAlignment="Right" VerticalAlignment="Center" Background="#E56670" CornerRadius="2"><Border.Effect><DropShadowEffect BlurRadius="6" ShadowDepth="0" Color="#E56670" Opacity="0.45" /></Border.Effect></Border></Grid>
                                                     </Grid>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>

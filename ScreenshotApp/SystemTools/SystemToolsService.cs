@@ -45,12 +45,12 @@ public static class SystemToolsService
         var items = new[]
         {
             new SystemInfoItem("Windows", "系统", $"{productName} {displayVersion}".Trim(), $"内部版本 {build} · {(Environment.Is64BitOperatingSystem ? "64 位" : "32 位")}", "#4D7CFE", "\uE770"),
-            new SystemInfoItem("处理器", "CPU", cpu, $"{Environment.ProcessorCount} 个逻辑处理器 · 当前为{(IsRunningAsAdministrator() ? "管理员" : "普通")}权限", "#3B9EFF", "\uE950"),
-            new SystemInfoItem("显卡", "GPU", gpu, "图形适配器信息来自 Windows 设备注册表", "#8B6CFF", "\uE7F4"),
+            new SystemInfoItem("处理器", "CPU", cpu, $"{Environment.ProcessorCount} 个逻辑处理器 · 当前为{(IsRunningAsAdministrator() ? "管理员" : "普通")}权限", "#3B9EFF", "\uEEA1"),
+            new SystemInfoItem("显卡", "GPU", gpu, "图形适配器信息来自 Windows 设备注册表", "#8B6CFF", "\uE7F3"),
             new SystemInfoItem("主板", "主板", boardText, $"设备名称 {Environment.MachineName}", "#F06D75", "\uE950"),
-            new SystemInfoItem("内存", "内存", $"可用 {availableMemory} / 共 {totalMemory}", $"系统已运行 {FormatUptime(uptime)}", "#18B894", "\uE950"),
-            new SystemInfoItem("显示器", "显示器", System.Windows.SystemParameters.PrimaryScreenWidth > 0 ? $"主显示器 {System.Windows.SystemParameters.PrimaryScreenWidth:F0} × {System.Windows.SystemParameters.PrimaryScreenHeight:F0}" : "显示器信息不可用", "分辨率来自当前 Windows 显示设置", "#4D7CFE", "\uE7F4"),
-            new SystemInfoItem("电池", "电池", batteryText, "电池数据由 Windows 电源状态提供", "#F3A847", "\uEBA0")
+            new SystemInfoItem("内存", "内存", $"可用 {availableMemory} / 共 {totalMemory}", $"系统已运行 {FormatUptime(uptime)}", "#18B894", "\uEEA0"),
+            new SystemInfoItem("显示器", "显示器", System.Windows.SystemParameters.PrimaryScreenWidth > 0 ? $"主显示器 {System.Windows.SystemParameters.PrimaryScreenWidth:F0} × {System.Windows.SystemParameters.PrimaryScreenHeight:F0}" : "显示器信息不可用", "分辨率来自当前 Windows 显示设置", "#4D7CFE", "\uE7F9"),
+            new SystemInfoItem("电池", "电池", batteryText, "电池数据由 Windows 电源状态提供", "#F3A847", "\uE855")
         };
         return new SystemOverview(items, DateTime.Now);
     }
@@ -75,7 +75,7 @@ public static class SystemToolsService
         var coreText = hybrid.Performance > 0 && hybrid.Efficiency > 0 ? $"核心数  {cores} ({hybrid.Performance}P+{hybrid.Efficiency}E)" : $"核心数  {cores}";
         var baseClock = GetInt(cpu, "MaxClockSpeed");
         var cpuAttributes = $"{coreText}    线程数  {threads}" + (baseClock > 0 ? $"    标称频率  {baseClock / 1000d:F2} GHz" : string.Empty);
-        items.Add(new HardwarePropertyItem("处理器", cpuName, cpuAttributes, string.Empty, "#2F9AF5", "\uE950"));
+        items.Add(new HardwarePropertyItem("处理器", cpuName, cpuAttributes, string.Empty, "#2F9AF5", "\uEEA1"));
 
         var graphics = QueryWmi(@"root\cimv2", "SELECT Name,AdapterCompatibility,AdapterRAM FROM Win32_VideoController")
             .Where(row => !GetText(row, "Name").Contains("Remote", StringComparison.OrdinalIgnoreCase))
@@ -88,7 +88,7 @@ public static class SystemToolsService
             var memory = GetGraphicsMemoryBytes(name);
             return memory > 0 ? $"{vendor}    显存  {FormatHardwareCapacity(memory)}" : $"{vendor}    共享系统内存";
         }));
-        items.Add(new HardwarePropertyItem("显卡", string.IsNullOrWhiteSpace(graphicsPrimary) ? "图形适配器信息不可用" : graphicsPrimary, graphicsDetails, string.Empty, "#7D63F1", "\uE7F4"));
+        items.Add(new HardwarePropertyItem("显卡", string.IsNullOrWhiteSpace(graphicsPrimary) ? "图形适配器信息不可用" : graphicsPrimary, graphicsDetails, string.Empty, "#7D63F1", "\uE7F3"));
 
         var board = QueryWmi(@"root\cimv2", "SELECT Manufacturer,Product,Version FROM Win32_BaseBoard").FirstOrDefault();
         items.Add(new HardwarePropertyItem("主板", GetText(board, "Product", "主板型号不可用"), $"{GetText(board, "Manufacturer", "未知厂商")}    版本  {GetText(board, "Version", "未知")}", string.Empty, "#F06D75", "\uE950"));
@@ -112,7 +112,7 @@ public static class SystemToolsService
         var height = GetInt(activeDisplay, "CurrentVerticalResolution");
         var refresh = GetInt(activeDisplay, "CurrentRefreshRate");
         var displayAttributes = width > 0 ? $"分辨率  {width} × {height}    刷新率  {refresh} Hz" : "当前显示参数不可用";
-        items.Add(new HardwarePropertyItem("显示器", string.IsNullOrWhiteSpace(monitorName) ? "主显示器" : monitorName, displayAttributes, string.Empty, "#607D91", "\uE7F4"));
+        items.Add(new HardwarePropertyItem("显示器", string.IsNullOrWhiteSpace(monitorName) ? "主显示器" : monitorName, displayAttributes, string.Empty, "#607D91", "\uE7F9"));
 
         var modules = QueryWmi(@"root\cimv2", "SELECT Manufacturer,PartNumber,Capacity,ConfiguredClockSpeed,SMBIOSMemoryType,DeviceLocator FROM Win32_PhysicalMemory");
         var totalMemory = modules.Sum(row => GetLong(row, "Capacity"));
@@ -121,7 +121,7 @@ public static class SystemToolsService
         var channels = modules.Select(row => GetText(row, "DeviceLocator").Split('-')[0]).Where(value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.OrdinalIgnoreCase).Count();
         var memoryAttributes = $"容量  {FormatHardwareCapacity(totalMemory)}    通道  {Math.Max(1, channels)}    频率  {memorySpeed} MHz    类型  {memoryType}";
         var moduleLines = string.Join("\n", modules.Select(row => $"{GetText(row, "Manufacturer", "未知厂商")}  {GetText(row, "PartNumber").Trim()}  {FormatHardwareCapacity(GetLong(row, "Capacity"))}"));
-        items.Add(new HardwarePropertyItem("内存", memoryAttributes, moduleLines, string.Empty, "#168BBF", "\uE950"));
+        items.Add(new HardwarePropertyItem("内存", memoryAttributes, moduleLines, string.Empty, "#168BBF", "\uEEA0"));
 
         var battery = QueryWmi(@"root\cimv2", "SELECT Name,EstimatedChargeRemaining,BatteryStatus FROM Win32_Battery").FirstOrDefault();
         if (battery is not null)
@@ -130,7 +130,7 @@ public static class SystemToolsService
             var percent = GetInt(battery, "EstimatedChargeRemaining");
             var status = System.Windows.Forms.SystemInformation.PowerStatus.PowerLineStatus == System.Windows.Forms.PowerLineStatus.Online ? "正在接通电源" : "使用电池供电";
             var details = $"电量  {percent}%    {status}" + (fullCapacity > 0 ? $"    满充容量  {fullCapacity / 1000d:F1} Wh" : string.Empty);
-            items.Add(new HardwarePropertyItem("电池", GetText(battery, "Name", "电池"), details, string.Empty, "#F3A847", "\uEBA0"));
+            items.Add(new HardwarePropertyItem("电池", GetText(battery, "Name", "电池"), details, string.Empty, "#F3A847", "\uE855"));
         }
         return new HardwareOverview(items, DateTime.Now);
     }
