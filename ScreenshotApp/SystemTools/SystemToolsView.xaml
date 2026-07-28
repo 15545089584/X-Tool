@@ -73,21 +73,21 @@
                         <Grid Grid.Row="2" ClipToBounds="True">
                             <Border Padding="10" Background="#54FFFFFF" BorderBrush="#8ED6E9F8" BorderThickness="1" CornerRadius="13">
                                 <Viewbox Stretch="Fill" StretchDirection="Both">
-                                    <Grid Width="1400" Height="620">
+                                    <Grid Width="1400" Height="540">
                                         <ItemsControl x:Name="OverviewInfoItems" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
                                             <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="8" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
                                                     <Grid VerticalAlignment="Center">
-                                                        <Grid.ColumnDefinitions><ColumnDefinition Width="152" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                                        <Grid.ColumnDefinitions><ColumnDefinition Width="180" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                                                         <StackPanel VerticalAlignment="Center" Orientation="Horizontal">
-                                                            <Border Width="38" Height="38" VerticalAlignment="Center" Background="Transparent" BorderBrush="#40D4E8F8" BorderThickness="1" CornerRadius="12"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="21" Foreground="{Binding Accent}" Text="{Binding Icon}" /></Border>
-                                                            <TextBlock Margin="12,0,0,0" VerticalAlignment="Center" FontSize="17" Foreground="#6683A0" Text="{Binding Title}" />
+                                                            <Border Width="46" Height="46" VerticalAlignment="Center" Background="Transparent" BorderBrush="#40D4E8F8" BorderThickness="1" CornerRadius="14"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="26" Foreground="{Binding Accent}" Text="{Binding Icon}" /></Border>
+                                                            <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" FontSize="20" FontWeight="SemiBold" Foreground="#6683A0" Text="{Binding Title}" />
                                                         </StackPanel>
                                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                                            <TextBlock FontSize="16" FontWeight="SemiBold" LineHeight="19" Foreground="#2E4B67" Text="{Binding Primary}" TextWrapping="Wrap" />
-                                                            <TextBlock Margin="0,2,0,0" FontSize="12" LineHeight="16" Foreground="#3F607E" Text="{Binding Attributes}" TextWrapping="Wrap" />
-                                                            <TextBlock Margin="0,2,0,0" FontSize="11" LineHeight="15" Foreground="#68829B" Text="{Binding Secondary}" TextWrapping="Wrap" />
+                                                            <TextBlock FontSize="20" FontWeight="SemiBold" LineHeight="22" Foreground="#2E4B67" Text="{Binding Primary}" TextWrapping="Wrap" />
+                                                            <TextBlock Margin="0,1,0,0" FontSize="14" LineHeight="15" Foreground="#3F607E" Text="{Binding Attributes}" TextWrapping="Wrap" />
+                                                            <TextBlock Margin="0,1,0,0" FontSize="13" LineHeight="14" Foreground="#68829B" Text="{Binding Secondary}" TextWrapping="Wrap" />
                                                         </StackPanel>
                                                     </Grid>
                                                 </DataTemplate>
