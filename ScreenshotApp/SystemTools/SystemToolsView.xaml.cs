@@ -18,6 +18,8 @@ public partial class SystemToolsView : UserControl
     private readonly ObservableCollection<ServiceEntry> _services = new();
     private readonly ObservableCollection<SystemRelationshipEntry> _relationships = new();
     private readonly ObservableCollection<EnvironmentVariableEntry> _environmentVariables = new();
+    private readonly ObservableCollection<StartupEntry> _startupItems = new();
+    private IReadOnlyList<StartupEntry> _allStartupItems = Array.Empty<StartupEntry>();
     private readonly ObservableCollection<PathEntry> _pathEntries = new();
     private IReadOnlyList<PortEntry> _allPorts = Array.Empty<PortEntry>();
     private IReadOnlyList<ProcessEntry> _allProcesses = Array.Empty<ProcessEntry>();
@@ -52,6 +54,7 @@ public partial class SystemToolsView : UserControl
         ServicesListBox.ItemsSource = _services;
         RelationsBubbleListBox.ItemsSource = _relationships;
         EnvironmentListBox.ItemsSource = _environmentVariables;
+        StartupListBox.ItemsSource = _startupItems;
         PathEntriesListBox.ItemsSource = _pathEntries;
         PathEntriesListBox.PreviewMouseLeftButtonDown += PathEntriesListBox_PreviewMouseLeftButtonDown;
         _portAutoRefreshTimer = new DispatcherTimer();
@@ -71,7 +74,12 @@ public partial class SystemToolsView : UserControl
             ConfigureInteractiveHeaders();
             ConfigurePortColumns();
             ConfigureProcessColumns();
-            if (EnvironmentOnly) RefreshEnvironment();
+            if (EnvironmentOnly)
+            {
+                await RefreshOverviewAsync();
+                await RefreshStartupAsync();
+                RefreshEnvironment();
+            }
             else await RefreshPortsAsync();
         };
         Unloaded += (_, _) => _portAutoRefreshTimer.Stop();
@@ -139,6 +147,37 @@ public partial class SystemToolsView : UserControl
         catch (Exception exception) { EnvironmentSummaryText.Text = $"读取失败：{exception.Message}"; }
     }
 
+    /// <summary>系统概览仅采集只读信息，始终放到后台线程避免磁盘枚举阻塞界面。</summary>
+    private async Task RefreshOverviewAsync()
+    {
+        OverviewSummaryText.Text = "正在读取…";
+        try
+        {
+            var overview = await Task.Run(SystemToolsService.GetSystemOverview);
+            OverviewWindowsText.Text = overview.WindowsText;
+            OverviewDeviceText.Text = overview.DeviceText;
+            OverviewMemoryText.Text = overview.MemoryText;
+            OverviewDrivesItems.ItemsSource = overview.Drives;
+            OverviewSummaryText.Text = $"{overview.Drives.Count} 个可用本地磁盘 · 更新于 {overview.CapturedAt:HH:mm:ss}";
+        }
+        catch (Exception exception) { OverviewSummaryText.Text = $"读取失败：{exception.Message}"; }
+    }
+
+    private async Task RefreshStartupAsync()
+    {
+        try
+        {
+            _allStartupItems = await Task.Run(SystemToolsService.GetStartupItems);
+            ApplyStartupFilter();
+        }
+        catch (Exception exception)
+        {
+            _allStartupItems = Array.Empty<StartupEntry>();
+            Replace(_startupItems, _allStartupItems);
+            MessageBox.Show(exception.Message, "读取启动项失败", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
     private void TabButton_Click(object sender, RoutedEventArgs e)
     {
         var section = (sender as FrameworkElement)?.Tag?.ToString() ?? "Ports";
@@ -146,11 +185,15 @@ public partial class SystemToolsView : UserControl
         ProcessesPanel.Visibility = section == "Processes" ? Visibility.Visible : Visibility.Collapsed;
         ServicesPanel.Visibility = section == "Services" ? Visibility.Visible : Visibility.Collapsed;
         RelationsBubblePanel.Visibility = section == "Relations" ? Visibility.Visible : Visibility.Collapsed;
+        OverviewPanel.Visibility = section == "Overview" ? Visibility.Visible : Visibility.Collapsed;
+        StartupPanel.Visibility = section == "Startup" ? Visibility.Visible : Visibility.Collapsed;
         EnvironmentPanel.Visibility = section == "Environment" ? Visibility.Visible : Visibility.Collapsed;
         SetActiveTab(section);
         if (section == "Processes") _ = RefreshProcessesAsync();
         else if (section == "Services") _ = RefreshServicesAsync();
         else if (section == "Relations") _ = RefreshRelationshipsAsync();
+        else if (section == "Overview") _ = RefreshOverviewAsync();
+        else if (section == "Startup") _ = RefreshStartupAsync();
         else if (section == "Environment") RefreshEnvironment();
     }
 
@@ -163,18 +206,30 @@ public partial class SystemToolsView : UserControl
             ProcessesTabButton.Visibility = Visibility.Collapsed;
             ServicesTabButton.Visibility = Visibility.Collapsed;
             RelationsTabButton.Visibility = Visibility.Collapsed;
-            Grid.SetColumn(EnvironmentTabButton, 0);
+            OverviewTabButton.Visibility = Visibility.Visible;
+            StartupTabButton.Visibility = Visibility.Visible;
+            Grid.SetColumn(OverviewTabButton, 0);
+            Grid.SetColumn(StartupTabButton, 2);
+            Grid.SetColumn(EnvironmentTabButton, 4);
+            AutoRefreshHostPanel.Visibility = Visibility.Collapsed;
             PortsPanel.Visibility = Visibility.Collapsed;
             ProcessesPanel.Visibility = Visibility.Collapsed;
             ServicesPanel.Visibility = Visibility.Collapsed;
             RelationsBubblePanel.Visibility = Visibility.Collapsed;
-            EnvironmentPanel.Visibility = Visibility.Visible;
-            SetActiveTab("Environment");
-            SetPageHeading("系统工具", "管理当前用户与系统环境变量；系统级写入会在执行时明确提示权限要求。");
+            EnvironmentPanel.Visibility = Visibility.Collapsed;
+            OverviewPanel.Visibility = Visibility.Visible;
+            StartupPanel.Visibility = Visibility.Collapsed;
+            SetActiveTab("Overview");
+            SetPageHeading("系统工具", "查看系统状态、管理启动项与环境变量；所有写入操作都会在执行前明确确认。");
             return;
         }
 
+        OverviewTabButton.Visibility = Visibility.Collapsed;
+        StartupTabButton.Visibility = Visibility.Collapsed;
         EnvironmentTabButton.Visibility = Visibility.Collapsed;
+        OverviewPanel.Visibility = Visibility.Collapsed;
+        StartupPanel.Visibility = Visibility.Collapsed;
+        AutoRefreshHostPanel.Visibility = Visibility.Visible;
         EnvironmentPanel.Visibility = Visibility.Collapsed;
         SetPageHeading("资源管理", "查看本机端口、进程、服务与关联关系；系统级操作会在执行时明确提示权限要求。");
     }
@@ -192,7 +247,7 @@ public partial class SystemToolsView : UserControl
 
     private void SetActiveTab(string section)
     {
-        foreach (var (button, name) in new[] { (PortsTabButton, "Ports"), (ProcessesTabButton, "Processes"), (ServicesTabButton, "Services"), (RelationsTabButton, "Relations"), (EnvironmentTabButton, "Environment") })
+        foreach (var (button, name) in new[] { (PortsTabButton, "Ports"), (ProcessesTabButton, "Processes"), (ServicesTabButton, "Services"), (RelationsTabButton, "Relations"), (OverviewTabButton, "Overview"), (StartupTabButton, "Startup"), (EnvironmentTabButton, "Environment") })
         {
             var active = name == section;
             button.Background = new SolidColorBrush(active ? Color.FromRgb(77, 124, 254) : Color.FromArgb(134, 255, 255, 255));
@@ -205,6 +260,36 @@ public partial class SystemToolsView : UserControl
     private async void RefreshProcesses_Click(object sender, RoutedEventArgs e) => await RefreshProcessesAsync();
     private async void RefreshServices_Click(object sender, RoutedEventArgs e) => await RefreshServicesAsync();
     private async void RefreshRelationships_Click(object sender, RoutedEventArgs e) => await RefreshRelationshipsAsync();
+    private async void RefreshOverview_Click(object sender, RoutedEventArgs e) => await RefreshOverviewAsync();
+    private async void RefreshStartup_Click(object sender, RoutedEventArgs e) => await RefreshStartupAsync();
+    private void StartupFilterTextBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyStartupFilter();
+
+    private void ApplyStartupFilter()
+    {
+        var keyword = StartupFilterTextBox.Text.Trim();
+        var items = string.IsNullOrWhiteSpace(keyword) ? _allStartupItems : _allStartupItems.Where(item =>
+            item.Name.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
+            item.Command.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
+            item.Source.Contains(keyword, StringComparison.OrdinalIgnoreCase));
+        Replace(_startupItems, items);
+    }
+
+    private void OpenStartupLocation_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not StartupEntry item) return;
+        if (!SystemToolsService.TryOpenStartupEntryLocation(item, out var error))
+            MessageBox.Show(error, "无法定位启动项", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    private async void ToggleStartup_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not StartupEntry item || !item.CanToggle) return;
+        var action = item.IsEnabled ? "禁用" : "启用";
+        if (MessageBox.Show($"确定{action}当前用户启动项“{item.Name}”吗？\n\n该操作仅影响登录后自动启动，不会删除程序文件。", $"确认{action}启动项", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+        var error = await Task.Run(() => SystemToolsService.TrySetStartupItemEnabled(item, !item.IsEnabled, out var message) ? null : message);
+        if (!string.IsNullOrWhiteSpace(error)) MessageBox.Show(error, $"{action}启动项失败", MessageBoxButton.OK, MessageBoxImage.Warning);
+        else await RefreshStartupAsync();
+    }
     private void PortFilterTextBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyPortFilter();
     private void PortDisplayOption_Changed(object sender, RoutedEventArgs e)
     {

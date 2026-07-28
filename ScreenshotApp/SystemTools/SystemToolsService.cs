@@ -9,6 +9,7 @@ using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Microsoft.Win32;
 
 namespace ScreenshotApp.SystemTools;
 
@@ -21,6 +22,118 @@ public static class SystemToolsService
     private static readonly Regex ServiceStateLine = new(@"^\s*STATE\s*:\s*\d+\s+(?<state>.+)$", RegexOptions.Compiled | RegexOptions.Multiline);
     private static readonly Regex ServiceProcessIdLine = new(@"^\s*PID\s*:\s*(?<pid>\d+)$", RegexOptions.Compiled | RegexOptions.Multiline);
     public static IReadOnlyList<PortEntry> GetPorts() => GetPorts(processesById: null);
+
+    /// <summary>采集系统概览所需的只读信息，不依赖 WMI，降低普通权限与精简系统上的失败概率。</summary>
+    public static SystemOverview GetSystemOverview()
+    {
+        using var currentVersion = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion");
+        var productName = currentVersion?.GetValue("ProductName")?.ToString() ?? "Windows";
+        var displayVersion = currentVersion?.GetValue("DisplayVersion")?.ToString() ?? currentVersion?.GetValue("ReleaseId")?.ToString() ?? string.Empty;
+        var build = currentVersion?.GetValue("CurrentBuildNumber")?.ToString() ?? Environment.OSVersion.Version.Build.ToString(CultureInfo.InvariantCulture);
+        var memory = new MemoryStatusEx { Length = (uint)Marshal.SizeOf<MemoryStatusEx>() };
+        var hasMemory = GlobalMemoryStatusEx(ref memory);
+        var totalMemory = hasMemory ? FormatBytes(memory.TotalPhys > long.MaxValue ? long.MaxValue : (long)memory.TotalPhys) : "未知";
+        var availableMemory = hasMemory ? FormatBytes(memory.AvailPhys > long.MaxValue ? long.MaxValue : (long)memory.AvailPhys) : "未知";
+        var uptime = TimeSpan.FromMilliseconds(Environment.TickCount64);
+        var drives = DriveInfo.GetDrives()
+            .Where(drive => drive.IsReady && drive.DriveType == DriveType.Fixed)
+            .Select(drive => new SystemDriveEntry(
+                drive.Name.TrimEnd('\\'),
+                string.IsNullOrWhiteSpace(drive.VolumeLabel) ? "本地磁盘" : drive.VolumeLabel,
+                drive.TotalSize <= 0 ? 0 : Math.Clamp((drive.TotalSize - drive.AvailableFreeSpace) * 100d / drive.TotalSize, 0, 100),
+                $"可用 {FormatBytes(drive.AvailableFreeSpace)} / 共 {FormatBytes(drive.TotalSize)}"))
+            .OrderBy(drive => drive.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return new SystemOverview(
+            $"{productName}{(string.IsNullOrWhiteSpace(displayVersion) ? string.Empty : " " + displayVersion)}\n内部版本 {build} · {(Environment.Is64BitOperatingSystem ? "64 位" : "32 位")}",
+            $"{Environment.MachineName}\n{Environment.ProcessorCount} 个逻辑处理器 · {(Environment.Is64BitProcess ? "X-Tool 64 位进程" : "X-Tool 32 位进程")}",
+            $"可用 {availableMemory} / 共 {totalMemory}\n已运行 {FormatUptime(uptime)} · {(IsRunningAsAdministrator() ? "当前已获管理员权限" : "当前为普通权限")}",
+            drives,
+            DateTime.Now);
+    }
+
+    /// <summary>读取常见启动来源；只对当前用户 Run 项提供启停，避免误操作系统级任务或快捷方式。</summary>
+    public static IReadOnlyList<StartupEntry> GetStartupItems()
+    {
+        var entries = new List<StartupEntry>();
+        AddRegistryStartupItems(entries, Registry.CurrentUser, @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", "当前用户注册表", canToggle: true);
+        AddRegistryStartupItems(entries, Registry.LocalMachine, @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", "系统注册表", canToggle: false);
+        var startupFolder = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
+        if (Directory.Exists(startupFolder))
+        {
+            foreach (var path in Directory.EnumerateFiles(startupFolder))
+            {
+                entries.Add(new StartupEntry(Path.GetFileNameWithoutExtension(path), path, "启动文件夹", startupFolder, true, false, ""));
+            }
+        }
+        return entries.OrderBy(item => item.Source).ThenBy(item => item.Name, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    public static bool TrySetStartupItemEnabled(StartupEntry item, bool enabled, out string? error)
+    {
+        if (!item.CanToggle || !string.Equals(item.Source, "当前用户注册表", StringComparison.Ordinal))
+        {
+            error = "该启动项当前仅支持查看与定位。";
+            return false;
+        }
+        try
+        {
+            using var approved = Registry.CurrentUser.CreateSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run", writable: true);
+            if (approved is null) { error = "无法打开当前用户启动项状态配置。"; return false; }
+            var value = new byte[12];
+            value[0] = enabled ? (byte)0x02 : (byte)0x03;
+            approved.SetValue(item.Name, value, RegistryValueKind.Binary);
+            error = null;
+            return true;
+        }
+        catch (Exception exception) { error = exception.Message; return false; }
+    }
+
+    public static bool TryOpenStartupEntryLocation(StartupEntry item, out string? error)
+    {
+        try
+        {
+            if (item.Source.Contains("注册表", StringComparison.Ordinal))
+            {
+                Process.Start(new ProcessStartInfo("regedit.exe") { UseShellExecute = true });
+            }
+            else
+            {
+                var folder = Directory.Exists(item.Location) ? item.Location : Path.GetDirectoryName(item.Location);
+                if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder)) { error = "启动项所在目录不可用。"; return false; }
+                Process.Start(new ProcessStartInfo("explorer.exe", $"\"{folder}\"") { UseShellExecute = true });
+            }
+            error = null;
+            return true;
+        }
+        catch (Exception exception) { error = exception.Message; return false; }
+    }
+
+    private static void AddRegistryStartupItems(ICollection<StartupEntry> entries, RegistryKey root, string subKey, string source, bool canToggle)
+    {
+        using var key = root.OpenSubKey(subKey, writable: false);
+        if (key is null) return;
+        using var approved = canToggle ? Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run", writable: false) : null;
+        foreach (var name in key.GetValueNames())
+        {
+            var command = key.GetValue(name)?.ToString() ?? string.Empty;
+            var state = approved?.GetValue(name) as byte[];
+            var enabled = state is not { Length: > 0 } || state[0] != 0x03;
+            entries.Add(new StartupEntry(name, command, source, $"{root.Name}\\{subKey}", enabled, canToggle, subKey));
+        }
+    }
+
+    private static string FormatBytes(long value)
+    {
+        var units = new[] { "B", "KB", "MB", "GB", "TB" };
+        double display = Math.Max(0, value);
+        var index = 0;
+        while (display >= 1024 && index < units.Length - 1) { display /= 1024d; index++; }
+        return index == 0 ? $"{display:F0} {units[index]}" : $"{display:F1} {units[index]}";
+    }
+
+    private static string FormatUptime(TimeSpan uptime)
+        => uptime.TotalDays >= 1 ? $"{(int)uptime.TotalDays} 天 {uptime.Hours} 小时" : $"{uptime.Hours} 小时 {uptime.Minutes} 分钟";
 
     /// <summary>一次采集三类只读数据，并以进程索引复用端口的进程信息，避免逐条端口重复访问进程句柄。</summary>
     public static SystemRelationshipSnapshot GetRelationshipSnapshot()
@@ -621,6 +734,23 @@ public static class SystemToolsService
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool GetProcessIoCounters(IntPtr hProcess, out IoCounters lpIoCounters);
 
+    [DllImport("kernel32.dll", SetLastError = false)]
+    private static extern bool GlobalMemoryStatusEx(ref MemoryStatusEx buffer);
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+    private struct MemoryStatusEx
+    {
+        public uint Length;
+        public uint MemoryLoad;
+        public ulong TotalPhys;
+        public ulong AvailPhys;
+        public ulong TotalPageFile;
+        public ulong AvailPageFile;
+        public ulong TotalVirtual;
+        public ulong AvailVirtual;
+        public ulong AvailExtendedVirtual;
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     private struct IoCounters
     {
@@ -732,3 +862,15 @@ public sealed record SystemRelationshipEntry(ProcessEntry Process, IReadOnlyList
 }
 
 public sealed record EnvironmentVariableEntry(string Name, string Value, EnvironmentVariableTarget Target);
+
+/// <summary>系统概览的只读快照，界面只渲染已采集数据。</summary>
+public sealed record SystemOverview(string WindowsText, string DeviceText, string MemoryText, IReadOnlyList<SystemDriveEntry> Drives, DateTime CapturedAt);
+
+public sealed record SystemDriveEntry(string Name, string Label, double UsedPercent, string CapacityText);
+
+/// <summary>启动项记录；仅当前用户注册表项允许在首版中安全启停。</summary>
+public sealed record StartupEntry(string Name, string Command, string Source, string Location, bool IsEnabled, bool CanToggle, string RegistrySubKey)
+{
+    public string StateText => IsEnabled ? "已启用" : "已禁用";
+    public string ToggleText => IsEnabled ? "禁用" : "启用";
+}
