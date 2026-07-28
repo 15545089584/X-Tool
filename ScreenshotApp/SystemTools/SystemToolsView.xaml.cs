@@ -57,7 +57,12 @@ public partial class SystemToolsView : UserControl
         EnvironmentListBox.ItemsSource = _environmentVariables;
         StartupListBox.ItemsSource = _startupItems;
         _hardwareSensorClient.SnapshotReceived += HardwareSensorClient_SnapshotReceived;
-        _hardwareSensorClient.Failed += (_, message) => Dispatcher.BeginInvoke(() => { if (OverviewPanel.Visibility == Visibility.Visible) MessageBox.Show(message, "高级传感器", MessageBoxButton.OK, MessageBoxImage.Information); });
+        _hardwareSensorClient.Failed += (_, message) => Dispatcher.BeginInvoke(() =>
+        {
+            OverviewSensorStatusText.Text = "连接失败";
+            OverviewUpdatedAtText.Text = message;
+            if (OverviewPanel.Visibility == Visibility.Visible) MessageBox.Show(message, "高级传感器", MessageBoxButton.OK, MessageBoxImage.Information);
+        });
         PathEntriesListBox.ItemsSource = _pathEntries;
         PathEntriesListBox.PreviewMouseLeftButtonDown += PathEntriesListBox_PreviewMouseLeftButtonDown;
         _portAutoRefreshTimer = new DispatcherTimer();
@@ -151,37 +156,97 @@ public partial class SystemToolsView : UserControl
         catch (Exception exception) { EnvironmentSummaryText.Text = $"读取失败：{exception.Message}"; }
     }
 
-    /// <summary>系统概览仅采集只读信息，始终放到后台线程避免磁盘枚举阻塞界面。</summary>
-    private Task RefreshOverviewAsync()
+    /// <summary>静态规格仅作为硬件身份信息，实时数值全部来自管理员传感器助手。</summary>
+    private async Task RefreshOverviewAsync()
     {
-        OverviewInfoItems.ItemsSource = null;
+        OverviewSensorStatusText.Text = "正在连接";
+        OverviewUpdatedAtText.Text = "等待数据";
+        OverviewMetricItems.ItemsSource = CreateMetricPlaceholders();
+        OverviewTemperatureItems.ItemsSource = new[] { new SensorPanelItem("正在枚举温度传感器", "—", "#7890A6") };
         try
         {
-            OverviewInfoItems.ItemsSource = new[] { new SystemInfoItem("Sensors", "高级实时监控", "正在等待管理员传感器助手…", "助手会自动读取当前机器支持的温度、负载、频率、功耗、电压与风扇数据。", "#4D7CFE", "\uE9D9") };
+            var overview = await Task.Run(SystemToolsService.GetSystemOverview);
+            OverviewInfoItems.ItemsSource = overview.Items.Select(item => item.Key switch
+            {
+                "Windows" => item with { Detail = string.Empty },
+                "处理器" => item with { Detail = $"{Environment.ProcessorCount} 个逻辑处理器" },
+                "显卡" or "主板" or "内存" or "显示器" or "电池" => item with { Detail = string.Empty },
+                _ => item
+            }).ToArray();
         }
         catch (Exception exception) { MessageBox.Show(exception.Message, "读取系统信息失败", MessageBoxButton.OK, MessageBoxImage.Warning); }
-        return Task.CompletedTask;
     }
 
     private void HardwareSensorClient_SnapshotReceived(object? sender, HardwareSensorSnapshot snapshot)
     {
         Dispatcher.BeginInvoke(() =>
         {
-            if (OverviewPanel.Visibility != Visibility.Visible) return;
-            var items = snapshot.Sensors.GroupBy(item => item.HardwareType).OrderBy(item => item.Key).Select(group =>
+            var sensors = snapshot.Sensors;
+            var cpu = sensors.Where(IsCpu).ToArray();
+            var gpu = sensors.Where(IsGpu).OrderBy(item => GpuOrder(item.HardwareType)).ToArray();
+            var memory = sensors.Where(item => item.HardwareType == "Memory").ToArray();
+            OverviewMetricItems.ItemsSource = new[]
             {
-                var label = group.Key switch { "Cpu" => "CPU", "GpuNvidia" or "GpuAmd" or "GpuIntel" => "GPU", "Memory" => "内存", "Storage" => "存储", "Motherboard" => "主板", _ => group.Key };
-                var values = group.Where(item => item.Type is "Temperature" or "Load" or "Clock" or "Power" or "Voltage" or "Fan").Take(8).Select(FormatSensor);
-                return new SystemInfoItem(group.Key, label, $"{label} · 更新于 {snapshot.CapturedAt.LocalDateTime:HH:mm:ss}", string.Join("  ·  ", values), label == "GPU" ? "#8B6CFF" : "#4D7CFE", "\uE9D9");
-            }).ToArray();
-            OverviewInfoItems.ItemsSource = items;
+                CreateMetric("CPU 核心频率", Pick(cpu, "Clock", "Core Average", "CPU Core", "Core #1"), "#278DDA"),
+                CreateMetric("CPU 占用", Pick(cpu, "Load", "CPU Total", "Total"), "#278DDA"),
+                CreateMetric("CPU 功耗", Pick(cpu, "Power", "CPU Package", "Package"), "#278DDA"),
+                CreateMetric("GPU 核心频率", Pick(gpu, "Clock", "GPU Core", "Core"), "#7A63E8"),
+                CreateMetric("GPU 显存频率", Pick(gpu, "Clock", "GPU Memory", "Memory"), "#7A63E8"),
+                CreateMetric("GPU 占用", Pick(gpu, "Load", "GPU Core", "Core"), "#7A63E8"),
+                CreateMetric("GPU 功耗", Pick(gpu, "Power", "GPU Package", "GPU Power", "Package"), "#7A63E8"),
+                CreateMetric("内存占用", Pick(memory, "Load", "Memory", "Used"), "#18A982")
+            };
+            var temperatures = CreateTemperatureItems(sensors);
+            OverviewTemperatureItems.ItemsSource = temperatures.Length == 0
+                ? new[] { new SensorPanelItem("当前硬件未提供温度读数", "—", "#7890A6") }
+                : temperatures;
+            OverviewSensorStatusText.Text = "监控中";
+            OverviewUpdatedAtText.Text = $"更新于 {snapshot.CapturedAt.LocalDateTime:HH:mm:ss}";
         });
     }
 
-    private static string FormatSensor(HardwareSensorValue sensor)
+    private static SensorPanelItem[] CreateMetricPlaceholders()
+        => new[] { "CPU 核心频率", "CPU 占用", "CPU 功耗", "GPU 核心频率", "GPU 显存频率", "GPU 占用", "GPU 功耗", "内存占用" }
+            .Select(label => new SensorPanelItem(label, "—", "#7890A6")).ToArray();
+
+    private static SensorPanelItem CreateMetric(string label, HardwareSensorValue? sensor, string accent)
+        => new(label, sensor is null ? "—" : FormatSensorValue(sensor), accent);
+
+    private static HardwareSensorValue? Pick(IEnumerable<HardwareSensorValue> sensors, string type, params string[] preferredNames)
+    {
+        var candidates = sensors.Where(item => item.Type == type).ToArray();
+        foreach (var preferred in preferredNames)
+        {
+            var match = candidates.FirstOrDefault(item => item.Name.Contains(preferred, StringComparison.OrdinalIgnoreCase));
+            if (match is not null) return match;
+        }
+        return candidates.FirstOrDefault();
+    }
+
+    private static SensorPanelItem[] CreateTemperatureItems(IEnumerable<HardwareSensorValue> sensors)
+        => sensors.Where(item => item.Type == "Temperature")
+            .GroupBy(item => item.HardwareIdentifier)
+            .Select(group => Pick(group, "Temperature", "CPU Package", "GPU Core", "Core Average", "System", "Composite", "Temperature") ?? group.First())
+            .OrderBy(item => TemperatureOrder(item.HardwareType))
+            .ThenBy(item => item.HardwareName, StringComparer.OrdinalIgnoreCase)
+            .Take(8)
+            .Select(item => new SensorPanelItem(TemperatureLabel(item), FormatSensorValue(item), TemperatureAccent(item.Value)))
+            .ToArray();
+
+    private static bool IsCpu(HardwareSensorValue sensor) => sensor.HardwareType == "Cpu";
+    private static bool IsGpu(HardwareSensorValue sensor) => sensor.HardwareType is "GpuNvidia" or "GpuAmd" or "GpuIntel";
+    private static int GpuOrder(string hardwareType) => hardwareType switch { "GpuNvidia" => 0, "GpuAmd" => 1, "GpuIntel" => 2, _ => 3 };
+    private static int TemperatureOrder(string hardwareType) => hardwareType switch { "Cpu" => 0, "GpuNvidia" or "GpuAmd" or "GpuIntel" => 1, "Motherboard" => 2, "Memory" => 3, "Storage" => 4, _ => 5 };
+    private static string TemperatureLabel(HardwareSensorValue sensor)
+    {
+        var prefix = sensor.HardwareType switch { "Cpu" => "CPU", "GpuNvidia" or "GpuAmd" or "GpuIntel" => "GPU", "Motherboard" => "主板", "Memory" => "内存", "Storage" => sensor.HardwareName, _ => sensor.HardwareName };
+        return $"{prefix} · {sensor.Name}";
+    }
+    private static string TemperatureAccent(float value) => value >= 85 ? "#E05260" : value >= 70 ? "#E38A35" : "#278DDA";
+    private static string FormatSensorValue(HardwareSensorValue sensor)
     {
         var unit = sensor.Type switch { "Temperature" => "℃", "Load" => "%", "Clock" => " MHz", "Power" => " W", "Voltage" => " V", "Fan" => " RPM", _ => string.Empty };
-        return $"{sensor.Name} {sensor.Value:F1}{unit}";
+        return sensor.Type is "Clock" or "Fan" ? $"{sensor.Value:F0}{unit}" : $"{sensor.Value:F1}{unit}";
     }
 
     private async Task RefreshStartupAsync()
@@ -285,7 +350,12 @@ public partial class SystemToolsView : UserControl
     private async void RefreshProcesses_Click(object sender, RoutedEventArgs e) => await RefreshProcessesAsync();
     private async void RefreshServices_Click(object sender, RoutedEventArgs e) => await RefreshServicesAsync();
     private async void RefreshRelationships_Click(object sender, RoutedEventArgs e) => await RefreshRelationshipsAsync();
-    private async void RefreshOverview_Click(object sender, RoutedEventArgs e) => await RefreshOverviewAsync();
+    private async void RefreshOverview_Click(object sender, RoutedEventArgs e)
+    {
+        _hardwareSensorClient.Stop();
+        await RefreshOverviewAsync();
+        await _hardwareSensorClient.StartAsync();
+    }
     private async void RefreshStartup_Click(object sender, RoutedEventArgs e) => await RefreshStartupAsync();
     private void StartupFilterTextBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyStartupFilter();
 
@@ -1118,6 +1188,9 @@ public partial class SystemToolsView : UserControl
         public PathEntry(string value) => Value = value;
         public string Value { get; set; }
     }
+
+    /// <summary>高级监控右侧仪表项，数值颜色由硬件类别或温度阈值决定。</summary>
+    private sealed record SensorPanelItem(string Label, string Value, string Accent);
 
     /// <summary>同名进程的汇总，避免多进程应用占满列表；展开后保留原始 PID 行。</summary>
     private sealed record ProcessGroup(string Name, IReadOnlyList<ProcessEntry> Items)

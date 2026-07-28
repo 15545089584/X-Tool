@@ -64,4 +64,4 @@ internal sealed class HardwareSensorClient : IDisposable
 }
 
 internal sealed record HardwareSensorSnapshot(DateTimeOffset CapturedAt, HardwareSensorValue[] Sensors);
-internal sealed record HardwareSensorValue(string HardwareType, string Name, string Type, float Value);
+internal sealed record HardwareSensorValue(string HardwareType, string HardwareName, string HardwareIdentifier, string Name, string Type, float Value);

@@ -30,7 +30,13 @@ try
         computer.Accept(new UpdateVisitor());
         var sensors = computer.Hardware.SelectMany(Flatten).SelectMany(item => item.Sensors)
             .Where(sensor => sensor.Value.HasValue)
-            .Select(sensor => new SensorValue(sensor.Hardware.HardwareType.ToString(), sensor.Name, sensor.SensorType.ToString(), sensor.Value!.Value))
+            .Select(sensor => new SensorValue(
+                sensor.Hardware.HardwareType.ToString(),
+                sensor.Hardware.Name,
+                sensor.Hardware.Identifier.ToString(),
+                sensor.Name,
+                sensor.SensorType.ToString(),
+                sensor.Value!.Value))
             .ToArray();
         await writer.WriteLineAsync(JsonSerializer.Serialize(new SensorSnapshot(DateTimeOffset.UtcNow, sensors)));
         await Task.Delay(1000);
@@ -55,4 +61,4 @@ sealed class UpdateVisitor : IVisitor
 }
 
 sealed record SensorSnapshot(DateTimeOffset CapturedAt, SensorValue[] Sensors);
-sealed record SensorValue(string HardwareType, string Name, string Type, float Value);
+sealed record SensorValue(string HardwareType, string HardwareName, string HardwareIdentifier, string Name, string Type, float Value);
