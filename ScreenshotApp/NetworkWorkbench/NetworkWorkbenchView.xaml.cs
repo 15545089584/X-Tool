@@ -993,9 +993,20 @@ public partial class NetworkWorkbenchView : UserControl
         Canvas.SetTop(titleText, top + 12);
         canvas.Children.Add(titleText);
 
-        var plotLeft = left + 22;
-        var plotWidth = width - 44;
-        var baseline = top + height - 34;
+        var verticalAxisHint = new TextBlock
+        {
+            Text = "纵轴：信号强度 (%)",
+            FontSize = 9,
+            Foreground = new SolidColorBrush(Color.FromRgb(112, 138, 163)),
+            IsHitTestVisible = false
+        };
+        Canvas.SetLeft(verticalAxisHint, left + width - 112);
+        Canvas.SetTop(verticalAxisHint, top + 15);
+        canvas.Children.Add(verticalAxisHint);
+
+        var plotLeft = left + 42;
+        var plotWidth = width - 64;
+        var baseline = top + height - 42;
         var plotHeight = height - 82;
         var baselineLine = new Line
         {
@@ -1008,6 +1019,35 @@ public partial class NetworkWorkbenchView : UserControl
             IsHitTestVisible = false
         };
         canvas.Children.Add(baselineLine);
+
+        foreach (var percent in new[] { 25, 50, 75 })
+        {
+            var y = baseline - plotHeight * percent / 100d;
+            var strengthGuide = new Line
+            {
+                X1 = plotLeft,
+                Y1 = y,
+                X2 = plotLeft + plotWidth,
+                Y2 = y,
+                Stroke = new SolidColorBrush(Color.FromArgb(72, 154, 190, 222)),
+                StrokeThickness = 1,
+                StrokeDashArray = new DoubleCollection { 2, 4 },
+                IsHitTestVisible = false
+            };
+            canvas.Children.Add(strengthGuide);
+            var strengthText = new TextBlock
+            {
+                Width = 32,
+                Text = $"{percent}%",
+                TextAlignment = TextAlignment.Right,
+                FontSize = 8,
+                Foreground = new SolidColorBrush(Color.FromRgb(112, 138, 163)),
+                IsHitTestVisible = false
+            };
+            Canvas.SetLeft(strengthText, left + 5);
+            Canvas.SetTop(strengthText, y - 6);
+            canvas.Children.Add(strengthText);
+        }
 
         foreach (var tick in ticks)
         {
@@ -1038,6 +1078,19 @@ public partial class NetworkWorkbenchView : UserControl
             canvas.Children.Add(tickText);
         }
 
+        var horizontalAxisHint = new TextBlock
+        {
+            Width = plotWidth,
+            Text = "横轴：Wi-Fi 信道（Channel）",
+            TextAlignment = TextAlignment.Center,
+            FontSize = 9,
+            Foreground = new SolidColorBrush(Color.FromRgb(112, 138, 163)),
+            IsHitTestVisible = false
+        };
+        Canvas.SetLeft(horizontalAxisHint, plotLeft);
+        Canvas.SetTop(horizontalAxisHint, baseline + 21);
+        canvas.Children.Add(horizontalAxisHint);
+
         var selected = WifiNetworksListBox.SelectedItem as WifiNetworkEntry;
         var channelSpan = Math.Max(1, maximumChannel - minimumChannel);
         foreach (var (network, channel) in entries)
@@ -1054,11 +1107,11 @@ public partial class NetworkWorkbenchView : UserControl
             {
                 Points = new PointCollection
                 {
-                    new(x - halfWidth, baseline),
-                    new(x - halfWidth * 0.54, peak + (baseline - peak) * 0.26),
+                    new(Math.Max(plotLeft, x - halfWidth), baseline),
+                    new(Math.Max(plotLeft, x - halfWidth * 0.54), peak + (baseline - peak) * 0.26),
                     new(x, peak),
-                    new(x + halfWidth * 0.54, peak + (baseline - peak) * 0.26),
-                    new(x + halfWidth, baseline)
+                    new(Math.Min(plotLeft + plotWidth, x + halfWidth * 0.54), peak + (baseline - peak) * 0.26),
+                    new(Math.Min(plotLeft + plotWidth, x + halfWidth), baseline)
                 },
                 Fill = new SolidColorBrush(Color.FromArgb(fillAlpha, color.Color.R, color.Color.G, color.Color.B)),
                 Stroke = color,

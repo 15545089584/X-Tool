@@ -247,6 +247,11 @@
                             </StackPanel>
                             <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal">
                                 <Border Padding="8,4" Background="#70EAF7FF" BorderBrush="#93CDE4F5" BorderThickness="1" CornerRadius="8"><TextBlock x:Name="WifiChannelDistributionSummaryText" FontSize="10" Foreground="#53718E" Text="等待扫描 Wi-Fi" /></Border>
+                                <StackPanel Margin="12,0,0,0" Orientation="Horizontal">
+                                    <Ellipse Width="8" Height="8" Margin="0,0,4,0" Fill="#54D39A" /><TextBlock Margin="0,0,9,0" VerticalAlignment="Center" FontSize="10" Foreground="#71879E" Text="强 ≥75%" />
+                                    <Ellipse Width="8" Height="8" Margin="0,0,4,0" Fill="#5EA4FF" /><TextBlock Margin="0,0,9,0" VerticalAlignment="Center" FontSize="10" Foreground="#71879E" Text="中 45–74%" />
+                                    <Ellipse Width="8" Height="8" Margin="0,0,4,0" Fill="#F5B957" /><TextBlock VerticalAlignment="Center" FontSize="10" Foreground="#71879E" Text="弱 &lt;45%" />
+                                </StackPanel>
                             </StackPanel>
                         </Grid>
                         <Grid Grid.Row="2">
