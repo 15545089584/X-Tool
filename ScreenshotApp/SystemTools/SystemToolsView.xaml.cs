@@ -1,10 +1,12 @@
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using ScreenshotApp.StorageAnalysis;
 
 namespace ScreenshotApp.SystemTools;
 
@@ -13,6 +15,8 @@ public partial class SystemToolsView : UserControl
 {
     /// <summary>显示静态硬件信息与环境变量，用于一级“系统工具”入口。</summary>
     public bool EnvironmentOnly { get; set; }
+    /// <summary>存储分析只负责发现空间来源，文件操作统一交给文件工作台执行。</summary>
+    public event EventHandler<FileWorkbenchNavigationRequestedEventArgs>? FileWorkbenchRequested;
     private readonly ObservableCollection<PortEntry> _ports = new();
     private readonly ObservableCollection<ProcessListRow> _processes = new();
     private readonly ObservableCollection<ServiceEntry> _services = new();
@@ -62,6 +66,8 @@ public partial class SystemToolsView : UserControl
         DriverCategoryItems.ItemsSource = _driverCategories;
         StorageVolumesItems.ItemsSource = _storageVolumes;
         PhysicalStorageItems.ItemsSource = _physicalStorage;
+        StorageAnalysisView.BackRequested += StorageAnalysisView_BackRequested;
+        StorageAnalysisView.FileWorkbenchRequested += StorageAnalysisView_FileWorkbenchRequested;
         PathEntriesListBox.PreviewMouseLeftButtonDown += PathEntriesListBox_PreviewMouseLeftButtonDown;
         _portAutoRefreshTimer = new DispatcherTimer();
         _portAutoRefreshTimer.Tick += AutoRefreshPorts_Tick;
@@ -87,7 +93,18 @@ public partial class SystemToolsView : UserControl
             }
             else await RefreshPortsAsync();
         };
-        Unloaded += (_, _) => _portAutoRefreshTimer.Stop();
+        Unloaded += (_, _) =>
+        {
+            _portAutoRefreshTimer.Stop();
+            StorageAnalysisView.CancelActiveScan();
+        };
+        IsVisibleChanged += (_, _) =>
+        {
+            if (!IsVisible)
+            {
+                StorageAnalysisView.CancelActiveScan();
+            }
+        };
     }
 
     private async Task RefreshPortsAsync()
@@ -203,6 +220,10 @@ public partial class SystemToolsView : UserControl
     private void TabButton_Click(object sender, RoutedEventArgs e)
     {
         var section = (sender as FrameworkElement)?.Tag?.ToString() ?? "Ports";
+        if (section != "Storage")
+        {
+            StorageAnalysisView.CancelActiveScan();
+        }
         PortsPanel.Visibility = section == "Ports" ? Visibility.Visible : Visibility.Collapsed;
         ProcessesPanel.Visibility = section == "Processes" ? Visibility.Visible : Visibility.Collapsed;
         ServicesPanel.Visibility = section == "Services" ? Visibility.Visible : Visibility.Collapsed;
@@ -240,6 +261,8 @@ public partial class SystemToolsView : UserControl
             RelationsBubblePanel.Visibility = Visibility.Collapsed;
             EnvironmentPanel.Visibility = Visibility.Collapsed;
             StoragePanel.Visibility = Visibility.Collapsed;
+            StorageOverviewContentPanel.Visibility = Visibility.Visible;
+            StorageAnalysisView.Visibility = Visibility.Collapsed;
             OverviewPanel.Visibility = Visibility.Visible;
             SetActiveTab("Overview");
             SetPageHeading("系统工具", "查看设备信息、存储空间与环境变量；所有写入操作都会在执行前明确确认。");
@@ -251,6 +274,7 @@ public partial class SystemToolsView : UserControl
         EnvironmentTabButton.Visibility = Visibility.Collapsed;
         OverviewPanel.Visibility = Visibility.Collapsed;
         StoragePanel.Visibility = Visibility.Collapsed;
+        HideStorageAnalysis();
         AutoRefreshHostPanel.Visibility = Visibility.Visible;
         EnvironmentPanel.Visibility = Visibility.Collapsed;
         SetPageHeading("资源管理", "查看本机端口、进程、服务与关联关系；系统级操作会在执行时明确提示权限要求。");
@@ -284,6 +308,44 @@ public partial class SystemToolsView : UserControl
     private async void RefreshRelationships_Click(object sender, RoutedEventArgs e) => await RefreshRelationshipsAsync();
     private async void RefreshDeviceInfo_Click(object sender, RoutedEventArgs e) => await RefreshDeviceInfoAsync();
     private async void RefreshStorage_Click(object sender, RoutedEventArgs e) => await RefreshStorageAsync();
+    private async void AnalyzeStorageVolume_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not StorageVolumeEntry volume)
+        {
+            return;
+        }
+
+        var rootPath = Path.GetPathRoot(volume.DriveName);
+        if (string.IsNullOrWhiteSpace(rootPath) || !Directory.Exists(rootPath))
+        {
+            MessageBox.Show("所选本地卷当前不可用，请刷新存储信息后重试。", "无法分析本地卷", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        StorageOverviewContentPanel.Visibility = Visibility.Collapsed;
+        StorageAnalysisView.Visibility = Visibility.Visible;
+        await StorageAnalysisView.StartAnalysisAsync(new StorageAnalysisTarget(rootPath, volume.Title, volume.TotalBytes, volume.FreeBytes));
+    }
+
+    private void StorageAnalysisView_BackRequested(object? sender, EventArgs e) => ShowStorageOverview();
+
+    private void StorageAnalysisView_FileWorkbenchRequested(object? sender, FileWorkbenchNavigationRequestedEventArgs e)
+        => FileWorkbenchRequested?.Invoke(this, e);
+
+    private void ShowStorageOverview()
+    {
+        StorageAnalysisView.CancelAndClear();
+        StorageAnalysisView.Visibility = Visibility.Collapsed;
+        StorageOverviewContentPanel.Visibility = Visibility.Visible;
+    }
+
+    private void HideStorageAnalysis()
+    {
+        StorageAnalysisView.CancelActiveScan();
+        StorageAnalysisView.Visibility = Visibility.Collapsed;
+        StorageOverviewContentPanel.Visibility = Visibility.Visible;
+    }
+
     private void DriverFilterTextBox_TextChanged(object sender, TextChangedEventArgs e)
     {
         if (IsLoaded) ApplyDriverFilter();

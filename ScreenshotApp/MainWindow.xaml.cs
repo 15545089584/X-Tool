@@ -18,6 +18,7 @@ using ScreenshotApp.History;
 using ScreenshotApp.Recording;
 using ScreenshotApp.Settings;
 using ScreenshotApp.Shortcuts;
+using ScreenshotApp.StorageAnalysis;
 using ScreenshotApp.Translation;
 using ScreenshotApp.VoiceInput;
 
@@ -85,6 +86,7 @@ public partial class MainWindow : Window
         _voiceInputService.SoundLevelChanged += VoiceInputService_SoundLevelChanged;
         _voiceInputService.RecordingFaulted += VoiceInputService_RecordingFaulted;
         _voiceInputService.PartialResultAvailable += VoiceInputService_PartialResultAvailable;
+        SystemToolsView.FileWorkbenchRequested += SystemToolsView_FileWorkbenchRequested;
         UpdateStorageLocationText();
         // 长截图需要连续拿到“此刻”的画面。每次重新创建桌面复制会话时，
         // 部分显卡驱动可能先返回上一帧，因此滚动采集优先使用同步的 GDI 帧，
@@ -262,6 +264,15 @@ public partial class MainWindow : Window
         {
             _ = RefreshHistoryAsync();
         }
+    }
+
+    /// <summary>存储页仅负责发现空间来源；用户点击后才切到文件工作台继续搜索或批处理。</summary>
+    private async void SystemToolsView_FileWorkbenchRequested(object? sender, FileWorkbenchNavigationRequestedEventArgs e)
+    {
+        FileWorkbenchNav.IsChecked = true;
+        NavigateToPage("FileWorkbench");
+        await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Render);
+        await FileWorkbenchView.OpenFolderFromStorageAsync(e.FolderPath, e.SearchKeyword, e.KnownFilePath);
     }
 
     private async void CaptureAction_Click(object sender, RoutedEventArgs e)

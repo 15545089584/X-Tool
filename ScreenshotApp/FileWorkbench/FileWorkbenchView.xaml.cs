@@ -3,6 +3,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Threading;
 using Forms = System.Windows.Forms;
 
 namespace ScreenshotApp.FileWorkbench;
@@ -14,12 +16,14 @@ public partial class FileWorkbenchView : UserControl
     private readonly ObservableCollection<FileOperationPlan> _plans = new();
     private CancellationTokenSource? _searchCancellation;
     private bool _sortAscending = true;
+    private FileSortField _selectedSortField = FileSortField.Name;
 
     public FileWorkbenchView()
     {
         InitializeComponent();
         FileResultsListBox.ItemsSource = _items;
         PreviewListBox.ItemsSource = _plans;
+        UpdateSortColumnHeaders();
         Loaded += (_, _) => UpdateOperationControls();
     }
 
@@ -46,7 +50,13 @@ public partial class FileWorkbenchView : UserControl
         _searchCancellation?.Dispose();
         _searchCancellation = new CancellationTokenSource();
         var cancellation = _searchCancellation;
+        _items.Clear();
+        _plans.Clear();
         SearchSummaryText.Text = "正在搜索…";
+        SearchProgressPanel.Visibility = Visibility.Visible;
+        SearchProgressBar.IsIndeterminate = true;
+        SearchProgressSummaryText.Text = "正在准备本地文件搜索…";
+        SearchProgressPathText.Text = root;
         try
         {
             var type = (TypeFilterComboBox.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "全部";
@@ -55,17 +65,47 @@ public partial class FileWorkbenchView : UserControl
             // 必须在 UI 线程先读取筛选条件；后台扫描不能直接访问 WPF 控件。
             var keyword = KeywordTextBox.Text.Trim();
             var sortField = SelectedSortField;
-            var results = await Task.Run(
-                () => FileWorkbenchService.Search(root, keyword, type, modifiedAfter, sortField, _sortAscending, cancellation.Token),
+            var progress = new Progress<FileSearchProgress>(snapshot =>
+            {
+                if (!ReferenceEquals(cancellation, _searchCancellation))
+                {
+                    return;
+                }
+
+                SearchProgressSummaryText.Text = snapshot.SummaryText;
+                SearchProgressPathText.Text = string.IsNullOrWhiteSpace(snapshot.CurrentPath) ? "正在准备下一项…" : snapshot.CurrentPath;
+            });
+            var searchResult = await Task.Run(
+                () => FileWorkbenchService.Search(root, keyword, type, modifiedAfter, sortField, _sortAscending, progress, cancellation.Token),
                 cancellation.Token);
             if (cancellation.IsCancellationRequested) return;
-            _items.Clear(); foreach (var item in results) _items.Add(item);
+            SearchProgressSummaryText.Text = "扫描完成，正在整理可显示结果…";
+            _items.Clear();
+            foreach (var item in searchResult.Items)
+            {
+                _items.Add(item);
+            }
             _plans.Clear();
-            SearchSummaryText.Text = $"找到 {_items.Count:N0} 个文件";
-            BatchStatusText.Text = "选择文件后生成操作预览";
+            SearchSummaryText.Text = searchResult.IsTruncated
+                ? $"匹配 {searchResult.MatchedFiles:N0} 个文件；为保持流畅，显示前 {_items.Count:N0} 个"
+                : $"找到 {_items.Count:N0} 个文件";
+            BatchStatusText.Text = searchResult.IsTruncated
+                ? "结果较多；可用关键词、类型或时间范围缩小搜索后再批处理"
+                : "选择文件后生成操作预览";
         }
         catch (OperationCanceledException) { }
         catch (Exception exception) { SearchSummaryText.Text = $"搜索失败：{exception.Message}"; }
+        finally
+        {
+            if (ReferenceEquals(cancellation, _searchCancellation))
+            {
+                _searchCancellation = null;
+                SearchProgressBar.IsIndeterminate = false;
+                SearchProgressPanel.Visibility = Visibility.Collapsed;
+            }
+
+            cancellation.Dispose();
+        }
     }
 
     private void SelectDestinationFolder_Click(object sender, RoutedEventArgs e)
@@ -76,17 +116,65 @@ public partial class FileWorkbenchView : UserControl
 
     private void BatchOperationComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateOperationControls();
 
-    private void SortFieldComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void SortColumnHeader_Click(object sender, RoutedEventArgs e)
     {
-        if (IsLoaded && Directory.Exists(SourceFolderTextBox.Text)) _ = SearchAsync();
+        if (!Enum.TryParse<FileSortField>((sender as FrameworkElement)?.Tag?.ToString(), out var requestedField))
+        {
+            return;
+        }
+
+        _sortAscending = _selectedSortField == requestedField
+            ? !_sortAscending
+            : requestedField is FileSortField.Name or FileSortField.Extension;
+        _selectedSortField = requestedField;
+        UpdateSortColumnHeaders();
+        ApplyCurrentSort();
     }
 
-    private void SortDirectionButton_Click(object sender, RoutedEventArgs e)
+    /// <summary>由存储分析显式跳转进来；页面显示后立即检索，已知的大文件直接定位，避免再次全盘扫描。</summary>
+    public async Task OpenFolderFromStorageAsync(string folderPath, string? searchKeyword, string? knownFilePath)
     {
-        _sortAscending = !_sortAscending;
-        SortDirectionButton.Content = _sortAscending ? "↑" : "↓";
-        SortDirectionButton.ToolTip = _sortAscending ? "当前从小到大，点击改为从大到小" : "当前从大到小，点击改为从小到大";
-        if (Directory.Exists(SourceFolderTextBox.Text)) _ = SearchAsync();
+        if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath))
+        {
+            SearchSummaryText.Text = "存储分析中的目录当前不可用";
+            return;
+        }
+
+        SourceFolderTextBox.Text = Path.GetFullPath(folderPath);
+        KeywordTextBox.Text = searchKeyword ?? string.Empty;
+        TypeFilterComboBox.SelectedIndex = 0;
+        _selectedSortField = FileSortField.Size;
+        _sortAscending = false;
+        UpdateSortColumnHeaders();
+
+        _searchCancellation?.Cancel();
+        _searchCancellation?.Dispose();
+        _searchCancellation = null;
+        _items.Clear();
+        _plans.Clear();
+        SearchSummaryText.Text = "正在接收存储分析结果…";
+        BatchStatusText.Text = "等待搜索结果…";
+        SearchProgressPanel.Visibility = Visibility.Collapsed;
+        await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Render);
+
+        if (!string.IsNullOrWhiteSpace(knownFilePath) && File.Exists(knownFilePath))
+        {
+            try
+            {
+                _items.Add(FileWorkbenchItem.Create(new FileInfo(knownFilePath)));
+                SearchSummaryText.Text = "已从存储分析定位 1 个文件";
+                BatchStatusText.Text = "选择文件后生成操作预览";
+                return;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                SearchSummaryText.Text = $"定位文件失败：{exception.Message}";
+                BatchStatusText.Text = "可修改条件后重新搜索";
+                return;
+            }
+        }
+
+        await SearchAsync();
     }
 
     private void UpdateOperationControls()
@@ -142,8 +230,56 @@ public partial class FileWorkbenchView : UserControl
         await SearchAsync();
     }
 
+    private void ApplyCurrentSort()
+    {
+        if (_items.Count == 0)
+        {
+            return;
+        }
+
+        var sortedItems = FileWorkbenchService.SortResults(_items, _selectedSortField, _sortAscending);
+        _items.Clear();
+        foreach (var item in sortedItems)
+        {
+            _items.Add(item);
+        }
+
+        _plans.Clear();
+        BatchStatusText.Text = "已按当前表头排序；选择文件后生成操作预览";
+    }
+
+    private void UpdateSortColumnHeaders()
+    {
+        UpdateSortIndicator(NameSortIndicatorText, FileSortField.Name);
+        UpdateSortIndicator(ExtensionSortIndicatorText, FileSortField.Extension);
+        UpdateSortIndicator(SizeSortIndicatorText, FileSortField.Size);
+        UpdateSortIndicator(ModifiedSortIndicatorText, FileSortField.Modified);
+    }
+
+    private void UpdateSortIndicator(TextBlock indicator, FileSortField field)
+    {
+        indicator.Text = _selectedSortField == field ? (_sortAscending ? "↑" : "↓") : string.Empty;
+    }
+
+    private void KeywordTextBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            e.Handled = true;
+            _ = SearchAsync();
+        }
+    }
+
+    private void KeywordTextBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (KeywordPlaceholderText is not null)
+        {
+            KeywordPlaceholderText.Visibility = string.IsNullOrWhiteSpace(KeywordTextBox.Text) ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
+
     private FileBatchOperation SelectedOperation => Enum.TryParse<FileBatchOperation>((BatchOperationComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString(), out var operation) ? operation : FileBatchOperation.Rename;
-    private FileSortField SelectedSortField => Enum.TryParse<FileSortField>((SortFieldComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString(), out var field) ? field : FileSortField.Name;
+    private FileSortField SelectedSortField => _selectedSortField;
     private static int ParsePositiveInt(string text, int fallback) => int.TryParse(text, out var value) && value > 0 ? value : fallback;
     private static bool TryParseNumberDigits(string text, out int value) => int.TryParse(text, out value) && value is >= 1 and <= 6;
     private void SourceFolderTextBox_TextChanged(object sender, TextChangedEventArgs e) { if (SearchSummaryText is not null && !Directory.Exists(SourceFolderTextBox.Text ?? string.Empty)) SearchSummaryText.Text = "请选择有效文件夹"; }

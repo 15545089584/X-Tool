@@ -1,21 +1,31 @@
 using System.Globalization;
 using System.IO;
+using System.Diagnostics;
 
 namespace ScreenshotApp.FileWorkbench;
 
 /// <summary>文件工作台的本地搜索与安全批处理规划。</summary>
 internal static class FileWorkbenchService
 {
-    internal static IReadOnlyList<FileWorkbenchItem> Search(
+    /// <summary>大目录只保留当前排序下最靠前的结果，避免百万级匹配拖垮界面与内存。</summary>
+    internal const int MaxDisplayResultCount = 5000;
+
+    internal static FileSearchResult Search(
         string rootDirectory,
         string keyword,
         string typeFilter,
         DateTime? modifiedAfter,
         FileSortField sortField,
         bool sortAscending,
+        IProgress<FileSearchProgress>? progress,
         CancellationToken cancellationToken)
     {
-        var results = new List<FileWorkbenchItem>();
+        var displayComparer = new FileWorkbenchItemComparer(sortField, sortAscending);
+        var displayResults = new SortedSet<FileWorkbenchItem>(displayComparer);
+        var filesScanned = 0L;
+        var matchedFiles = 0L;
+        var currentPath = rootDirectory;
+        var progressStopwatch = Stopwatch.StartNew();
         var options = new EnumerationOptions
         {
             RecurseSubdirectories = true,
@@ -25,6 +35,8 @@ internal static class FileWorkbenchService
         foreach (var path in Directory.EnumerateFiles(rootDirectory, "*", options))
         {
             cancellationToken.ThrowIfCancellationRequested();
+            filesScanned++;
+            currentPath = path;
             try
             {
                 var info = new FileInfo(path);
@@ -33,7 +45,8 @@ internal static class FileWorkbenchService
                     continue;
                 }
 
-                results.Add(FileWorkbenchItem.Create(info));
+                matchedFiles++;
+                KeepBestMatch(info);
             }
             catch (UnauthorizedAccessException)
             {
@@ -43,10 +56,48 @@ internal static class FileWorkbenchService
             {
                 // 搜索过程中被移动或占用的文件直接跳过。
             }
+            finally
+            {
+                ReportProgress(force: false);
+            }
         }
 
-        return OrderResults(results, sortField, sortAscending).ToArray();
+        ReportProgress(force: true);
+        return new FileSearchResult(SortResults(displayResults, sortField, sortAscending), filesScanned, matchedFiles);
+
+        void KeepBestMatch(FileInfo info)
+        {
+            if (displayResults.Count < MaxDisplayResultCount)
+            {
+                displayResults.Add(FileWorkbenchItem.Create(info));
+                return;
+            }
+
+            var worstDisplayedItem = displayResults.Max;
+            if (worstDisplayedItem is null || CompareForDisplay(info, worstDisplayedItem, sortField, sortAscending) >= 0)
+            {
+                return;
+            }
+
+            displayResults.Remove(worstDisplayedItem);
+            displayResults.Add(FileWorkbenchItem.Create(info));
+        }
+
+        void ReportProgress(bool force)
+        {
+            if (progress is null || (!force && progressStopwatch.Elapsed < TimeSpan.FromMilliseconds(220)))
+            {
+                return;
+            }
+
+            progressStopwatch.Restart();
+            progress.Report(new FileSearchProgress(filesScanned, matchedFiles, currentPath));
+        }
     }
+
+    /// <summary>表头排序仅重排已加载的结果，不重新访问磁盘。</summary>
+    internal static IReadOnlyList<FileWorkbenchItem> SortResults(IEnumerable<FileWorkbenchItem> items, FileSortField sortField, bool sortAscending)
+        => OrderResults(items, sortField, sortAscending).ToArray();
 
     internal static IReadOnlyList<FileOperationPlan> CreatePlans(
         IEnumerable<FileWorkbenchItem> items,
@@ -130,15 +181,72 @@ internal static class FileWorkbenchService
 
     private static IOrderedEnumerable<FileWorkbenchItem> OrderResults(IEnumerable<FileWorkbenchItem> items, FileSortField field, bool ascending)
     {
-        return (field, ascending) switch
+        return items.OrderBy(item => item, new FileWorkbenchItemComparer(field, ascending));
+    }
+
+    private static int CompareForDisplay(FileInfo left, FileWorkbenchItem right, FileSortField field, bool ascending)
+    {
+        var comparison = field switch
         {
-            (FileSortField.Name, true) => items.OrderBy(item => item.FileName, StringComparer.OrdinalIgnoreCase),
-            (FileSortField.Name, false) => items.OrderByDescending(item => item.FileName, StringComparer.OrdinalIgnoreCase),
-            (FileSortField.Size, true) => items.OrderBy(item => item.Size).ThenBy(item => item.FileName, StringComparer.OrdinalIgnoreCase),
-            (FileSortField.Size, false) => items.OrderByDescending(item => item.Size).ThenBy(item => item.FileName, StringComparer.OrdinalIgnoreCase),
-            (FileSortField.Modified, true) => items.OrderBy(item => item.ModifiedAt).ThenBy(item => item.FileName, StringComparer.OrdinalIgnoreCase),
-            _ => items.OrderByDescending(item => item.ModifiedAt).ThenBy(item => item.FileName, StringComparer.OrdinalIgnoreCase)
+            FileSortField.Name => StringComparer.OrdinalIgnoreCase.Compare(left.Name, right.FileName),
+            FileSortField.Extension => StringComparer.OrdinalIgnoreCase.Compare(left.Extension, right.Extension),
+            FileSortField.Size => left.Length.CompareTo(right.Size),
+            FileSortField.Modified => left.LastWriteTime.CompareTo(right.ModifiedAt),
+            _ => 0
         };
+
+        if (comparison == 0)
+        {
+            comparison = StringComparer.OrdinalIgnoreCase.Compare(left.FullName, right.FullPath);
+        }
+
+        return ascending ? comparison : -comparison;
+    }
+
+    private sealed class FileWorkbenchItemComparer : IComparer<FileWorkbenchItem>
+    {
+        private readonly FileSortField _field;
+        private readonly bool _ascending;
+
+        public FileWorkbenchItemComparer(FileSortField field, bool ascending)
+        {
+            _field = field;
+            _ascending = ascending;
+        }
+
+        public int Compare(FileWorkbenchItem? left, FileWorkbenchItem? right)
+        {
+            if (ReferenceEquals(left, right))
+            {
+                return 0;
+            }
+
+            if (left is null)
+            {
+                return -1;
+            }
+
+            if (right is null)
+            {
+                return 1;
+            }
+
+            var comparison = _field switch
+            {
+                FileSortField.Name => StringComparer.OrdinalIgnoreCase.Compare(left.FileName, right.FileName),
+                FileSortField.Extension => StringComparer.OrdinalIgnoreCase.Compare(left.Extension, right.Extension),
+                FileSortField.Size => left.Size.CompareTo(right.Size),
+                FileSortField.Modified => left.ModifiedAt.CompareTo(right.ModifiedAt),
+                _ => 0
+            };
+
+            if (comparison == 0)
+            {
+                comparison = StringComparer.OrdinalIgnoreCase.Compare(left.FullPath, right.FullPath);
+            }
+
+            return _ascending ? comparison : -comparison;
+        }
     }
 
     internal static string GetCategory(string extension)
@@ -190,8 +298,21 @@ internal enum FileBatchOperation
 internal enum FileSortField
 {
     Name,
+    Extension,
     Size,
     Modified
+}
+
+/// <summary>文件搜索的阶段性进度；目录总量未知，因此展示已扫描数量与当前路径。</summary>
+internal sealed record FileSearchProgress(long FilesScanned, long MatchedFiles, string CurrentPath)
+{
+    public string SummaryText => $"已扫描 {FilesScanned:N0} 个文件 · 匹配 {MatchedFiles:N0} 个";
+}
+
+/// <summary>文件搜索结果只保留可流畅显示的部分，仍返回完整匹配计数供用户缩小筛选范围。</summary>
+internal sealed record FileSearchResult(IReadOnlyList<FileWorkbenchItem> Items, long FilesScanned, long MatchedFiles)
+{
+    public bool IsTruncated => MatchedFiles > Items.Count;
 }
 
 public sealed record FileWorkbenchItem(string FullPath, string FileName, string Extension, long Size, DateTime ModifiedAt)
