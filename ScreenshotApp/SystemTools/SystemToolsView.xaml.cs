@@ -38,7 +38,6 @@ public partial class SystemToolsView : UserControl
     private IReadOnlyList<SystemDiagnosticTimelineBucket> _diagnosticTimelineBuckets = Array.Empty<SystemDiagnosticTimelineBucket>();
     private SystemDiagnosticSnapshot? _diagnosticSnapshot;
     private int _selectedDiagnosticBucketIndex = -1;
-    private SystemDiagnosticSeverity? _selectedDiagnosticSeverity;
     private CancellationTokenSource? _diagnosticCancellation;
     private bool _portsAscending = true;
     private string _portSortKey = "Port";
@@ -267,7 +266,6 @@ public partial class SystemToolsView : UserControl
             _diagnosticSnapshot = snapshot;
             _allDiagnosticGroups = snapshot.Groups;
             _selectedDiagnosticBucketIndex = -1;
-            _selectedDiagnosticSeverity = null;
             DiagnosticProgressText.Text = $"诊断完成 · {snapshot.CompletedAt:yyyy-MM-dd HH:mm:ss}";
             DiagnosticProgressDetailText.Text = snapshot.Failures.Count == 0
                 ? "已完成 System 与 Application 日志的只读扫描"
@@ -437,7 +435,12 @@ public partial class SystemToolsView : UserControl
         UpdateDiagnosticReliabilityGrid(categoryTag, severityTag);
         var filteredEvents = SelectedDiagnosticTimelineEvents(categoryTag, severityTag).ToArray();
         var selectedGroupKeys = filteredEvents.Select(item => item.GroupKey).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var filtered = _allDiagnosticGroups.Where(group => selectedGroupKeys.Contains(group.GroupKey)).ToArray();
+        var filtered = _allDiagnosticGroups
+            .Where(group => selectedGroupKeys.Contains(group.GroupKey))
+            .OrderBy(group => group.Severity)
+            .ThenByDescending(group => group.Count)
+            .ThenByDescending(group => group.LastSeen)
+            .ToArray();
         var previousKey = (DiagnosticResultsListBox.SelectedItem as SystemDiagnosticGroup)?.GroupKey;
         Replace(_diagnosticGroups, filtered);
         DiagnosticFilteredCountText.Text = _diagnosticSnapshot is null
@@ -452,7 +455,7 @@ public partial class SystemToolsView : UserControl
         else if (filtered.Length == 0)
         {
             DiagnosticEmptyTitleText.Text = _allDiagnosticGroups.Count == 0 ? "本次范围内未发现异常记录" : "所选时间格没有匹配事件";
-            DiagnosticEmptyDescriptionText.Text = _allDiagnosticGroups.Count == 0 ? "关键、错误和警告事件均未形成诊断结果" : "可点击其他日期、事件级别，或调整顶部筛选";
+            DiagnosticEmptyDescriptionText.Text = _allDiagnosticGroups.Count == 0 ? "关键、错误和警告事件均未形成诊断结果" : "可点击其他日期列，或调整顶部筛选";
         }
 
         UpdateDiagnosticSelectionSummary(filteredEvents.Length);
@@ -478,7 +481,10 @@ public partial class SystemToolsView : UserControl
             (categoryTag == "All" || string.Equals(item.Category.ToString(), categoryTag, StringComparison.OrdinalIgnoreCase)) &&
             (severityTag == "All" || string.Equals(item.Severity.ToString(), severityTag, StringComparison.OrdinalIgnoreCase)))
             .ToArray();
-        var bucketCount = snapshot.TimeRange.TotalDays <= 1.1 ? 12 : snapshot.TimeRange.TotalDays <= 7.1 ? 7 : 10;
+        // 24 小时视图按小时展示；日期范围严格保持一列对应一天。
+        var bucketCount = snapshot.TimeRange.TotalDays <= 1.1
+            ? 24
+            : Math.Max(1, (int)Math.Round(snapshot.TimeRange.TotalDays));
         var end = snapshot.CompletedAt;
         var start = end - snapshot.TimeRange;
         var bucketDuration = TimeSpan.FromTicks(snapshot.TimeRange.Ticks / bucketCount);
@@ -503,26 +509,20 @@ public partial class SystemToolsView : UserControl
 
         _diagnosticTimelineBuckets = buckets;
         DiagnosticReliabilityChart.Buckets = buckets;
-        var intervalText = snapshot.TimeRange.TotalDays <= 1.1 ? "每 2 小时" : snapshot.TimeRange.TotalDays <= 7.1 ? "每天" : "每 3 天";
+        var intervalText = snapshot.TimeRange.TotalDays <= 1.1 ? "每小时" : "每天";
         DiagnosticTimelineSummaryText.Text = $"当前筛选共 {events.Length:N0} 条事件 · {intervalText}汇总 · 红色关键、橙色错误、蓝色警告" +
             (snapshot.WasTruncated ? " · 已达到读取上限，图中为本次已读取样本" : string.Empty);
 
-        var selectedSeverity = severityTag == "All"
-            ? _selectedDiagnosticSeverity
-            : Enum.TryParse<SystemDiagnosticSeverity>(severityTag, true, out var parsedSeverity) ? parsedSeverity : null;
-        if (_selectedDiagnosticBucketIndex < 0 || _selectedDiagnosticBucketIndex >= buckets.Length ||
-            (severityTag != "All" && _selectedDiagnosticSeverity != selectedSeverity))
+        if (_selectedDiagnosticBucketIndex < 0 || _selectedDiagnosticBucketIndex >= buckets.Length)
         {
             _selectedDiagnosticBucketIndex = Array.FindLastIndex(buckets, bucket => bucket.TotalCount > 0);
             if (_selectedDiagnosticBucketIndex < 0)
             {
                 _selectedDiagnosticBucketIndex = buckets.Length - 1;
             }
-
-            _selectedDiagnosticSeverity = selectedSeverity;
         }
 
-        DiagnosticReliabilityChart.SelectCell(_selectedDiagnosticBucketIndex, _selectedDiagnosticSeverity, false);
+        DiagnosticReliabilityChart.SelectCell(_selectedDiagnosticBucketIndex, null, false);
     }
 
     private IEnumerable<SystemDiagnosticTimelineEvent> SelectedDiagnosticTimelineEvents(string categoryTag, string severityTag)
@@ -537,14 +537,12 @@ public partial class SystemToolsView : UserControl
             item.OccurredAt >= bucket.Start &&
             (_selectedDiagnosticBucketIndex == _diagnosticTimelineBuckets.Count - 1 ? item.OccurredAt <= bucket.End : item.OccurredAt < bucket.End) &&
             (categoryTag == "All" || string.Equals(item.Category.ToString(), categoryTag, StringComparison.OrdinalIgnoreCase)) &&
-            (severityTag == "All" || string.Equals(item.Severity.ToString(), severityTag, StringComparison.OrdinalIgnoreCase)) &&
-            (_selectedDiagnosticSeverity is null || item.Severity == _selectedDiagnosticSeverity));
+            (severityTag == "All" || string.Equals(item.Severity.ToString(), severityTag, StringComparison.OrdinalIgnoreCase)));
     }
 
     private void DiagnosticReliabilityChart_CellSelected(object? sender, SystemDiagnosticTimeCellSelectedEventArgs e)
     {
         _selectedDiagnosticBucketIndex = e.BucketIndex;
-        _selectedDiagnosticSeverity = e.Severity;
         ApplyDiagnosticFilters();
     }
 
@@ -558,18 +556,18 @@ public partial class SystemToolsView : UserControl
         }
 
         var bucket = _diagnosticTimelineBuckets[_selectedDiagnosticBucketIndex];
-        var severityText = _selectedDiagnosticSeverity switch
+        var severityText = SelectedTag(DiagnosticSeverityComboBox) switch
         {
-            SystemDiagnosticSeverity.Critical => "关键事件",
-            SystemDiagnosticSeverity.Error => "错误事件",
-            SystemDiagnosticSeverity.Warning => "警告事件",
+            "Critical" => "关键事件",
+            "Error" => "错误事件",
+            "Warning" => "警告事件",
             _ => "全部级别"
         };
         var rangeText = bucket.Start.Date == bucket.End.Date
             ? $"{bucket.Start:yyyy-MM-dd HH:mm} - {bucket.End:HH:mm}"
             : $"{bucket.Start:yyyy-MM-dd} 至 {bucket.End:yyyy-MM-dd}";
         DiagnosticSelectedCellText.Text = $"{bucket.Label} · {severityText} · {eventCount:N0} 条";
-        DiagnosticSummaryText.Text = $"{rangeText} · {severityText}；点击上方其他时间格即可切换";
+        DiagnosticSummaryText.Text = $"{rangeText} · {severityText}；已按危险等级从高到低排列";
     }
 
     private void DiagnosticResultsListBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateDiagnosticDetails();

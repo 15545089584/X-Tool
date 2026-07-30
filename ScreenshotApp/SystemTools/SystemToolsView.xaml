@@ -265,7 +265,7 @@
                         <Grid>
                             <StackPanel>
                                 <TextBlock FontSize="17" FontWeight="SemiBold" Foreground="#2E4B67" Text="异常事件时间格" />
-                                <TextBlock x:Name="DiagnosticTimelineSummaryText" Margin="0,3,0,0" FontSize="10" Foreground="#728BA3" Text="时间位于格网下方，点击彩色事件图标查看对应记录" />
+                                <TextBlock x:Name="DiagnosticTimelineSummaryText" Margin="0,3,0,0" FontSize="10" Foreground="#728BA3" Text="时间位于格网下方，点击任意格选中当天全部事件" />
                             </StackPanel>
                             <Border HorizontalAlignment="Right" VerticalAlignment="Center" Padding="12,7" Background="#78E6F1FF" BorderBrush="#78A8C9F2" BorderThickness="1" CornerRadius="10"><TextBlock x:Name="DiagnosticSelectedCellText" FontSize="10" FontWeight="SemiBold" Foreground="#4D7CFE" Text="尚未选择时间格" /></Border>
                         </Grid>
