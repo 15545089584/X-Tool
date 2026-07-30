@@ -40,6 +40,8 @@
     <PackageReference Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="3.1.21" />
     <!-- 系统概览读取只读 WMI/SMBIOS 公开信息，不用于任何系统写操作。 -->
     <PackageReference Include="System.Management" Version="6.0.0" />
+    <!-- 系统诊断按需读取 Windows System/Application 事件日志，不订阅实时事件。 -->
+    <PackageReference Include="System.Diagnostics.EventLog" Version="6.0.0" />
   </ItemGroup>
 
   <ItemGroup>

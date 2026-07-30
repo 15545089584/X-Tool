@@ -83,10 +83,14 @@ git log -5 --oneline
 ### 资源管理与系统工具（已拆分）
 
 - 左侧原“系统工具”已更名为“资源管理”，图标改为资源/性能样式，承载端口查看器、进程管理、服务管理、关联关系四个页面。
-- 新增的“系统工具”保留原名称与芯片图标，承载“设备信息”“存储”“环境变量”三个页面；入口默认打开设备信息页，不再与资源管理功能混在一起。
+- 新增的“系统工具”保留原名称与芯片图标，承载“设备信息”“存储”“环境变量”“系统诊断”四个页面；入口默认打开设备信息页，不再与资源管理功能混在一起。
 - 两个入口复用 `ScreenshotApp\SystemTools\SystemToolsView.xaml(.cs)`；资源管理使用默认模式，系统工具使用 `EnvironmentOnly=True`。修改时不要破坏两种入口各自的可见标签和默认页面。
 - 设备信息页使用 Windows 公开只读接口显示静态系统与硬件规格（系统、处理器、显卡、主板、硬盘、显示器、内存、电池），无需管理员权限；下方独立列出 Windows 已识别的 PnP 驱动。驱动数据来自 `Win32_PnPSignedDriver` 与 `Win32_PnPEntity`，显示设备类别、提供商、版本、日期、INF、签名和设备状态，默认“关键设备”，可切换“全部设备”或“异常项”并搜索。驱动按类别收纳为默认折叠、可展开的毛玻璃卡片；搜索或查看异常项时，匹配类别会自动展开。蓝牙、USB、虚拟设备等不强行映射到上方硬件摘要。该清单不等同于所有内核/服务/筛选驱动或固件。
 - “存储”页面已提供只读的容量初步概览：用 `DriveInfo` 展示已挂载固定磁盘的已用、可用与总容量，用 `Win32_DiskDrive` 展示物理磁盘型号、接口、介质类型与容量。它不读取 SMART、温度、寿命、健康度或任何实时传感器数据，也不尝试把卷强行映射到单块磁盘。
+- “系统诊断”页面按用户点击读取 Windows `System` 与 `Application` 事件日志，不读取 `Security`，不订阅实时事件，也不会自动修复或修改系统。时间范围可选最近 24 小时、7 天、30 天；使用事件日志 XPath 在系统侧筛选关键、错误和警告记录，按日志、Provider、事件 ID 与应用/服务主体聚合，默认每个日志最多 500 条、总计 1,000 条，最终最多显示 300 个问题组。
+- 系统诊断规则覆盖异常关机、蓝屏、WHEA、存储与文件系统、驱动与设备、应用崩溃/无响应、服务失败和 Windows 更新异常。规则文案只提供排查线索，不把单条日志断言为硬件损坏；未命中规则的事件保留 Windows 原始级别和描述。扫描在后台执行，蓝色按钮原位切换“开始诊断/取消诊断”，切换标签或页面隐藏时取消；访问拒绝、日志缺失、事件描述资源缺失均不得中断其他日志结果。
+- 系统诊断顶部使用参考 Windows 可靠性监视器的“异常事件时间格”：按所选时间范围分桶（24 小时按 2 小时、7 天按天、30 天按 3 天），时间标签位于格网下方；格网内仅用红、橙、蓝三色图标表示关键、错误和警告，不显示左侧等级标签，也不保留额外统计卡片。点击底部日期选择该时间段全部级别，点击彩色事件格只查看对应级别，下方结果和详情会同步切换。图表复用同一次诊断扫描保留的轻量时间点，不会二次读取事件日志；分类与级别筛选只在内存中重新分桶。
+- 系统诊断依赖 `System.Diagnostics.EventLog` 6.0.0；读取端使用 `EventLogQuery`/`EventLogReader` 倒序限量查询，代表事件才调用 `FormatDescription()`，避免逐条格式化拖慢扫描。详情支持复制与打开 Windows 事件查看器，并明确提醒事件描述可能包含本机路径或应用名称。
 - 本轮已通过 Release 构建（0 警告、0 错误）与实际启动验证：当前机器“关键设备”筛选显示 10 类 / 149 项驱动，显卡类别可正常展开；存储页读取到 3 个固定本地卷和 1 块物理 NVMe 磁盘。上述数量与容量仅是本机验证样本，其他设备应以实时读取结果为准。
 - 实时温度、电压、频率、负载、功耗，以及创建或调用管理员传感器助手、计划任务的代码和 LibreHardwareMonitor 依赖均已移除；除非用户明确重新立项，不得恢复该链路。历史版本若已注册按需任务，新版本不会启动它；可在管理员权限下从任务计划程序删除该旧任务。
 - 启动项管理页面，以及其启动项扫描、图标提取、启停、定位和管理员启动项操作代码均已移除。设置页中“X-Tool 自身开机启动”是独立功能，仍保留。
@@ -346,7 +350,7 @@ git log -5 --oneline
 | PDF 转换与引擎回退 | `ScreenshotApp\Converters\PdfConversionService.cs` |
 | 编码转换 | `ScreenshotApp\Converters\EncodingConverterView.xaml(.cs)`、`EncodingConversionService.cs` |
 | 文件工作台 | `ScreenshotApp\FileWorkbench\FileWorkbenchView.xaml(.cs)`、`FileWorkbenchService.cs` |
-| 系统工具（设备信息、折叠 PnP 驱动清单、存储容量概览、环境变量） | `ScreenshotApp\SystemTools\SystemToolsView.xaml(.cs)`、`SystemToolsService.cs` |
+| 系统工具（设备信息、折叠 PnP 驱动清单、存储容量概览、环境变量、系统诊断） | `ScreenshotApp\SystemTools\SystemToolsView.xaml(.cs)`、`SystemToolsService.cs`、`SystemDiagnosticService.cs`、`SystemDiagnosticModels.cs`、`SystemDiagnosticRules.cs` |
 | 网络工作台主页面 | `ScreenshotApp\NetworkWorkbench\NetworkWorkbenchView.xaml(.cs)` |
 | 网络状态与方案服务 | `ScreenshotApp\NetworkWorkbench\NetworkWorkbenchService.cs` |
 | 统一监测与历史库 | `ScreenshotApp\NetworkWorkbench\NetworkMonitorCoordinator.cs`、`NetworkHistoryStore.cs` |
@@ -364,7 +368,7 @@ git log -5 --oneline
 5. **配置目录迁移**：`%LocalAppData%\JieYing` 是遗留目录，只能在有兼容迁移方案时更名。
 6. **回归保护**：继续确保贴图、截图辅助窗、录像边框和控制条不进入捕获画面。
 7. **转 PDF 人工回归**：分别验证图片合并、已有 PDF 合并、Word/Excel/PowerPoint 的 Office 导出，以及未装 Office/WPS 时 LibreOffice 回退和缺失提示。
-8. **资源管理与系统工具权限/性能回归**：受保护进程、服务启动/停止和系统环境变量写入需分别在普通权限与管理员权限下验证；端口自动刷新不应造成页面卡顿，设备与 PnP 驱动信息应能在普通权限下刷新，且需确认资源管理与系统工具入口没有串页。
+8. **资源管理与系统工具权限/性能回归**：受保护进程、服务启动/停止和系统环境变量写入需分别在普通权限与管理员权限下验证；端口自动刷新不应造成页面卡顿，设备与 PnP 驱动信息应能在普通权限下刷新，且需确认资源管理与系统工具入口没有串页。系统诊断需验证 24 小时/7 天/30 天范围、分类与级别筛选、扫描取消、重复事件聚合、复制详情和事件查看器跳转；普通权限下单个日志访问失败不得弹 UAC 或丢弃其他日志结果。
 
 ## 九、最近关键提交
 

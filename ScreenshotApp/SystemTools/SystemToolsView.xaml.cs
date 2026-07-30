@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -26,12 +27,19 @@ public partial class SystemToolsView : UserControl
     private readonly ObservableCollection<DeviceDriverCategoryGroup> _driverCategories = new();
     private readonly ObservableCollection<StorageVolumeEntry> _storageVolumes = new();
     private readonly ObservableCollection<PhysicalStorageEntry> _physicalStorage = new();
+    private readonly ObservableCollection<SystemDiagnosticGroup> _diagnosticGroups = new();
     private IReadOnlyList<PortEntry> _allPorts = Array.Empty<PortEntry>();
     private IReadOnlyList<ProcessEntry> _allProcesses = Array.Empty<ProcessEntry>();
     private IReadOnlyList<ServiceEntry> _allServices = Array.Empty<ServiceEntry>();
     private IReadOnlyList<SystemRelationshipEntry> _allRelationships = Array.Empty<SystemRelationshipEntry>();
     private IReadOnlyList<EnvironmentVariableEntry> _allEnvironmentVariables = Array.Empty<EnvironmentVariableEntry>();
     private IReadOnlyList<DeviceDriverEntry> _allDrivers = Array.Empty<DeviceDriverEntry>();
+    private IReadOnlyList<SystemDiagnosticGroup> _allDiagnosticGroups = Array.Empty<SystemDiagnosticGroup>();
+    private IReadOnlyList<SystemDiagnosticTimelineBucket> _diagnosticTimelineBuckets = Array.Empty<SystemDiagnosticTimelineBucket>();
+    private SystemDiagnosticSnapshot? _diagnosticSnapshot;
+    private int _selectedDiagnosticBucketIndex = -1;
+    private SystemDiagnosticSeverity? _selectedDiagnosticSeverity;
+    private CancellationTokenSource? _diagnosticCancellation;
     private bool _portsAscending = true;
     private string _portSortKey = "Port";
     private bool _portHeaderSortActive;
@@ -66,6 +74,8 @@ public partial class SystemToolsView : UserControl
         DriverCategoryItems.ItemsSource = _driverCategories;
         StorageVolumesItems.ItemsSource = _storageVolumes;
         PhysicalStorageItems.ItemsSource = _physicalStorage;
+        DiagnosticResultsListBox.ItemsSource = _diagnosticGroups;
+        DiagnosticReliabilityChart.CellSelected += DiagnosticReliabilityChart_CellSelected;
         StorageAnalysisView.BackRequested += StorageAnalysisView_BackRequested;
         StorageAnalysisView.FileWorkbenchRequested += StorageAnalysisView_FileWorkbenchRequested;
         PathEntriesListBox.PreviewMouseLeftButtonDown += PathEntriesListBox_PreviewMouseLeftButtonDown;
@@ -97,12 +107,14 @@ public partial class SystemToolsView : UserControl
         {
             _portAutoRefreshTimer.Stop();
             StorageAnalysisView.CancelActiveScan();
+            CancelActiveDiagnostics();
         };
         IsVisibleChanged += (_, _) =>
         {
             if (!IsVisible)
             {
                 StorageAnalysisView.CancelActiveScan();
+                CancelActiveDiagnostics();
             }
         };
     }
@@ -217,12 +229,83 @@ public partial class SystemToolsView : UserControl
         }
     }
 
+    /// <summary>按需读取最近的系统与应用事件；保持只读，并限制数量避免大日志拖慢界面。</summary>
+    private async Task RefreshDiagnosticsAsync()
+    {
+        if (_diagnosticCancellation is not null)
+        {
+            return;
+        }
+
+        var cancellation = new CancellationTokenSource();
+        _diagnosticCancellation = cancellation;
+        DiagnosticScanButtonText.Text = "取消诊断";
+        DiagnosticProgressText.Text = "正在准备 Windows 事件日志查询…";
+        DiagnosticProgressDetailText.Text = "只读取关键、错误和警告记录；可随时取消";
+        var progress = new Progress<SystemDiagnosticProgress>(snapshot =>
+        {
+            if (!ReferenceEquals(cancellation, _diagnosticCancellation))
+            {
+                return;
+            }
+
+            DiagnosticProgressText.Text = snapshot.SummaryText;
+            DiagnosticProgressDetailText.Text = snapshot.Detail;
+        });
+
+        try
+        {
+            var query = new SystemDiagnosticQuery(TimeSpan.FromDays(SelectedDiagnosticDays));
+            var snapshot = await Task.Run(
+                () => SystemDiagnosticService.Scan(query, progress, cancellation.Token),
+                cancellation.Token);
+            if (cancellation.IsCancellationRequested)
+            {
+                return;
+            }
+
+            _diagnosticSnapshot = snapshot;
+            _allDiagnosticGroups = snapshot.Groups;
+            _selectedDiagnosticBucketIndex = -1;
+            _selectedDiagnosticSeverity = null;
+            DiagnosticProgressText.Text = $"诊断完成 · {snapshot.CompletedAt:yyyy-MM-dd HH:mm:ss}";
+            DiagnosticProgressDetailText.Text = snapshot.Failures.Count == 0
+                ? "已完成 System 与 Application 日志的只读扫描"
+                : string.Join("；", snapshot.Failures.Select(failure => $"{failure.LogName}：{failure.Reason}").Take(2));
+            ApplyDiagnosticFilters();
+        }
+        catch (OperationCanceledException)
+        {
+            DiagnosticProgressText.Text = "诊断已取消";
+            DiagnosticProgressDetailText.Text = "未修改任何系统设置或事件日志";
+        }
+        catch (Exception exception)
+        {
+            DiagnosticProgressText.Text = $"诊断失败：{exception.Message}";
+            DiagnosticProgressDetailText.Text = "未修改任何系统设置；可稍后重试";
+        }
+        finally
+        {
+            if (ReferenceEquals(cancellation, _diagnosticCancellation))
+            {
+                _diagnosticCancellation = null;
+                DiagnosticScanButtonText.Text = "开始诊断";
+            }
+
+            cancellation.Dispose();
+        }
+    }
+
     private void TabButton_Click(object sender, RoutedEventArgs e)
     {
         var section = (sender as FrameworkElement)?.Tag?.ToString() ?? "Ports";
         if (section != "Storage")
         {
             StorageAnalysisView.CancelActiveScan();
+        }
+        if (section != "Diagnostics")
+        {
+            CancelActiveDiagnostics();
         }
         PortsPanel.Visibility = section == "Ports" ? Visibility.Visible : Visibility.Collapsed;
         ProcessesPanel.Visibility = section == "Processes" ? Visibility.Visible : Visibility.Collapsed;
@@ -231,6 +314,7 @@ public partial class SystemToolsView : UserControl
         OverviewPanel.Visibility = section == "Overview" ? Visibility.Visible : Visibility.Collapsed;
         StoragePanel.Visibility = section == "Storage" ? Visibility.Visible : Visibility.Collapsed;
         EnvironmentPanel.Visibility = section == "Environment" ? Visibility.Visible : Visibility.Collapsed;
+        DiagnosticsPanel.Visibility = section == "Diagnostics" ? Visibility.Visible : Visibility.Collapsed;
         SetActiveTab(section);
         if (section == "Processes") _ = RefreshProcessesAsync();
         else if (section == "Services") _ = RefreshServicesAsync();
@@ -251,9 +335,11 @@ public partial class SystemToolsView : UserControl
             RelationsTabButton.Visibility = Visibility.Collapsed;
             OverviewTabButton.Visibility = Visibility.Visible;
             StorageTabButton.Visibility = Visibility.Visible;
+            DiagnosticsTabButton.Visibility = Visibility.Visible;
             Grid.SetColumn(OverviewTabButton, 0);
             Grid.SetColumn(StorageTabButton, 2);
             Grid.SetColumn(EnvironmentTabButton, 4);
+            Grid.SetColumn(DiagnosticsTabButton, 6);
             AutoRefreshHostPanel.Visibility = Visibility.Collapsed;
             PortsPanel.Visibility = Visibility.Collapsed;
             ProcessesPanel.Visibility = Visibility.Collapsed;
@@ -261,19 +347,22 @@ public partial class SystemToolsView : UserControl
             RelationsBubblePanel.Visibility = Visibility.Collapsed;
             EnvironmentPanel.Visibility = Visibility.Collapsed;
             StoragePanel.Visibility = Visibility.Collapsed;
+            DiagnosticsPanel.Visibility = Visibility.Collapsed;
             StorageOverviewContentPanel.Visibility = Visibility.Visible;
             StorageAnalysisView.Visibility = Visibility.Collapsed;
             OverviewPanel.Visibility = Visibility.Visible;
             SetActiveTab("Overview");
-            SetPageHeading("系统工具", "查看设备信息、存储空间与环境变量；所有写入操作都会在执行前明确确认。");
+            SetPageHeading("系统工具", "查看设备信息、存储空间、环境变量与系统诊断；所有写入操作都会在执行前明确确认。");
             return;
         }
 
         OverviewTabButton.Visibility = Visibility.Collapsed;
         StorageTabButton.Visibility = Visibility.Collapsed;
         EnvironmentTabButton.Visibility = Visibility.Collapsed;
+        DiagnosticsTabButton.Visibility = Visibility.Collapsed;
         OverviewPanel.Visibility = Visibility.Collapsed;
         StoragePanel.Visibility = Visibility.Collapsed;
+        DiagnosticsPanel.Visibility = Visibility.Collapsed;
         HideStorageAnalysis();
         AutoRefreshHostPanel.Visibility = Visibility.Visible;
         EnvironmentPanel.Visibility = Visibility.Collapsed;
@@ -282,18 +371,13 @@ public partial class SystemToolsView : UserControl
 
     private void SetPageHeading(string title, string subtitle)
     {
-        var headers = FindVisualDescendants<TextBlock>(this)
-            .Where(item => item.FontSize is >= 14 && (item.Text == "系统工具" || item.Text == "查看设备信息、存储空间与环境变量；系统级操作会在执行时明确提示权限要求。"))
-            .ToArray();
-        foreach (var header in headers)
-        {
-            header.Text = header.FontSize >= 30 ? title : subtitle;
-        }
+        PageTitleText.Text = title;
+        PageSubtitleText.Text = subtitle;
     }
 
     private void SetActiveTab(string section)
     {
-        foreach (var (button, name) in new[] { (PortsTabButton, "Ports"), (ProcessesTabButton, "Processes"), (ServicesTabButton, "Services"), (RelationsTabButton, "Relations"), (OverviewTabButton, "Overview"), (StorageTabButton, "Storage"), (EnvironmentTabButton, "Environment") })
+        foreach (var (button, name) in new[] { (PortsTabButton, "Ports"), (ProcessesTabButton, "Processes"), (ServicesTabButton, "Services"), (RelationsTabButton, "Relations"), (OverviewTabButton, "Overview"), (StorageTabButton, "Storage"), (EnvironmentTabButton, "Environment"), (DiagnosticsTabButton, "Diagnostics") })
         {
             var active = name == section;
             button.Background = new SolidColorBrush(active ? Color.FromRgb(77, 124, 254) : Color.FromArgb(134, 255, 255, 255));
@@ -308,6 +392,244 @@ public partial class SystemToolsView : UserControl
     private async void RefreshRelationships_Click(object sender, RoutedEventArgs e) => await RefreshRelationshipsAsync();
     private async void RefreshDeviceInfo_Click(object sender, RoutedEventArgs e) => await RefreshDeviceInfoAsync();
     private async void RefreshStorage_Click(object sender, RoutedEventArgs e) => await RefreshStorageAsync();
+
+    private async void DiagnosticScanButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_diagnosticCancellation is not null)
+        {
+            CancelActiveDiagnostics();
+            return;
+        }
+
+        await RefreshDiagnosticsAsync();
+    }
+
+    private void DiagnosticTimeRangeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded || _diagnosticSnapshot is null || _diagnosticCancellation is not null)
+        {
+            return;
+        }
+
+        DiagnosticProgressText.Text = "时间范围已更改";
+        DiagnosticProgressDetailText.Text = "点击“开始诊断”后按新范围重新读取日志；当前结果仍保留";
+    }
+
+    private void DiagnosticFilter_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded || DiagnosticResultsListBox is null)
+        {
+            return;
+        }
+
+        ApplyDiagnosticFilters();
+    }
+
+    private void ApplyDiagnosticFilters()
+    {
+        if (DiagnosticResultsListBox is null)
+        {
+            return;
+        }
+
+        var categoryTag = SelectedTag(DiagnosticCategoryComboBox);
+        var severityTag = SelectedTag(DiagnosticSeverityComboBox);
+        UpdateDiagnosticReliabilityGrid(categoryTag, severityTag);
+        var filteredEvents = SelectedDiagnosticTimelineEvents(categoryTag, severityTag).ToArray();
+        var selectedGroupKeys = filteredEvents.Select(item => item.GroupKey).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var filtered = _allDiagnosticGroups.Where(group => selectedGroupKeys.Contains(group.GroupKey)).ToArray();
+        var previousKey = (DiagnosticResultsListBox.SelectedItem as SystemDiagnosticGroup)?.GroupKey;
+        Replace(_diagnosticGroups, filtered);
+        DiagnosticFilteredCountText.Text = _diagnosticSnapshot is null
+            ? string.Empty
+            : $"{filtered.Length:N0} 组 · {filteredEvents.Length:N0} 条事件";
+        DiagnosticEmptyState.Visibility = filtered.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (_diagnosticSnapshot is null)
+        {
+            DiagnosticEmptyTitleText.Text = "尚未生成诊断结果";
+            DiagnosticEmptyDescriptionText.Text = "点击“开始诊断”读取最近的系统与应用事件";
+        }
+        else if (filtered.Length == 0)
+        {
+            DiagnosticEmptyTitleText.Text = _allDiagnosticGroups.Count == 0 ? "本次范围内未发现异常记录" : "所选时间格没有匹配事件";
+            DiagnosticEmptyDescriptionText.Text = _allDiagnosticGroups.Count == 0 ? "关键、错误和警告事件均未形成诊断结果" : "可点击其他日期、事件级别，或调整顶部筛选";
+        }
+
+        UpdateDiagnosticSelectionSummary(filteredEvents.Length);
+
+        DiagnosticResultsListBox.SelectedItem = filtered.FirstOrDefault(group => group.GroupKey == previousKey) ?? filtered.FirstOrDefault();
+        UpdateDiagnosticDetails();
+    }
+
+    /// <summary>按当前筛选构建类似可靠性监视器的可点击时间格。</summary>
+    private void UpdateDiagnosticReliabilityGrid(string categoryTag, string severityTag)
+    {
+        if (_diagnosticSnapshot is null)
+        {
+            _diagnosticTimelineBuckets = Array.Empty<SystemDiagnosticTimelineBucket>();
+            DiagnosticReliabilityChart.Buckets = _diagnosticTimelineBuckets;
+            DiagnosticTimelineSummaryText.Text = "完成诊断后按时间与事件级别展示异常分布";
+            DiagnosticSelectedCellText.Text = "尚未选择时间格";
+            return;
+        }
+
+        var snapshot = _diagnosticSnapshot;
+        var events = snapshot.TimelineEvents.Where(item =>
+            (categoryTag == "All" || string.Equals(item.Category.ToString(), categoryTag, StringComparison.OrdinalIgnoreCase)) &&
+            (severityTag == "All" || string.Equals(item.Severity.ToString(), severityTag, StringComparison.OrdinalIgnoreCase)))
+            .ToArray();
+        var bucketCount = snapshot.TimeRange.TotalDays <= 1.1 ? 12 : snapshot.TimeRange.TotalDays <= 7.1 ? 7 : 10;
+        var end = snapshot.CompletedAt;
+        var start = end - snapshot.TimeRange;
+        var bucketDuration = TimeSpan.FromTicks(snapshot.TimeRange.Ticks / bucketCount);
+        var buckets = new SystemDiagnosticTimelineBucket[bucketCount];
+        for (var index = 0; index < bucketCount; index++)
+        {
+            var bucketStart = start + TimeSpan.FromTicks(bucketDuration.Ticks * index);
+            var bucketEnd = index == bucketCount - 1 ? end : bucketStart + bucketDuration;
+            var label = snapshot.TimeRange.TotalDays <= 1.1 ? bucketStart.ToString("HH:mm") : bucketStart.ToString("M/d");
+            var bucketEvents = events.Where(item =>
+                item.OccurredAt >= bucketStart &&
+                (index == bucketCount - 1 ? item.OccurredAt <= bucketEnd : item.OccurredAt < bucketEnd))
+                .ToArray();
+            buckets[index] = new SystemDiagnosticTimelineBucket(
+                bucketStart,
+                bucketEnd,
+                label,
+                bucketEvents.Count(item => item.Severity == SystemDiagnosticSeverity.Critical),
+                bucketEvents.Count(item => item.Severity == SystemDiagnosticSeverity.Error),
+                bucketEvents.Count(item => item.Severity == SystemDiagnosticSeverity.Warning));
+        }
+
+        _diagnosticTimelineBuckets = buckets;
+        DiagnosticReliabilityChart.Buckets = buckets;
+        var intervalText = snapshot.TimeRange.TotalDays <= 1.1 ? "每 2 小时" : snapshot.TimeRange.TotalDays <= 7.1 ? "每天" : "每 3 天";
+        DiagnosticTimelineSummaryText.Text = $"当前筛选共 {events.Length:N0} 条事件 · {intervalText}汇总 · 红色关键、橙色错误、蓝色警告" +
+            (snapshot.WasTruncated ? " · 已达到读取上限，图中为本次已读取样本" : string.Empty);
+
+        var selectedSeverity = severityTag == "All"
+            ? _selectedDiagnosticSeverity
+            : Enum.TryParse<SystemDiagnosticSeverity>(severityTag, true, out var parsedSeverity) ? parsedSeverity : null;
+        if (_selectedDiagnosticBucketIndex < 0 || _selectedDiagnosticBucketIndex >= buckets.Length ||
+            (severityTag != "All" && _selectedDiagnosticSeverity != selectedSeverity))
+        {
+            _selectedDiagnosticBucketIndex = Array.FindLastIndex(buckets, bucket => bucket.TotalCount > 0);
+            if (_selectedDiagnosticBucketIndex < 0)
+            {
+                _selectedDiagnosticBucketIndex = buckets.Length - 1;
+            }
+
+            _selectedDiagnosticSeverity = selectedSeverity;
+        }
+
+        DiagnosticReliabilityChart.SelectCell(_selectedDiagnosticBucketIndex, _selectedDiagnosticSeverity, false);
+    }
+
+    private IEnumerable<SystemDiagnosticTimelineEvent> SelectedDiagnosticTimelineEvents(string categoryTag, string severityTag)
+    {
+        if (_diagnosticSnapshot is null || _selectedDiagnosticBucketIndex < 0 || _selectedDiagnosticBucketIndex >= _diagnosticTimelineBuckets.Count)
+        {
+            return Enumerable.Empty<SystemDiagnosticTimelineEvent>();
+        }
+
+        var bucket = _diagnosticTimelineBuckets[_selectedDiagnosticBucketIndex];
+        return _diagnosticSnapshot.TimelineEvents.Where(item =>
+            item.OccurredAt >= bucket.Start &&
+            (_selectedDiagnosticBucketIndex == _diagnosticTimelineBuckets.Count - 1 ? item.OccurredAt <= bucket.End : item.OccurredAt < bucket.End) &&
+            (categoryTag == "All" || string.Equals(item.Category.ToString(), categoryTag, StringComparison.OrdinalIgnoreCase)) &&
+            (severityTag == "All" || string.Equals(item.Severity.ToString(), severityTag, StringComparison.OrdinalIgnoreCase)) &&
+            (_selectedDiagnosticSeverity is null || item.Severity == _selectedDiagnosticSeverity));
+    }
+
+    private void DiagnosticReliabilityChart_CellSelected(object? sender, SystemDiagnosticTimeCellSelectedEventArgs e)
+    {
+        _selectedDiagnosticBucketIndex = e.BucketIndex;
+        _selectedDiagnosticSeverity = e.Severity;
+        ApplyDiagnosticFilters();
+    }
+
+    private void UpdateDiagnosticSelectionSummary(int eventCount)
+    {
+        if (_diagnosticSnapshot is null || _selectedDiagnosticBucketIndex < 0 || _selectedDiagnosticBucketIndex >= _diagnosticTimelineBuckets.Count)
+        {
+            DiagnosticSelectedCellText.Text = "尚未选择时间格";
+            DiagnosticSummaryText.Text = _diagnosticSnapshot?.SummaryText ?? "先运行诊断，再点击上方日期或事件格";
+            return;
+        }
+
+        var bucket = _diagnosticTimelineBuckets[_selectedDiagnosticBucketIndex];
+        var severityText = _selectedDiagnosticSeverity switch
+        {
+            SystemDiagnosticSeverity.Critical => "关键事件",
+            SystemDiagnosticSeverity.Error => "错误事件",
+            SystemDiagnosticSeverity.Warning => "警告事件",
+            _ => "全部级别"
+        };
+        var rangeText = bucket.Start.Date == bucket.End.Date
+            ? $"{bucket.Start:yyyy-MM-dd HH:mm} - {bucket.End:HH:mm}"
+            : $"{bucket.Start:yyyy-MM-dd} 至 {bucket.End:yyyy-MM-dd}";
+        DiagnosticSelectedCellText.Text = $"{bucket.Label} · {severityText} · {eventCount:N0} 条";
+        DiagnosticSummaryText.Text = $"{rangeText} · {severityText}；点击上方其他时间格即可切换";
+    }
+
+    private void DiagnosticResultsListBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateDiagnosticDetails();
+
+    private void UpdateDiagnosticDetails()
+    {
+        var selected = DiagnosticResultsListBox?.SelectedItem as SystemDiagnosticGroup;
+        DiagnosticDetailContent.DataContext = selected;
+        DiagnosticDetailContent.Visibility = selected is null ? Visibility.Collapsed : Visibility.Visible;
+        DiagnosticDetailEmptyState.Visibility = selected is null ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void CopyDiagnosticDetails_Click(object sender, RoutedEventArgs e)
+    {
+        if (DiagnosticResultsListBox.SelectedItem is not SystemDiagnosticGroup selected)
+        {
+            return;
+        }
+
+        try
+        {
+            Clipboard.SetText(selected.CopyText);
+            DiagnosticProgressText.Text = "诊断详情已复制";
+            DiagnosticProgressDetailText.Text = "事件描述可能包含本机路径或应用名称，分享前请自行确认";
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show($"复制诊断详情失败：{exception.Message}", "系统诊断", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private void OpenEventViewer_Click(object sender, RoutedEventArgs e)
+    {
+        if (DiagnosticResultsListBox.SelectedItem is not SystemDiagnosticGroup selected)
+        {
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo("eventvwr.msc", $"/c:{selected.LogName}") { UseShellExecute = true });
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show($"无法打开 Windows 事件查看器：{exception.Message}", "系统诊断", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private void CancelActiveDiagnostics()
+    {
+        if (_diagnosticCancellation is null || _diagnosticCancellation.IsCancellationRequested)
+        {
+            return;
+        }
+
+        DiagnosticProgressText.Text = "正在取消诊断…";
+        DiagnosticProgressDetailText.Text = "等待当前 Windows 日志读取操作结束";
+        _diagnosticCancellation.Cancel();
+    }
+
     private async void AnalyzeStorageVolume_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is not StorageVolumeEntry volume)
@@ -966,6 +1288,7 @@ public partial class SystemToolsView : UserControl
     }
 
     private EnvironmentVariableTarget SelectedEnvironmentScope => (EnvironmentScopeComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() == "Machine" ? EnvironmentVariableTarget.Machine : EnvironmentVariableTarget.User;
+    private int SelectedDiagnosticDays => int.TryParse((DiagnosticTimeRangeComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString(), out var days) ? Math.Clamp(days, 1, 30) : 7;
 
     private static string SelectedTag(ComboBox comboBox) => (comboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? string.Empty;
 

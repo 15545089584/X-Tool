@@ -1,46 +1,50 @@
-# 硬件信息面板设计验收
+# 系统诊断时间格设计核验
 
-- source visual truth path: `C:\Windows\TEMP\codex-clipboard-53e6e8ea-1385-47c8-900d-9d2008e7026c.png`
-- implementation screenshot: Computer Use 会话内窗口截图（未持久化为本地文件）
-- viewport: 1480 × 900
-- source pixels: 2048 × 1155
-- implementation pixels: 1480 × 900
-- density normalization: 按可见内容区域和信息层级比较，未进行像素级缩放
-- state: 系统工具 / 硬件信息 / 静态只读信息
+- Source visual truth path: `C:\Windows\TEMP\codex-clipboard-cfa586d7-22c0-4513-a67f-e4c56f653c99.png`
+- Earlier implementation screenshot path: `D:\Claude Code\X-Tool\system-diagnostics-reliability-grid.png`
+- Viewport: 1480 × 900 logical pixels
+- Source pixels: 1687 × 1243
+- Earlier implementation pixels: 1480 × 900
+- Density normalization: 两张截图均按完整应用窗口观察；参考图包含控制面板窗口边框，因此只比较图形内容结构，不比较系统窗口外壳。
+- State: 最近 7 天诊断完成，选中单个错误事件时间格。
 
 ## Full-view comparison evidence
 
-窗口截图确认硬件信息页采用参考图的信息结构：系统、处理器、显卡、主板、硬盘、显示器、内存和电池均采用“型号 + 关键属性 + 设备明细”。页面保留项目既有浅色毛玻璃主题，并仅保留单列静态硬件信息。
+第一轮实现已经形成可点击的三行时间矩阵，但日期位于顶部、左侧仍显示事件等级，并保留四张统计卡，与最新参考方向存在明显结构差异。随后代码已调整为日期位于格网下方、移除左侧等级标签、使用红橙蓝三色事件图标，并删除统计卡片。
 
 ## Focused region comparison evidence
 
-可访问性快照验证了 24 核（8P+16E）/32 线程、双显卡、8 GB 独显、FX607JIR、954 GB NVMe、2560 × 1600 / 165 Hz、双通道 DDR5-5600 和 GA50358 电池等字段。首轮发现 Windows 名称和显卡顺序与参考图不一致，已经改为读取 WMI 系统名称并优先排列独立显卡。
+本次重点区域仅为时间矩阵和其下方内容。第一次实际交互验证确认：点击整列会显示该时间段全部级别，点击单个事件格会更新右上角摘要，并让下方结果切换到对应日期与级别。最终视觉调整完成并通过 Release 构建，但在获取最终实现截图时检测到用户正在操作 X-Tool，自动化按安全规则停止，因此无法形成最终同状态对照截图。
 
 ## Findings
 
-- [P2] 修正后的最终窗口未能再次截图
-  - Location: 硬件信息面板
-  - Evidence: 复查时检测到用户正在操作目标窗口，自动界面控制按安全规则停止。
-  - Impact: 已通过编译和数据快照验证，但无法完成最终像素级对照。
-  - Fix: 用户停止操作窗口后重新捕获相同视口并复查 Windows 名称、显卡顺序和滚动密度。
+- [P2] 最终视觉截图缺失
+  - Location: 系统工具 → 系统诊断 → 异常事件时间格
+  - Evidence: 最终代码已经移除左侧等级标签和统计卡，并把日期移到底部，但现有实现截图仍是调整前版本。
+  - Impact: 无法在自动化证据中确认最终间距、颜色和底部日期位置。
+  - Fix: 由用户在新版 X-Tool 中完成最终视觉确认，或允许下一轮重新捕获同一界面。
 
-- [P3] 厂商私有字段无法通用读取
-  - Location: CPU 制程、GPU 流处理器/显存颗粒、内存完整时序
-  - Evidence: Windows WMI、注册表和通用硬件库没有稳定公开这些字段。
-  - Impact: 页面显示真实可验证的数据，不伪造参考软件的私有数据库结果。
+## Required fidelity surfaces
+
+- Fonts and typography: 继续复用 X-Tool 的 Segoe UI 与 Segoe Fluent Icons；代码层面一致，最终视觉待确认。
+- Spacing and layout rhythm: 图形高度提升至 380，统计卡已移除，结果区自然上移；最终视觉待确认。
+- Colors and visual tokens: 使用现有毛玻璃背景、边框和阴影；事件颜色改为红、橙、蓝。
+- Image quality and asset fidelity: 页面无位图资产，图标来自现有 Segoe Fluent Icons 字体。
+- Copy and content: 日期位于格网下方，选择摘要与下方结果联动文案已更新。
 
 ## Comparison history
 
-1. 首轮：发现 Windows 11 被旧注册表兼容字段标为 Windows 10、核显排列在独显之前。
-2. 修正：系统名称改用 `Win32_OperatingSystem.Caption`，显卡按 NVIDIA/AMD/Intel 排序，并统一容量为整数 GB。
-3. 复查：因检测到用户输入而停止窗口自动化，缺少修正后的最终截图。
+1. 第一轮发现日期位置、左侧等级和统计卡与参考图不一致。
+2. 已修改时间格绘制与 XAML 布局，并通过 Release 构建（0 警告、0 错误）。
+3. 最终截图捕获因检测到用户输入而中止，未继续控制应用。
 
 ## Implementation checklist
 
-- [x] 硬件信息页整体改为硬件属性表
-- [x] 接入公开 WMI/注册表/CPU Set 数据
-- [x] 保留浅色毛玻璃和单列自适应布局
-- [x] 移除实时传感器面板、管理员助手与计划任务启动链路
-- [ ] 用户空闲时补充最终窗口截图对照
+- [x] 日期标签移到格网下方
+- [x] 移除左侧危险等级标签
+- [x] 使用红、橙、蓝事件图标
+- [x] 删除四张统计卡片
+- [x] 保留时间列和事件格点击联动
+- [ ] 用户确认最终视觉状态
 
 final result: blocked
