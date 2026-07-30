@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace ScreenshotApp.SystemTools;
 
 internal enum SystemDiagnosticSeverity
@@ -91,6 +93,8 @@ internal sealed record SystemDiagnosticTimelineBucket(
 {
     public int TotalCount => CriticalCount + ErrorCount + WarningCount;
 }
+
+internal sealed record SystemDiagnosticRecommendationStep(int Number, string Text);
 
 internal sealed record SystemDiagnosticSnapshot(
     IReadOnlyList<SystemDiagnosticGroup> Groups,
@@ -208,6 +212,8 @@ internal sealed record SystemDiagnosticGroup(
     public string EventIdentityText => $"{ProviderName} · 事件 {EventId} · {LogName}";
     public string LastSeenText => $"最近发生 {LastSeen:yyyy-MM-dd HH:mm}";
     public string OccurrenceText => Count >= 3 ? $"频繁发生 · {Count:N0} 次" : $"{Count:N0} 次";
+    public string FrequencyValueText => $"{Count:N0} 次";
+    public string LatestOccurredAtText => LastSeen.ToString("yyyy-MM-dd HH:mm:ss");
     public string TimeRangeText => FirstSeen == LastSeen
         ? FirstSeen.ToString("yyyy-MM-dd HH:mm:ss")
         : $"{FirstSeen:yyyy-MM-dd HH:mm:ss} 至 {LastSeen:yyyy-MM-dd HH:mm:ss}";
@@ -216,6 +222,28 @@ internal sealed record SystemDiagnosticGroup(
         .Take(20)
         .Select(time => time.ToString("yyyy-MM-dd HH:mm:ss")));
     public string SafeMessage => string.IsNullOrWhiteSpace(Message) ? "Windows 未提供可格式化的事件描述，可在事件查看器中查看原始记录。" : Message;
+    public string FaultingModuleText => ExtractMessageField("错误模块名称", "故障模块名称", "Faulting module name") ?? "Windows 未提供";
+    public string ExceptionCodeText => ExtractMessageField("异常代码", "Exception code") ?? "Windows 未提供";
+    public IReadOnlyList<SystemDiagnosticRecommendationStep> RecommendationSteps => Recommendation
+        .Split(new[] { '；', '。', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Where(step => !string.IsNullOrWhiteSpace(step))
+        .Take(3)
+        .Select((step, index) => new SystemDiagnosticRecommendationStep(index + 1, step))
+        .ToArray();
+
+    public string CopyAdviceText => string.Join(Environment.NewLine, new[]
+    {
+        $"诊断：{DisplayTitle}",
+        $"级别：{SeverityText}",
+        $"事件：{EventIdentityText}",
+        $"发生次数：{Count:N0}",
+        $"最近发生：{LatestOccurredAtText}",
+        $"故障模块：{FaultingModuleText}",
+        $"异常代码：{ExceptionCodeText}",
+        string.Empty,
+        $"影响判断：{Explanation}",
+        $"建议处理：{Recommendation}"
+    });
 
     public string CopyText => string.Join(Environment.NewLine, new[]
     {
@@ -233,4 +261,25 @@ internal sealed record SystemDiagnosticGroup(
         "Windows 事件描述：",
         SafeMessage
     });
+
+    private string? ExtractMessageField(params string[] labels)
+    {
+        foreach (var label in labels)
+        {
+            var match = Regex.Match(
+                SafeMessage,
+                $@"(?im)(?:^|[，,])\s*{Regex.Escape(label)}\s*[:：]\s*([^，,\r\n]+)",
+                RegexOptions.CultureInvariant);
+            if (match.Success)
+            {
+                var value = match.Groups[1].Value.Trim();
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return value;
+                }
+            }
+        }
+
+        return null;
+    }
 }
