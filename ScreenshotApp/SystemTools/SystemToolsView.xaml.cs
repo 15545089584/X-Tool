@@ -4,6 +4,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -74,6 +75,8 @@ public partial class SystemToolsView : UserControl
         StorageVolumesItems.ItemsSource = _storageVolumes;
         PhysicalStorageItems.ItemsSource = _physicalStorage;
         DiagnosticResultsListBox.ItemsSource = _diagnosticGroups;
+        var diagnosticResultsView = CollectionViewSource.GetDefaultView(_diagnosticGroups);
+        diagnosticResultsView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(SystemDiagnosticGroup.SeverityDisplay)));
         DiagnosticReliabilityChart.CellSelected += DiagnosticReliabilityChart_CellSelected;
         StorageAnalysisView.BackRequested += StorageAnalysisView_BackRequested;
         StorageAnalysisView.FileWorkbenchRequested += StorageAnalysisView_FileWorkbenchRequested;

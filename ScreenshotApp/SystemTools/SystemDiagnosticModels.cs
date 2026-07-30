@@ -7,6 +7,47 @@ internal enum SystemDiagnosticSeverity
     Warning = 3
 }
 
+/// <summary>统一时间格、分组标题和事件标签的等级视觉语义。</summary>
+internal sealed record SystemDiagnosticSeverityDisplay(
+    string Title,
+    string Description,
+    string Color,
+    string TextColor,
+    string SoftBackground,
+    string Glyph)
+{
+    private static readonly SystemDiagnosticSeverityDisplay CriticalDisplay = new(
+        "关键事件",
+        "影响可靠性的停止工作、无响应或系统故障",
+        "#E56565",
+        "#C54848",
+        "#20E56565",
+        "\uE711");
+
+    private static readonly SystemDiagnosticSeverityDisplay ErrorDisplay = new(
+        "错误事件",
+        "需要进一步排查的系统或应用错误",
+        "#F08A62",
+        "#C65D36",
+        "#20F08A62",
+        "\uE783");
+
+    private static readonly SystemDiagnosticSeverityDisplay WarningDisplay = new(
+        "警告事件",
+        "可能影响稳定性的系统与应用警告",
+        "#3B9EFF",
+        "#247CC7",
+        "#203B9EFF",
+        "\uE7BA");
+
+    public static SystemDiagnosticSeverityDisplay For(SystemDiagnosticSeverity severity) => severity switch
+    {
+        SystemDiagnosticSeverity.Critical => CriticalDisplay,
+        SystemDiagnosticSeverity.Error => ErrorDisplay,
+        _ => WarningDisplay
+    };
+}
+
 internal enum SystemDiagnosticCategory
 {
     Shutdown,
@@ -122,12 +163,9 @@ internal sealed record SystemDiagnosticGroup(
         _ => "警告"
     };
 
-    public string SeverityColor => Severity switch
-    {
-        SystemDiagnosticSeverity.Critical => "#E56565",
-        SystemDiagnosticSeverity.Error => "#F08A62",
-        _ => "#E3A33E"
-    };
+    public SystemDiagnosticSeverityDisplay SeverityDisplay => SystemDiagnosticSeverityDisplay.For(Severity);
+    public string SeverityColor => SeverityDisplay.Color;
+    public string SeverityTextColor => SeverityDisplay.TextColor;
 
     public string CategoryText => Category switch
     {
