@@ -20,7 +20,11 @@ internal enum SystemDiagnosticCategory
     Other
 }
 
-internal sealed record SystemDiagnosticQuery(TimeSpan TimeRange, int MaximumEventsPerLog = 500, int MaximumTotalEvents = 1000);
+internal sealed record SystemDiagnosticQuery(
+    TimeSpan TimeRange,
+    int MaximumEventsPerSegment = 400,
+    int MaximumTotalEvents = 12000,
+    int MaximumReliabilityRecords = 10000);
 
 internal sealed record SystemDiagnosticProgress(string Stage, string Detail, int LogsCompleted, int TotalLogs, int EventsRead)
 {
@@ -67,8 +71,8 @@ internal sealed record SystemDiagnosticSnapshot(
         get
         {
             var main = Groups.Count == 0
-                ? $"已检查 {EventsRead:N0} 条事件，未发现符合当前范围的关键、错误或警告记录"
-                : $"从 {EventsRead:N0} 条事件中归纳出 {Groups.Count:N0} 组需要关注的记录";
+                ? $"已检查 {EventsRead:N0} 条可靠性与日志记录，未发现符合当前范围的异常"
+                : $"从 {EventsRead:N0} 条可靠性与日志记录中归纳出 {Groups.Count:N0} 组需要关注的问题";
             if (WasTruncated)
             {
                 main += "；日志较多，已达到本次读取上限";

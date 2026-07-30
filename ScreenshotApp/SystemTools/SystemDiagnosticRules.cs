@@ -57,8 +57,16 @@ internal static class SystemDiagnosticRules
         if (IsApplicationCrash(providerName, eventId))
         {
             var title = ProviderContains(providerName, "Hang") ? "应用程序曾无响应" : "应用程序发生崩溃";
-            return new(SystemDiagnosticCategory.Application, originalSeverity, title,
-                "Windows 记录了应用崩溃、无响应或运行时未处理异常。相同应用与故障模块会合并显示。",
+            var reliabilitySeverity =
+                (ProviderEquals(providerName, "Application Error") && eventId == 1000) ||
+                (ProviderEquals(providerName, "Application Hang") && eventId == 1002) ||
+                (ProviderEquals(providerName, "Windows Error Reporting") && eventId == 1001)
+                    ? SystemDiagnosticSeverity.Critical
+                    : originalSeverity;
+            return new(SystemDiagnosticCategory.Application, reliabilitySeverity, title,
+                reliabilitySeverity == SystemDiagnosticSeverity.Critical
+                    ? "Windows 记录了影响应用稳定性的崩溃或无响应。按照可靠性监视器口径，此类故障归为关键事件。"
+                    : "Windows 记录了运行时未处理异常；它作为崩溃诊断线索保留，但不会重复计入可靠性关键事件。",
                 "检查应用版本、插件和故障模块；频繁出现时可复制事件详情提供给应用开发者。");
         }
 

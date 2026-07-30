@@ -228,7 +228,7 @@ public partial class SystemToolsView : UserControl
         }
     }
 
-    /// <summary>按需读取最近的系统与应用事件；保持只读，并限制数量避免大日志拖慢界面。</summary>
+    /// <summary>按需读取可靠性记录，并用分段事件日志补充诊断细节；全过程只读。</summary>
     private async Task RefreshDiagnosticsAsync()
     {
         if (_diagnosticCancellation is not null)
@@ -239,8 +239,8 @@ public partial class SystemToolsView : UserControl
         var cancellation = new CancellationTokenSource();
         _diagnosticCancellation = cancellation;
         DiagnosticScanButtonText.Text = "取消诊断";
-        DiagnosticProgressText.Text = "正在准备 Windows 事件日志查询…";
-        DiagnosticProgressDetailText.Text = "只读取关键、错误和警告记录；可随时取消";
+        DiagnosticProgressText.Text = "正在准备 Windows 可靠性诊断…";
+        DiagnosticProgressDetailText.Text = "可靠性记录为主，System 与 Application 日志补充；可随时取消";
         var progress = new Progress<SystemDiagnosticProgress>(snapshot =>
         {
             if (!ReferenceEquals(cancellation, _diagnosticCancellation))
@@ -268,7 +268,7 @@ public partial class SystemToolsView : UserControl
             _selectedDiagnosticBucketIndex = -1;
             DiagnosticProgressText.Text = $"诊断完成 · {snapshot.CompletedAt:yyyy-MM-dd HH:mm:ss}";
             DiagnosticProgressDetailText.Text = snapshot.Failures.Count == 0
-                ? "已完成 System 与 Application 日志的只读扫描"
+                ? "已完成可靠性记录与 System、Application 日志的只读扫描"
                 : string.Join("；", snapshot.Failures.Select(failure => $"{failure.LogName}：{failure.Reason}").Take(2));
             ApplyDiagnosticFilters();
         }
