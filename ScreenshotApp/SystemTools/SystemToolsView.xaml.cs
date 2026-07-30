@@ -437,7 +437,7 @@ public partial class SystemToolsView : UserControl
         var selectedGroupKeys = filteredEvents.Select(item => item.GroupKey).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var filtered = _allDiagnosticGroups
             .Where(group => selectedGroupKeys.Contains(group.GroupKey))
-            .OrderBy(group => group.Severity)
+            .OrderBy(group => group.SeverityPriority)
             .ThenByDescending(group => group.Count)
             .ThenByDescending(group => group.LastSeen)
             .ToArray();

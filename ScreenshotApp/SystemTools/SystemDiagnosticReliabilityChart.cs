@@ -134,7 +134,8 @@ public sealed class SystemDiagnosticReliabilityChart : FrameworkElement
 
             var columnPen = column > 0 ? new Pen(PairDividerBrush, 1.1) : gridPen;
             drawingContext.DrawLine(columnPen, new Point(x, HeaderHeight), new Point(x, HeaderHeight + plotHeight));
-            DrawText(drawingContext, _buckets[column].Label, 9.2, LabelBrush, new Point(x, HeaderHeight + plotHeight + 15), columnWidth, TextAlignment.Center, pixelsPerDip, FontWeights.SemiBold);
+            var labelFontSize = columnWidth < 42 ? 7.6 : columnWidth < 64 ? 8.4 : 9.2;
+            DrawText(drawingContext, _buckets[column].Label, labelFontSize, LabelBrush, new Point(x, HeaderHeight + plotHeight + 15), columnWidth, TextAlignment.Center, pixelsPerDip, FontWeights.SemiBold);
         }
 
         drawingContext.DrawLine(gridPen, new Point(PlotLeft + plotWidth, HeaderHeight), new Point(PlotLeft + plotWidth, HeaderHeight + plotHeight));

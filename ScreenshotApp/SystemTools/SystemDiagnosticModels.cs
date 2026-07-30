@@ -103,6 +103,14 @@ internal sealed record SystemDiagnosticGroup(
     int Count,
     IReadOnlyList<DateTime> Occurrences)
 {
+    /// <summary>用于界面稳定地按关键、错误、警告排序，不依赖枚举的隐式数值。</summary>
+    public int SeverityPriority => Severity switch
+    {
+        SystemDiagnosticSeverity.Critical => 0,
+        SystemDiagnosticSeverity.Error => 1,
+        _ => 2
+    };
+
     public string SeverityText => Severity switch
     {
         SystemDiagnosticSeverity.Critical => "关键",

@@ -112,7 +112,7 @@ internal static class SystemDiagnosticService
         cancellationToken.ThrowIfCancellationRequested();
         var groups = accumulators.Values
             .Select(accumulator => accumulator.ToGroup())
-            .OrderBy(group => group.Severity)
+            .OrderBy(group => group.SeverityPriority)
             .ThenByDescending(group => group.Count)
             .ThenByDescending(group => group.LastSeen)
             .Take(300)
