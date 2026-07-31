@@ -301,6 +301,15 @@
                         <TextBlock VerticalAlignment="Center" Text="形状" />
                     </StackPanel>
                 </Button>
+                <Button x:Name="ColorPickerToolButton"
+                        Style="{StaticResource AnnotationToolButtonStyle}"
+                        Click="ColorPickerToolButton_Click"
+                        ToolTip="移动查看颜色，单击复制 HEX">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Margin="0,0,5,0" FontSize="14" Text="◉" />
+                        <TextBlock VerticalAlignment="Center" Text="取色" />
+                    </StackPanel>
+                </Button>
                 <Button x:Name="OcrToolButton"
                         Style="{StaticResource AnnotationToolButtonStyle}"
                         Click="OcrToolButton_Click"

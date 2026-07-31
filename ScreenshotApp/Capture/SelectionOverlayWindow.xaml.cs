@@ -328,6 +328,15 @@ public partial class SelectionOverlayWindow : Window
         ToggleToolPanel(ShapeOptionsPanel, ShapeToolButton);
     }
 
+    private void ColorPickerToolButton_Click(object sender, RoutedEventArgs e)
+    {
+        HideToolPanels();
+        SetActiveAnnotationTool(
+            _activeAnnotationTool == ScreenshotAnnotationTool.ColorPicker
+                ? ScreenshotAnnotationTool.None
+                : ScreenshotAnnotationTool.ColorPicker);
+    }
+
     private void ShapeOptionButton_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement { Tag: string shapeText } || !Enum.TryParse<AnnotationShape>(shapeText, out var shape))
@@ -1306,6 +1315,7 @@ public partial class SelectionOverlayWindow : Window
     {
         SetButtonSelected(PenToolButton, _activeAnnotationTool == ScreenshotAnnotationTool.Pen);
         SetButtonSelected(ShapeToolButton, _activeAnnotationTool == ScreenshotAnnotationTool.Shape);
+        SetButtonSelected(ColorPickerToolButton, _activeAnnotationTool == ScreenshotAnnotationTool.ColorPicker);
     }
 
     private ScreenColorSampler.ColorSample UpdateColorPicker(Point surfacePoint)
