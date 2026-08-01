@@ -342,16 +342,14 @@
                 </Grid.RowDefinitions>
 
                 <StackPanel>
-                    <Border Width="58" Height="58" HorizontalAlignment="Left"
-                            Background="{StaticResource GlassSurfaceBrush}" CornerRadius="16"
+                    <Border Width="72" Height="72" HorizontalAlignment="Left"
+                            Background="{StaticResource GlassSurfaceBrush}" CornerRadius="20"
                             BorderBrush="{StaticResource GlassBorderBrush}" BorderThickness="1">
                         <Border.Effect>
                             <DropShadowEffect BlurRadius="18" ShadowDepth="3" Direction="270" Opacity="0.12" Color="#53708D" />
                         </Border.Effect>
-                        <Grid>
-                            <Border Width="38" Height="38" Background="#E8F1FF" CornerRadius="12" />
-                            <TextBlock Style="{StaticResource IconTextStyle}" FontSize="25" Text="&#xE90F;" Foreground="#317CF5" />
-                        </Grid>
+                        <Image Width="58" Height="58" Stretch="Uniform" SnapsToDevicePixels="True"
+                               Source="/Assets/XTool.png" />
                     </Border>
                     <TextBlock Margin="2,12,0,0" FontSize="20" FontWeight="SemiBold" Text="X-Tool" />
                     <TextBlock Margin="2,4,0,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="桌面效率工具箱" />
