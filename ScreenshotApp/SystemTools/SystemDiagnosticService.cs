@@ -154,14 +154,15 @@ internal static class SystemDiagnosticService
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        var groups = accumulators.Values
+        var groupedResults = accumulators.Values
             .Select(accumulator => accumulator.ToGroup())
             .OrderBy(group => group.SeverityPriority)
             .ThenByDescending(group => group.Count)
             .ThenByDescending(group => group.LastSeen)
             .Take(300)
             .ToArray();
-        if (accumulators.Count > groups.Length)
+        var groups = SystemProgramIdentityResolver.Resolve(groupedResults, cancellationToken);
+        if (accumulators.Count > groups.Count)
         {
             wasTruncated = true;
         }

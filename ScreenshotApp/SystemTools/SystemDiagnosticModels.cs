@@ -152,6 +152,8 @@ internal sealed record SystemDiagnosticGroup(
     int Count,
     IReadOnlyList<DateTime> Occurrences)
 {
+    public SystemProgramIdentity? ProgramIdentity { get; init; }
+
     /// <summary>用于界面稳定地按关键、错误、警告排序，不依赖枚举的隐式数值。</summary>
     public int SeverityPriority => Severity switch
     {
@@ -208,8 +210,16 @@ internal sealed record SystemDiagnosticGroup(
         _ => "\uE7BA"
     };
 
-    public string DisplayTitle => string.IsNullOrWhiteSpace(Subject) ? Title : $"{Title} · {Subject}";
-    public string EventIdentityText => $"{ProviderName} · 事件 {EventId} · {LogName}";
+    private SystemProgramIdentity EffectiveProgramIdentity => ProgramIdentity ?? SystemProgramIdentity.FromSubject(Subject);
+    public string DisplayTitle => Category == SystemDiagnosticCategory.Application && EffectiveProgramIdentity.HasFriendlyName
+        ? $"{Title} · {EffectiveProgramIdentity.FriendlyName}"
+        : string.IsNullOrWhiteSpace(Subject) ? Title : $"{Title} · {Subject}";
+    public string EventIdentityText => Category == SystemDiagnosticCategory.Application && !string.IsNullOrWhiteSpace(EffectiveProgramIdentity.ExecutableName)
+        ? $"{EffectiveProgramIdentity.ExecutableName} · {EffectiveProgramIdentity.PublisherText} · {ProviderName} {EventId}"
+        : $"{ProviderName} · 事件 {EventId} · {LogName}";
+    public string ProgramIdentityToolTip => Category == SystemDiagnosticCategory.Application
+        ? EffectiveProgramIdentity.DetailText
+        : EventIdentityText;
     public string LastSeenText => $"最近发生 {LastSeen:yyyy-MM-dd HH:mm}";
     public string OccurrenceText => Count >= 3 ? $"频繁发生 · {Count:N0} 次" : $"{Count:N0} 次";
     public string FrequencyValueText => $"{Count:N0} 次";
@@ -255,6 +265,7 @@ internal sealed record SystemDiagnosticGroup(
     public string CopyText => string.Join(Environment.NewLine, new[]
     {
         $"诊断：{DisplayTitle}",
+        Category == SystemDiagnosticCategory.Application ? $"程序身份：{EffectiveProgramIdentity.DetailText}" : string.Empty,
         $"级别：{SeverityText}",
         $"分类：{CategoryText}",
         $"事件：{EventIdentityText}",
