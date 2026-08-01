@@ -58,6 +58,7 @@
   <ItemGroup>
     <Resource Include="Assets\XTool.ico" />
     <Resource Include="Assets\XTool.png" />
+    <Resource Include="Assets\XToolMark.png" />
   </ItemGroup>
 
   <ItemGroup>
