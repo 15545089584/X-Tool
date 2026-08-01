@@ -26,6 +26,7 @@ public sealed class ToolchainInstallation
     public string StateBackground => IsActive ? "#DCEBFF" : IsVerified ? "#DDF6EA" : "#EEF1F5";
     public string StateForeground => IsActive ? "#326DAF" : IsVerified ? "#367A59" : "#66717E";
     public string LocationText => string.IsNullOrWhiteSpace(InstallationPath) ? ExecutablePath : InstallationPath;
+    public string ConfigurationDisplayText => $"{Version}  ·  {LocationText}";
 }
 
 public sealed class ToolchainSummary
@@ -48,9 +49,22 @@ public sealed class ToolchainSummary
         ?? "未在常用位置发现";
     public bool HasActiveCommand => Installations.Any(item => item.IsActive);
     public bool HasConflict => Installations.Count(item => item.IsActive) > 1;
+    public bool CanConfigureEnvironment => Installations.Any(item => item.IsVerified);
+    public bool CanConfigureFromStatus => InstallationCount > 0 && !HasActiveCommand && CanConfigureEnvironment;
     public string StatusText => InstallationCount == 0 ? "未发现" : HasConflict ? "存在冲突" : !HasActiveCommand ? "未加入 PATH" : Installations.Any(item => item.IsVerified) ? "正常" : "待验证";
     public string StatusBackground => InstallationCount == 0 ? "#EEF1F5" : HasConflict || !HasActiveCommand ? "#FFF0D9" : Installations.Any(item => item.IsVerified) ? "#DDF6EA" : "#E8F0FF";
     public string StatusForeground => InstallationCount == 0 ? "#6E7782" : HasConflict || !HasActiveCommand ? "#A56B13" : Installations.Any(item => item.IsVerified) ? "#367A59" : "#426FA8";
+}
+
+public sealed class ToolchainEnvironmentPlan
+{
+    public ToolchainSummary Toolchain { get; init; } = new();
+    public ToolchainInstallation Installation { get; init; } = new();
+    public IReadOnlyList<string> PathEntries { get; init; } = Array.Empty<string>();
+    public IReadOnlyDictionary<string, string> Variables { get; init; } = new Dictionary<string, string>();
+    public IReadOnlyList<string> Warnings { get; init; } = Array.Empty<string>();
+    public string? BlockingReason { get; init; }
+    public bool CanApply => string.IsNullOrWhiteSpace(BlockingReason) && PathEntries.Count + Variables.Count > 0;
 }
 
 public sealed class DeveloperDiagnosticIssue

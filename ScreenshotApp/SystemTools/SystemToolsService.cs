@@ -665,6 +665,40 @@ public static class SystemToolsService
             out error);
     }
 
+    /// <summary>异步应用一组开发环境配置；系统范围仅为本次写入请求管理员权限。</summary>
+    public static async Task<EnvironmentConfigurationResult> ApplyEnvironmentConfigurationAsync(
+        EnvironmentVariableTarget target,
+        IReadOnlyList<string> pathEntries,
+        IReadOnlyDictionary<string, string> variables,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedEntries = pathEntries
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => path.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var normalizedVariables = variables
+            .Where(pair => !string.IsNullOrWhiteSpace(pair.Key))
+            .ToDictionary(pair => pair.Key.Trim(), pair => pair.Value ?? string.Empty, StringComparer.OrdinalIgnoreCase);
+
+        if (target == EnvironmentVariableTarget.Machine && !IsRunningAsAdministrator())
+        {
+            return await RunElevatedSystemActionAsync(
+                new ElevatedSystemActionRequest(
+                    "ApplyEnvironmentConfiguration",
+                    PathEntries: normalizedEntries,
+                    Variables: normalizedVariables),
+                "管理员保存开发环境配置失败",
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        return await Task.Run(() =>
+        {
+            var succeeded = TryApplyEnvironmentConfiguration(target, normalizedEntries, normalizedVariables, out var changed, out var error);
+            return new EnvironmentConfigurationResult(succeeded, changed, error);
+        }, cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>按需请求管理员权限修改网卡启用状态。</summary>
     public static bool TrySetNetworkAdapterStateWithElevation(string adapterName, bool enabled, out string? error)
         => RunElevatedSystemAction(
@@ -740,9 +774,16 @@ public static class SystemToolsService
             }
 
             string? actionError = null;
+            var changed = false;
             var succeeded = request.Action switch
             {
                 "SetMachineEnvironment" => TrySaveEnvironmentVariable(request.Name ?? string.Empty, request.Value ?? string.Empty, EnvironmentVariableTarget.Machine, out actionError),
+                "ApplyEnvironmentConfiguration" => TryApplyEnvironmentConfiguration(
+                    EnvironmentVariableTarget.Machine,
+                    request.PathEntries ?? Array.Empty<string>(),
+                    request.Variables ?? new Dictionary<string, string>(),
+                    out changed,
+                    out actionError),
                 "EndProcesses" => TryEndProcesses(request.ProcessIds ?? Array.Empty<int>(), out actionError),
                 "ControlService" => TryControlService(request.Name ?? string.Empty, request.Start, out actionError),
                 "SetNetworkAdapterState" => TrySetNetworkAdapterState(request.Name ?? string.Empty, request.Start, out actionError),
@@ -764,10 +805,11 @@ public static class SystemToolsService
                 "ResetWinHttpProxy" => TryRunSystemCommand("netsh.exe", "winhttp reset proxy", out actionError),
                 _ => false
             };
+            if (!string.Equals(request.Action, "ApplyEnvironmentConfiguration", StringComparison.Ordinal)) changed = succeeded;
             if (!succeeded && string.IsNullOrWhiteSpace(actionError)) actionError = "不支持的管理员操作";
             if (!string.IsNullOrWhiteSpace(request.ResultPath))
             {
-                File.WriteAllText(request.ResultPath, JsonSerializer.Serialize(new ElevatedSystemActionResult(succeeded, actionError)), new UTF8Encoding(false));
+                File.WriteAllText(request.ResultPath, JsonSerializer.Serialize(new ElevatedSystemActionResult(succeeded, actionError, changed)), new UTF8Encoding(false));
             }
             return succeeded ? 0 : 5;
         }
@@ -776,7 +818,7 @@ public static class SystemToolsService
             try
             {
                 var request = JsonSerializer.Deserialize<ElevatedSystemActionRequest>(File.ReadAllText(requestPath, Encoding.UTF8));
-                if (!string.IsNullOrWhiteSpace(request?.ResultPath)) File.WriteAllText(request.ResultPath, JsonSerializer.Serialize(new ElevatedSystemActionResult(false, exception.Message)), new UTF8Encoding(false));
+                if (!string.IsNullOrWhiteSpace(request?.ResultPath)) File.WriteAllText(request.ResultPath, JsonSerializer.Serialize(new ElevatedSystemActionResult(false, exception.Message, false)), new UTF8Encoding(false));
             }
             catch { }
             return 5;
@@ -856,6 +898,201 @@ public static class SystemToolsService
         }
     }
 
+    private static async Task<EnvironmentConfigurationResult> RunElevatedSystemActionAsync(
+        ElevatedSystemActionRequest request,
+        string failureMessage,
+        CancellationToken cancellationToken)
+    {
+        var requestPath = Path.Combine(Path.GetTempPath(), $"xtool-system-action-{Guid.NewGuid():N}.json");
+        var resultPath = Path.ChangeExtension(requestPath, ".result.json");
+        try
+        {
+            request = request with { ResultPath = resultPath };
+            await File.WriteAllTextAsync(requestPath, JsonSerializer.Serialize(request), new UTF8Encoding(false), cancellationToken).ConfigureAwait(false);
+            var executablePath = Environment.ProcessPath;
+            if (string.IsNullOrWhiteSpace(executablePath) || !File.Exists(executablePath))
+            {
+                return new EnvironmentConfigurationResult(false, false, "未能找到 X-Tool 可执行文件，无法请求管理员授权");
+            }
+
+            using var process = Process.Start(new ProcessStartInfo(executablePath, $"--apply-elevated-system-action \"{requestPath}\"")
+            {
+                UseShellExecute = true,
+                Verb = "runas",
+                WindowStyle = ProcessWindowStyle.Hidden
+            });
+            if (process is null)
+            {
+                return new EnvironmentConfigurationResult(false, false, "无法启动管理员授权进程");
+            }
+
+            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+            ElevatedSystemActionResult? actionResult = null;
+            if (File.Exists(resultPath))
+            {
+                try
+                {
+                    actionResult = JsonSerializer.Deserialize<ElevatedSystemActionResult>(
+                        await File.ReadAllTextAsync(resultPath, Encoding.UTF8, cancellationToken).ConfigureAwait(false));
+                }
+                catch
+                {
+                    // 结果文件损坏时仍使用子进程退出码给出失败信息。
+                }
+            }
+
+            if (process.ExitCode == 0 && actionResult?.Succeeded != false)
+            {
+                return new EnvironmentConfigurationResult(true, actionResult?.Changed ?? true, null);
+            }
+
+            return new EnvironmentConfigurationResult(false, false,
+                string.IsNullOrWhiteSpace(actionResult?.Error) ? failureMessage : actionResult.Error);
+        }
+        catch (Win32Exception exception) when (exception.NativeErrorCode == 1223)
+        {
+            return new EnvironmentConfigurationResult(false, false, "已取消管理员授权，操作未执行");
+        }
+        catch (OperationCanceledException)
+        {
+            return new EnvironmentConfigurationResult(false, false, "操作已取消");
+        }
+        catch (Exception exception)
+        {
+            return new EnvironmentConfigurationResult(false, false, exception.Message);
+        }
+        finally
+        {
+            try { File.Delete(requestPath); }
+            catch { /* 管理员子进程可能已经清理临时文件。 */ }
+            try { File.Delete(resultPath); }
+            catch { /* 结果文件仅用于父子进程传递错误信息。 */ }
+        }
+    }
+
+    private static bool TryApplyEnvironmentConfiguration(
+        EnvironmentVariableTarget target,
+        IReadOnlyList<string> pathEntries,
+        IReadOnlyDictionary<string, string> variables,
+        out bool changed,
+        out string? error)
+    {
+        changed = false;
+        var acquired = false;
+        using var mutex = new Mutex(false, @"Local\XTool.EnvironmentConfiguration.v1");
+        try
+        {
+            try { acquired = mutex.WaitOne(TimeSpan.FromSeconds(10)); }
+            catch (AbandonedMutexException) { acquired = true; }
+            if (!acquired)
+            {
+                error = "另一个环境变量操作仍在进行，请稍后重试";
+                return false;
+            }
+
+            foreach (var entry in pathEntries)
+            {
+                if (entry.Contains(';') || !Directory.Exists(Environment.ExpandEnvironmentVariables(entry.Trim().Trim('"'))))
+                {
+                    error = $"准备加入 PATH 的目录无效：{entry}";
+                    return false;
+                }
+            }
+
+            foreach (var pair in variables)
+            {
+                if (string.IsNullOrWhiteSpace(pair.Key) || pair.Key.IndexOfAny(new[] { '=', '\0' }) >= 0)
+                {
+                    error = $"环境变量名称无效：{pair.Key}";
+                    return false;
+                }
+            }
+
+            var previousPath = Environment.GetEnvironmentVariable("Path", target) ?? string.Empty;
+            var previousVariables = variables.Keys.ToDictionary(
+                name => name,
+                name => Environment.GetEnvironmentVariable(name, target),
+                StringComparer.OrdinalIgnoreCase);
+            var existingEntries = previousPath.Split(';', StringSplitOptions.RemoveEmptyEntries).Select(item => item.Trim()).ToList();
+            var normalizedExisting = existingEntries.Select(NormalizeEnvironmentPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var otherTarget = target == EnvironmentVariableTarget.User
+                ? EnvironmentVariableTarget.Machine
+                : EnvironmentVariableTarget.User;
+            foreach (var otherEntry in (Environment.GetEnvironmentVariable("Path", otherTarget) ?? string.Empty)
+                         .Split(';', StringSplitOptions.RemoveEmptyEntries))
+            {
+                normalizedExisting.Add(NormalizeEnvironmentPath(otherEntry));
+            }
+            var additions = pathEntries.Where(entry => normalizedExisting.Add(NormalizeEnvironmentPath(entry))).ToList();
+            var nextPath = string.Join(";", existingEntries.Concat(additions));
+
+            try
+            {
+                if (additions.Count > 0)
+                {
+                    Environment.SetEnvironmentVariable("Path", nextPath, target);
+                    changed = true;
+                }
+
+                foreach (var pair in variables)
+                {
+                    var current = Environment.GetEnvironmentVariable(pair.Key, target) ?? string.Empty;
+                    if (string.Equals(current, pair.Value, StringComparison.Ordinal)) continue;
+                    Environment.SetEnvironmentVariable(pair.Key, string.IsNullOrWhiteSpace(pair.Value) ? null : pair.Value, target);
+                    changed = true;
+                }
+
+                if (changed) BroadcastEnvironmentChanged();
+                error = null;
+                return true;
+            }
+            catch
+            {
+                try
+                {
+                    Environment.SetEnvironmentVariable("Path", previousPath, target);
+                    foreach (var pair in previousVariables)
+                    {
+                        Environment.SetEnvironmentVariable(pair.Key, pair.Value, target);
+                    }
+                    BroadcastEnvironmentChanged();
+                }
+                catch
+                {
+                    // 回滚失败时保留原始异常，由调用方提示用户检查环境变量页面。
+                }
+                throw;
+            }
+        }
+        catch (UnauthorizedAccessException)
+        {
+            error = "权限不足：系统环境变量需要管理员权限";
+            return false;
+        }
+        catch (Exception exception)
+        {
+            error = exception.Message;
+            return false;
+        }
+        finally
+        {
+            if (acquired) mutex.ReleaseMutex();
+        }
+    }
+
+    private static string NormalizeEnvironmentPath(string path)
+    {
+        try
+        {
+            return Path.GetFullPath(Environment.ExpandEnvironmentVariables(path.Trim().Trim('"')))
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+        catch
+        {
+            return path.Trim().Trim('"').TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+    }
+
     private static bool RequiresElevation(string? error)
     {
         return !string.IsNullOrWhiteSpace(error) &&
@@ -922,8 +1159,17 @@ public static class SystemToolsService
 
     private static string EscapeCommandValue(string value) => value.Replace("\"", string.Empty).Trim();
 
-    private sealed record ElevatedSystemActionRequest(string Action, string? Name = null, string? Value = null, string? ExtraValue = null, int[]? ProcessIds = null, bool Start = false, string? ResultPath = null);
-    private sealed record ElevatedSystemActionResult(bool Succeeded, string? Error);
+    private sealed record ElevatedSystemActionRequest(
+        string Action,
+        string? Name = null,
+        string? Value = null,
+        string? ExtraValue = null,
+        int[]? ProcessIds = null,
+        bool Start = false,
+        string? ResultPath = null,
+        string[]? PathEntries = null,
+        Dictionary<string, string>? Variables = null);
+    private sealed record ElevatedSystemActionResult(bool Succeeded, string? Error, bool Changed = false);
 
     private static string RunCommand(string fileName, string arguments)
         => RunCommandWithExitCode(fileName, arguments).Output;
@@ -1108,6 +1354,8 @@ public sealed record SystemRelationshipEntry(ProcessEntry Process, IReadOnlyList
 }
 
 public sealed record EnvironmentVariableEntry(string Name, string Value, EnvironmentVariableTarget Target);
+
+public sealed record EnvironmentConfigurationResult(bool Succeeded, bool Changed, string? Error);
 
 /// <summary>系统概览的只读快照，界面只渲染已采集数据。</summary>
 public sealed record SystemOverview(IReadOnlyList<SystemInfoItem> Items, DateTime CapturedAt);

@@ -1184,7 +1184,7 @@ public partial class SystemToolsView : UserControl
         PathValueEditor.Visibility = Visibility.Collapsed;
     }
 
-    private void SaveEnvironmentVariable_Click(object sender, RoutedEventArgs e)
+    private async void SaveEnvironmentVariable_Click(object sender, RoutedEventArgs e)
     {
         var name = EnvironmentNameTextBox.Text;
         var value = IsPathEditorActive ? string.Join(";", _pathEntries.Select(item => item.Value.Trim()).Where(item => !string.IsNullOrWhiteSpace(item))) : EnvironmentValueTextBox.Text;
@@ -1202,9 +1202,23 @@ public partial class SystemToolsView : UserControl
             }
         }
 
-        var saved = target == EnvironmentVariableTarget.Machine
-            ? SystemToolsService.TrySaveMachineEnvironmentVariableWithElevation(name, value, out var error)
-            : SystemToolsService.TrySaveEnvironmentVariable(name, value, target, out error);
+        var saveButton = sender as Button;
+        var saveButtonText = saveButton?.Content as TextBlock;
+        if (saveButton is not null) saveButton.IsEnabled = false;
+        if (saveButtonText is not null) saveButtonText.Text = "保存中…";
+        EnvironmentConfigurationResult result;
+        try
+        {
+            var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { [name] = value };
+            result = await SystemToolsService.ApplyEnvironmentConfigurationAsync(target, Array.Empty<string>(), variables);
+        }
+        finally
+        {
+            if (saveButton is not null) saveButton.IsEnabled = true;
+            if (saveButtonText is not null) saveButtonText.Text = "保存变量";
+        }
+        var saved = result.Succeeded;
+        var error = result.Error;
         if (!saved)
         {
             MessageBox.Show(error, "保存环境变量失败", MessageBoxButton.OK, MessageBoxImage.Warning);
