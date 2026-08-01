@@ -82,6 +82,108 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <Style x:Key="DeveloperGlassComboBox" TargetType="ComboBox">
+            <Setter Property="Height" Value="40" />
+            <Setter Property="Background" Value="#B8FFFFFF" />
+            <Setter Property="BorderBrush" Value="#A9CEE8F8" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="#405F7C" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="ItemContainerStyle">
+                <Setter.Value>
+                    <Style TargetType="ComboBoxItem">
+                        <Setter Property="Padding" Value="12,9" />
+                        <Setter Property="Foreground" Value="#405F7C" />
+                        <Setter Property="Background" Value="Transparent" />
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ComboBoxItem">
+                                    <Border x:Name="ItemRoot" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}" CornerRadius="8">
+                                        <ContentPresenter />
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ItemRoot" Property="Background" Value="#DCEBFF" /></Trigger>
+                                        <Trigger Property="IsSelected" Value="True"><Setter TargetName="ItemRoot" Property="Background" Value="#C9DEFF" /></Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <ToggleButton x:Name="ToggleButton" Background="Transparent" BorderThickness="0" ClickMode="Press"
+                                          IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border x:Name="ComboRoot" Background="{Binding Background, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                                                BorderBrush="{Binding BorderBrush, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                                                BorderThickness="{Binding BorderThickness, RelativeSource={RelativeSource AncestorType=ComboBox}}" CornerRadius="10">
+                                            <Grid>
+                                                <ContentPresenter Margin="12,0,34,0" VerticalAlignment="Center"
+                                                                  Content="{Binding SelectionBoxItem, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                                                                  ContentTemplate="{Binding SelectionBoxItemTemplate, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                                                                  ContentTemplateSelector="{Binding ItemTemplateSelector, RelativeSource={RelativeSource AncestorType=ComboBox}}" />
+                                                <TextBlock Margin="0,0,12,0" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                           FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#6285A8" Text="&#xE70D;" />
+                                            </Grid>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ComboRoot" Property="Background" Value="#E4F1FFFF" /></Trigger>
+                                            <Trigger Property="IsChecked" Value="True"><Setter TargetName="ComboRoot" Property="Background" Value="#DCEBFF" /><Setter TargetName="ComboRoot" Property="BorderBrush" Value="#609BFE" /></Trigger>
+                                            <Trigger Property="IsEnabled" Value="False"><Setter TargetName="ComboRoot" Property="Opacity" Value="0.58" /></Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                            <Popup x:Name="PART_Popup" AllowsTransparency="True" Focusable="False" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" PopupAnimation="Fade">
+                                <Border Width="{Binding ActualWidth, ElementName=ToggleButton}" Margin="0,5,0,0" Padding="5"
+                                        Background="#F2FAFFFF" BorderBrush="#B4D2E9FA" BorderThickness="1" CornerRadius="10">
+                                    <Border.Effect><DropShadowEffect BlurRadius="16" ShadowDepth="3" Direction="270" Opacity="0.16" Color="#456886" /></Border.Effect>
+                                    <ScrollViewer MaxHeight="220" CanContentScroll="True"><StackPanel IsItemsHost="True" /></ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="DeveloperGlassScrollBar" TargetType="ScrollBar">
+            <Setter Property="Width" Value="9" />
+            <Setter Property="Margin" Value="3,7,3,7" />
+            <Setter Property="Background" Value="#38D3E5F5" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="5" Padding="2">
+                            <Track x:Name="PART_Track" IsDirectionReversed="True">
+                                <Track.DecreaseRepeatButton><RepeatButton Command="ScrollBar.PageUpCommand" Background="Transparent" BorderThickness="0" /></Track.DecreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb Background="#89A9C7E5" Cursor="Hand">
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Border x:Name="ThumbRoot" Background="{TemplateBinding Background}" CornerRadius="4" />
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ThumbRoot" Property="Background" Value="#C14D7CFE" /></Trigger>
+                                                    <Trigger Property="IsDragging" Value="True"><Setter TargetName="ThumbRoot" Property="Background" Value="#E54D7CFE" /></Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Track.Thumb>
+                                <Track.IncreaseRepeatButton><RepeatButton Command="ScrollBar.PageDownCommand" Background="Transparent" BorderThickness="0" /></Track.IncreaseRepeatButton>
+                            </Track>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="ScrollBar" BasedOn="{StaticResource DeveloperGlassScrollBar}" />
     </UserControl.Resources>
 
     <Grid Margin="38,30,38,30">
@@ -251,9 +353,11 @@
             </Grid>
         </Grid>
 
-        <Grid x:Name="EnvironmentConfigurationOverlay" Grid.RowSpan="5" Panel.ZIndex="30" Background="#660F2235" Visibility="Collapsed">
+        <Grid x:Name="EnvironmentConfigurationOverlay" Grid.RowSpan="5" Margin="-38,-30,-38,-30" Panel.ZIndex="30" Visibility="Collapsed">
+            <Border Background="#520F2235" CornerRadius="22" />
             <Border Width="600" MaxHeight="650" Padding="26" HorizontalAlignment="Center" VerticalAlignment="Center"
                     Background="#F5F9FC" BorderBrush="#D7E6F2" BorderThickness="1" CornerRadius="18">
+                <Border.Effect><DropShadowEffect BlurRadius="30" ShadowDepth="8" Direction="270" Opacity="0.28" Color="#35516A" /></Border.Effect>
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" /><RowDefinition Height="16" /><RowDefinition Height="Auto" />
@@ -272,12 +376,18 @@
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="14" /><ColumnDefinition Width="190" /></Grid.ColumnDefinitions>
                         <StackPanel>
                             <TextBlock FontSize="11" Foreground="#6683A0" Text="目标安装" />
-                            <ComboBox x:Name="ConfigurationInstallationComboBox" Margin="0,6,0,0" Height="40" DisplayMemberPath="ConfigurationDisplayText"
-                                      SelectionChanged="ConfigurationSelectionChanged" />
+                            <ComboBox x:Name="ConfigurationInstallationComboBox" Margin="0,6,0,0" Style="{StaticResource DeveloperGlassComboBox}"
+                                      SelectionChanged="ConfigurationSelectionChanged">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Foreground="#405F7C" Text="{Binding ConfigurationDisplayText}" TextTrimming="CharacterEllipsis" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
                         </StackPanel>
                         <StackPanel Grid.Column="2">
                             <TextBlock FontSize="11" Foreground="#6683A0" Text="作用范围" />
-                            <ComboBox x:Name="ConfigurationScopeComboBox" Margin="0,6,0,0" Height="40" SelectionChanged="ConfigurationScopeChanged">
+                            <ComboBox x:Name="ConfigurationScopeComboBox" Margin="0,6,0,0" Style="{StaticResource DeveloperGlassComboBox}" SelectionChanged="ConfigurationScopeChanged">
                                 <ComboBoxItem Tag="Machine" IsSelected="True">系统变量（默认，需要 UAC）</ComboBoxItem>
                                 <ComboBoxItem Tag="User">当前用户</ComboBoxItem>
                             </ComboBox>
