@@ -592,9 +592,9 @@ public partial class SystemToolsView : UserControl
 
         try
         {
-            Clipboard.SetText(selected.CopyAdviceText);
-            DiagnosticProgressText.Text = "处理建议已复制";
-            DiagnosticProgressDetailText.Text = "已省略原始事件中的长路径、标识符和空字段";
+            Clipboard.SetText(selected.CopyText);
+            DiagnosticProgressText.Text = "诊断详情已复制";
+            DiagnosticProgressDetailText.Text = "已包含事件摘要、判断信息与 Windows 事件描述";
         }
         catch (Exception exception)
         {
