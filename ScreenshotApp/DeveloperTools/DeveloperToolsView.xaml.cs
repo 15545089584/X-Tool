@@ -168,6 +168,11 @@ public partial class DeveloperToolsView : UserControl
             foreach (var installation in toolchain.Installations)
             {
                 report.AppendLine($"- {installation.Version} | {installation.StateText} | {installation.ExecutablePath}");
+                if (!string.Equals(Path.GetDirectoryName(installation.ExecutablePath), installation.InstallationPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    report.AppendLine($"  安装位置：{installation.InstallationPath}");
+                }
+                report.AppendLine($"  依据：{installation.Evidence}");
             }
             report.AppendLine();
         }

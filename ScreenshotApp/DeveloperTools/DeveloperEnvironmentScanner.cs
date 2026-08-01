@@ -1,6 +1,9 @@
 using Microsoft.Win32;
+using Microsoft.Win32.SafeHandles;
 using System.Collections.Concurrent;
 using System.IO;
+using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace ScreenshotApp.DeveloperTools;
@@ -9,7 +12,7 @@ public sealed class DeveloperEnvironmentScanner
 {
     private static readonly ToolDefinition[] Definitions =
     {
-        new("java", "Java", "JDK、JAVA_HOME 与命令解析", "\uE943", "#FFF0D9", "#D88B24", new[] { "java.exe" }, new[] { "-version" }),
+        new("java", "Java", "JDK、JAVA_HOME 与命令解析", "\uE943", "#FFF0D9", "#D88B24", new[] { "java.exe" }, new[] { "-XshowSettings:properties", "-version" }),
         new("python", "Python", "解释器、启动别名与 pip 一致性", "\uE73C", "#E6F0FF", "#347ED8", new[] { "python.exe", "python3.exe" }, new[] { "--version" }),
         new("node", "Node.js", "Node、npm 与版本管理器入口", "\uE74C", "#E5F6E9", "#3C9760", new[] { "node.exe" }, new[] { "--version" }),
         new("dotnet", ".NET SDK", "并行安装的 SDK 与默认 dotnet", "\uE756", "#F0EAFF", "#7759B5", new[] { "dotnet.exe" }, new[] { "--list-sdks" }),
@@ -24,7 +27,7 @@ public sealed class DeveloperEnvironmentScanner
         IProgress<DeveloperScanProgress>? progress,
         CancellationToken cancellationToken)
     {
-        var processPathEntries = ReadPathEntries(Environment.GetEnvironmentVariable("PATH"));
+        var effectivePathEntries = ReadEffectivePersistentPathEntries();
         var results = new ConcurrentDictionary<string, IReadOnlyList<ToolchainInstallation>>(StringComparer.OrdinalIgnoreCase);
         var completed = 0;
         using var gate = new SemaphoreSlim(3);
@@ -35,7 +38,7 @@ public sealed class DeveloperEnvironmentScanner
             try
             {
                 progress?.Report(new DeveloperScanProgress($"正在扫描 {definition.DisplayName}", Volatile.Read(ref completed), Definitions.Length));
-                results[definition.Id] = await DiscoverToolAsync(definition, processPathEntries, cancellationToken).ConfigureAwait(false);
+                results[definition.Id] = await DiscoverToolAsync(definition, effectivePathEntries, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -80,7 +83,7 @@ public sealed class DeveloperEnvironmentScanner
             snapshot.Toolchains.Add(summary);
         }
 
-        foreach (var issue in BuildDiagnostics(snapshot, processPathEntries))
+        foreach (var issue in BuildDiagnostics(snapshot, effectivePathEntries))
         {
             snapshot.Issues.Add(issue);
         }
@@ -114,8 +117,14 @@ public sealed class DeveloperEnvironmentScanner
             }
         }
 
+        var canonicalCandidates = candidates.Values
+            .Where(candidate => definition.Id != "python" || candidate.IsActive || !IsPythonVirtualEnvironment(candidate.CanonicalExecutablePath))
+            .Where(candidate => !IsPrivateHostRuntime(candidate.ExecutablePath))
+            .GroupBy(candidate => candidate.CanonicalExecutablePath, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.OrderByDescending(item => item.IsActive).ThenBy(item => item.ExecutablePath.Length).First());
+
         var installations = new List<ToolchainInstallation>();
-        foreach (var candidate in candidates.Values
+        foreach (var candidate in canonicalCandidates
                      .OrderByDescending(item => item.IsActive)
                      .ThenBy(item => item.ExecutablePath, StringComparer.OrdinalIgnoreCase)
                      .Take(24))
@@ -138,7 +147,7 @@ public sealed class DeveloperEnvironmentScanner
         ToolCandidate candidate,
         CancellationToken cancellationToken)
     {
-        var installationPath = GetInstallationRoot(definition.Id, candidate.ExecutablePath);
+        var installationPath = GetInstallationRoot(definition.Id, candidate.CanonicalExecutablePath);
         var architecture = GuessArchitecture(candidate.ExecutablePath);
         var version = TryReadVersionFromFiles(definition.Id, installationPath);
         var evidence = string.IsNullOrWhiteSpace(version) ? "已发现命令路径，尚未执行版本验证。" : "根据安装目录中的版本文件识别。";
@@ -157,6 +166,15 @@ public sealed class DeveloperEnvironmentScanner
                         version = parsed;
                         verified = true;
                         evidence = FirstMeaningfulLine(result.CombinedOutput);
+                        if (definition.Id == "java")
+                        {
+                            var runtimeHome = ParseJavaHome(result.CombinedOutput);
+                            if (!string.IsNullOrWhiteSpace(runtimeHome))
+                            {
+                                installationPath = NormalizeJavaInstallationRoot(runtimeHome);
+                                evidence = $"java.home = {runtimeHome}";
+                            }
+                        }
                     }
                     else
                     {
@@ -203,14 +221,19 @@ public sealed class DeveloperEnvironmentScanner
     {
         try
         {
-            var result = await _commandRunner.RunAsync(candidate.ExecutablePath, new[] { "--list-sdks" }, cancellationToken).ConfigureAwait(false);
-            if (result.TimedOut || result.ExitCode != 0)
+            var activeResult = await _commandRunner.RunAsync(candidate.ExecutablePath, new[] { "--version" }, cancellationToken).ConfigureAwait(false);
+            var listResult = await _commandRunner.RunAsync(candidate.ExecutablePath, new[] { "--list-sdks" }, cancellationToken).ConfigureAwait(false);
+            if (listResult.TimedOut || listResult.ExitCode != 0)
             {
                 return Array.Empty<ToolchainInstallation>();
             }
 
+            var activeVersion = activeResult.TimedOut || activeResult.ExitCode != 0
+                ? string.Empty
+                : FirstMeaningfulLine(activeResult.StandardOutput);
+
             var installations = new List<ToolchainInstallation>();
-            foreach (var line in SplitLines(result.StandardOutput))
+            foreach (var line in SplitLines(listResult.StandardOutput))
             {
                 var match = Regex.Match(line, "^(?<version>\\S+)\\s+\\[(?<path>.+)\\]$");
                 if (!match.Success)
@@ -229,7 +252,7 @@ public sealed class DeveloperEnvironmentScanner
                     Source = candidate.Source,
                     Architecture = GuessArchitecture(candidate.ExecutablePath),
                     Evidence = line.Trim(),
-                    IsActive = candidate.IsActive && installations.Count == 0,
+                    IsActive = candidate.IsActive && string.Equals(match.Groups["version"].Value.Trim(), activeVersion, StringComparison.OrdinalIgnoreCase),
                     IsVerified = true
                 });
             }
@@ -515,7 +538,7 @@ public sealed class DeveloperEnvironmentScanner
             }
             else
             {
-                candidates[path] = new ToolCandidate(path, source, isActive, canExecute);
+                candidates[path] = new ToolCandidate(path, ResolveFinalPath(path), source, isActive, canExecute);
             }
         }
         catch
@@ -545,7 +568,7 @@ public sealed class DeveloperEnvironmentScanner
                     Evidence = string.Join(Environment.NewLine, activeCandidates.Select(item => item.ExecutablePath))
                 });
             }
-            else if (toolchain.Installations.Count > 1)
+            else if (toolchain.Installations.Count > 1 && toolchain.Id != "dotnet")
             {
                 issues.Add(new DeveloperDiagnosticIssue
                 {
@@ -555,10 +578,21 @@ public sealed class DeveloperEnvironmentScanner
                     Evidence = string.Join(Environment.NewLine, toolchain.Installations.Select(item => $"{item.Version}  {item.ExecutablePath}"))
                 });
             }
+            else if (toolchain.Id == "dotnet" && toolchain.Installations.Count > 1)
+            {
+                issues.Add(new DeveloperDiagnosticIssue
+                {
+                    Severity = DeveloperIssueSeverity.Info,
+                    Title = ".NET SDK 采用并行安装",
+                    Description = "多个 SDK 共用 dotnet 主机；当前目录的实际版本由 global.json 与 SDK 回退规则决定，不是由 PATH 中的 SDK 顺序决定。",
+                    Evidence = string.Join(Environment.NewLine, toolchain.Installations.Select(item => $"{item.StateText}  {item.Version}  {item.InstallationPath}"))
+                });
+            }
         }
 
         AddJavaHomeIssue(snapshot, issues);
         AddPythonPipIssue(snapshot, processPathEntries, issues);
+        AddNodeDirectoryVersionIssue(snapshot, issues);
         return issues;
     }
 
@@ -644,6 +678,30 @@ public sealed class DeveloperEnvironmentScanner
         }
     }
 
+    private static void AddNodeDirectoryVersionIssue(DeveloperEnvironmentSnapshot snapshot, ICollection<DeveloperDiagnosticIssue> issues)
+    {
+        var node = snapshot.Toolchains.FirstOrDefault(item => item.Id == "node")?.Installations.FirstOrDefault();
+        if (node is null || !node.IsVerified)
+        {
+            return;
+        }
+
+        var directoryName = Path.GetFileName(node.InstallationPath);
+        var directoryMajor = Regex.Match(directoryName, "(?:node(?:js)?)[^0-9]*(?<major>[0-9]+)", RegexOptions.IgnoreCase);
+        var versionMajor = Regex.Match(node.Version, "^(?<major>[0-9]+)");
+        if (directoryMajor.Success && versionMajor.Success &&
+            !string.Equals(directoryMajor.Groups["major"].Value, versionMajor.Groups["major"].Value, StringComparison.Ordinal))
+        {
+            issues.Add(new DeveloperDiagnosticIssue
+            {
+                Severity = DeveloperIssueSeverity.Warning,
+                Title = "Node.js 目录名称与实际版本不一致",
+                Description = "版本命令结果可信度高于文件夹名称；该目录可能曾被原位升级或替换。",
+                Evidence = $"目录：{node.InstallationPath}{Environment.NewLine}node --version：v{node.Version}"
+            });
+        }
+    }
+
     private static IReadOnlyList<string> ReadPathEntries(string? rawPath)
     {
         if (string.IsNullOrWhiteSpace(rawPath))
@@ -662,6 +720,13 @@ public sealed class DeveloperEnvironmentScanner
             .ToList();
     }
 
+    private static IReadOnlyList<string> ReadEffectivePersistentPathEntries()
+    {
+        var machineEntries = ReadPathEntries(Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.Machine));
+        var userEntries = ReadPathEntries(Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User));
+        return machineEntries.Concat(userEntries).ToList();
+    }
+
     private static string GetInstallationRoot(string toolchainId, string executablePath)
     {
         var directory = Path.GetDirectoryName(executablePath) ?? string.Empty;
@@ -671,9 +736,17 @@ public sealed class DeveloperEnvironmentScanner
             return Directory.GetParent(directory)?.FullName ?? directory;
         }
 
-        if (toolchainId == "git" && (string.Equals(directoryName, "cmd", StringComparison.OrdinalIgnoreCase) || string.Equals(directoryName, "bin", StringComparison.OrdinalIgnoreCase)))
+        if (toolchainId == "git" && string.Equals(directoryName, "cmd", StringComparison.OrdinalIgnoreCase))
         {
             return Directory.GetParent(directory)?.FullName ?? directory;
+        }
+
+        if (toolchainId == "git" && string.Equals(directoryName, "bin", StringComparison.OrdinalIgnoreCase))
+        {
+            var parent = Directory.GetParent(directory);
+            return string.Equals(parent?.Name, "mingw64", StringComparison.OrdinalIgnoreCase)
+                ? parent?.Parent?.FullName ?? parent?.FullName ?? directory
+                : parent?.FullName ?? directory;
         }
 
         return directory;
@@ -745,6 +818,27 @@ public sealed class DeveloperEnvironmentScanner
         return match.Success ? match.Groups["version"].Value.Trim() : string.Empty;
     }
 
+    private static string ParseJavaHome(string output)
+    {
+        var match = Regex.Match(output, "^\\s*java\\.home\\s*=\\s*(?<home>.+?)\\s*$", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+        return match.Success ? match.Groups["home"].Value.Trim() : string.Empty;
+    }
+
+    private static string NormalizeJavaInstallationRoot(string runtimeHome)
+    {
+        var home = NormalizePath(runtimeHome);
+        if (string.Equals(Path.GetFileName(home), "jre", StringComparison.OrdinalIgnoreCase))
+        {
+            var parent = Directory.GetParent(home)?.FullName;
+            if (!string.IsNullOrWhiteSpace(parent) && File.Exists(Path.Combine(parent, "bin", "javac.exe")))
+            {
+                return parent;
+            }
+        }
+
+        return home;
+    }
+
     private static string FirstMeaningfulLine(string output) =>
         SplitLines(output).FirstOrDefault(line => !string.IsNullOrWhiteSpace(line))?.Trim() ?? "版本命令已成功执行。";
 
@@ -753,15 +847,22 @@ public sealed class DeveloperEnvironmentScanner
 
     private static string GuessArchitecture(string executablePath)
     {
-        if (executablePath.Contains("Program Files (x86)", StringComparison.OrdinalIgnoreCase) ||
-            executablePath.Contains("x86", StringComparison.OrdinalIgnoreCase))
-        {
-            return "x86";
-        }
-
         if (executablePath.Contains("arm64", StringComparison.OrdinalIgnoreCase))
         {
             return "ARM64";
+        }
+
+        if (executablePath.Contains("x86_64", StringComparison.OrdinalIgnoreCase) ||
+            executablePath.Contains("amd64", StringComparison.OrdinalIgnoreCase) ||
+            executablePath.Contains("x64", StringComparison.OrdinalIgnoreCase))
+        {
+            return "x64";
+        }
+
+        if (executablePath.Contains("Program Files (x86)", StringComparison.OrdinalIgnoreCase) ||
+            Regex.IsMatch(executablePath, "(?:^|[\\\\/_-])x86(?:[\\\\/_-]|$)", RegexOptions.IgnoreCase))
+        {
+            return "x86";
         }
 
         return Environment.Is64BitOperatingSystem ? "x64 / 未验证" : "x86 / 未验证";
@@ -769,6 +870,66 @@ public sealed class DeveloperEnvironmentScanner
 
     private static bool IsWindowsAppAlias(string path) =>
         path.Contains("\\Microsoft\\WindowsApps\\", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsPythonVirtualEnvironment(string executablePath)
+    {
+        var directory = Path.GetDirectoryName(executablePath);
+        if (string.IsNullOrWhiteSpace(directory))
+        {
+            return false;
+        }
+
+        if (File.Exists(Path.Combine(directory, "pyvenv.cfg")))
+        {
+            return true;
+        }
+
+        var parent = Directory.GetParent(directory)?.FullName;
+        return string.Equals(Path.GetFileName(directory), "Scripts", StringComparison.OrdinalIgnoreCase) &&
+               !string.IsNullOrWhiteSpace(parent) &&
+               File.Exists(Path.Combine(parent, "pyvenv.cfg"));
+    }
+
+    private static bool IsPrivateHostRuntime(string path) =>
+        path.Contains("\\.cache\\codex-runtimes\\", StringComparison.OrdinalIgnoreCase) ||
+        path.Contains("\\AppData\\Local\\OpenAI\\Codex\\", StringComparison.OrdinalIgnoreCase);
+
+    private static string ResolveFinalPath(string path)
+    {
+        try
+        {
+            using SafeFileHandle handle = File.OpenHandle(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            var capacity = 512u;
+            while (capacity <= 32768)
+            {
+                var builder = new StringBuilder((int)capacity);
+                var length = GetFinalPathNameByHandle(handle, builder, capacity, 0);
+                if (length == 0)
+                {
+                    break;
+                }
+
+                if (length < capacity)
+                {
+                    var resolved = builder.ToString();
+                    if (resolved.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return @"\\" + resolved[8..];
+                    }
+
+                    return resolved.StartsWith(@"\\?\", StringComparison.OrdinalIgnoreCase) ? resolved[4..] : resolved;
+                }
+
+                capacity = length + 1;
+            }
+        }
+        catch
+        {
+            // 无法打开句柄时继续使用原路径，扫描仍可降级完成。
+        }
+
+        return NormalizePath(path);
+    }
 
     private static string NormalizePath(string? path)
     {
@@ -797,5 +958,8 @@ public sealed class DeveloperEnvironmentScanner
         string[] CommandNames,
         string[] VersionArguments);
 
-    private sealed record ToolCandidate(string ExecutablePath, string Source, bool IsActive, bool CanExecute);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint GetFinalPathNameByHandle(SafeFileHandle fileHandle, StringBuilder filePath, uint characterCount, uint flags);
+
+    private sealed record ToolCandidate(string ExecutablePath, string CanonicalExecutablePath, string Source, bool IsActive, bool CanExecute);
 }

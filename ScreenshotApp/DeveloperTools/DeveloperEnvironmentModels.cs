@@ -46,10 +46,11 @@ public sealed class ToolchainSummary
     public string ActivePath => Installations.FirstOrDefault(item => item.IsActive)?.ExecutablePath
         ?? Installations.FirstOrDefault()?.ExecutablePath
         ?? "未在常用位置发现";
+    public bool HasActiveCommand => Installations.Any(item => item.IsActive);
     public bool HasConflict => Installations.Count(item => item.IsActive) > 1;
-    public string StatusText => InstallationCount == 0 ? "未发现" : HasConflict ? "存在冲突" : Installations.Any(item => item.IsVerified) ? "正常" : "待验证";
-    public string StatusBackground => InstallationCount == 0 ? "#EEF1F5" : HasConflict ? "#FFF0D9" : Installations.Any(item => item.IsVerified) ? "#DDF6EA" : "#E8F0FF";
-    public string StatusForeground => InstallationCount == 0 ? "#6E7782" : HasConflict ? "#A56B13" : Installations.Any(item => item.IsVerified) ? "#367A59" : "#426FA8";
+    public string StatusText => InstallationCount == 0 ? "未发现" : HasConflict ? "存在冲突" : !HasActiveCommand ? "未加入 PATH" : Installations.Any(item => item.IsVerified) ? "正常" : "待验证";
+    public string StatusBackground => InstallationCount == 0 ? "#EEF1F5" : HasConflict || !HasActiveCommand ? "#FFF0D9" : Installations.Any(item => item.IsVerified) ? "#DDF6EA" : "#E8F0FF";
+    public string StatusForeground => InstallationCount == 0 ? "#6E7782" : HasConflict || !HasActiveCommand ? "#A56B13" : Installations.Any(item => item.IsVerified) ? "#367A59" : "#426FA8";
 }
 
 public sealed class DeveloperDiagnosticIssue

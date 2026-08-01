@@ -18,7 +18,7 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
                         <Border x:Name="Root" Background="#70FFFFFF" BorderBrush="#90D5E6F5" BorderThickness="1" CornerRadius="11">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{TemplateBinding Foreground}" Text="{TemplateBinding Content}" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Background" Value="#C6FFFFFF" /></Trigger>
@@ -42,7 +42,7 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="Root" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="9">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{TemplateBinding Foreground}" Text="{TemplateBinding Content}" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Background" Value="#DCEEFF" /><Setter TargetName="Root" Property="BorderBrush" Value="#74A9E8" /></Trigger>
