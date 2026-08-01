@@ -9,6 +9,7 @@
         xmlns:fileWorkbench="clr-namespace:ScreenshotApp.FileWorkbench"
         xmlns:systemTools="clr-namespace:ScreenshotApp.SystemTools"
         xmlns:networkWorkbench="clr-namespace:ScreenshotApp.NetworkWorkbench"
+        xmlns:developerTools="clr-namespace:ScreenshotApp.DeveloperTools"
         mc:Ignorable="d"
         Title="X-Tool"
         Icon="Assets/XTool.png"
@@ -353,7 +354,8 @@
 
                 <Border Grid.Row="1" Height="1" Margin="0,18,12,0" Background="{StaticResource GlassDividerBrush}" />
 
-                <StackPanel Grid.Row="2" Margin="0,12,0,0">
+                <ScrollViewer Grid.Row="2" Margin="0,12,0,0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel>
                     <RadioButton x:Name="HomeNav" GroupName="Navigation" IsChecked="True"
                                  Style="{StaticResource NavItemStyle}" Tag="Home" Checked="NavButton_Checked">
                         <StackPanel Orientation="Horizontal">
@@ -417,6 +419,15 @@
                             <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" FontSize="15" Text="系统工具" />
                         </StackPanel>
                     </RadioButton>
+                    <RadioButton x:Name="DeveloperToolsNav" GroupName="Navigation" Style="{StaticResource NavItemStyle}"
+                                 Tag="DeveloperTools" Checked="NavButton_Checked">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Width="34" Height="34" Background="#F7F8FA" CornerRadius="9">
+                                <TextBlock Style="{StaticResource IconTextStyle}" FontSize="17" Text="&#xE943;" Foreground="#626971" />
+                            </Border>
+                            <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" FontSize="15" Text="开发者工具" />
+                        </StackPanel>
+                    </RadioButton>
                     <RadioButton x:Name="ShortcutsNav" GroupName="Navigation" Style="{StaticResource NavItemStyle}"
                                  Tag="Shortcuts" Checked="NavButton_Checked">
                         <StackPanel Orientation="Horizontal">
@@ -426,7 +437,8 @@
                             <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" FontSize="15" Text="快捷键" />
                         </StackPanel>
                     </RadioButton>
-                </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
 
                 <RadioButton x:Name="SettingsNav" Grid.Row="3" GroupName="Navigation" Style="{StaticResource NavItemStyle}"
                              Tag="Settings" Checked="NavButton_Checked">
@@ -529,11 +541,11 @@
                                             <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="统一管理截图、剪贴板与本地语音输入热键" />
                                         </StackPanel>
                                     </Button>
-                                    <Button Height="148" Margin="8,8,0,0" Style="{StaticResource ActionCardStyle}" Tag="Settings" Click="HomeNavigate_Click">
+                                    <Button Height="148" Margin="8,8,0,0" Style="{StaticResource ActionCardStyle}" Tag="DeveloperTools" Click="HomeNavigate_Click">
                                         <StackPanel>
-                                            <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#E4F2FF" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#4384C8" Text="&#xE713;" /></Border>
-                                            <TextBlock Margin="0,11,0,0" FontSize="16" FontWeight="SemiBold" Text="设置" />
-                                            <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="自启动、存储目录、贴图与本地语音偏好" />
+                                            <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#E4F2FF" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#4384C8" Text="&#xE943;" /></Border>
+                                            <TextBlock Margin="0,11,0,0" FontSize="16" FontWeight="SemiBold" Text="开发者工具" />
+                                            <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="工具链扫描、实际版本识别与开发环境诊断" />
                                         </StackPanel>
                                     </Button>
                                 </primitives:UniformGrid>
@@ -929,6 +941,7 @@
                             <networkWorkbench:NetworkWorkbenchView x:Name="NetworkWorkbenchView" Visibility="Collapsed" />
                             <systemTools:SystemToolsView x:Name="ResourceManagementView" Visibility="Collapsed" />
                             <systemTools:SystemToolsView x:Name="SystemToolsView" EnvironmentOnly="True" Visibility="Collapsed" />
+                            <developerTools:DeveloperToolsView x:Name="DeveloperToolsView" Visibility="Collapsed" />
 
                             <!-- 快捷键页 -->
                             <Grid x:Name="ShortcutsView" Visibility="Collapsed" Margin="58,44">

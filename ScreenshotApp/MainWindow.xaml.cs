@@ -252,6 +252,7 @@ public partial class MainWindow : Window
         NetworkWorkbenchView.Visibility = page == "NetworkWorkbench" ? Visibility.Visible : Visibility.Collapsed;
         ResourceManagementView.Visibility = page == "ResourceManagement" ? Visibility.Visible : Visibility.Collapsed;
         SystemToolsView.Visibility = page == "SystemTools" ? Visibility.Visible : Visibility.Collapsed;
+        DeveloperToolsView.Visibility = page == "DeveloperTools" ? Visibility.Visible : Visibility.Collapsed;
         if (page == "ImageConverter")
         {
             Dispatcher.BeginInvoke(new Action(() => NormalizeImageConverterLabels(ImageConverterView)), DispatcherPriority.Loaded);
@@ -1688,6 +1689,9 @@ public partial class MainWindow : Window
                 break;
             case "SystemTools":
                 SystemToolsNav.IsChecked = true;
+                break;
+            case "DeveloperTools":
+                DeveloperToolsNav.IsChecked = true;
                 break;
             case "Shortcuts":
                 ShortcutsNav.IsChecked = true;
