@@ -224,6 +224,13 @@ internal sealed record SystemDiagnosticGroup(
     public string SafeMessage => string.IsNullOrWhiteSpace(Message) ? "Windows 未提供可格式化的事件描述，可在事件查看器中查看原始记录。" : Message;
     public string FaultingModuleText => ExtractMessageField("错误模块名称", "故障模块名称", "Faulting module name") ?? "Windows 未提供";
     public string ExceptionCodeText => ExtractMessageField("异常代码", "Exception code") ?? "Windows 未提供";
+    public string ApplicationExecutablePath => (ExtractMessageField(
+        "错误应用程序路径",
+        "故障应用程序路径",
+        "应用程序路径",
+        "Faulting application path",
+        "Application path") ?? string.Empty).Trim().Trim('"');
+    public string PrimaryActionText => Category == SystemDiagnosticCategory.Application ? "打开程序位置" : "打开事件查看器";
     public IReadOnlyList<SystemDiagnosticRecommendationStep> RecommendationSteps => Recommendation
         .Split(new[] { '；', '。', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
         .Where(step => !string.IsNullOrWhiteSpace(step))

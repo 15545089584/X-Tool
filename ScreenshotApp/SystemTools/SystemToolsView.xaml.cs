@@ -602,7 +602,7 @@ public partial class SystemToolsView : UserControl
         }
     }
 
-    private void OpenEventViewer_Click(object sender, RoutedEventArgs e)
+    private void OpenPrimaryDiagnosticAction_Click(object sender, RoutedEventArgs e)
     {
         if (DiagnosticResultsListBox.SelectedItem is not SystemDiagnosticGroup selected)
         {
@@ -611,11 +611,30 @@ public partial class SystemToolsView : UserControl
 
         try
         {
+            if (selected.Category == SystemDiagnosticCategory.Application)
+            {
+                var executablePath = selected.ApplicationExecutablePath;
+                if (string.IsNullOrWhiteSpace(executablePath) || !File.Exists(executablePath))
+                {
+                    MessageBox.Show(
+                        "Windows 原始记录没有提供可访问的程序路径，暂时无法在资源管理器中定位该程序。",
+                        "系统诊断",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                    return;
+                }
+
+                var safePath = executablePath.Replace("\"", string.Empty, StringComparison.Ordinal);
+                Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{safePath}\"") { UseShellExecute = true });
+                return;
+            }
+
             Process.Start(new ProcessStartInfo("eventvwr.msc", $"/c:{selected.LogName}") { UseShellExecute = true });
         }
         catch (Exception exception)
         {
-            MessageBox.Show($"无法打开 Windows 事件查看器：{exception.Message}", "系统诊断", MessageBoxButton.OK, MessageBoxImage.Warning);
+            var actionName = selected.Category == SystemDiagnosticCategory.Application ? "程序位置" : "Windows 事件查看器";
+            MessageBox.Show($"无法打开{actionName}：{exception.Message}", "系统诊断", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
