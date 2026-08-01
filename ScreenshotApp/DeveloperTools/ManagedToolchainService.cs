@@ -1,0 +1,375 @@
+using System.Diagnostics;
+using System.IO;
+using System.IO.Compression;
+using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text.Json;
+
+namespace ScreenshotApp.DeveloperTools;
+
+/// <summary>管理 X-Tool 自己下载的开发工具；不会接管或删除外部安装。</summary>
+public sealed class ManagedToolchainService
+{
+    private static readonly HttpClient HttpClient = CreateHttpClient();
+    private static readonly SemaphoreSlim ManifestLock = new(1, 1);
+    private static readonly int[] TemurinMajors = { 8, 11, 17, 21, 25 };
+    private readonly SafeDeveloperCommandRunner _commandRunner = new();
+
+    public string ManagedRoot { get; } = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "X-Tool", "Dev");
+
+    private string ManifestPath => Path.Combine(ManagedRoot, "managed-tools.json");
+    private string DownloadsRoot => Path.Combine(ManagedRoot, "Downloads");
+    private string JavaRoot => Path.Combine(ManagedRoot, "Java");
+    private string LogPath => Path.Combine(ManagedRoot, "Logs", "managed-toolchains.log");
+
+    public async Task<IReadOnlyList<ManagedToolchainRelease>> GetTemurinReleasesAsync(CancellationToken cancellationToken)
+    {
+        var manifest = await LoadManifestAsync(cancellationToken).ConfigureAwait(false);
+        var releases = new List<ManagedToolchainRelease>();
+        foreach (var major in TemurinMajors)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var uri = $"https://api.adoptium.net/v3/assets/latest/{major}/hotspot?architecture=x64&image_type=jdk&jvm_impl=hotspot&os=windows&vendor=eclipse";
+            using var response = await HttpClient.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+            var first = document.RootElement.EnumerateArray().FirstOrDefault();
+            if (first.ValueKind != JsonValueKind.Object || !first.TryGetProperty("binary", out var binary) ||
+                !binary.TryGetProperty("package", out var package) || !first.TryGetProperty("version", out var version))
+            {
+                continue;
+            }
+
+            var releaseVersion = version.GetProperty("openjdk_version").GetString() ?? major.ToString();
+            var downloadUrl = package.GetProperty("link").GetString() ?? string.Empty;
+            var sha256 = package.GetProperty("checksum").GetString() ?? string.Empty;
+            var fileName = package.GetProperty("name").GetString() ?? string.Empty;
+            var size = package.TryGetProperty("size", out var sizeValue) ? sizeValue.GetInt64() : 0;
+            if (!IsTrustedTemurinDownload(downloadUrl, fileName, sha256)) continue;
+
+            releases.Add(new ManagedToolchainRelease
+            {
+                ToolchainId = "java",
+                ProviderId = "temurin",
+                DisplayName = $"Temurin JDK {major}",
+                Version = releaseVersion,
+                Architecture = "x64",
+                DownloadUrl = downloadUrl,
+                Sha256 = sha256,
+                FileName = fileName,
+                DownloadSize = size,
+                IsLts = string.Equals(version.TryGetProperty("optional", out var optional) ? optional.GetString() : null, "LTS", StringComparison.OrdinalIgnoreCase),
+                IsInstalled = manifest.Installations.Any(item => item.ManagedByXTool &&
+                    item.ToolchainId == "java" && item.ProviderId == "temurin" && item.Version == releaseVersion &&
+                    Directory.Exists(item.InstallationPath))
+            });
+        }
+
+        return releases.OrderByDescending(item => ParseMajor(item.Version)).ToList();
+    }
+
+    public async Task<ManagedToolchainOperationResult> InstallTemurinAsync(
+        ManagedToolchainRelease release,
+        IProgress<ManagedInstallProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        if (release.ToolchainId != "java" || release.ProviderId != "temurin" ||
+            !IsTrustedTemurinDownload(release.DownloadUrl, release.FileName, release.Sha256))
+        {
+            return new(false, "安装请求不是受信任的 Temurin Windows ZIP。");
+        }
+
+        Directory.CreateDirectory(DownloadsRoot);
+        Directory.CreateDirectory(JavaRoot);
+        var operationId = Guid.NewGuid().ToString("N");
+        var archivePath = Path.Combine(DownloadsRoot, $"{operationId}.partial");
+        var stagingPath = Path.Combine(JavaRoot, $".staging-{operationId}");
+        string? installedPath = null;
+        var manifestCommitted = false;
+        try
+        {
+            progress?.Report(new("正在连接 Eclipse Adoptium"));
+            await DownloadAsync(release.DownloadUrl, archivePath, progress, cancellationToken).ConfigureAwait(false);
+            progress?.Report(new("正在校验 SHA-256"));
+            var actualHash = await ComputeSha256Async(archivePath, cancellationToken).ConfigureAwait(false);
+            if (!string.Equals(actualHash, release.Sha256, StringComparison.OrdinalIgnoreCase))
+            {
+                await WriteLogAsync($"Temurin {release.Version} 校验失败：期望 {release.Sha256}，实际 {actualHash}").ConfigureAwait(false);
+                return new(false, "下载文件的 SHA-256 与 Adoptium API 不一致，安装已停止。");
+            }
+
+            progress?.Report(new("正在安全解压 JDK"));
+            Directory.CreateDirectory(stagingPath);
+            await ExtractZipSafelyAsync(archivePath, stagingPath, cancellationToken).ConfigureAwait(false);
+            var extractedRoot = FindJdkRoot(stagingPath);
+            if (extractedRoot is null)
+            {
+                return new(false, "压缩包内未找到完整的 java.exe 与 javac.exe。");
+            }
+
+            var safeVersion = SanitizeDirectoryName(release.Version);
+            var destination = Path.Combine(JavaRoot, $"temurin-{safeVersion}-{release.Architecture}");
+            if (Directory.Exists(destination))
+            {
+                return new(false, "该 Temurin 版本的托管目录已经存在，请先重新扫描或卸载旧记录。");
+            }
+
+            Directory.Move(extractedRoot, destination);
+            installedPath = destination;
+            var javaPath = Path.Combine(destination, "bin", "java.exe");
+            var validation = await _commandRunner.RunAsync(javaPath, new[] { "-version" }, cancellationToken).ConfigureAwait(false);
+            if (validation.TimedOut || validation.ExitCode != 0)
+            {
+                TryDeleteManagedDirectory(destination);
+                return new(false, "JDK 解压完成，但 java -version 验证失败，已撤销本次安装。");
+            }
+
+            var entry = new ManagedToolchainEntry
+            {
+                ToolchainId = "java",
+                ProviderId = "temurin",
+                Version = release.Version,
+                Architecture = release.Architecture,
+                InstallationPath = destination,
+                ExecutablePath = javaPath,
+                DownloadUrl = release.DownloadUrl,
+                Sha256 = release.Sha256,
+                InstalledAtUtc = DateTime.UtcNow,
+                ManagedByXTool = true
+            };
+            await AddManifestEntryAsync(entry, cancellationToken).ConfigureAwait(false);
+            manifestCommitted = true;
+            await WriteLogAsync($"已安装 Temurin {release.Version} 到 {destination}").ConfigureAwait(false);
+            progress?.Report(new("安装与版本验证完成", release.DownloadSize, release.DownloadSize));
+            return new(true, $"Temurin {release.Version} 已安装并通过 java -version 验证。", entry);
+        }
+        catch (OperationCanceledException)
+        {
+            await WriteLogAsync($"Temurin {release.Version} 安装已取消").ConfigureAwait(false);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            await WriteLogAsync($"Temurin {release.Version} 安装失败：{ex}").ConfigureAwait(false);
+            return new(false, $"安装失败：{ex.Message}");
+        }
+        finally
+        {
+            TryDeleteFile(archivePath);
+            TryDeleteManagedDirectory(stagingPath);
+            if (!manifestCommitted && !string.IsNullOrWhiteSpace(installedPath)) TryDeleteManagedDirectory(installedPath);
+        }
+    }
+
+    public async Task<ManagedToolchainOperationResult> UninstallAsync(ManagedToolchainRelease release, CancellationToken cancellationToken)
+    {
+        var manifest = await LoadManifestAsync(cancellationToken).ConfigureAwait(false);
+        var entry = manifest.Installations.FirstOrDefault(item => item.ManagedByXTool &&
+            item.ToolchainId == release.ToolchainId && item.ProviderId == release.ProviderId && item.Version == release.Version);
+        if (entry is null) return new(false, "未找到 X-Tool 托管记录，拒绝删除外部安装。");
+        if (!IsInsideRoot(entry.InstallationPath, JavaRoot)) return new(false, "托管目录超出 X-Tool Java 根目录，拒绝删除。");
+
+        var reference = FindReference(entry);
+        if (reference is not null) return new(false, reference);
+        if (IsInstallationRunning(entry.InstallationPath)) return new(false, "该 JDK 仍被运行中的进程使用，请关闭相关终端或 IDE 后重试。");
+
+        try
+        {
+            if (Directory.Exists(entry.InstallationPath)) Directory.Delete(entry.InstallationPath, recursive: true);
+            manifest.Installations.Remove(entry);
+            await SaveManifestAsync(manifest, cancellationToken).ConfigureAwait(false);
+            await WriteLogAsync($"已卸载 Temurin {entry.Version}：{entry.InstallationPath}").ConfigureAwait(false);
+            return new(true, $"Temurin {entry.Version} 的 X-Tool 托管目录已删除。");
+        }
+        catch (Exception ex)
+        {
+            await WriteLogAsync($"卸载 Temurin {entry.Version} 失败：{ex}").ConfigureAwait(false);
+            return new(false, $"卸载失败：{ex.Message}");
+        }
+    }
+
+    private async Task DownloadAsync(string url, string destination, IProgress<ManagedInstallProgress>? progress, CancellationToken cancellationToken)
+    {
+        using var response = await HttpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        var total = response.Content.Headers.ContentLength ?? 0;
+        await using var input = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        await using var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1024 * 128, useAsync: true);
+        var buffer = new byte[1024 * 128];
+        long received = 0;
+        while (true)
+        {
+            var count = await input.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken).ConfigureAwait(false);
+            if (count == 0) break;
+            await output.WriteAsync(buffer.AsMemory(0, count), cancellationToken).ConfigureAwait(false);
+            received += count;
+            progress?.Report(new("正在下载", received, total));
+        }
+    }
+
+    private static async Task<string> ComputeSha256Async(string path, CancellationToken cancellationToken)
+    {
+        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1024 * 128, useAsync: true);
+        using var sha256 = SHA256.Create();
+        var hash = await sha256.ComputeHashAsync(stream, cancellationToken).ConfigureAwait(false);
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    private static async Task ExtractZipSafelyAsync(string archivePath, string destination, CancellationToken cancellationToken)
+    {
+        var destinationRoot = Path.GetFullPath(destination) + Path.DirectorySeparatorChar;
+        using var archive = ZipFile.OpenRead(archivePath);
+        foreach (var entry in archive.Entries)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var target = Path.GetFullPath(Path.Combine(destination, entry.FullName));
+            if (!target.StartsWith(destinationRoot, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("压缩包包含越界路径。");
+            if (string.IsNullOrEmpty(entry.Name))
+            {
+                Directory.CreateDirectory(target);
+                continue;
+            }
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            await using var input = entry.Open();
+            await using var output = new FileStream(target, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1024 * 128, useAsync: true);
+            await input.CopyToAsync(output, 1024 * 128, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static string? FindJdkRoot(string stagingPath)
+        => Directory.EnumerateDirectories(stagingPath, "*", SearchOption.AllDirectories)
+            .Prepend(stagingPath)
+            .FirstOrDefault(path => File.Exists(Path.Combine(path, "bin", "java.exe")) && File.Exists(Path.Combine(path, "bin", "javac.exe")));
+
+    private async Task<ManagedToolchainManifest> LoadManifestAsync(CancellationToken cancellationToken)
+    {
+        await ManifestLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (!File.Exists(ManifestPath)) return new();
+            await using var stream = File.OpenRead(ManifestPath);
+            return await JsonSerializer.DeserializeAsync<ManagedToolchainManifest>(stream, cancellationToken: cancellationToken).ConfigureAwait(false) ?? new();
+        }
+        catch (JsonException ex)
+        {
+            await WriteLogAsync($"托管清单无法解析：{ex.Message}").ConfigureAwait(false);
+            throw new InvalidDataException("X-Tool 托管清单已损坏；为避免失去目录所有权记录，安装和卸载已停止。", ex);
+        }
+        finally { ManifestLock.Release(); }
+    }
+
+    private async Task AddManifestEntryAsync(ManagedToolchainEntry entry, CancellationToken cancellationToken)
+    {
+        var manifest = await LoadManifestAsync(cancellationToken).ConfigureAwait(false);
+        manifest.Installations.RemoveAll(item => item.ToolchainId == entry.ToolchainId && item.ProviderId == entry.ProviderId && item.Version == entry.Version);
+        manifest.Installations.Add(entry);
+        await SaveManifestAsync(manifest, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task SaveManifestAsync(ManagedToolchainManifest manifest, CancellationToken cancellationToken)
+    {
+        await ManifestLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            Directory.CreateDirectory(ManagedRoot);
+            var temporary = ManifestPath + ".tmp";
+            await using (var stream = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None, 4096, useAsync: true))
+            {
+                await JsonSerializer.SerializeAsync(stream, manifest, new JsonSerializerOptions { WriteIndented = true }, cancellationToken).ConfigureAwait(false);
+            }
+            File.Move(temporary, ManifestPath, overwrite: true);
+        }
+        finally { ManifestLock.Release(); }
+    }
+
+    private string? FindReference(ManagedToolchainEntry entry)
+    {
+        foreach (var target in new[] { EnvironmentVariableTarget.User, EnvironmentVariableTarget.Machine })
+        {
+            var scope = target == EnvironmentVariableTarget.User ? "当前用户" : "系统";
+            var javaHome = Environment.GetEnvironmentVariable("JAVA_HOME", target);
+            if (!string.IsNullOrWhiteSpace(javaHome) && PathsEqual(javaHome, entry.InstallationPath))
+                return $"{scope} JAVA_HOME 仍指向该 JDK，请先切换环境后再卸载。";
+            var path = Environment.GetEnvironmentVariable("Path", target) ?? string.Empty;
+            if (path.Split(';', StringSplitOptions.RemoveEmptyEntries).Any(item => IsInsideRoot(Environment.ExpandEnvironmentVariables(item.Trim().Trim('"')), entry.InstallationPath)))
+                return $"{scope} PATH 仍引用该 JDK，请先切换环境后再卸载。";
+        }
+        return null;
+    }
+
+    private static bool IsInstallationRunning(string installationPath)
+    {
+        foreach (var process in Process.GetProcesses())
+        {
+            try
+            {
+                var path = process.MainModule?.FileName;
+                if (!string.IsNullOrWhiteSpace(path) && IsInsideRoot(path, installationPath)) return true;
+            }
+            catch { /* 普通权限无法读取的进程不作为误判依据。 */ }
+            finally { process.Dispose(); }
+        }
+        return false;
+    }
+
+    private static bool IsTrustedTemurinDownload(string url, string fileName, string sha256)
+        => Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps &&
+           string.Equals(uri.Host, "github.com", StringComparison.OrdinalIgnoreCase) &&
+           fileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
+           sha256.Length == 64 && sha256.All(Uri.IsHexDigit);
+
+    private static bool IsInsideRoot(string path, string root)
+    {
+        try
+        {
+            var fullPath = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            var fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            return fullPath.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase);
+        }
+        catch { return false; }
+    }
+
+    private static bool PathsEqual(string left, string right)
+    {
+        try { return string.Equals(Path.GetFullPath(left).TrimEnd('\\'), Path.GetFullPath(right).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase); }
+        catch { return false; }
+    }
+
+    private static int ParseMajor(string version)
+        => int.TryParse(version.Split('.')[0], out var major) ? major : 0;
+
+    private static string SanitizeDirectoryName(string value)
+        => string.Concat(value.Select(character => Path.GetInvalidFileNameChars().Contains(character) ? '_' : character));
+
+    private static void TryDeleteFile(string path)
+    {
+        try { if (File.Exists(path)) File.Delete(path); }
+        catch { /* 下次安装会使用新的随机临时文件名。 */ }
+    }
+
+    private static void TryDeleteManagedDirectory(string path)
+    {
+        try { if (Directory.Exists(path)) Directory.Delete(path, recursive: true); }
+        catch { /* 失败信息已由主操作记录；不会扩大删除范围。 */ }
+    }
+
+    private async Task WriteLogAsync(string message)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(LogPath)!);
+            await File.AppendAllTextAsync(LogPath, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} {message}{Environment.NewLine}").ConfigureAwait(false);
+        }
+        catch { /* 日志失败不得覆盖真实安装结果。 */ }
+    }
+
+    private static HttpClient CreateHttpClient()
+    {
+        var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = true }) { Timeout = TimeSpan.FromMinutes(30) };
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("X-Tool/1.0 (Windows managed toolchain installer)");
+        return client;
+    }
+}

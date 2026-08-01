@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Collections.ObjectModel;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
@@ -10,7 +11,11 @@ namespace ScreenshotApp.DeveloperTools;
 public partial class DeveloperToolsView : UserControl
 {
     private readonly DeveloperEnvironmentScanner _scanner = new();
+    private readonly ManagedToolchainService _managedToolchainService = new();
+    private readonly ObservableCollection<ManagedToolchainRelease> _managedReleases = new();
     private CancellationTokenSource? _scanCancellation;
+    private CancellationTokenSource? _managedCatalogCancellation;
+    private CancellationTokenSource? _managedOperationCancellation;
     private DeveloperEnvironmentSnapshot _snapshot = new();
     private bool _hasScanned;
     private ToolchainSummary? _configurationToolchain;
@@ -21,6 +26,15 @@ public partial class DeveloperToolsView : UserControl
     {
         InitializeComponent();
         DataContext = _snapshot;
+        ManagedReleasesItemsControl.ItemsSource = _managedReleases;
+        ManagedInstallRootText.Text = $"托管目录：{_managedToolchainService.ManagedRoot}";
+    }
+
+    private void DeveloperToolsView_Unloaded(object sender, RoutedEventArgs e)
+    {
+        _scanCancellation?.Cancel();
+        _managedCatalogCancellation?.Cancel();
+        _managedOperationCancellation?.Cancel();
     }
 
     private async void DeveloperToolsView_Loaded(object sender, RoutedEventArgs e)
@@ -126,7 +140,118 @@ public partial class DeveloperToolsView : UserControl
         var tab = radioButton.Tag?.ToString() ?? "Overview";
         OverviewView.Visibility = tab == "Overview" ? Visibility.Visible : Visibility.Collapsed;
         ToolchainsView.Visibility = tab == "Toolchains" ? Visibility.Visible : Visibility.Collapsed;
+        ManagedInstallView.Visibility = tab == "Managed" ? Visibility.Visible : Visibility.Collapsed;
         DiagnosticsView.Visibility = tab == "Diagnostics" ? Visibility.Visible : Visibility.Collapsed;
+        if (tab == "Managed" && _managedReleases.Count == 0 && _managedCatalogCancellation is null)
+        {
+            _ = RefreshManagedCatalogAsync();
+        }
+    }
+
+    private async void RefreshManagedCatalog_Click(object sender, RoutedEventArgs e)
+        => await RefreshManagedCatalogAsync();
+
+    private async Task RefreshManagedCatalogAsync()
+    {
+        _managedCatalogCancellation?.Cancel();
+        _managedCatalogCancellation?.Dispose();
+        var cancellation = new CancellationTokenSource();
+        _managedCatalogCancellation = cancellation;
+        RefreshManagedCatalogButton.IsEnabled = false;
+        ManagedCatalogStateText.Text = "正在读取 Adoptium API…";
+        try
+        {
+            var releases = await _managedToolchainService.GetTemurinReleasesAsync(cancellation.Token);
+            if (cancellation.IsCancellationRequested) return;
+            _managedReleases.Clear();
+            foreach (var release in releases) _managedReleases.Add(release);
+            ManagedCatalogEmptyState.Visibility = releases.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            ManagedCatalogStateText.Text = releases.Count == 0 ? "未返回可安装版本" : $"已读取 {releases.Count} 个官方版本";
+        }
+        catch (OperationCanceledException)
+        {
+            ManagedCatalogStateText.Text = "版本读取已取消";
+        }
+        catch (Exception ex)
+        {
+            ManagedCatalogStateText.Text = $"读取失败：{ex.Message}";
+            ManagedCatalogEmptyState.Visibility = Visibility.Visible;
+        }
+        finally
+        {
+            if (ReferenceEquals(_managedCatalogCancellation, cancellation))
+            {
+                _managedCatalogCancellation.Dispose();
+                _managedCatalogCancellation = null;
+                RefreshManagedCatalogButton.IsEnabled = true;
+            }
+        }
+    }
+
+    private async void ManagedReleaseAction_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as Button)?.CommandParameter is not ManagedToolchainRelease release || _managedOperationCancellation is not null) return;
+        if (release.IsInstalled)
+        {
+            var confirmation = MessageBox.Show(
+                $"将永久删除 X-Tool 托管的 {release.DisplayName} {release.Version}。\n\n如果 PATH、JAVA_HOME 或运行中的进程仍引用它，操作会被拒绝。是否继续？",
+                "确认卸载托管 JDK", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (confirmation != MessageBoxResult.Yes) return;
+        }
+        else
+        {
+            var confirmation = MessageBox.Show(
+                $"将从 Eclipse Adoptium 官方发行页下载并安装：\n\n{release.DisplayName} {release.Version}\n{release.Architecture} · {release.SizeText}\n\n下载完成后会校验 API 提供的 SHA-256，安装到当前用户的 X-Tool 托管目录。是否继续？",
+                "确认安装 Temurin JDK", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (confirmation != MessageBoxResult.Yes) return;
+        }
+
+        var cancellation = new CancellationTokenSource();
+        _managedOperationCancellation = cancellation;
+        release.IsBusy = true;
+        CancelManagedOperationButton.Visibility = Visibility.Visible;
+        RefreshManagedCatalogButton.IsEnabled = false;
+        var progress = new Progress<ManagedInstallProgress>(value =>
+        {
+            release.ProgressPercentage = value.Percentage;
+            release.ProgressText = value.DisplayText;
+            ManagedCatalogStateText.Text = value.DisplayText;
+        });
+        try
+        {
+            var result = release.IsInstalled
+                ? await _managedToolchainService.UninstallAsync(release, cancellation.Token)
+                : await _managedToolchainService.InstallTemurinAsync(release, progress, cancellation.Token);
+            release.ProgressText = result.Message;
+            ManagedCatalogStateText.Text = result.Message;
+            if (result.Succeeded)
+            {
+                release.IsInstalled = !release.IsInstalled;
+                await StartScanAsync();
+                await RefreshManagedCatalogAsync();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            release.ProgressText = "任务已取消，临时下载和解压目录将被清理。";
+            ManagedCatalogStateText.Text = "任务已取消";
+        }
+        finally
+        {
+            release.IsBusy = false;
+            CancelManagedOperationButton.Visibility = Visibility.Collapsed;
+            RefreshManagedCatalogButton.IsEnabled = true;
+            _managedOperationCancellation?.Dispose();
+            _managedOperationCancellation = null;
+        }
+    }
+
+    private void CancelManagedOperation_Click(object sender, RoutedEventArgs e)
+    {
+        CancelManagedOperationButton.IsEnabled = false;
+        ManagedCatalogStateText.Text = "正在取消并清理临时文件…";
+        _managedOperationCancellation?.Cancel();
+        CancelManagedOperationButton.IsEnabled = true;
     }
 
     private void OpenInstallationLocation_Click(object sender, RoutedEventArgs e)

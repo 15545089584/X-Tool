@@ -127,7 +127,7 @@ git log -5 --oneline
 ### 开发者工具（扫描诊断与受控环境配置）
 
 - 一级导航“开发者工具”进入独立的“开发环境中心”，首页原“设置”能力卡已替换为开发者工具入口；设置仍保留在左侧底部一级导航。
-- 当前包含“开发环境总览”“SDK 与工具链”“环境诊断”三个页面，支持 Java、Python、Node.js、.NET SDK、Git、Maven 与 Gradle。项目环境、安装、卸载、全局版本切换和 Shim 尚未开放。
+- 当前包含“开发环境总览”“SDK 与工具链”“托管安装”“环境诊断”四个页面，扫描支持 Java、Python、Node.js、.NET SDK、Git、Maven 与 Gradle。项目环境、全局版本切换和 Shim 尚未开放；托管安装目前只开放 Eclipse Temurin JDK，Python 与 Node.js 仍按后续顺序开发。
 - 页面首次进入后异步扫描，蓝色按钮原位切换“重新扫描/取消扫描”；离开页面时取消未完成任务。扫描失败按单个工具隔离，不阻断其他结果，也不会申请管理员权限。
 - 发现来源限定为用户/系统持久 PATH、相关环境变量、Python/Git 注册表、常用安装目录，以及固定磁盘顶层名称匹配的有限目录；不会递归扫描整块磁盘、建立常驻索引或后台持续监测。不得改回直接使用 X-Tool 继承的进程 PATH 作为全局环境依据，因为 Codex、IDE 等启动宿主可能注入私有工具路径。
 - Java、Python、Node.js、.NET 与 Git 的版本验证只运行已经解析出的绝对 EXE 路径，统一限制为 8 秒、64 KB 输出，并支持取消与终止进程树。WindowsApps 下的 Python 应用执行别名不会被自动运行，避免触发商店或安装流程。
@@ -139,6 +139,8 @@ git log -5 --oneline
 - 配置环境弹层使用覆盖整个开发者工具主内容面板的圆角半透明遮罩，不遮挡左侧一级导航；目标安装与作用范围使用毛玻璃 ComboBox 及圆角下拉列表，下拉列表禁用无意义的水平滚动区域；SDK 与工具链、环境诊断等滚动区域统一使用细圆角毛玻璃滚动条。不得恢复为带内容边距的矩形局部遮罩或 Windows 原生下拉框/滚动条。
 - 自动配置按工具链生成明确计划：Node/Git/.NET 使用已验证命令所在目录，Maven/Gradle 使用 `bin` 并设置对应 HOME，Java 只允许含 `bin\java.exe` 与 `bin\javac.exe` 的 JDK 并设置 `JAVA_HOME`，Python 添加解释器目录与存在的 `Scripts`，但拒绝 WindowsApps 别名和项目虚拟环境。检测到 Volta、nvm 或 fnm 时不把具体 Node 版本目录加入 PATH。
 - 环境写入在管理员子进程中重新读取最新 PATH，跨用户/系统范围规范化去重，并用命名互斥量避免并发覆盖；失败时尝试恢复写入前的 PATH 与配套变量。不得退回把页面加载时取得的整段 PATH 直接交给管理员进程覆盖的实现。
+- “托管安装”从 Adoptium API v3 读取 Temurin Windows x64 JDK 8/11/17/21/25 的最新 ZIP，只接受 `https://github.com/` 官方发行链接和 64 位 SHA-256；下载后先校验哈希，再进行防目录穿越解压，并以绝对路径执行 `java -version` 验证。下载、校验、解压和验证均异步且可取消，不会自动修改 PATH 或 `JAVA_HOME`。
+- 托管根目录为 `%LocalAppData%\X-Tool\Dev`，下载临时文件、Java 安装、JSON 所有权清单和操作日志分别位于其 `Downloads`、`Java`、`managed-tools.json` 和 `Logs`。清单损坏时必须停止安装/卸载，不能猜测目录所有权；只有清单明确标记为 X-Tool 托管、位于 Java 托管根目录内且未被 PATH、`JAVA_HOME` 或运行中进程引用的 JDK 才允许永久删除，外部/MSI/手动安装一律不得直接删除。
 - “打开位置”只打开已发现安装目录；“复制报告”输出当前工具链与诊断文本，不读取项目文件，也不包含密码、Token 或凭据。
 
 ### 网络工作台（第三阶段已完成）
@@ -392,7 +394,7 @@ git log -5 --oneline
 | 重复文件内容校验 | `ScreenshotApp\FileWorkbench\DuplicateFileFinderService.cs` |
 | Windows 后缀关联图标缓存 | `ScreenshotApp\FileWorkbench\FileTypeIconProvider.cs` |
 | 普通搜索与重复文件永久删除 | `ScreenshotApp\FileWorkbench\FileWorkbenchService.cs`、`FileWorkbenchView.xaml(.cs)` |
-| 开发环境扫描、工具链列表与环境诊断 | `ScreenshotApp\DeveloperTools\DeveloperToolsView.xaml(.cs)`、`DeveloperEnvironmentScanner.cs`、`DeveloperEnvironmentModels.cs`、`SafeDeveloperCommandRunner.cs` |
+| 开发环境扫描、工具链列表、托管安装与环境诊断 | `ScreenshotApp\DeveloperTools\DeveloperToolsView.xaml(.cs)`、`DeveloperEnvironmentScanner.cs`、`DeveloperEnvironmentModels.cs`、`SafeDeveloperCommandRunner.cs`、`ManagedToolchainModels.cs`、`ManagedToolchainService.cs` |
 | 系统工具（设备信息、折叠 PnP 驱动清单、存储容量概览、环境变量、系统诊断） | `ScreenshotApp\SystemTools\SystemToolsView.xaml(.cs)`、`SystemToolsService.cs`、`SystemDiagnosticService.cs`、`SystemDiagnosticModels.cs`、`SystemDiagnosticRules.cs`、`SystemProgramIdentityResolver.cs` |
 | 网络工作台主页面 | `ScreenshotApp\NetworkWorkbench\NetworkWorkbenchView.xaml(.cs)` |
 | 网络状态与方案服务 | `ScreenshotApp\NetworkWorkbench\NetworkWorkbenchService.cs` |
@@ -414,7 +416,7 @@ git log -5 --oneline
 8. **资源管理与系统工具权限/性能回归**：受保护进程、服务启动/停止和系统环境变量写入需分别在普通权限与管理员权限下验证；端口自动刷新不应造成页面卡顿，设备与 PnP 驱动信息应能在普通权限下刷新，且需确认资源管理与系统工具入口没有串页。系统诊断需验证 24 小时/7 天/14 天/30 天范围、分类与级别筛选、扫描取消、重复事件聚合、时间格整列选择、详情滚动、长原始事件、复制详情、非应用事件的事件查看器跳转，以及应用故障的友好程序名、发布者、身份悬停和“打开程序位置”；普通权限下单个日志、服务目录或受保护程序文件访问失败不得弹 UAC、阻断扫描或丢弃其他日志结果。
 9. **文件工作台索引覆盖回归**：分别验证已索引目录的“开始搜索”、Windows Search 关闭/未覆盖目录时的自动回退、以及“完整扫描”的取消与无权限目录跳过；不得为了追求秒级全盘搜索而恢复同步 UI 回填、常驻扫描或自建全盘实时索引。
 10. **重复文件与删除回归**：使用包含同名不同内容、不同名相同内容、大文件、硬链接、被占用文件和无权限文件的目录验证重复分组、取消与失败提示；验证普通搜索选择“删除文件”后才显示玻璃复选框，勾选可跨分页、筛选和排序保留并实时同步右侧预览，未勾选时删除按钮不可用，确认后永久删除且不进入回收站；重复文件页必须每组至少保留一个文件，红色按钮永久删除明确勾选的副本且不会进入回收站，需重点验证强确认、部分失败反馈和删除后列表刷新。
-11. **开发环境中心回归**：在未安装工具、同一工具多个版本、PATH 含中文/空格/重复/失效目录、WindowsApps Python 别名、项目虚拟环境、版本管理器入口、版本命令超时和普通权限目录不可读场景验证扫描、取消、证据与失败隔离；分别验证系统/用户 PATH 的确认、UAC 取消、去重、失败回滚、写入后自动重扫及界面不冻结。不得擅自加入静默安装、卸载、全局版本切换或 Shim。
+11. **开发环境中心回归**：在未安装工具、同一工具多个版本、PATH 含中文/空格/重复/失效目录、WindowsApps Python 别名、项目虚拟环境、版本管理器入口、版本命令超时和普通权限目录不可读场景验证扫描、取消、证据与失败隔离；分别验证系统/用户 PATH 的确认、UAC 取消、去重、失败回滚、写入后自动重扫及界面不冻结。Temurin 托管安装还需人工验证大文件下载进度、取消清理、错误哈希拒绝、`java -version` 验证、清单损坏保护，以及被 PATH/JAVA_HOME/运行进程引用时拒绝卸载。不得擅自加入静默安装、外部安装目录删除、全局版本切换或 Shim。
 
 ## 九、最近关键提交
 
@@ -503,9 +505,9 @@ git log -5 --oneline
 
 `ClipboardDiagnostics/` 与 `ScreenshotApp/VoiceInput/Runtime/` 是未跟踪的本地临时目录，必须保留，禁止提交、删除或修改。`ScreenshotApp/App.xaml.cs`、`Translation/TranslationEngineProvider.cs`、`VoiceInput/VoiceInputService.cs` 也有与当前任务无关的既有修改，禁止顺带暂存或覆盖。未经我明确要求不要推送 GitHub。
 
-当前已完成：首页、屏幕工作台、转换器工作台（图片/音频/视频/PDF/编码）、文件工作台、网络工作台第三阶段、资源管理、系统工具、开发者工具第一阶段、快捷键和设置。开发者工具当前只读扫描 Java、Python、Node.js、.NET SDK、Git、Maven 与 Gradle，提供实际命令识别、有限目录发现和 PATH/JAVA_HOME/Python-pip 冲突诊断；不得擅自加入安装、卸载、自动环境变量修复或 Shim。屏幕截图标注工具栏的独立“取色”按钮位于“形状”之后，已接回选中状态和点击处理，不要再次隐藏。文件工作台当前处于**未提交待确认**状态：默认“开始搜索”为 Windows Search 优先，使用 `Search.CollatorDSO.1` 查询 `SystemIndex`；必须取 `System.ItemUrl` 并用 `Uri.LocalPath` 获取真实路径，不能使用已本地化的 `System.ItemPathDisplay`。用户可点“完整扫描”绕过系统索引做异步递归扫描；结果最多保留 5,000 项、每页 200 项，类型/时间/多列排序只处理当前结果池。网络工作台当前顶栏为网络总览、网卡与路由、代理与 DNS、Wi-Fi、网络方案；实时曲线在切页期间仍持续采样，并使用“新峰值立即扩展、旧峰值平滑回落”的纵轴缩放。资源管理包含端口、进程、服务、关联关系；系统工具包含静态设备信息、折叠的 Windows PnP 驱动清单、只读存储容量概览、环境变量与已提交的按需只读系统诊断。系统诊断按可靠性监视器口径展示 24 小时/7 天/14 天/30 天时间格、分级事件组和右侧详情；固定建议/等级说明卡已移除，原始事件正文限制在独立滚动框内。应用故障会解析友好程序名、EXE、发布者和身份依据，主操作为“打开程序位置”；其他事件仍打开事件查看器。不得恢复实时传感器监控、启动项管理、计划任务或管理员助手。当前语音输入是稳定 CPU 方案，不要重新启用 GPU 运行时；顶部 ETW 精确流量入口已移除，不要擅自恢复。下一项功能由我在后续消息指定。
+当前已完成：首页、屏幕工作台、转换器工作台（图片/音频/视频/PDF/编码）、文件工作台、网络工作台第三阶段、资源管理、系统工具、开发者工具第一阶段及第二阶段首个增量、快捷键和设置。开发者工具可扫描 Java、Python、Node.js、.NET SDK、Git、Maven 与 Gradle，提供实际命令识别、有限目录发现、PATH/JAVA_HOME/Python-pip 冲突诊断和受控环境配置；“托管安装”已接入 Temurin 官方目录、SHA-256 校验、用户目录安装、清单、日志、取消和安全卸载保护，但 uv Python 与 Volta Node.js 尚未开发。不得擅自扩大为静默安装、删除外部安装、全局版本切换或 Shim。屏幕截图标注工具栏的独立“取色”按钮位于“形状”之后，已接回选中状态和点击处理，不要再次隐藏。文件工作台当前处于**未提交待确认**状态：默认“开始搜索”为 Windows Search 优先，使用 `Search.CollatorDSO.1` 查询 `SystemIndex`；必须取 `System.ItemUrl` 并用 `Uri.LocalPath` 获取真实路径，不能使用已本地化的 `System.ItemPathDisplay`。用户可点“完整扫描”绕过系统索引做异步递归扫描；结果最多保留 5,000 项、每页 200 项，类型/时间/多列排序只处理当前结果池。网络工作台当前顶栏为网络总览、网卡与路由、代理与 DNS、Wi-Fi、网络方案；实时曲线在切页期间仍持续采样，并使用“新峰值立即扩展、旧峰值平滑回落”的纵轴缩放。资源管理包含端口、进程、服务、关联关系；系统工具包含静态设备信息、折叠的 Windows PnP 驱动清单、只读存储容量概览、环境变量与已提交的按需只读系统诊断。系统诊断按可靠性监视器口径展示 24 小时/7 天/14 天/30 天时间格、分级事件组和右侧详情；固定建议/等级说明卡已移除，原始事件正文限制在独立滚动框内。应用故障会解析友好程序名、EXE、发布者和身份依据，主操作为“打开程序位置”；其他事件仍打开事件查看器。不得恢复实时传感器监控、启动项管理、计划任务或管理员助手。当前语音输入是稳定 CPU 方案，不要重新启用 GPU 运行时；顶部 ETW 精确流量入口已移除，不要擅自恢复。下一项功能由我在后续消息指定。
 
-补充更新：开发者工具已不再是完全只读阶段。总览“未加入 PATH”和 SDK 清单“配置环境”可在当前页应用受控配置；默认写系统变量并按需请求 UAC，也可切换用户范围。仅支持已验证安装与既定工具规则，不包含安装、卸载、全局版本切换或 Shim。
+补充更新：开发者工具已不再是完全只读阶段。总览“未加入 PATH”和 SDK 清单“配置环境”可在当前页应用受控配置；默认写系统变量并按需请求 UAC，也可切换用户范围。仅支持已验证安装与既定工具规则；托管安装/卸载仅限 X-Tool 清单拥有的 Temurin JDK，不包含外部安装卸载、全局版本切换或 Shim。
 
 若需要继续优化 UI，请保持现有浅色毛玻璃设计语言，不要破坏已实现的异步、取消、失败提示、日志、单飞刷新、历史持久化和权限确认逻辑。任何 ETW、系统网络配置、防火墙、服务、受保护进程或系统环境变量写操作都只能在用户明确点击后按需申请管理员权限，不得让主程序默认长期以管理员运行。
 
