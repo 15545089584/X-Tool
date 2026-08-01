@@ -446,7 +446,7 @@
                         <TextBlock FontSize="16" FontWeight="SemiBold" Text="Volta 管理 Node.js" />
                         <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
                             <TextBlock x:Name="ManagedNodeStateText" Margin="0,0,12,0" VerticalAlignment="Center" FontSize="11" Foreground="#66809A" Text="等待读取 Node.js 目录" />
-                            <Button x:Name="InstallVoltaButton" Width="126" Style="{StaticResource DeveloperSmallButtonStyle}"
+                            <Button x:Name="InstallVoltaButton" MinWidth="156" Padding="16,0" Style="{StaticResource DeveloperSmallButtonStyle}"
                                     Content="通过 WinGet 安装 Volta" Visibility="Collapsed" Click="InstallVolta_Click" />
                         </StackPanel>
                     </Grid>
