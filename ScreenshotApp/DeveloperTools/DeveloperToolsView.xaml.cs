@@ -176,14 +176,6 @@ public partial class DeveloperToolsView : UserControl
         OpenEnvironmentConfiguration(toolchain, installation);
     }
 
-    private void ConfigureInstallation_Click(object sender, RoutedEventArgs e)
-    {
-        if ((sender as Button)?.CommandParameter is not ToolchainInstallation installation) return;
-        var toolchain = _snapshot.Toolchains.FirstOrDefault(item => string.Equals(item.Id, installation.ToolchainId, StringComparison.OrdinalIgnoreCase));
-        if (toolchain is null) return;
-        OpenEnvironmentConfiguration(toolchain, installation);
-    }
-
     private void OpenEnvironmentConfiguration(ToolchainSummary toolchain, ToolchainInstallation installation)
     {
         _configurationToolchain = toolchain;

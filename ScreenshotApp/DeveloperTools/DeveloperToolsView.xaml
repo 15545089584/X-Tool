@@ -294,21 +294,25 @@
                                             <Border Width="40" Height="40" Background="{Binding IconBackground}" CornerRadius="11"><TextBlock FontFamily="Segoe Fluent Icons" FontSize="19" Foreground="{Binding IconForeground}" Text="{Binding IconGlyph}" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border>
                                             <StackPanel Margin="13,0,0,0" VerticalAlignment="Center"><TextBlock FontSize="16" FontWeight="SemiBold" Text="{Binding DisplayName}" /><TextBlock Margin="0,3,0,0" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}" Text="{Binding Description}" /></StackPanel>
                                         </StackPanel>
-                                        <Border HorizontalAlignment="Right" VerticalAlignment="Center" Padding="10,5" Background="{Binding StatusBackground}" CornerRadius="8"><TextBlock FontSize="11" Foreground="{Binding StatusForeground}" Text="{Binding CountText}" /></Border>
+                                        <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal">
+                                            <Border VerticalAlignment="Center" Padding="10,5" Background="{Binding StatusBackground}" CornerRadius="8">
+                                                <TextBlock FontSize="11" Foreground="{Binding StatusForeground}" Text="{Binding CountText}" />
+                                            </Border>
+                                            <Button Width="88" Margin="10,0,0,0" Style="{StaticResource DeveloperSmallButtonStyle}"
+                                                    Content="配置环境" IsEnabled="{Binding CanConfigureEnvironment}"
+                                                    CommandParameter="{Binding}" Click="ConfigureToolchain_Click" />
+                                        </StackPanel>
                                     </Grid>
                                     <ItemsControl Margin="0,14,0,0" ItemsSource="{Binding Installations}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
                                                 <Border Margin="0,0,0,8" Padding="14,12" Background="#5CF2F7FC" BorderBrush="#78D5E3EF" BorderThickness="1" CornerRadius="11" ToolTip="{Binding Evidence}">
                                                     <Grid>
-                                                        <Grid.ColumnDefinitions><ColumnDefinition Width="100" /><ColumnDefinition Width="120" /><ColumnDefinition Width="*" /><ColumnDefinition Width="196" /></Grid.ColumnDefinitions>
+                                                        <Grid.ColumnDefinitions><ColumnDefinition Width="100" /><ColumnDefinition Width="120" /><ColumnDefinition Width="*" /><ColumnDefinition Width="96" /></Grid.ColumnDefinitions>
                                                         <StackPanel VerticalAlignment="Center"><TextBlock FontSize="14" FontWeight="SemiBold" Text="{Binding Version}" /><TextBlock Margin="0,3,0,0" FontSize="10" Foreground="#7D8B99" Text="{Binding Architecture}" /></StackPanel>
                                                         <Border Grid.Column="1" Margin="8,0" Padding="8,4" HorizontalAlignment="Left" VerticalAlignment="Center" Background="{Binding StateBackground}" CornerRadius="8"><TextBlock FontSize="10" Foreground="{Binding StateForeground}" Text="{Binding StateText}" /></Border>
                                                         <StackPanel Grid.Column="2" Margin="8,0" VerticalAlignment="Center"><TextBlock FontSize="11" Foreground="#496984" Text="{Binding ExecutablePath}" TextTrimming="CharacterEllipsis" ToolTip="{Binding ExecutablePath}" /><TextBlock Margin="0,4,0,0" FontSize="10" Foreground="#8492A0" Text="{Binding Source}" /></StackPanel>
-                                                        <StackPanel Grid.Column="3" HorizontalAlignment="Right" Orientation="Horizontal">
-                                                            <Button Width="88" Margin="0,0,8,0" Style="{StaticResource DeveloperSmallButtonStyle}" Content="配置环境" CommandParameter="{Binding}" Click="ConfigureInstallation_Click" />
-                                                            <Button Width="88" Style="{StaticResource DeveloperSmallButtonStyle}" Content="打开位置" CommandParameter="{Binding}" Click="OpenInstallationLocation_Click" />
-                                                        </StackPanel>
+                                                        <Button Grid.Column="3" Width="88" HorizontalAlignment="Right" Style="{StaticResource DeveloperSmallButtonStyle}" Content="打开位置" CommandParameter="{Binding}" Click="OpenInstallationLocation_Click" />
                                                     </Grid>
                                                 </Border>
                                             </DataTemplate>
