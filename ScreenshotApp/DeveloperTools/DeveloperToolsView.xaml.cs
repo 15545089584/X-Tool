@@ -13,6 +13,7 @@ public partial class DeveloperToolsView : UserControl
     private readonly DeveloperEnvironmentScanner _scanner = new();
     private readonly ManagedToolchainService _managedToolchainService = new();
     private readonly ObservableCollection<ManagedToolchainRelease> _managedReleases = new();
+    private readonly ObservableCollection<ManagedToolchainRelease> _managedPythonReleases = new();
     private CancellationTokenSource? _scanCancellation;
     private CancellationTokenSource? _managedCatalogCancellation;
     private CancellationTokenSource? _managedOperationCancellation;
@@ -27,6 +28,7 @@ public partial class DeveloperToolsView : UserControl
         InitializeComponent();
         DataContext = _snapshot;
         ManagedReleasesItemsControl.ItemsSource = _managedReleases;
+        ManagedPythonReleasesItemsControl.ItemsSource = _managedPythonReleases;
         ManagedInstallRootText.Text = $"托管目录：{_managedToolchainService.ManagedRoot}";
     }
 
@@ -142,7 +144,7 @@ public partial class DeveloperToolsView : UserControl
         ToolchainsView.Visibility = tab == "Toolchains" ? Visibility.Visible : Visibility.Collapsed;
         ManagedInstallView.Visibility = tab == "Managed" ? Visibility.Visible : Visibility.Collapsed;
         DiagnosticsView.Visibility = tab == "Diagnostics" ? Visibility.Visible : Visibility.Collapsed;
-        if (tab == "Managed" && _managedReleases.Count == 0 && _managedCatalogCancellation is null)
+        if (tab == "Managed" && _managedReleases.Count == 0 && _managedPythonReleases.Count == 0 && _managedCatalogCancellation is null)
         {
             _ = RefreshManagedCatalogAsync();
         }
@@ -166,7 +168,24 @@ public partial class DeveloperToolsView : UserControl
             _managedReleases.Clear();
             foreach (var release in releases) _managedReleases.Add(release);
             ManagedCatalogEmptyState.Visibility = releases.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-            ManagedCatalogStateText.Text = releases.Count == 0 ? "未返回可安装版本" : $"已读取 {releases.Count} 个官方版本";
+            ManagedCatalogStateText.Text = releases.Count == 0 ? "Temurin 未返回版本" : $"Temurin {releases.Count} 个版本";
+
+            try
+            {
+                var pythonReleases = await _managedToolchainService.GetUvPythonReleasesAsync(cancellation.Token);
+                if (cancellation.IsCancellationRequested) return;
+                _managedPythonReleases.Clear();
+                foreach (var release in pythonReleases) _managedPythonReleases.Add(release);
+                ManagedPythonEmptyState.Visibility = pythonReleases.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+                ManagedPythonStateText.Text = pythonReleases.Count == 0 ? "uv 未返回可安装版本" : $"已读取 {pythonReleases.Count} 个 CPython 版本";
+                ManagedCatalogStateText.Text = $"已读取 {releases.Count + pythonReleases.Count} 个官方版本";
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _managedPythonReleases.Clear();
+                ManagedPythonEmptyState.Visibility = Visibility.Visible;
+                ManagedPythonStateText.Text = ex.Message;
+            }
         }
         catch (OperationCanceledException)
         {
@@ -194,15 +213,17 @@ public partial class DeveloperToolsView : UserControl
         if (release.IsInstalled)
         {
             var confirmation = MessageBox.Show(
-                $"将永久删除 X-Tool 托管的 {release.DisplayName} {release.Version}。\n\n如果 PATH、JAVA_HOME 或运行中的进程仍引用它，操作会被拒绝。是否继续？",
-                "确认卸载托管 JDK", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                $"将卸载 X-Tool 托管的 {release.DisplayName} {release.Version}。\n\n如果 PATH、配套变量或运行中的进程仍引用它，操作会被拒绝。是否继续？",
+                "确认卸载托管工具链", MessageBoxButton.YesNo, MessageBoxImage.Warning);
             if (confirmation != MessageBoxResult.Yes) return;
         }
         else
         {
             var confirmation = MessageBox.Show(
-                $"将从 Eclipse Adoptium 官方发行页下载并安装：\n\n{release.DisplayName} {release.Version}\n{release.Architecture} · {release.SizeText}\n\n下载完成后会校验 API 提供的 SHA-256，安装到当前用户的 X-Tool 托管目录。是否继续？",
-                "确认安装 Temurin JDK", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                release.ProviderId == "uv"
+                    ? $"将调用本机已验证的 uv 安装：\n\n{release.DisplayName} {release.Version}\n{release.Architecture}\n\nuv 将按其官方目录下载并校验，且只安装到 X-Tool 的当前用户托管目录，不注册系统 Python。是否继续？"
+                    : $"将从 Eclipse Adoptium 官方发行页下载并安装：\n\n{release.DisplayName} {release.Version}\n{release.Architecture} · {release.SizeText}\n\n下载完成后会校验 API 提供的 SHA-256，安装到当前用户的 X-Tool 托管目录。是否继续？",
+                "确认安装托管工具链", MessageBoxButton.YesNo, MessageBoxImage.Question);
             if (confirmation != MessageBoxResult.Yes) return;
         }
 
@@ -221,7 +242,7 @@ public partial class DeveloperToolsView : UserControl
         {
             var result = release.IsInstalled
                 ? await _managedToolchainService.UninstallAsync(release, cancellation.Token)
-                : await _managedToolchainService.InstallTemurinAsync(release, progress, cancellation.Token);
+                : await _managedToolchainService.InstallAsync(release, progress, cancellation.Token);
             release.ProgressText = result.Message;
             ManagedCatalogStateText.Text = result.Message;
             if (result.Succeeded)

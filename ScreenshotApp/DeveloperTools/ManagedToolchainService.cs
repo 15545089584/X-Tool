@@ -13,6 +13,7 @@ public sealed class ManagedToolchainService
     private static readonly HttpClient HttpClient = CreateHttpClient();
     private static readonly SemaphoreSlim ManifestLock = new(1, 1);
     private static readonly int[] TemurinMajors = { 8, 11, 17, 21, 25 };
+    private static readonly int[] PythonMinors = { 10, 11, 12, 13, 14 };
     private readonly SafeDeveloperCommandRunner _commandRunner = new();
 
     public string ManagedRoot { get; } = Path.Combine(
@@ -21,6 +22,7 @@ public sealed class ManagedToolchainService
     private string ManifestPath => Path.Combine(ManagedRoot, "managed-tools.json");
     private string DownloadsRoot => Path.Combine(ManagedRoot, "Downloads");
     private string JavaRoot => Path.Combine(ManagedRoot, "Java");
+    private string PythonRoot => Path.Combine(ManagedRoot, "Python", "uv");
     private string LogPath => Path.Combine(ManagedRoot, "Logs", "managed-toolchains.log");
 
     public async Task<IReadOnlyList<ManagedToolchainRelease>> GetTemurinReleasesAsync(CancellationToken cancellationToken)
@@ -68,6 +70,132 @@ public sealed class ManagedToolchainService
         }
 
         return releases.OrderByDescending(item => ParseMajor(item.Version)).ToList();
+    }
+
+    public async Task<IReadOnlyList<ManagedToolchainRelease>> GetUvPythonReleasesAsync(CancellationToken cancellationToken)
+    {
+        var uvPath = await FindValidatedUvAsync(cancellationToken).ConfigureAwait(false);
+        if (uvPath is null) throw new FileNotFoundException("未找到可验证的 uv.exe；请先从 uv 官方方式安装 uv。 ");
+        var manifest = await LoadManifestAsync(cancellationToken).ConfigureAwait(false);
+        var releases = new List<ManagedToolchainRelease>();
+        foreach (var minor in PythonMinors)
+        {
+            var result = await _commandRunner.RunAsync(uvPath,
+                new[] { "python", "list", $"3.{minor}", "--managed-python", "--only-downloads", "--output-format", "json", "--no-config", "--color", "never" },
+                cancellationToken, TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+            if (result.TimedOut || result.ExitCode != 0) continue;
+            using var document = JsonDocument.Parse(result.StandardOutput);
+            var candidate = document.RootElement.EnumerateArray().FirstOrDefault(item =>
+                item.TryGetProperty("implementation", out var implementation) && implementation.GetString() == "cpython" &&
+                item.TryGetProperty("arch", out var architecture) && architecture.GetString() == "x86_64" &&
+                item.TryGetProperty("url", out var url) && url.ValueKind == JsonValueKind.String);
+            if (candidate.ValueKind != JsonValueKind.Object) continue;
+            var key = candidate.GetProperty("key").GetString() ?? string.Empty;
+            var version = candidate.GetProperty("version").GetString() ?? string.Empty;
+            var urlText = candidate.GetProperty("url").GetString() ?? string.Empty;
+            if (!IsTrustedUvRelease(key, urlText)) continue;
+            releases.Add(new ManagedToolchainRelease
+            {
+                ToolchainId = "python",
+                ProviderId = "uv",
+                DisplayName = $"Python 3.{minor}",
+                Version = version,
+                Architecture = "x64",
+                DownloadUrl = urlText,
+                FileName = key,
+                IsInstalled = manifest.Installations.Any(item => item.ManagedByXTool && item.ToolchainId == "python" &&
+                    item.ProviderId == "uv" && item.Version == version && Directory.Exists(item.InstallationPath))
+            });
+        }
+        foreach (var entry in manifest.Installations.Where(item => item.ManagedByXTool && item.ProviderId == "uv" &&
+                     Directory.Exists(item.InstallationPath) && !releases.Any(release => release.Version == item.Version)))
+        {
+            if (!IsTrustedUvRelease(entry.PackageKey, entry.DownloadUrl)) continue;
+            releases.Add(new ManagedToolchainRelease
+            {
+                ToolchainId = "python", ProviderId = "uv", DisplayName = $"Python {entry.Version}", Version = entry.Version,
+                Architecture = entry.Architecture, DownloadUrl = entry.DownloadUrl, FileName = entry.PackageKey, IsInstalled = true
+            });
+        }
+        return releases.OrderByDescending(item => item.Version).ToList();
+    }
+
+    public Task<ManagedToolchainOperationResult> InstallAsync(
+        ManagedToolchainRelease release, IProgress<ManagedInstallProgress>? progress, CancellationToken cancellationToken)
+        => release.ProviderId switch
+        {
+            "temurin" => InstallTemurinAsync(release, progress, cancellationToken),
+            "uv" => InstallUvPythonAsync(release, progress, cancellationToken),
+            _ => Task.FromResult(new ManagedToolchainOperationResult(false, "不支持该托管来源。"))
+        };
+
+    private async Task<ManagedToolchainOperationResult> InstallUvPythonAsync(
+        ManagedToolchainRelease release, IProgress<ManagedInstallProgress>? progress, CancellationToken cancellationToken)
+    {
+        if (release.ToolchainId != "python" || release.ProviderId != "uv" ||
+            !IsTrustedUvRelease(release.FileName, release.DownloadUrl))
+            return new(false, "安装请求不是 uv 官方目录中的 CPython Windows x64 版本。");
+
+        var uvPath = await FindValidatedUvAsync(cancellationToken).ConfigureAwait(false);
+        if (uvPath is null) return new(false, "未找到可验证的 uv.exe，无法执行托管安装。");
+        Directory.CreateDirectory(PythonRoot);
+        if (await FindInstalledPythonAsync(release.Version, cancellationToken).ConfigureAwait(false) is not null)
+            return new(false, "X-Tool Python 托管目录已存在该版本，但清单没有所有权记录；为避免接管未知目录，安装已停止。");
+        var uvInstalled = false;
+        var manifestCommitted = false;
+        try
+        {
+            progress?.Report(new("uv 正在下载、校验并安装 Python"));
+            var result = await _commandRunner.RunAsync(uvPath,
+                new[] { "python", "install", release.FileName, "--install-dir", PythonRoot, "--no-bin", "--no-registry", "--managed-python", "--no-config", "--color", "never" },
+                cancellationToken, TimeSpan.FromMinutes(30)).ConfigureAwait(false);
+            if (result.TimedOut || result.ExitCode != 0)
+            {
+                await WriteLogAsync($"uv Python {release.Version} 安装失败：{result.CombinedOutput}").ConfigureAwait(false);
+                return new(false, result.TimedOut ? "uv 安装超时，进程已终止。" : $"uv 安装失败：{result.CombinedOutput}");
+            }
+            uvInstalled = true;
+
+            var pythonPath = await FindInstalledPythonAsync(release.Version, cancellationToken).ConfigureAwait(false);
+            if (pythonPath is null) return new(false, "uv 返回安装成功，但未在 X-Tool 托管目录找到匹配的 python.exe。");
+            var installationPath = Directory.GetParent(pythonPath)!.FullName;
+            var entry = new ManagedToolchainEntry
+            {
+                ToolchainId = "python", ProviderId = "uv", Version = release.Version, Architecture = release.Architecture,
+                InstallationPath = installationPath, ExecutablePath = pythonPath, DownloadUrl = release.DownloadUrl,
+                PackageKey = release.FileName, Sha256 = "由 uv 官方目录与内置校验负责", InstalledAtUtc = DateTime.UtcNow, ManagedByXTool = true
+            };
+            await AddManifestEntryAsync(entry, cancellationToken).ConfigureAwait(false);
+            manifestCommitted = true;
+            await WriteLogAsync($"已通过 uv 安装 Python {release.Version} 到 {installationPath}").ConfigureAwait(false);
+            return new(true, $"Python {release.Version} 已由 uv 安装并通过版本验证。", entry);
+        }
+        catch (OperationCanceledException)
+        {
+            await WriteLogAsync($"uv Python {release.Version} 安装已取消").ConfigureAwait(false);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            await WriteLogAsync($"uv Python {release.Version} 安装失败：{ex}").ConfigureAwait(false);
+            return new(false, $"安装失败：{ex.Message}");
+        }
+        finally
+        {
+            if (uvInstalled && !manifestCommitted)
+            {
+                try
+                {
+                    await _commandRunner.RunAsync(uvPath,
+                        new[] { "python", "uninstall", release.FileName, "--install-dir", PythonRoot, "--managed-python", "--no-config", "--color", "never" },
+                        CancellationToken.None, TimeSpan.FromMinutes(10)).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    await WriteLogAsync($"uv Python {release.Version} 回滚失败：{ex.Message}").ConfigureAwait(false);
+                }
+            }
+        }
     }
 
     public async Task<ManagedToolchainOperationResult> InstallTemurinAsync(
@@ -169,25 +297,69 @@ public sealed class ManagedToolchainService
         var entry = manifest.Installations.FirstOrDefault(item => item.ManagedByXTool &&
             item.ToolchainId == release.ToolchainId && item.ProviderId == release.ProviderId && item.Version == release.Version);
         if (entry is null) return new(false, "未找到 X-Tool 托管记录，拒绝删除外部安装。");
-        if (!IsInsideRoot(entry.InstallationPath, JavaRoot)) return new(false, "托管目录超出 X-Tool Java 根目录，拒绝删除。");
+        var expectedRoot = entry.ProviderId == "uv" ? PythonRoot : JavaRoot;
+        if (!IsInsideRoot(entry.InstallationPath, expectedRoot)) return new(false, "托管目录超出对应的 X-Tool 根目录，拒绝删除。");
 
         var reference = FindReference(entry);
         if (reference is not null) return new(false, reference);
-        if (IsInstallationRunning(entry.InstallationPath)) return new(false, "该 JDK 仍被运行中的进程使用，请关闭相关终端或 IDE 后重试。");
+        if (IsInstallationRunning(entry.InstallationPath)) return new(false, "该工具链仍被运行中的进程使用，请关闭相关终端或 IDE 后重试。");
 
         try
         {
-            if (Directory.Exists(entry.InstallationPath)) Directory.Delete(entry.InstallationPath, recursive: true);
+            if (entry.ProviderId == "uv")
+            {
+                var uvPath = await FindValidatedUvAsync(cancellationToken).ConfigureAwait(false);
+                if (uvPath is null) return new(false, "未找到可验证的 uv.exe，无法安全卸载该 Python。");
+                var result = await _commandRunner.RunAsync(uvPath,
+                    new[] { "python", "uninstall", entry.PackageKey, "--install-dir", PythonRoot, "--managed-python", "--no-config", "--color", "never" },
+                    cancellationToken, TimeSpan.FromMinutes(10)).ConfigureAwait(false);
+                if (result.TimedOut || result.ExitCode != 0) return new(false, $"uv 卸载失败：{result.CombinedOutput}");
+            }
+            else if (Directory.Exists(entry.InstallationPath)) Directory.Delete(entry.InstallationPath, recursive: true);
             manifest.Installations.Remove(entry);
             await SaveManifestAsync(manifest, cancellationToken).ConfigureAwait(false);
-            await WriteLogAsync($"已卸载 Temurin {entry.Version}：{entry.InstallationPath}").ConfigureAwait(false);
-            return new(true, $"Temurin {entry.Version} 的 X-Tool 托管目录已删除。");
+            await WriteLogAsync($"已卸载 {entry.ProviderId} {entry.Version}：{entry.InstallationPath}").ConfigureAwait(false);
+            return new(true, $"{release.DisplayName} {entry.Version} 的 X-Tool 托管安装已卸载。");
         }
         catch (Exception ex)
         {
             await WriteLogAsync($"卸载 Temurin {entry.Version} 失败：{ex}").ConfigureAwait(false);
             return new(false, $"卸载失败：{ex.Message}");
         }
+    }
+
+    private async Task<string?> FindValidatedUvAsync(CancellationToken cancellationToken)
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var candidates = new List<string>
+        {
+            Path.Combine(home, ".local", "bin", "uv.exe"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "uv", "uv.exe"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "uv", "uv.exe")
+        };
+        foreach (var target in new[] { EnvironmentVariableTarget.User, EnvironmentVariableTarget.Machine })
+        {
+            candidates.AddRange((Environment.GetEnvironmentVariable("Path", target) ?? string.Empty)
+                .Split(';', StringSplitOptions.RemoveEmptyEntries)
+                .Select(item => Path.Combine(Environment.ExpandEnvironmentVariables(item.Trim().Trim('"')), "uv.exe")));
+        }
+        foreach (var candidate in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (!Path.IsPathFullyQualified(candidate) || !File.Exists(candidate)) continue;
+            var result = await _commandRunner.RunAsync(candidate, new[] { "--version" }, cancellationToken).ConfigureAwait(false);
+            if (!result.TimedOut && result.ExitCode == 0 && result.StandardOutput.StartsWith("uv ", StringComparison.OrdinalIgnoreCase)) return candidate;
+        }
+        return null;
+    }
+
+    private async Task<string?> FindInstalledPythonAsync(string expectedVersion, CancellationToken cancellationToken)
+    {
+        foreach (var pythonPath in Directory.EnumerateFiles(PythonRoot, "python.exe", SearchOption.AllDirectories))
+        {
+            var result = await _commandRunner.RunAsync(pythonPath, new[] { "--version" }, cancellationToken).ConfigureAwait(false);
+            if (!result.TimedOut && result.ExitCode == 0 && result.CombinedOutput.Contains(expectedVersion, StringComparison.OrdinalIgnoreCase)) return pythonPath;
+        }
+        return null;
     }
 
     private async Task DownloadAsync(string url, string destination, IProgress<ManagedInstallProgress>? progress, CancellationToken cancellationToken)
@@ -320,6 +492,14 @@ public sealed class ManagedToolchainService
            string.Equals(uri.Host, "github.com", StringComparison.OrdinalIgnoreCase) &&
            fileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
            sha256.Length == 64 && sha256.All(Uri.IsHexDigit);
+
+    private static bool IsTrustedUvRelease(string key, string url)
+        => key.StartsWith("cpython-", StringComparison.Ordinal) &&
+           key.EndsWith("-windows-x86_64-none", StringComparison.Ordinal) &&
+           !key.Any(character => char.IsWhiteSpace(character) || character is '\\' or '/' or '"') &&
+           Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps &&
+           string.Equals(uri.Host, "github.com", StringComparison.OrdinalIgnoreCase) &&
+           uri.AbsolutePath.StartsWith("/astral-sh/python-build-standalone/releases/", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsInsideRoot(string path, string root)
     {

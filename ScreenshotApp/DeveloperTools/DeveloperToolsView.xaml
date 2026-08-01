@@ -395,11 +395,58 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
+                    <Grid Margin="0,14,0,10">
+                        <TextBlock FontSize="16" FontWeight="SemiBold" Text="uv 托管 Python" />
+                        <TextBlock x:Name="ManagedPythonStateText" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" Foreground="#66809A" Text="等待读取 uv 目录" />
+                    </Grid>
+                    <TextBlock Margin="0,0,0,12" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}" TextWrapping="Wrap"
+                               Text="复用本机已验证的 uv.exe 与 uv 官方 Python 目录；安装到 X-Tool 独立目录，不写注册表、不创建全局命令入口。" />
+                    <Border x:Name="ManagedPythonEmptyState" Padding="20" Background="#72FFFFFF" BorderBrush="#92FFFFFF" BorderThickness="1" CornerRadius="14">
+                        <TextBlock HorizontalAlignment="Center" FontSize="12" Foreground="#74879A" Text="未找到 uv，或 uv 未返回可安装的 CPython 版本" />
+                    </Border>
+                    <ItemsControl x:Name="ManagedPythonReleasesItemsControl">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Margin="0,0,0,10" Padding="16,14" Background="#78FFFFFF" BorderBrush="#99D5E3EF" BorderThickness="1" CornerRadius="13">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="52" /><ColumnDefinition Width="*" /><ColumnDefinition Width="116" /></Grid.ColumnDefinitions>
+                                        <Border Width="42" Height="42" Background="#E8F2FF" CornerRadius="11">
+                                            <TextBlock FontFamily="Consolas" FontSize="17" FontWeight="SemiBold" Foreground="#4385D1" Text="Py" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                        <StackPanel Grid.Column="1" Margin="12,0,20,0" VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock FontSize="15" FontWeight="SemiBold" Text="{Binding DisplayName}" />
+                                                <Border Margin="10,0,0,0" Padding="8,3" Background="#DDEEFF" CornerRadius="7">
+                                                    <TextBlock FontSize="10" Foreground="#36709A" Text="{Binding VersionText}" />
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Margin="0,5,0,0" FontSize="11" Foreground="#687D91">
+                                                <Run Text="{Binding SourceText, Mode=OneWay}" /><Run Text="  ·  " /><Run Text="{Binding Architecture, Mode=OneWay}" />
+                                            </TextBlock>
+                                            <TextBlock Margin="0,5,0,0" FontSize="10" Foreground="#74899D" Text="{Binding ProgressText}" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <Button Grid.Column="2" Width="104" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                Content="{Binding ActionText}" CommandParameter="{Binding}" Click="ManagedReleaseAction_Click">
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource DeveloperSmallButtonStyle}">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsBusy}" Value="True"><Setter Property="IsEnabled" Value="False" /></DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsInstalled}" Value="True"><Setter Property="Foreground" Value="#B14F4F" /><Setter Property="Background" Value="#FFF0F0" /></DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
                     <Border Margin="0,10,0,0" Padding="18" Background="#66E8F2FF" BorderBrush="#88CFE0F3" BorderThickness="1" CornerRadius="13">
                         <StackPanel>
                             <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="#426B98" Text="后续接入顺序" />
                             <TextBlock Margin="0,6,0,0" FontSize="11" Foreground="#647B91" TextWrapping="Wrap"
-                                       Text="Python 将复用本机 uv 的官方托管机制；Node.js 将优先复用 Volta。两者不会通过 X-Tool 自行伪造运行时下载源。" />
+                                       Text="下一项将优先复用 Volta 管理 Node.js；X-Tool 不会自行伪造 Node 运行时下载源。" />
                         </StackPanel>
                     </Border>
                 </StackPanel>

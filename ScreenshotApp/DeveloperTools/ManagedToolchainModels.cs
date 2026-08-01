@@ -23,7 +23,12 @@ public sealed class ManagedToolchainRelease : INotifyPropertyChanged
 
     public string VersionText => IsLts ? $"{Version} · LTS" : Version;
     public string SizeText => DownloadSize <= 0 ? "大小未知" : $"{DownloadSize / 1024d / 1024d:N1} MB";
-    public string SourceText => ProviderId == "temurin" ? "Eclipse Adoptium 官方发行版" : ProviderId;
+    public string SourceText => ProviderId switch
+    {
+        "temurin" => "Eclipse Adoptium 官方发行版",
+        "uv" => "uv 官方托管 Python",
+        _ => ProviderId
+    };
     public string ActionText => IsInstalled ? "卸载" : "安装";
 
     public bool IsInstalled
@@ -64,6 +69,7 @@ public sealed class ManagedToolchainEntry
     public string InstallationPath { get; init; } = string.Empty;
     public string ExecutablePath { get; init; } = string.Empty;
     public string DownloadUrl { get; init; } = string.Empty;
+    public string PackageKey { get; init; } = string.Empty;
     public string Sha256 { get; init; } = string.Empty;
     public DateTime InstalledAtUtc { get; init; }
     public bool ManagedByXTool { get; init; } = true;

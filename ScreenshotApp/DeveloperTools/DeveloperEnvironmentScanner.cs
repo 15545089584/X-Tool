@@ -402,7 +402,12 @@ public sealed class DeveloperEnvironmentScanner
                 Path.Combine(programFiles, "Microsoft"),
                 Path.Combine(localAppData, "X-Tool", "Dev", "Java")
             },
-            "python" => new[] { Path.Combine(localAppData, "Programs", "Python"), Path.Combine(roamingAppData, "uv", "python") },
+            "python" => new[]
+            {
+                Path.Combine(localAppData, "Programs", "Python"),
+                Path.Combine(roamingAppData, "uv", "python"),
+                Path.Combine(localAppData, "X-Tool", "Dev", "Python", "uv")
+            },
             "node" => new[] { Path.Combine(programFiles, "nodejs"), Path.Combine(localAppData, "Volta", "tools", "image", "node") },
             "dotnet" => new[] { Path.Combine(programFiles, "dotnet"), Path.Combine(programFilesX86, "dotnet") },
             "git" => new[] { Path.Combine(programFiles, "Git"), Path.Combine(programFilesX86, "Git"), Path.Combine(localAppData, "Programs", "Git") },
