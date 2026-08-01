@@ -457,7 +457,7 @@
                             <!-- X-Tool 工具箱首页 -->
                             <Grid x:Name="HomeView" Margin="44,34,44,34">
                                 <Grid.RowDefinitions>
-                                    <RowDefinition Height="154" />
+                                    <RowDefinition Height="174" />
                                     <RowDefinition Height="20" />
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="12" />
@@ -466,24 +466,17 @@
                                 </Grid.RowDefinitions>
 
                                 <Border Padding="26,20" Background="#82FFFFFF" BorderBrush="#A6FFFFFF" BorderThickness="1" CornerRadius="18">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="138" /></Grid.ColumnDefinitions>
-                                        <StackPanel VerticalAlignment="Center">
-                                            <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#52779D" Text="X-Tool · 本地桌面效率平台" />
-                                            <TextBlock Margin="0,8,0,0" FontSize="28" FontWeight="SemiBold" Text="一个入口，管理你的桌面工作流" />
-                                            <TextBlock Margin="0,7,0,0" FontSize="13" Foreground="{StaticResource SecondaryTextBrush}"
-                                                       Text="从屏幕内容、格式转换和文件整理，到网络、进程、设备与系统诊断，都在本机按需完成。" />
-                                            <StackPanel Margin="0,14,0,0" Orientation="Horizontal">
-                                                <Border Padding="10,5" Background="#DCEBFF" CornerRadius="9"><TextBlock FontSize="11" Foreground="#326DAF" Text="8 个核心入口" /></Border>
-                                                <Border Margin="8,0,0,0" Padding="10,5" Background="#DDF6EA" CornerRadius="9"><TextBlock FontSize="11" Foreground="#367A59" Text="本地优先" /></Border>
-                                                <Border Margin="8,0,0,0" Padding="10,5" Background="#F3E8FF" CornerRadius="9"><TextBlock FontSize="11" Foreground="#76549A" Text="按需申请权限" /></Border>
-                                            </StackPanel>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#52779D" Text="X-Tool · 本地桌面效率平台" />
+                                        <TextBlock Margin="0,8,0,0" FontSize="28" FontWeight="SemiBold" Text="一个入口，管理你的桌面工作流" />
+                                        <TextBlock Margin="0,7,0,0" FontSize="13" Foreground="{StaticResource SecondaryTextBrush}"
+                                                   Text="从屏幕内容、格式转换和文件整理，到网络、进程、设备与系统诊断，都在本机按需完成。" />
+                                        <StackPanel Margin="0,14,0,0" Orientation="Horizontal">
+                                            <Border Padding="10,5" Background="#DCEBFF" CornerRadius="9"><TextBlock FontSize="11" Foreground="#326DAF" Text="8 个核心入口" /></Border>
+                                            <Border Margin="8,0,0,0" Padding="10,5" Background="#DDF6EA" CornerRadius="9"><TextBlock FontSize="11" Foreground="#367A59" Text="本地优先" /></Border>
+                                            <Border Margin="8,0,0,0" Padding="10,5" Background="#F3E8FF" CornerRadius="9"><TextBlock FontSize="11" Foreground="#76549A" Text="按需申请权限" /></Border>
                                         </StackPanel>
-                                        <Border Grid.Column="1" Width="106" Height="106" HorizontalAlignment="Right" VerticalAlignment="Center"
-                                                Background="#B8FFFFFF" BorderBrush="#CFFFFFFF" BorderThickness="1" CornerRadius="28">
-                                            <Image Width="86" Height="86" Source="/Assets/XTool.png" Stretch="Uniform" />
-                                        </Border>
-                                    </Grid>
+                                    </StackPanel>
                                 </Border>
 
                                 <Grid Grid.Row="2">
