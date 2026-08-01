@@ -20,6 +20,8 @@ public sealed class ManagedToolchainRelease : INotifyPropertyChanged
     public string FileName { get; init; } = string.Empty;
     public long DownloadSize { get; init; }
     public bool IsLts { get; init; }
+    public bool IsProviderAvailable { get; init; } = true;
+    public bool IsReadOnlyInstalled { get; init; }
 
     public string VersionText => IsLts ? $"{Version} · LTS" : Version;
     public string SizeText => DownloadSize <= 0 ? "大小未知" : $"{DownloadSize / 1024d / 1024d:N1} MB";
@@ -29,7 +31,11 @@ public sealed class ManagedToolchainRelease : INotifyPropertyChanged
         "uv" => "uv 官方托管 Python",
         _ => ProviderId
     };
-    public string ActionText => IsInstalled ? "卸载" : "安装";
+    public string ActionText => !IsProviderAvailable ? "需要 Volta" :
+        IsReadOnlyInstalled ? "已缓存" :
+        IsInstalled ? "卸载" :
+        ProviderId == "volta" ? "缓存版本" : "安装";
+    public bool CanExecuteAction => IsProviderAvailable && !IsReadOnlyInstalled;
 
     public bool IsInstalled
     {

@@ -14,6 +14,7 @@ public partial class DeveloperToolsView : UserControl
     private readonly ManagedToolchainService _managedToolchainService = new();
     private readonly ObservableCollection<ManagedToolchainRelease> _managedReleases = new();
     private readonly ObservableCollection<ManagedToolchainRelease> _managedPythonReleases = new();
+    private readonly ObservableCollection<ManagedToolchainRelease> _managedNodeReleases = new();
     private CancellationTokenSource? _scanCancellation;
     private CancellationTokenSource? _managedCatalogCancellation;
     private CancellationTokenSource? _managedOperationCancellation;
@@ -29,6 +30,7 @@ public partial class DeveloperToolsView : UserControl
         DataContext = _snapshot;
         ManagedReleasesItemsControl.ItemsSource = _managedReleases;
         ManagedPythonReleasesItemsControl.ItemsSource = _managedPythonReleases;
+        ManagedNodeReleasesItemsControl.ItemsSource = _managedNodeReleases;
         ManagedInstallRootText.Text = $"托管目录：{_managedToolchainService.ManagedRoot}";
     }
 
@@ -144,7 +146,8 @@ public partial class DeveloperToolsView : UserControl
         ToolchainsView.Visibility = tab == "Toolchains" ? Visibility.Visible : Visibility.Collapsed;
         ManagedInstallView.Visibility = tab == "Managed" ? Visibility.Visible : Visibility.Collapsed;
         DiagnosticsView.Visibility = tab == "Diagnostics" ? Visibility.Visible : Visibility.Collapsed;
-        if (tab == "Managed" && _managedReleases.Count == 0 && _managedPythonReleases.Count == 0 && _managedCatalogCancellation is null)
+        if (tab == "Managed" && _managedReleases.Count == 0 && _managedPythonReleases.Count == 0 &&
+            _managedNodeReleases.Count == 0 && _managedCatalogCancellation is null)
         {
             _ = RefreshManagedCatalogAsync();
         }
@@ -186,6 +189,28 @@ public partial class DeveloperToolsView : UserControl
                 ManagedPythonEmptyState.Visibility = Visibility.Visible;
                 ManagedPythonStateText.Text = ex.Message;
             }
+
+            try
+            {
+                var nodeReleases = await _managedToolchainService.GetVoltaNodeReleasesAsync(cancellation.Token);
+                if (cancellation.IsCancellationRequested) return;
+                _managedNodeReleases.Clear();
+                foreach (var release in nodeReleases) _managedNodeReleases.Add(release);
+                ManagedNodeEmptyState.Visibility = nodeReleases.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+                var voltaAvailable = nodeReleases.Any(release => release.IsProviderAvailable);
+                InstallVoltaButton.Visibility = voltaAvailable ? Visibility.Collapsed : Visibility.Visible;
+                ManagedNodeStateText.Text = nodeReleases.Count == 0
+                    ? "Node.js 官方目录未返回受支持版本"
+                    : voltaAvailable ? $"已读取 {nodeReleases.Count} 个受支持版本" : "未安装 Volta；可先通过 WinGet 安装";
+                ManagedCatalogStateText.Text = $"已读取 {_managedReleases.Count + _managedPythonReleases.Count + nodeReleases.Count} 个官方版本";
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _managedNodeReleases.Clear();
+                ManagedNodeEmptyState.Visibility = Visibility.Visible;
+                InstallVoltaButton.Visibility = Visibility.Collapsed;
+                ManagedNodeStateText.Text = ex.Message;
+            }
         }
         catch (OperationCanceledException)
         {
@@ -210,6 +235,7 @@ public partial class DeveloperToolsView : UserControl
     private async void ManagedReleaseAction_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as Button)?.CommandParameter is not ManagedToolchainRelease release || _managedOperationCancellation is not null) return;
+        if (!release.CanExecuteAction) return;
         if (release.IsInstalled)
         {
             var confirmation = MessageBox.Show(
@@ -222,6 +248,8 @@ public partial class DeveloperToolsView : UserControl
             var confirmation = MessageBox.Show(
                 release.ProviderId == "uv"
                     ? $"将调用本机已验证的 uv 安装：\n\n{release.DisplayName} {release.Version}\n{release.Architecture}\n\nuv 将按其官方目录下载并校验，且只安装到 X-Tool 的当前用户托管目录，不注册系统 Python。是否继续？"
+                    : release.ProviderId == "volta"
+                        ? $"将调用本机已验证的 Volta 缓存：\n\n{release.DisplayName} {release.Version}\n{release.Architecture}\n\n此操作只执行 volta fetch，不会改变当前默认 Node.js，也不会修改 PATH。是否继续？"
                     : $"将从 Eclipse Adoptium 官方发行页下载并安装：\n\n{release.DisplayName} {release.Version}\n{release.Architecture} · {release.SizeText}\n\n下载完成后会校验 API 提供的 SHA-256，安装到当前用户的 X-Tool 托管目录。是否继续？",
                 "确认安装托管工具链", MessageBoxButton.YesNo, MessageBoxImage.Question);
             if (confirmation != MessageBoxResult.Yes) return;
@@ -247,14 +275,14 @@ public partial class DeveloperToolsView : UserControl
             ManagedCatalogStateText.Text = result.Message;
             if (result.Succeeded)
             {
-                release.IsInstalled = !release.IsInstalled;
+                if (release.ProviderId != "volta") release.IsInstalled = !release.IsInstalled;
                 await StartScanAsync();
                 await RefreshManagedCatalogAsync();
             }
         }
         catch (OperationCanceledException)
         {
-            release.ProgressText = "任务已取消，临时下载和解压目录将被清理。";
+            release.ProgressText = "任务已取消；对应工具将处理未完成的下载内容。";
             ManagedCatalogStateText.Text = "任务已取消";
         }
         finally
@@ -262,6 +290,38 @@ public partial class DeveloperToolsView : UserControl
             release.IsBusy = false;
             CancelManagedOperationButton.Visibility = Visibility.Collapsed;
             RefreshManagedCatalogButton.IsEnabled = true;
+            _managedOperationCancellation?.Dispose();
+            _managedOperationCancellation = null;
+        }
+    }
+
+    private async void InstallVolta_Click(object sender, RoutedEventArgs e)
+    {
+        if (_managedOperationCancellation is not null) return;
+        var confirmation = MessageBox.Show(
+            "将通过 Windows 程序包管理器执行：\n\nwinget install --id Volta.Volta\n\n这是 Volta 官方推荐的 Windows 安装方式。安装程序可能弹出 UAC；X-Tool 主程序仍保持普通权限。是否继续？",
+            "确认安装 Volta", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (confirmation != MessageBoxResult.Yes) return;
+
+        var cancellation = new CancellationTokenSource();
+        _managedOperationCancellation = cancellation;
+        InstallVoltaButton.IsEnabled = false;
+        CancelManagedOperationButton.Visibility = Visibility.Visible;
+        ManagedNodeStateText.Text = "正在通过 WinGet 安装 Volta…";
+        try
+        {
+            var result = await _managedToolchainService.InstallVoltaWithWingetAsync(cancellation.Token);
+            ManagedNodeStateText.Text = result.Message;
+            if (result.Succeeded) await RefreshManagedCatalogAsync();
+        }
+        catch (OperationCanceledException)
+        {
+            ManagedNodeStateText.Text = "Volta 安装已取消";
+        }
+        finally
+        {
+            CancelManagedOperationButton.Visibility = Visibility.Collapsed;
+            InstallVoltaButton.IsEnabled = true;
             _managedOperationCancellation?.Dispose();
             _managedOperationCancellation = null;
         }

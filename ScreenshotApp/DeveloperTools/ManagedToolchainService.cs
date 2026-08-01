@@ -23,6 +23,16 @@ public sealed class ManagedToolchainService
     private string DownloadsRoot => Path.Combine(ManagedRoot, "Downloads");
     private string JavaRoot => Path.Combine(ManagedRoot, "Java");
     private string PythonRoot => Path.Combine(ManagedRoot, "Python", "uv");
+    private string VoltaRoot
+    {
+        get
+        {
+            var configured = Environment.GetEnvironmentVariable("VOLTA_HOME", EnvironmentVariableTarget.User);
+            return string.IsNullOrWhiteSpace(configured)
+                ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Volta")
+                : Environment.ExpandEnvironmentVariables(configured.Trim().Trim('"'));
+        }
+    }
     private string LogPath => Path.Combine(ManagedRoot, "Logs", "managed-toolchains.log");
 
     public async Task<IReadOnlyList<ManagedToolchainRelease>> GetTemurinReleasesAsync(CancellationToken cancellationToken)
@@ -126,8 +136,100 @@ public sealed class ManagedToolchainService
         {
             "temurin" => InstallTemurinAsync(release, progress, cancellationToken),
             "uv" => InstallUvPythonAsync(release, progress, cancellationToken),
+            "volta" => FetchVoltaNodeAsync(release, progress, cancellationToken),
             _ => Task.FromResult(new ManagedToolchainOperationResult(false, "不支持该托管来源。"))
         };
+
+    public async Task<IReadOnlyList<ManagedToolchainRelease>> GetVoltaNodeReleasesAsync(CancellationToken cancellationToken)
+    {
+        var voltaPath = await FindValidatedVoltaAsync(cancellationToken).ConfigureAwait(false);
+        using var versionsResponse = await HttpClient.GetAsync("https://nodejs.org/dist/index.json", cancellationToken).ConfigureAwait(false);
+        versionsResponse.EnsureSuccessStatusCode();
+        await using var versionsStream = await versionsResponse.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        using var versionsDocument = await JsonDocument.ParseAsync(versionsStream, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        using var scheduleResponse = await HttpClient.GetAsync("https://raw.githubusercontent.com/nodejs/Release/main/schedule.json", cancellationToken).ConfigureAwait(false);
+        scheduleResponse.EnsureSuccessStatusCode();
+        await using var scheduleStream = await scheduleResponse.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        using var scheduleDocument = await JsonDocument.ParseAsync(scheduleStream, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var today = DateTime.UtcNow.Date;
+        var supportedMajors = scheduleDocument.RootElement.EnumerateObject()
+            .Where(item => item.Value.TryGetProperty("start", out var start) && DateTime.TryParse(start.GetString(), out var startDate) && startDate <= today &&
+                           item.Value.TryGetProperty("end", out var end) && DateTime.TryParse(end.GetString(), out var endDate) && endDate >= today)
+            .Select(item => int.TryParse(item.Name.TrimStart('v'), out var major) ? major : 0)
+            .Where(major => major > 0)
+            .ToHashSet();
+
+        var latest = new Dictionary<int, JsonElement>();
+        foreach (var item in versionsDocument.RootElement.EnumerateArray())
+        {
+            var version = item.GetProperty("version").GetString()?.TrimStart('v') ?? string.Empty;
+            if (!int.TryParse(version.Split('.')[0], out var major) || !supportedMajors.Contains(major) || latest.ContainsKey(major)) continue;
+            if (!item.TryGetProperty("files", out var files) || !files.EnumerateArray().Any(file => file.GetString() == "win-x64-zip")) continue;
+            latest[major] = item.Clone();
+        }
+
+        var releases = new List<ManagedToolchainRelease>();
+        foreach (var pair in latest.OrderByDescending(item => item.Key))
+        {
+            var version = pair.Value.GetProperty("version").GetString()?.TrimStart('v') ?? string.Empty;
+            var cachedPath = Path.Combine(VoltaRoot, "tools", "image", "node", version);
+            var cached = Directory.Exists(cachedPath) && File.Exists(Path.Combine(cachedPath, "node.exe"));
+            var isLts = pair.Value.TryGetProperty("lts", out var lts) && lts.ValueKind == JsonValueKind.String;
+            releases.Add(new ManagedToolchainRelease
+            {
+                ToolchainId = "node", ProviderId = "volta", DisplayName = $"Node.js {pair.Key}", Version = version,
+                Architecture = "x64", DownloadUrl = $"https://nodejs.org/dist/v{version}/", FileName = $"node@{version}",
+                IsLts = isLts, IsProviderAvailable = voltaPath is not null, IsInstalled = cached, IsReadOnlyInstalled = cached
+            });
+        }
+        return releases;
+    }
+
+    public async Task<ManagedToolchainOperationResult> InstallVoltaWithWingetAsync(CancellationToken cancellationToken)
+    {
+        if (await FindValidatedVoltaAsync(cancellationToken).ConfigureAwait(false) is not null)
+            return new(true, "Volta 已安装，无需重复安装。");
+        var winget = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "WindowsApps", "winget.exe");
+        if (!File.Exists(winget)) return new(false, "未找到 Windows 程序包管理器 winget.exe，请按 Volta 官方指南手动安装。 ");
+        var validation = await _commandRunner.RunAsync(winget, new[] { "--version" }, cancellationToken).ConfigureAwait(false);
+        if (validation.TimedOut || validation.ExitCode != 0) return new(false, "winget.exe 验证失败，拒绝启动安装。");
+        var result = await _commandRunner.RunAsync(winget,
+            new[] { "install", "--id", "Volta.Volta", "--exact", "--source", "winget", "--accept-package-agreements", "--accept-source-agreements" },
+            cancellationToken, TimeSpan.FromMinutes(15)).ConfigureAwait(false);
+        if (result.TimedOut || result.ExitCode != 0)
+        {
+            await WriteLogAsync($"Volta WinGet 安装失败：{result.CombinedOutput}").ConfigureAwait(false);
+            return new(false, result.TimedOut ? "Volta 安装超时。" : $"Volta 安装失败：{result.CombinedOutput}");
+        }
+        var volta = await FindValidatedVoltaAsync(cancellationToken).ConfigureAwait(false);
+        if (volta is null) return new(false, "WinGet 返回成功，但尚未找到可验证的 volta.exe；可重启 X-Tool 后重新检查。");
+        await WriteLogAsync($"已通过 WinGet 安装 Volta：{volta}").ConfigureAwait(false);
+        return new(true, "Volta 已通过 WinGet 安装并完成版本验证。");
+    }
+
+    private async Task<ManagedToolchainOperationResult> FetchVoltaNodeAsync(
+        ManagedToolchainRelease release, IProgress<ManagedInstallProgress>? progress, CancellationToken cancellationToken)
+    {
+        if (release.ToolchainId != "node" || release.ProviderId != "volta" || !IsTrustedNodeRelease(release))
+            return new(false, "请求不是 Node.js 官方目录中的受支持 Windows x64 版本。");
+        var volta = await FindValidatedVoltaAsync(cancellationToken).ConfigureAwait(false);
+        if (volta is null) return new(false, "尚未安装可验证的 Volta。");
+        progress?.Report(new("Volta 正在下载并校验 Node.js；不会切换默认版本"));
+        var result = await _commandRunner.RunAsync(volta, new[] { "fetch", release.FileName }, cancellationToken, TimeSpan.FromMinutes(30)).ConfigureAwait(false);
+        if (result.TimedOut || result.ExitCode != 0)
+        {
+            await WriteLogAsync($"Volta fetch {release.FileName} 失败：{result.CombinedOutput}").ConfigureAwait(false);
+            return new(false, result.TimedOut ? "Volta 下载超时。" : $"Volta 下载失败：{result.CombinedOutput}");
+        }
+        var nodePath = Path.Combine(VoltaRoot, "tools", "image", "node", release.Version, "node.exe");
+        if (!File.Exists(nodePath)) return new(false, "Volta 返回成功，但未在其标准缓存目录找到 node.exe。");
+        var validation = await _commandRunner.RunAsync(nodePath, new[] { "--version" }, cancellationToken).ConfigureAwait(false);
+        if (validation.TimedOut || validation.ExitCode != 0 || !validation.CombinedOutput.Contains($"v{release.Version}", StringComparison.OrdinalIgnoreCase))
+            return new(false, "Node.js 已缓存，但绝对路径版本验证未通过。");
+        await WriteLogAsync($"已通过 Volta 缓存 Node.js {release.Version}：{nodePath}").ConfigureAwait(false);
+        return new(true, $"Node.js {release.Version} 已缓存；当前默认版本未改变。");
+    }
 
     private async Task<ManagedToolchainOperationResult> InstallUvPythonAsync(
         ManagedToolchainRelease release, IProgress<ManagedInstallProgress>? progress, CancellationToken cancellationToken)
@@ -352,6 +454,28 @@ public sealed class ManagedToolchainService
         return null;
     }
 
+    private async Task<string?> FindValidatedVoltaAsync(CancellationToken cancellationToken)
+    {
+        var candidates = new List<string>
+        {
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Volta", "volta.exe"),
+            Path.Combine(VoltaRoot, "bin", "volta.exe")
+        };
+        foreach (var target in new[] { EnvironmentVariableTarget.User, EnvironmentVariableTarget.Machine })
+        {
+            candidates.AddRange((Environment.GetEnvironmentVariable("Path", target) ?? string.Empty)
+                .Split(';', StringSplitOptions.RemoveEmptyEntries)
+                .Select(item => Path.Combine(Environment.ExpandEnvironmentVariables(item.Trim().Trim('"')), "volta.exe")));
+        }
+        foreach (var candidate in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (!Path.IsPathFullyQualified(candidate) || !File.Exists(candidate)) continue;
+            var result = await _commandRunner.RunAsync(candidate, new[] { "--version" }, cancellationToken).ConfigureAwait(false);
+            if (!result.TimedOut && result.ExitCode == 0 && Version.TryParse(result.StandardOutput.Trim(), out _)) return candidate;
+        }
+        return null;
+    }
+
     private async Task<string?> FindInstalledPythonAsync(string expectedVersion, CancellationToken cancellationToken)
     {
         foreach (var pythonPath in Directory.EnumerateFiles(PythonRoot, "python.exe", SearchOption.AllDirectories))
@@ -500,6 +624,12 @@ public sealed class ManagedToolchainService
            Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps &&
            string.Equals(uri.Host, "github.com", StringComparison.OrdinalIgnoreCase) &&
            uri.AbsolutePath.StartsWith("/astral-sh/python-build-standalone/releases/", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsTrustedNodeRelease(ManagedToolchainRelease release)
+        => Version.TryParse(release.Version, out _) && release.FileName == $"node@{release.Version}" &&
+           Uri.TryCreate(release.DownloadUrl, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps &&
+           string.Equals(uri.Host, "nodejs.org", StringComparison.OrdinalIgnoreCase) &&
+           string.Equals(uri.AbsolutePath.TrimEnd('/'), $"/dist/v{release.Version}", StringComparison.Ordinal);
 
     private static bool IsInsideRoot(string path, string root)
     {
