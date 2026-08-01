@@ -144,7 +144,12 @@
                                 <Border Width="{Binding ActualWidth, ElementName=ToggleButton}" Margin="0,5,0,0" Padding="5"
                                         Background="#F2FAFFFF" BorderBrush="#B4D2E9FA" BorderThickness="1" CornerRadius="10">
                                     <Border.Effect><DropShadowEffect BlurRadius="16" ShadowDepth="3" Direction="270" Opacity="0.16" Color="#456886" /></Border.Effect>
-                                    <ScrollViewer MaxHeight="220" CanContentScroll="True"><StackPanel IsItemsHost="True" /></ScrollViewer>
+                                    <ScrollViewer MaxHeight="220"
+                                                  CanContentScroll="True"
+                                                  HorizontalScrollBarVisibility="Disabled"
+                                                  VerticalScrollBarVisibility="Auto">
+                                        <StackPanel IsItemsHost="True" />
+                                    </ScrollViewer>
                                 </Border>
                             </Popup>
                         </Grid>
