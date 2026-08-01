@@ -298,7 +298,7 @@
                                             <Border VerticalAlignment="Center" Padding="10,5" Background="{Binding StatusBackground}" CornerRadius="8">
                                                 <TextBlock FontSize="11" Foreground="{Binding StatusForeground}" Text="{Binding CountText}" />
                                             </Border>
-                                            <Button Width="88" Margin="10,0,0,0" Style="{StaticResource DeveloperSmallButtonStyle}"
+                                            <Button Width="88" Margin="10,0,14,0" Style="{StaticResource DeveloperSmallButtonStyle}"
                                                     Content="配置环境" IsEnabled="{Binding CanConfigureEnvironment}"
                                                     CommandParameter="{Binding}" Click="ConfigureToolchain_Click" />
                                         </StackPanel>
@@ -350,7 +350,15 @@
                                         <Grid Grid.Column="1" Margin="18,15">
                                             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                                             <Border Padding="9,5" VerticalAlignment="Top" Background="{Binding BadgeBackground}" CornerRadius="8"><TextBlock FontSize="10" FontWeight="SemiBold" Foreground="{Binding AccentColor}" Text="{Binding SeverityText}" /></Border>
-                                            <StackPanel Grid.Column="1" Margin="14,0,0,0"><TextBlock FontSize="15" FontWeight="SemiBold" Text="{Binding Title}" /><TextBlock Margin="0,5,0,0" FontSize="11" Foreground="#66788A" Text="{Binding Description}" TextWrapping="Wrap" /><Border Margin="0,9,0,0" Padding="10,8" Background="#55EAF1F7" CornerRadius="8"><TextBlock FontFamily="Consolas, Microsoft YaHei UI" FontSize="10" Foreground="#587087" Text="{Binding Evidence}" TextWrapping="Wrap" /></Border></StackPanel>
+                                            <StackPanel Grid.Column="1" Margin="14,0,0,0">
+                                                <TextBlock FontSize="15" FontWeight="SemiBold" Text="{Binding Title}" />
+                                                <TextBlock Margin="0,5,0,0" FontSize="11" Foreground="#66788A" Text="{Binding Description}" TextWrapping="Wrap" />
+                                                <Border Margin="0,9,0,0" Padding="11,9" Background="#55EAF1F7" CornerRadius="8">
+                                                    <TextBlock FontFamily="Consolas, Microsoft YaHei UI" FontSize="11" LineHeight="17"
+                                                               Foreground="#587087" Text="{Binding Evidence}" TextWrapping="Wrap"
+                                                               TextOptions.TextFormattingMode="Display" />
+                                                </Border>
+                                            </StackPanel>
                                         </Grid>
                                     </Grid>
                                 </Border>

@@ -697,7 +697,9 @@ public sealed class DeveloperEnvironmentScanner
                 Severity = DeveloperIssueSeverity.Warning,
                 Title = "Node.js 目录名称与实际版本不一致",
                 Description = "版本命令结果可信度高于文件夹名称；该目录可能曾被原位升级或替换。",
-                Evidence = $"目录：{node.InstallationPath}{Environment.NewLine}node --version：v{node.Version}"
+                Evidence = $"目录名称：{directoryName}（标示主版本 {directoryMajor.Groups["major"].Value}）{Environment.NewLine}" +
+                           $"实际命令版本：v{node.Version}{Environment.NewLine}" +
+                           $"可执行文件：{node.ExecutablePath}"
             });
         }
     }
