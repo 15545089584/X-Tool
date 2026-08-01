@@ -1680,6 +1680,15 @@ public partial class MainWindow : Window
             case "FileWorkbench":
                 FileWorkbenchNav.IsChecked = true;
                 break;
+            case "NetworkWorkbench":
+                NetworkWorkbenchNav.IsChecked = true;
+                break;
+            case "ResourceManagement":
+                ResourceManagementNav.IsChecked = true;
+                break;
+            case "SystemTools":
+                SystemToolsNav.IsChecked = true;
+                break;
             case "Shortcuts":
                 ShortcutsNav.IsChecked = true;
                 break;
