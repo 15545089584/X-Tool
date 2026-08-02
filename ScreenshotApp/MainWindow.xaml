@@ -428,15 +428,6 @@
                             <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" FontSize="15" Text="开发者工具" />
                         </StackPanel>
                     </RadioButton>
-                    <RadioButton x:Name="ShortcutsNav" GroupName="Navigation" Style="{StaticResource NavItemStyle}"
-                                 Tag="Shortcuts" Checked="NavButton_Checked">
-                        <StackPanel Orientation="Horizontal">
-                            <Border Width="34" Height="34" Background="#F7F8FA" CornerRadius="9">
-                                <TextBlock Style="{StaticResource IconTextStyle}" FontSize="17" Text="&#xE765;" Foreground="#626971" />
-                            </Border>
-                            <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" FontSize="15" Text="快捷键" />
-                        </StackPanel>
-                    </RadioButton>
                     </StackPanel>
                 </ScrollViewer>
 
@@ -943,41 +934,6 @@
                             <systemTools:SystemToolsView x:Name="SystemToolsView" EnvironmentOnly="True" Visibility="Collapsed" />
                             <developerTools:DeveloperToolsView x:Name="DeveloperToolsView" Visibility="Collapsed" />
 
-                            <!-- 快捷键页 -->
-                            <Grid x:Name="ShortcutsView" Visibility="Collapsed" Margin="58,44">
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="28" />
-                                    <RowDefinition Height="Auto" />
-                                </Grid.RowDefinitions>
-                                <StackPanel>
-                                    <TextBlock FontSize="28" FontWeight="SemiBold" Text="快捷键" />
-                                    <TextBlock Margin="0,8,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}" Text="点击快捷键后按下新组合；保存前会检查应用内、系统保留及已注册的全局快捷键冲突" />
-                                </StackPanel>
-                                <Border Grid.Row="2" Background="{StaticResource GlassCardBrush}"
-                                        BorderBrush="#5AFFFFFF" BorderThickness="1" CornerRadius="14">
-                                    <StackPanel>
-                                        <Grid Height="72" Margin="22,0">
-                                            <TextBlock VerticalAlignment="Center" FontSize="15" Text="截图" />
-                                            <Button x:Name="ScreenshotShortcutButton" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource ShortcutValueButtonStyle}"
-                                                    Click="ShortcutButton_Click" PreviewKeyDown="ShortcutButton_PreviewKeyDown" Tag="Screenshot" />
-                                        </Grid>
-                                        <Border Height="1" Background="#55FFFFFF" />
-                                        <Grid Height="72" Margin="22,0">
-                                            <TextBlock VerticalAlignment="Center" FontSize="15" Text="剪贴板选择粘贴" />
-                                            <Button x:Name="ClipboardShortcutButton" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource ShortcutValueButtonStyle}"
-                                                    Click="ShortcutButton_Click" PreviewKeyDown="ShortcutButton_PreviewKeyDown" Tag="Clipboard" />
-                                        </Grid>
-                                        <Border Height="1" Background="#55FFFFFF" />
-                                        <Grid Height="72" Margin="22,0">
-                                            <TextBlock VerticalAlignment="Center" FontSize="15" Text="本地语音输入" />
-                                            <Button x:Name="VoiceShortcutButton" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource ShortcutValueButtonStyle}" Click="ShortcutButton_Click" PreviewKeyDown="ShortcutButton_PreviewKeyDown" Tag="Voice" />
-                                        </Grid>
-                                        <TextBlock x:Name="ShortcutCaptureStatusText" Margin="22,0,22,16" FontSize="11" Foreground="#5E819F" Text="提示：Windows 无法枚举未注册全局热键的第三方键盘钩子，X-Tool 会验证可注册的系统级冲突。" TextWrapping="Wrap" />
-                                    </StackPanel>
-                                </Border>
-                            </Grid>
-
                             <!-- 设置页 -->
                             <Grid x:Name="SettingsView" Visibility="Collapsed" Margin="58,44">
                                 <Grid.RowDefinitions>
@@ -1039,6 +995,25 @@
                                             <CheckBox x:Name="StickerTopmostCheckBox" HorizontalAlignment="Right" VerticalAlignment="Center"
                                                       Style="{StaticResource SettingToggleStyle}" Click="StickerTopmostCheckBox_Click" />
                                         </Grid>
+                                        </Border>
+                                        <Border Cursor="Hand" MouseLeftButtonDown="OpenShortcutSettings_Click">
+                                            <Border.Style>
+                                                <Style TargetType="Border" BasedOn="{StaticResource SettingCardStyle}">
+                                                    <Style.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Background" Value="#AAFFFFFF" />
+                                                            <Setter Property="BorderBrush" Value="#B9E4F3FF" />
+                                                        </Trigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <Grid Height="76" Margin="20,0">
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock FontSize="15" Text="快捷键" />
+                                                    <TextBlock x:Name="SettingsShortcutSummaryText" Margin="0,5,0,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                                <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="22" Foreground="#8AA0B4" Text="›" />
+                                            </Grid>
                                         </Border>
                                         <Expander Margin="0" Style="{StaticResource StorageExpanderStyle}">
                                             <Expander.Header>

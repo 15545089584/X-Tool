@@ -65,7 +65,6 @@ public partial class MainWindow : Window
     private GlobalShortcut _screenshotShortcut;
     private GlobalShortcut _clipboardShortcut;
     private GlobalShortcut _voiceInputShortcut;
-    private string? _shortcutBeingEdited;
 
     public MainWindow()
     {
@@ -112,7 +111,7 @@ public partial class MainWindow : Window
             _toastTimer.Stop();
             ToastBorder.Visibility = Visibility.Collapsed;
         };
-        UpdateShortcutButtons();
+        UpdateSettingsShortcutSummary();
 
         SourceInitialized += MainWindow_SourceInitialized;
         Loaded += MainWindow_Loaded;
@@ -258,7 +257,6 @@ public partial class MainWindow : Window
             Dispatcher.BeginInvoke(new Action(() => NormalizeImageConverterLabels(ImageConverterView)), DispatcherPriority.Loaded);
         }
         HistoryView.Visibility = page == "History" ? Visibility.Visible : Visibility.Collapsed;
-        ShortcutsView.Visibility = page == "Shortcuts" ? Visibility.Visible : Visibility.Collapsed;
         SettingsView.Visibility = page == "Settings" ? Visibility.Visible : Visibility.Collapsed;
 
         if (page is "History" or "ScreenWorkbench")
@@ -1694,8 +1692,8 @@ public partial class MainWindow : Window
                 DeveloperToolsNav.IsChecked = true;
                 break;
             case "Shortcuts":
-                ShortcutsNav.IsChecked = true;
-                break;
+                OpenShortcutSettings();
+                return;
             case "Settings":
                 SettingsNav.IsChecked = true;
                 break;
@@ -1923,74 +1921,45 @@ public partial class MainWindow : Window
         ShowToast("更多 X-Tool 子工具正在准备中");
     }
 
-    private void ShortcutButton_Click(object sender, RoutedEventArgs e)
+    private void OpenShortcutSettings()
     {
-        if (sender is not Button button || button.Tag is not string target)
+        var window = new ShortcutSettingsWindow(_screenshotShortcut, _clipboardShortcut, _voiceInputShortcut)
         {
-            return;
-        }
-
-        _shortcutBeingEdited = target;
-        button.Content = "请按下快捷键…";
-        ShortcutCaptureStatusText.Text = "正在监听。按 Esc 取消；右 Alt 仅可用于本地语音输入。";
-        button.Focus();
+            Owner = this
+        };
+        window.ApplyShortcutRequested = ApplyShortcutRequested;
+        window.ShowDialog();
     }
 
-    private void ShortcutButton_PreviewKeyDown(object sender, KeyEventArgs e)
+    private void OpenShortcutSettings_Click(object sender, MouseButtonEventArgs e) => OpenShortcutSettings();
+
+    /// <summary>快捷键弹框回调：完成合法性检查、冲突探测、热键重注册与偏好保存。</summary>
+    private string? ApplyShortcutRequested(string target, GlobalShortcut candidate)
     {
-        if (_shortcutBeingEdited is null)
-        {
-            return;
-        }
-
-        var key = e.Key == Key.System ? e.SystemKey : e.Key;
-        e.Handled = true;
-        if (key == Key.Escape)
-        {
-            _shortcutBeingEdited = null;
-            UpdateShortcutButtons();
-            ShortcutCaptureStatusText.Text = "已取消修改。";
-            return;
-        }
-
-        GlobalShortcut candidate;
-        if (key == Key.RightAlt && _shortcutBeingEdited == "Voice")
-        {
-            candidate = GlobalShortcut.VoiceDefault;
-        }
-        else
-        {
-            candidate = GlobalShortcut.FromKey(key, Keyboard.Modifiers);
-        }
-
         if (!candidate.IsRightAlt && !candidate.IsSupportedGlobalCombination)
         {
-            ShortcutCaptureStatusText.Text = "请使用 Ctrl、Shift 或 Alt 加一个非修饰键；Windows 徽标键组合不允许设置。";
-            return;
+            return "请使用 Ctrl、Shift 或 Alt 加一个非修饰键；Windows 徽标键组合不允许设置。";
         }
 
         if (candidate.IsKnownWindowsReserved)
         {
-            ShortcutCaptureStatusText.Text = "这是 Windows 保留快捷键，不能设置为 X-Tool 全局快捷键。";
-            return;
+            return "这是 Windows 保留快捷键，不能设置为 X-Tool 全局快捷键。";
         }
 
-        if (candidate.IsRightAlt && _shortcutBeingEdited != "Voice")
+        if (candidate.IsRightAlt && target != "Voice")
         {
-            ShortcutCaptureStatusText.Text = "右 Alt 仅可作为本地语音输入快捷键。";
-            return;
+            return "右 Alt 仅可作为本地语音输入快捷键。";
         }
 
-        if (!TryValidateShortcut(_shortcutBeingEdited, candidate, out var reason))
+        if (!TryValidateShortcut(target, candidate, out var reason))
         {
-            ShortcutCaptureStatusText.Text = reason;
-            return;
+            return reason;
         }
 
-        ApplyShortcut(_shortcutBeingEdited, candidate);
-        _shortcutBeingEdited = null;
-        UpdateShortcutButtons();
-        ShortcutCaptureStatusText.Text = $"已设为 {candidate.DisplayText}，未发现应用内或已注册的系统级冲突。";
+        ApplyShortcut(target, candidate);
+        HomeScreenshotShortcutText.Text = _screenshotShortcut.DisplayText;
+        UpdateSettingsShortcutSummary();
+        return null;
     }
 
     private bool TryValidateShortcut(string target, GlobalShortcut candidate, out string reason)
@@ -2126,17 +2095,10 @@ public partial class MainWindow : Window
         return _voiceInputHotKeyRegistered;
     }
 
-    private void UpdateShortcutButtons()
+    private void UpdateSettingsShortcutSummary()
     {
-        if (ScreenshotShortcutButton is null)
-        {
-            return;
-        }
-
-        ScreenshotShortcutButton.Content = _screenshotShortcut.DisplayText;
-        ClipboardShortcutButton.Content = _clipboardShortcut.DisplayText;
-        VoiceShortcutButton.Content = _voiceInputShortcut.DisplayText;
-        HomeScreenshotShortcutText.Text = _screenshotShortcut.DisplayText;
+        SettingsShortcutSummaryText.Text =
+            $"截图 {_screenshotShortcut.DisplayText} · 剪贴板 {_clipboardShortcut.DisplayText} · 语音 {_voiceInputShortcut.DisplayText}";
     }
 
     private void ShowToast(string message)
