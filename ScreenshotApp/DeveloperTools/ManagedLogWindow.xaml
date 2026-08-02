@@ -1,0 +1,149 @@
+<Window x:Class="ScreenshotApp.DeveloperTools.ManagedLogWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="托管操作日志" Width="920" Height="640" WindowStartupLocation="CenterOwner"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent">
+    <Window.Resources>
+        <Style x:Key="GlassButton" TargetType="Button">
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Padding" Value="13,0" />
+            <Setter Property="Background" Value="#92FFFFFF" />
+            <Setter Property="BorderBrush" Value="#B1CFE5F5" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="#405F7C" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10">
+                            <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="SemiBold" Foreground="{TemplateBinding Foreground}" Text="{TemplateBinding Content}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.84" /></Trigger>
+                            <Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.70" /></Trigger>
+                            <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Root" Property="Opacity" Value="0.45" /></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="PrimaryGlassButton" TargetType="Button" BasedOn="{StaticResource GlassButton}">
+            <Setter Property="Background" Value="#4D7CFE" />
+            <Setter Property="BorderBrush" Value="#76A0FF" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style x:Key="GlassScrollBar" TargetType="ScrollBar">
+            <Setter Property="Width" Value="8" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Grid Background="Transparent">
+                            <Track x:Name="PART_Track" IsDirectionReversed="True" Orientation="{TemplateBinding Orientation}">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="ScrollBar.PageUpCommand" Background="Transparent" BorderThickness="0" />
+                                </Track.DecreaseRepeatButton>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="ScrollBar.PageDownCommand" Background="Transparent" BorderThickness="0" />
+                                </Track.IncreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb>
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Border Margin="2,1" Background="#9CD9E8F4" CornerRadius="4" />
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="ScrollBar" BasedOn="{StaticResource GlassScrollBar}" />
+    </Window.Resources>
+    <Border Margin="12" Padding="22" Background="#EEF8FCFF" BorderBrush="#B9D8EAF8" BorderThickness="1" CornerRadius="20">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="24" ShadowDepth="5" Direction="270" Opacity="0.20" Color="#36536D" />
+        </Border.Effect>
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="16" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="14" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="14" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Grid MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+                <StackPanel>
+                    <TextBlock FontSize="21" FontWeight="SemiBold" Foreground="#304E69" Text="托管操作日志" />
+                    <TextBlock x:Name="LogPathText" Margin="0,5,0,0" FontSize="11" Foreground="#718AA2" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+                <Button HorizontalAlignment="Right" VerticalAlignment="Top" Width="32" Height="32" Padding="0"
+                        Background="#66FFFFFF" BorderBrush="#A7CEE6F5" BorderThickness="1" Foreground="#607C96"
+                        FontSize="16" Content="×" Click="Close_Click" />
+            </Grid>
+
+            <StackPanel Grid.Row="2" Orientation="Horizontal">
+                <Button x:Name="RefreshButton" Width="82" Style="{StaticResource PrimaryGlassButton}" Content="刷新" Click="Refresh_Click" />
+                <Button x:Name="CopyButton" Width="94" Margin="8,0,0,0" Style="{StaticResource GlassButton}" Content="复制日志" Click="Copy_Click" />
+                <Button x:Name="OpenFileButton" Width="108" Margin="8,0,0,0" Style="{StaticResource GlassButton}" Content="打开日志文件" Click="OpenFile_Click" />
+                <Button x:Name="OpenFolderButton" Width="108" Margin="8,0,0,0" Style="{StaticResource GlassButton}" Content="打开日志目录" Click="OpenFolder_Click" />
+                <TextBlock x:Name="LogStateText" Margin="14,0,0,0" VerticalAlignment="Center" FontSize="10" Foreground="#7890A6" Text="正在读取日志…" />
+            </StackPanel>
+
+            <Border Grid.Row="4" Padding="12" Background="#70FFFFFF" BorderBrush="#9BCDE4F5" BorderThickness="1" CornerRadius="13">
+                <Grid>
+                    <ListBox x:Name="LogListBox" Background="Transparent" BorderThickness="0"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Padding" Value="0" />
+                                <Setter Property="Margin" Value="0,0,0,6" />
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListBoxItem">
+                                            <ContentPresenter />
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Border Padding="12,10" Background="{Binding RowBackground}" BorderBrush="#7DCEE2F1" BorderThickness="1" CornerRadius="10">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="158" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Margin="0,1,0,0" FontFamily="Consolas, Microsoft YaHei UI" FontSize="10" Foreground="#7890A6" Text="{Binding TimeText}" TextTrimming="CharacterEllipsis" />
+                                        <Border Grid.Column="1" Margin="12,0" Padding="9,3" VerticalAlignment="Top" CornerRadius="8" Background="{Binding LevelBackground}">
+                                            <TextBlock FontSize="10" FontWeight="SemiBold" Foreground="{Binding LevelForeground}" Text="{Binding LevelText}" />
+                                        </Border>
+                                        <TextBlock Grid.Column="2" FontSize="10.5" Foreground="#526F8B" Text="{Binding Message}" TextWrapping="Wrap" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <TextBlock x:Name="EmptyStateText" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="12" Foreground="#74879A" Text="尚无托管操作日志" Visibility="Collapsed" />
+                </Grid>
+            </Border>
+
+            <Grid Grid.Row="6">
+                <StackPanel>
+                    <TextBlock x:Name="SummaryText" FontSize="10" Foreground="#7890A6" Text="共 0 行日志" />
+                    <TextBlock Margin="0,3,0,0" FontSize="10" Foreground="#8A9AAA" Text="日志保存在本地，仅用于排查托管安装问题；不会上传任何内容。" />
+                </StackPanel>
+                <Button HorizontalAlignment="Right" VerticalAlignment="Center" Width="82" Style="{StaticResource PrimaryGlassButton}" Content="关闭" Click="Close_Click" />
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

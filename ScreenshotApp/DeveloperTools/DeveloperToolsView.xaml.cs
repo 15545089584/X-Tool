@@ -14,6 +14,10 @@ public partial class DeveloperToolsView : UserControl
     private readonly ManagedToolchainService _managedToolchainService = new();
     private readonly ObservableCollection<ManagedToolchainRelease> _managedReleases = new();
     private readonly ObservableCollection<ManagedToolchainRelease> _managedHistoricalReleases = new();
+    private readonly ObservableCollection<ManagedToolchainRelease> _managedMysqlReleases = new();
+    private readonly ObservableCollection<ManagedToolchainRelease> _managedHistoricalMysqlReleases = new();
+    private readonly ObservableCollection<ManagedToolchainRelease> _managedDesktopReleases = new();
+    private readonly ObservableCollection<ManagedToolchainRelease> _managedDockerCliReleases = new();
     private readonly ObservableCollection<ManagedToolchainRelease> _managedPythonReleases = new();
     private readonly ObservableCollection<ManagedToolchainRelease> _managedHistoricalPythonReleases = new();
     private readonly ObservableCollection<ManagedToolchainRelease> _managedNodeReleases = new();
@@ -32,6 +36,10 @@ public partial class DeveloperToolsView : UserControl
         DataContext = _snapshot;
         ManagedReleasesItemsControl.ItemsSource = _managedReleases;
         ManagedHistoricalReleasesItemsControl.ItemsSource = _managedHistoricalReleases;
+        ManagedMysqlReleasesItemsControl.ItemsSource = _managedMysqlReleases;
+        ManagedHistoricalMysqlReleasesItemsControl.ItemsSource = _managedHistoricalMysqlReleases;
+        ManagedDesktopReleasesItemsControl.ItemsSource = _managedDesktopReleases;
+        ManagedDockerCliReleasesItemsControl.ItemsSource = _managedDockerCliReleases;
         ManagedPythonReleasesItemsControl.ItemsSource = _managedPythonReleases;
         ManagedHistoricalPythonReleasesItemsControl.ItemsSource = _managedHistoricalPythonReleases;
         ManagedNodeReleasesItemsControl.ItemsSource = _managedNodeReleases;
@@ -183,6 +191,55 @@ public partial class DeveloperToolsView : UserControl
 
             try
             {
+                var mysqlReleases = await _managedToolchainService.GetMysqlReleasesAsync(cancellation.Token);
+                if (cancellation.IsCancellationRequested) return;
+                _managedMysqlReleases.Clear();
+                _managedHistoricalMysqlReleases.Clear();
+                foreach (var release in mysqlReleases.Where(item => item.IsRecommended)) _managedMysqlReleases.Add(release);
+                foreach (var release in mysqlReleases.Where(item => item.IsHistorical)) _managedHistoricalMysqlReleases.Add(release);
+                ManagedMysqlEmptyState.Visibility = mysqlReleases.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+                ManagedHistoricalMysqlSection.Visibility = _managedHistoricalMysqlReleases.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+                ManagedMysqlStateText.Text = mysqlReleases.Count == 0 ? "MySQL 官方目录未返回版本" : $"已读取 {mysqlReleases.Count} 个 MySQL 版本";
+                ManagedCatalogStateText.Text = $"已读取 {releases.Count + mysqlReleases.Count} 个官方版本";
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _managedMysqlReleases.Clear();
+                _managedHistoricalMysqlReleases.Clear();
+                ManagedHistoricalMysqlSection.Visibility = Visibility.Collapsed;
+                ManagedMysqlEmptyState.Visibility = Visibility.Visible;
+                ManagedMysqlStateText.Text = ex.Message;
+            }
+
+            try
+            {
+                var desktopReleases = await _managedToolchainService.GetDockerDesktopReleasesAsync(cancellation.Token);
+                if (cancellation.IsCancellationRequested) return;
+                _managedDesktopReleases.Clear();
+                foreach (var release in desktopReleases) _managedDesktopReleases.Add(release);
+                ManagedDesktopEmptyState.Visibility = desktopReleases.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+                var cliReleases = await _managedToolchainService.GetDockerCliReleasesAsync(cancellation.Token);
+                if (cancellation.IsCancellationRequested) return;
+                _managedDockerCliReleases.Clear();
+                foreach (var release in cliReleases) _managedDockerCliReleases.Add(release);
+                ManagedDockerCliEmptyState.Visibility = cliReleases.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+                var desktopText = desktopReleases.Count > 0 ? $"Desktop {desktopReleases[0].Version}" : "Desktop 目录不可用";
+                var cliText = cliReleases.Count > 0 ? $"CLI {cliReleases[0].Version}" : "CLI 目录不可用";
+                ManagedDockerStateText.Text = $"{desktopText} · {cliText}";
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _managedDesktopReleases.Clear();
+                _managedDockerCliReleases.Clear();
+                ManagedDesktopEmptyState.Visibility = Visibility.Visible;
+                ManagedDockerCliEmptyState.Visibility = Visibility.Visible;
+                ManagedDockerStateText.Text = ex.Message;
+            }
+
+            try
+            {
                 var pythonReleases = await _managedToolchainService.GetUvPythonReleasesAsync(cancellation.Token);
                 if (cancellation.IsCancellationRequested) return;
                 _managedPythonReleases.Clear();
@@ -215,7 +272,7 @@ public partial class DeveloperToolsView : UserControl
                 ManagedNodeStateText.Text = nodeReleases.Count == 0
                     ? "Node.js 官方目录未返回受支持版本"
                     : voltaAvailable ? $"已读取 {nodeReleases.Count} 个受支持版本" : "未安装 Volta；可先通过 WinGet 安装";
-                ManagedCatalogStateText.Text = $"已读取 {_managedReleases.Count + _managedHistoricalReleases.Count + _managedPythonReleases.Count + nodeReleases.Count} 个官方版本";
+                ManagedCatalogStateText.Text = $"已读取 {_managedReleases.Count + _managedHistoricalReleases.Count + _managedMysqlReleases.Count + _managedHistoricalMysqlReleases.Count + _managedDesktopReleases.Count + _managedDockerCliReleases.Count + _managedPythonReleases.Count + nodeReleases.Count} 个官方版本";
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -264,6 +321,12 @@ public partial class DeveloperToolsView : UserControl
                     ? $"将调用本机已验证的 uv 安装：\n\n{release.DisplayName} {release.Version}\n{release.Architecture}\n\n{(release.IsHistorical ? "警告：该 Python 分支已经结束官方安全维护，只建议用于无法升级的旧项目。\n\n" : string.Empty)}uv 将按其官方目录下载并校验，且只安装到 X-Tool 的当前用户托管目录，不注册系统 Python。是否继续？"
                     : release.ProviderId == "volta"
                         ? $"将调用本机已验证的 Volta 缓存：\n\n{release.DisplayName} {release.Version}\n{release.Architecture}\n\n此操作只执行 volta fetch，不会改变当前默认 Node.js，也不会修改 PATH。是否继续？"
+                    : release.ProviderId == "docker-desktop"
+                        ? $"将下载 Docker Desktop 安装器：\n\n{release.DisplayName} {release.Version}\n{release.Architecture} · {release.SizeText}\n\n下载完成后校验官方数字签名并启动安装向导；安装需要管理员权限与 WSL2，X-Tool 不会静默安装。是否继续？"
+                    : release.ProviderId == "docker-cli"
+                        ? $"将从 Docker 官方下载静态 CLI 包：\n\n{release.DisplayName} {release.Version}\n{release.Architecture} · {release.SizeText}\n\n解压到 X-Tool 托管目录后仅提供 docker CLI（无守护进程），容器引擎仍需 Docker Desktop 或远程 DOCKER_HOST。是否继续？"
+                    : release.ProviderId == "mysql"
+                        ? $"将从 MySQL 官方 CDN 归档下载：\n\n{release.DisplayName} {release.Version}\n{release.Architecture} · {release.SizeText}\n\n{(release.IsHistorical ? "警告：该 MySQL 分支已经结束官方安全维护，只建议用于无法升级的旧项目。\n\n" : string.Empty)}下载完成后校验官方 MD5，解压到当前用户的 X-Tool 托管目录；不初始化数据目录、不注册 Windows 服务、不修改 PATH。是否继续？"
                     : $"将安装：\n\n{release.DisplayName} {release.Version}\n{release.Architecture} · {release.SizeText}\n下载源：{_managedToolchainService.TemurinDownloadSourceText}\n\n下载完成后仍会校验 Adoptium API 提供的 SHA-256，安装到当前用户的 X-Tool 托管目录。是否继续？",
                 "确认安装托管工具链", MessageBoxButton.YesNo, MessageBoxImage.Question);
             if (confirmation != MessageBoxResult.Yes) return;
@@ -289,7 +352,7 @@ public partial class DeveloperToolsView : UserControl
             ManagedCatalogStateText.Text = result.Message;
             if (result.Succeeded)
             {
-                if (release.ProviderId != "volta") release.IsInstalled = !release.IsInstalled;
+                if (release.ProviderId != "volta" && release.ProviderId != "docker-desktop") release.IsInstalled = !release.IsInstalled;
                 await StartScanAsync();
                 await RefreshManagedCatalogAsync();
                 if (!wasInstalled && result.Entry is not null)
@@ -374,18 +437,21 @@ public partial class DeveloperToolsView : UserControl
 
     private void OpenManagedRoot_Click(object sender, RoutedEventArgs e)
     {
-        OpenManagedPath(_managedToolchainService.ManagedRoot, false, "托管目录尚未创建");
+        OpenManagedPath(_managedToolchainService.ManagedRoot, "托管目录尚未创建");
     }
 
     private void OpenManagedLog_Click(object sender, RoutedEventArgs e)
     {
-        OpenManagedPath(_managedToolchainService.OperationLogPath, true, "尚无托管操作日志");
+        var window = new ManagedLogWindow(_managedToolchainService.OperationLogPath)
+        {
+            Owner = Window.GetWindow(this)
+        };
+        window.ShowDialog();
     }
 
-    private void OpenManagedPath(string path, bool isFile, string missingMessage)
+    private void OpenManagedPath(string path, string missingMessage)
     {
-        var exists = isFile ? File.Exists(path) : Directory.Exists(path);
-        if (!exists)
+        if (!Directory.Exists(path))
         {
             ManagedCatalogStateText.Text = missingMessage;
             return;
@@ -401,7 +467,7 @@ public partial class DeveloperToolsView : UserControl
         }
         catch (Exception ex)
         {
-            ManagedCatalogStateText.Text = isFile ? "无法打开操作日志" : "无法打开托管目录";
+            ManagedCatalogStateText.Text = "无法打开托管目录";
             ManagedCatalogStateText.ToolTip = ex.Message;
         }
     }

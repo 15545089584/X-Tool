@@ -23,6 +23,7 @@ public sealed class ManagedToolchainRelease : INotifyPropertyChanged
     public string Architecture { get; init; } = "x64";
     public string DownloadUrl { get; init; } = string.Empty;
     public string Sha256 { get; init; } = string.Empty;
+    public string HashAlgorithm { get; init; } = "SHA256";
     public string FileName { get; init; } = string.Empty;
     public long DownloadSize { get; init; }
     public int FeatureVersion { get; init; }
@@ -44,12 +45,16 @@ public sealed class ManagedToolchainRelease : INotifyPropertyChanged
     {
         "temurin" => "Eclipse Adoptium 官方发行版",
         "uv" => "uv 官方托管 Python",
+        "mysql" => "MySQL 官方 CDN 归档",
+        "docker-desktop" => "Docker Desktop 官方更新源",
+        "docker-cli" => "Docker 官方 Windows 静态包",
         _ => ProviderId
     };
     public string ActionText => !IsProviderAvailable ? "需要 Volta" :
-        IsReadOnlyInstalled ? "已缓存" :
+        IsReadOnlyInstalled ? (ProviderId == "volta" ? "已缓存" : "已安装") :
         IsInstalled ? "卸载" :
-        ProviderId == "volta" ? "缓存版本" : "安装";
+        ProviderId == "volta" ? "缓存版本" :
+        ProviderId == "docker-desktop" ? "下载安装器" : "安装";
     public bool CanExecuteAction => IsProviderAvailable && !IsReadOnlyInstalled;
 
     public bool IsInstalled
@@ -92,6 +97,7 @@ public sealed class ManagedToolchainEntry
     public string DownloadUrl { get; init; } = string.Empty;
     public string PackageKey { get; init; } = string.Empty;
     public string Sha256 { get; init; } = string.Empty;
+    public string HashAlgorithm { get; init; } = "SHA256";
     public DateTime InstalledAtUtc { get; init; }
     public bool ManagedByXTool { get; init; } = true;
 }

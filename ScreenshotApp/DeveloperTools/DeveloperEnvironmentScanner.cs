@@ -17,6 +17,8 @@ public sealed class DeveloperEnvironmentScanner
         new("node", "Node.js", "Node、npm 与版本管理器入口", "\uE74C", "#E5F6E9", "#3C9760", new[] { "node.exe" }, new[] { "--version" }),
         new("dotnet", ".NET SDK", "并行安装的 SDK 与默认 dotnet", "\uE756", "#F0EAFF", "#7759B5", new[] { "dotnet.exe" }, new[] { "--list-sdks" }),
         new("git", "Git", "版本、命令路径与基础配置入口", "\uE8F1", "#FFEAE5", "#C45D42", new[] { "git.exe" }, new[] { "--version" }),
+        new("docker", "Docker", "客户端、守护进程与 Docker Desktop 状态", "\uE9A3", "#E5F1FF", "#2F6FB3", new[] { "docker.exe" }, new[] { "--version" }),
+        new("mysql", "MySQL", "客户端、服务端与 MYSQL_HOME 一致性", "\uE8A7", "#E8F1FF", "#3E74C7", new[] { "mysql.exe", "mysqld.exe" }, new[] { "--version" }),
         new("maven", "Maven", "Maven 主目录与命令入口", "\uE8F7", "#E6F4FF", "#3B7DAA", new[] { "mvn.cmd", "mvn.bat" }, Array.Empty<string>()),
         new("gradle", "Gradle", "Gradle 主目录与命令入口", "\uE9D9", "#E2F5F3", "#318C83", new[] { "gradle.bat", "gradle.cmd" }, Array.Empty<string>())
     };
@@ -88,6 +90,7 @@ public sealed class DeveloperEnvironmentScanner
             snapshot.Issues.Add(issue);
         }
 
+        await AddDockerDiagnosticsAsync(snapshot, effectivePathEntries, cancellationToken).ConfigureAwait(false);
         return snapshot;
     }
 
@@ -337,6 +340,7 @@ public sealed class DeveloperEnvironmentScanner
             "node" => new[] { "NODE_HOME", "VOLTA_HOME" },
             "dotnet" => new[] { "DOTNET_ROOT", "DOTNET_ROOT_X64" },
             "git" => new[] { "GIT_HOME" },
+            "mysql" => new[] { "MYSQL_HOME" },
             "maven" => new[] { "MAVEN_HOME", "M2_HOME" },
             "gradle" => new[] { "GRADLE_HOME" },
             _ => Array.Empty<string>()
@@ -391,6 +395,78 @@ public sealed class DeveloperEnvironmentScanner
             foreach (var path in ReadRegistryInstallPaths(@"SOFTWARE\GitForWindows", "InstallPath"))
             {
                 TryAddCandidate(Path.Combine(path, "cmd", "git.exe"), "Git for Windows 注册表", false, candidates);
+            }
+        }
+        else if (toolchainId == "mysql")
+        {
+            // MySQL Installer 会为每个版本写入 HKLM\SOFTWARE\MySQL AB\MySQL Server x.y\Location。
+            foreach (var hive in new[] { RegistryHive.CurrentUser, RegistryHive.LocalMachine })
+            {
+                foreach (var view in new[] { RegistryView.Registry64, RegistryView.Registry32 })
+                {
+                    try
+                    {
+                        using var baseKey = RegistryKey.OpenBaseKey(hive, view);
+                        using var mysqlAb = baseKey.OpenSubKey(@"SOFTWARE\MySQL AB");
+                        foreach (var versionName in mysqlAb?.GetSubKeyNames() ?? Array.Empty<string>())
+                        {
+                            if (!versionName.StartsWith("MySQL Server", StringComparison.OrdinalIgnoreCase)) continue;
+                            using var versionKey = mysqlAb?.OpenSubKey(versionName);
+                            var location = versionKey?.GetValue("Location")?.ToString();
+                            if (!string.IsNullOrWhiteSpace(location))
+                            {
+                                TryAddCandidate(Path.Combine(location, "bin", "mysql.exe"), $"MySQL 注册表 {versionName}", false, candidates);
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // 单个注册表视图不可读时继续使用其他发现来源。
+                    }
+                }
+            }
+        }
+        else if (toolchainId == "docker")
+        {
+            // Docker Desktop 的卸载注册表项带 InstallLocation；CLI 位于其 resources\bin。
+            foreach (var uninstallRoot in new[]
+                     {
+                         @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+                         @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+                     })
+            {
+                foreach (var hive in new[] { RegistryHive.CurrentUser, RegistryHive.LocalMachine })
+                {
+                    foreach (var view in new[] { RegistryView.Registry64, RegistryView.Registry32 })
+                    {
+                        try
+                        {
+                            using var baseKey = RegistryKey.OpenBaseKey(hive, view);
+                            using var uninstall = baseKey.OpenSubKey(uninstallRoot);
+                            foreach (var keyName in uninstall?.GetSubKeyNames() ?? Array.Empty<string>())
+                            {
+                                using var productKey = uninstall?.OpenSubKey(keyName);
+                                var displayName = productKey?.GetValue("DisplayName")?.ToString();
+                                if (string.IsNullOrWhiteSpace(displayName) ||
+                                    !displayName.Contains("Docker Desktop", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    continue;
+                                }
+
+                                var location = productKey?.GetValue("InstallLocation")?.ToString();
+                                if (!string.IsNullOrWhiteSpace(location))
+                                {
+                                    TryAddCandidate(Path.Combine(location, "resources", "bin", "docker.exe"),
+                                        "Docker Desktop 注册表", false, candidates);
+                                }
+                            }
+                        }
+                        catch
+                        {
+                            // 单个注册表视图不可读时继续使用其他发现来源。
+                        }
+                    }
+                }
             }
         }
     }
@@ -454,12 +530,24 @@ public sealed class DeveloperEnvironmentScanner
             },
             "dotnet" => new[] { Path.Combine(programFiles, "dotnet"), Path.Combine(programFilesX86, "dotnet") },
             "git" => new[] { Path.Combine(programFiles, "Git"), Path.Combine(programFilesX86, "Git"), Path.Combine(localAppData, "Programs", "Git") },
+            "docker" => new[]
+            {
+                Path.Combine(programFiles, "Docker", "Docker", "resources", "bin"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".docker", "bin"),
+                Path.Combine(localAppData, "X-Tool", "Dev", "Docker")
+            },
+            "mysql" => new[]
+            {
+                Path.Combine(programFiles, "MySQL"),
+                Path.Combine(programFilesX86, "MySQL"),
+                Path.Combine(localAppData, "X-Tool", "Dev", "MySQL")
+            },
             _ => Array.Empty<string>()
         };
 
         foreach (var root in roots.Where(path => !string.IsNullOrWhiteSpace(path)))
         {
-            foreach (var candidateRoot in EnumerateCandidateRoots(root, toolchainId is "java" or "python" or "node" ? 2 : 0))
+            foreach (var candidateRoot in EnumerateCandidateRoots(root, toolchainId is "java" or "python" or "node" or "mysql" ? 2 : 0))
             {
                 foreach (var executable in CandidateExecutablesForRoot(toolchainId, candidateRoot))
                 {
@@ -478,6 +566,8 @@ public sealed class DeveloperEnvironmentScanner
             "node" => new[] { "node", "nodejs" },
             "dotnet" => new[] { "dotnet" },
             "git" => new[] { "git" },
+            "docker" => new[] { "docker" },
+            "mysql" => new[] { "mysql" },
             "maven" => new[] { "maven", "apache-maven" },
             "gradle" => new[] { "gradle" },
             _ => Array.Empty<string>()
@@ -569,6 +659,8 @@ public sealed class DeveloperEnvironmentScanner
             "node" => new[] { Path.Combine(root, "node.exe"), Path.Combine(root, "bin", "node.exe") },
             "dotnet" => new[] { Path.Combine(root, "dotnet.exe") },
             "git" => new[] { Path.Combine(root, "cmd", "git.exe"), Path.Combine(root, "bin", "git.exe"), Path.Combine(root, "git.exe") },
+            "docker" => new[] { Path.Combine(root, "docker.exe"), Path.Combine(root, "bin", "docker.exe") },
+            "mysql" => new[] { Path.Combine(root, "bin", "mysql.exe"), Path.Combine(root, "bin", "mysqld.exe") },
             "maven" => new[] { Path.Combine(root, "bin", "mvn.cmd"), Path.Combine(root, "bin", "mvn.bat") },
             "gradle" => new[] { Path.Combine(root, "bin", "gradle.bat"), Path.Combine(root, "bin", "gradle.cmd") },
             _ => Array.Empty<string>()
@@ -647,6 +739,7 @@ public sealed class DeveloperEnvironmentScanner
         AddJavaHomeIssue(snapshot, issues);
         AddPythonPipIssue(snapshot, processPathEntries, issues);
         AddNodeDirectoryVersionIssue(snapshot, issues);
+        AddMysqlIssues(snapshot, issues);
         return issues;
     }
 
@@ -758,6 +851,199 @@ public sealed class DeveloperEnvironmentScanner
         }
     }
 
+    private static void AddMysqlIssues(DeveloperEnvironmentSnapshot snapshot, ICollection<DeveloperDiagnosticIssue> issues)
+    {
+        var toolchain = snapshot.Toolchains.FirstOrDefault(item => item.Id == "mysql");
+        if (toolchain is null)
+        {
+            return;
+        }
+
+        var active = toolchain.Installations.FirstOrDefault(item => item.IsActive);
+        var mysqlHome = Environment.GetEnvironmentVariable("MYSQL_HOME");
+        if (!string.IsNullOrWhiteSpace(mysqlHome) && active is not null &&
+            !string.Equals(NormalizePath(Environment.ExpandEnvironmentVariables(mysqlHome)), NormalizePath(active.InstallationPath), StringComparison.OrdinalIgnoreCase))
+        {
+            issues.Add(new DeveloperDiagnosticIssue
+            {
+                Severity = DeveloperIssueSeverity.Warning,
+                Title = "MYSQL_HOME 与当前 mysql.exe 不一致",
+                Description = "MYSQL_HOME 指向的目录与 PATH 解析到的 mysql.exe 不属于同一安装，可能导致其他工具读取到不同版本的客户端或服务端。",
+                Evidence = $"MYSQL_HOME：{mysqlHome}{Environment.NewLine}当前 mysql.exe：{active.ExecutablePath}"
+            });
+        }
+
+        var mysqlClient = toolchain.Installations.FirstOrDefault(item => item.ExecutablePath.EndsWith("mysql.exe", StringComparison.OrdinalIgnoreCase));
+        var mysqlServer = toolchain.Installations.FirstOrDefault(item => item.ExecutablePath.EndsWith("mysqld.exe", StringComparison.OrdinalIgnoreCase));
+        if (mysqlClient is not null && mysqlServer is not null &&
+            !string.Equals(NormalizePath(mysqlClient.InstallationPath), NormalizePath(mysqlServer.InstallationPath), StringComparison.OrdinalIgnoreCase))
+        {
+            issues.Add(new DeveloperDiagnosticIssue
+            {
+                Severity = DeveloperIssueSeverity.Warning,
+                Title = "mysql 客户端与服务端不属于同一安装",
+                Description = "PATH 中的 mysql.exe 与 mysqld.exe 来自不同目录，连接本机服务时可能出现客户端与服务端版本不一致。",
+                Evidence = $"mysql.exe：{mysqlClient.ExecutablePath}{Environment.NewLine}mysqld.exe：{mysqlServer.ExecutablePath}"
+            });
+        }
+
+        foreach (var installation in toolchain.Installations.Where(item => item.IsVerified))
+        {
+            var parts = installation.Version.Split('.');
+            if (parts.Length < 2 || !int.TryParse(parts[0], out var major) || !int.TryParse(parts[1], out var minor))
+            {
+                continue;
+            }
+
+            if (major == 8 && minor >= 4 || major == 9 && minor >= 7)
+            {
+                continue; // 8.4 与 9.7 起属于 LTS，仍在官方支持期。
+            }
+
+            if (major == 9)
+            {
+                issues.Add(new DeveloperDiagnosticIssue
+                {
+                    Severity = DeveloperIssueSeverity.Info,
+                    Title = "MySQL 9 创新版迭代较快",
+                    Description = "9.x 创新版每季度发布，单个版本的维护窗口较短；生产环境建议使用 8.4 LTS 或 9.7 LTS。",
+                    Evidence = $"{installation.Version}  {installation.ExecutablePath}"
+                });
+            }
+            else if (major < 9)
+            {
+                issues.Add(new DeveloperDiagnosticIssue
+                {
+                    Severity = DeveloperIssueSeverity.Warning,
+                    Title = "MySQL 已停止官方安全维护",
+                    Description = $"MySQL {major}.{minor} 已经结束官方安全维护，建议升级到 8.4 LTS 或更新版本；该提示不会修改任何配置。",
+                    Evidence = $"{installation.Version}  {installation.ExecutablePath}"
+                });
+            }
+        }
+    }
+
+    private async Task AddDockerDiagnosticsAsync(
+        DeveloperEnvironmentSnapshot snapshot,
+        IReadOnlyList<string> processPathEntries,
+        CancellationToken cancellationToken)
+    {
+        var docker = snapshot.Toolchains.FirstOrDefault(item => item.Id == "docker");
+        if (docker is null || docker.InstallationCount == 0)
+        {
+            return;
+        }
+
+        var cli = docker.Installations.FirstOrDefault(item => item.IsActive) ?? docker.Installations.FirstOrDefault();
+        if (cli is null)
+        {
+            return;
+        }
+
+        var serverVersion = string.Empty;
+        string? daemonEvidence = null;
+        try
+        {
+            var result = await _commandRunner.RunAsync(cli.ExecutablePath, new[] { "version" }, cancellationToken).ConfigureAwait(false);
+            daemonEvidence = FirstMeaningfulLine(result.CombinedOutput);
+            var match = Regex.Match(result.StandardOutput,
+                "Server:[^\\r\\n]*\\r?\\n\\s*Engine:\\s*\\r?\\n\\s*Version:\\s*(?<version>\\S+)",
+                RegexOptions.Multiline);
+            serverVersion = match.Success ? match.Groups["version"].Value.Trim() : string.Empty;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            daemonEvidence = ex.Message;
+        }
+
+        if (string.IsNullOrWhiteSpace(serverVersion))
+        {
+            snapshot.Issues.Add(new DeveloperDiagnosticIssue
+            {
+                Severity = DeveloperIssueSeverity.Warning,
+                Title = "Docker 守护进程不可用",
+                Description = "docker CLI 已发现，但无法连接引擎；Docker Desktop 可能未启动，或 WSL2 后端尚未就绪。",
+                Evidence = string.IsNullOrWhiteSpace(daemonEvidence) ? cli.ExecutablePath : $"{cli.ExecutablePath}{Environment.NewLine}{daemonEvidence}"
+            });
+        }
+        else
+        {
+            snapshot.Issues.Add(new DeveloperDiagnosticIssue
+            {
+                Severity = DeveloperIssueSeverity.Info,
+                Title = "Docker 守护进程可用",
+                Description = "docker CLI 可以连接到引擎；引擎运行在 WSL2 的 docker-desktop 发行版中。",
+                Evidence = $"客户端：{cli.Version}{Environment.NewLine}守护进程：{serverVersion}{Environment.NewLine}{cli.ExecutablePath}"
+            });
+        }
+
+        var desktopCli = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+            "Docker", "Docker", "resources", "bin", "docker.exe");
+        if (File.Exists(desktopCli) &&
+            !processPathEntries.Any(entry => string.Equals(
+                Path.TrimEndingDirectorySeparator(entry),
+                Path.TrimEndingDirectorySeparator(Path.GetDirectoryName(desktopCli)!),
+                StringComparison.OrdinalIgnoreCase)))
+        {
+            snapshot.Issues.Add(new DeveloperDiagnosticIssue
+            {
+                Severity = DeveloperIssueSeverity.Warning,
+                Title = "Docker Desktop 已安装但 docker.exe 未加入 PATH",
+                Description = "当前终端无法直接使用 docker 命令；可以手动把 resources\\bin 加入 PATH，或在 X-Tool 中为该安装执行一键配置。",
+                Evidence = desktopCli
+            });
+        }
+
+        if (string.IsNullOrWhiteSpace(serverVersion) && !IsWsl2Available())
+        {
+            snapshot.Issues.Add(new DeveloperDiagnosticIssue
+            {
+                Severity = DeveloperIssueSeverity.Warning,
+                Title = "未检测到 WSL2 环境",
+                Description = "Docker Desktop 的 Linux 容器依赖 WSL2；请在“启用或关闭 Windows 功能”中开启“适用于 Linux 的 Windows 子系统”并升级到 WSL2。",
+                Evidence = "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Lxss 未找到有效的 WSL2 发行版"
+            });
+        }
+    }
+
+    private static bool IsWsl2Available()
+    {
+        try
+        {
+            using var baseKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+            using var lxss = baseKey.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Lxss");
+            if (lxss is null)
+            {
+                return false;
+            }
+
+            if (lxss.GetValue("DefaultVersion") is int defaultVersion && defaultVersion >= 2)
+            {
+                return true;
+            }
+
+            foreach (var name in lxss.GetSubKeyNames())
+            {
+                using var distro = lxss.OpenSubKey(name);
+                if (distro?.GetValue("Version") is int distroVersion && distroVersion >= 2)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static IReadOnlyList<string> ReadPathEntries(string? rawPath)
     {
         if (string.IsNullOrWhiteSpace(rawPath))
@@ -787,7 +1073,7 @@ public sealed class DeveloperEnvironmentScanner
     {
         var directory = Path.GetDirectoryName(executablePath) ?? string.Empty;
         var directoryName = Path.GetFileName(directory);
-        if (toolchainId is "java" or "maven" or "gradle" && string.Equals(directoryName, "bin", StringComparison.OrdinalIgnoreCase))
+        if (toolchainId is "java" or "maven" or "gradle" or "mysql" && string.Equals(directoryName, "bin", StringComparison.OrdinalIgnoreCase))
         {
             return Directory.GetParent(directory)?.FullName ?? directory;
         }
@@ -872,6 +1158,9 @@ public sealed class DeveloperEnvironmentScanner
             "python" => "Python\\s+(?<version>[^\\s]+)",
             "node" => "v(?<version>[0-9][^\\s]*)",
             "git" => "git version\\s+(?<version>[^\\s]+)",
+            "docker" => "Docker version\\s+(?<version>[0-9][^,\\s]*)",
+            // 兼容 5.x 的 “Distrib 5.7.19” 与 8.x/9.x 的 “Ver 8.4.6 for” 两种输出。
+            "mysql" => "(?:Distrib|Ver)\\s+(?<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
             _ => "(?<version>[0-9]+(?:\\.[0-9A-Za-z-]+)+)"
         };
         var match = Regex.Match(output, pattern, RegexOptions.IgnoreCase);

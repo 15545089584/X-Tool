@@ -17,6 +17,8 @@ public static class DeveloperEnvironmentConfigurationPlanner
             "java" => BuildJava(toolchain, installation),
             "python" => BuildPython(toolchain, installation),
             "node" => BuildNode(toolchain, installation),
+            "docker" => BuildDocker(toolchain, installation),
+            "mysql" => BuildMysql(toolchain, installation),
             "maven" => BuildBinTool(toolchain, installation, "mvn.cmd", "MAVEN_HOME"),
             "gradle" => BuildBinTool(toolchain, installation, "gradle.bat", "GRADLE_HOME"),
             "git" => BuildExecutableDirectory(toolchain, installation),
@@ -80,6 +82,38 @@ public static class DeveloperEnvironmentConfigurationPlanner
         var warnings = File.Exists(Path.Combine(directory, "npm.cmd"))
             ? Array.Empty<string>()
             : new[] { "该目录未发现 npm.cmd；加入 PATH 后可能只能使用 node。" };
+        return Ready(toolchain, installation, new[] { directory }, new Dictionary<string, string>(), warnings);
+    }
+
+    private static ToolchainEnvironmentPlan BuildMysql(ToolchainSummary toolchain, ToolchainInstallation installation)
+    {
+        var root = installation.InstallationPath;
+        var bin = Path.Combine(root, "bin");
+        if (!File.Exists(Path.Combine(bin, "mysql.exe")))
+        {
+            return Blocked(toolchain, installation, "未能在安装根目录下找到 bin\\mysql.exe。");
+        }
+
+        return Ready(toolchain, installation, new[] { bin }, new Dictionary<string, string>
+        {
+            ["MYSQL_HOME"] = root
+        }, new[]
+        {
+            "加入 PATH 后只提供 mysql/mysqld 命令行入口；数据目录初始化、my.ini 与 Windows 服务需要单独处理。"
+        });
+    }
+
+    private static ToolchainEnvironmentPlan BuildDocker(ToolchainSummary toolchain, ToolchainInstallation installation)
+    {
+        var directory = Path.GetDirectoryName(installation.ExecutablePath) ?? string.Empty;
+        if (!Directory.Exists(directory))
+        {
+            return Blocked(toolchain, installation, "未能定位 docker.exe 所在目录。");
+        }
+
+        var warnings = directory.Contains(@"\Docker\Docker\resources\bin", StringComparison.OrdinalIgnoreCase)
+            ? new[] { "Docker Desktop 通常会自动维护 PATH；若终端仍无法使用 docker，再确认此目录已加入 PATH。" }
+            : new[] { "加入 PATH 的只是 docker CLI；容器引擎仍需要 Docker Desktop 或通过 DOCKER_HOST 连接远程引擎。" };
         return Ready(toolchain, installation, new[] { directory }, new Dictionary<string, string>(), warnings);
     }
 

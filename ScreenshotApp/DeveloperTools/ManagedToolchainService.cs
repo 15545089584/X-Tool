@@ -1,9 +1,13 @@
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using Microsoft.Win32;
 using System.Net.Http;
 using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
+using System.Text.RegularExpressions;
+using System.Xml.Linq;
 
 namespace ScreenshotApp.DeveloperTools;
 
@@ -14,6 +18,12 @@ public sealed class ManagedToolchainService
     private static readonly SemaphoreSlim ManifestLock = new(1, 1);
     private const string AdoptiumAvailableReleasesUrl = "https://api.adoptium.net/v3/info/available_releases";
     private const string TunaAdoptiumRoot = "https://mirrors.tuna.tsinghua.edu.cn/Adoptium";
+    private const string MysqlEolApiUrl = "https://endoflife.date/api/mysql.json";
+    private const string MysqlArchivesRoot = "https://cdn.mysql.com/archives/mysql-";
+    private const string DockerDesktopAppcastUrl = "https://desktop.docker.com/win/main/amd64/appcast.xml";
+    private const string DockerCliDirectoryUrl = "https://download.docker.com/win/static/stable/x86_64/";
+    // MySQL 生命周期基线更新于 2026-08：8.4 与 9.7 为 LTS，其余 9.x 为创新版，8.0 及更早已停止维护。
+    private static readonly HashSet<string> MysqlLtsCycles = new(StringComparer.Ordinal) { "8.4", "9.7" };
     // Python 官方支持状态基线更新于 2026-08；uv 目录是否仍提供对应构建仍以实际查询结果为准。
     private static readonly int[] PythonMinors = { 8, 9, 10, 11, 12, 13, 14 };
     private static readonly HashSet<int> SupportedPythonMinors = new() { 10, 11, 12, 13, 14 };
@@ -33,6 +43,8 @@ public sealed class ManagedToolchainService
     private string DownloadsRoot => Path.Combine(ManagedRoot, "Downloads");
     private string JavaRoot => Path.Combine(ManagedRoot, "Java");
     private string PythonRoot => Path.Combine(ManagedRoot, "Python", "uv");
+    private string MysqlRoot => Path.Combine(ManagedRoot, "MySQL");
+    private string DockerRoot => Path.Combine(ManagedRoot, "Docker");
     private string VoltaRoot
     {
         get
@@ -161,9 +173,243 @@ public sealed class ManagedToolchainService
         {
             "temurin" => InstallTemurinAsync(release, progress, cancellationToken),
             "uv" => InstallUvPythonAsync(release, progress, cancellationToken),
+            "mysql" => InstallMysqlAsync(release, progress, cancellationToken),
+            "docker-desktop" => InstallDockerDesktopAsync(release, progress, cancellationToken),
+            "docker-cli" => InstallDockerCliAsync(release, progress, cancellationToken),
             "volta" => FetchVoltaNodeAsync(release, progress, cancellationToken),
             _ => Task.FromResult(new ManagedToolchainOperationResult(false, "不支持该托管来源。"))
         };
+
+    public async Task<IReadOnlyList<ManagedToolchainRelease>> GetDockerDesktopReleasesAsync(CancellationToken cancellationToken)
+    {
+        using var response = await HttpClient.GetAsync(DockerDesktopAppcastUrl, cancellationToken).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        var content = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        var document = XDocument.Parse(content);
+        var item = document.Root?.Element("channel")?.Element("item");
+        var enclosure = item?.Element("enclosure");
+        var sparkleNamespace = XNamespace.Get("http://www.andymatuschak.org/xml-namespaces/sparkle");
+        var version = item?.Element("title")?.Value.Trim();
+        var url = enclosure?.Attribute("url")?.Value;
+        var lengthText = enclosure?.Attribute("length")?.Value;
+        var versionText = enclosure?.Attribute(sparkleNamespace + "shortVersionString")?.Value;
+        if (string.IsNullOrWhiteSpace(url) || !IsTrustedDockerDesktopUrl(url))
+        {
+            return Array.Empty<ManagedToolchainRelease>();
+        }
+
+        var installed = IsDockerDesktopInstalled(out var installedVersion);
+        return new[]
+        {
+            new ManagedToolchainRelease
+            {
+                ToolchainId = "docker",
+                ProviderId = "docker-desktop",
+                DisplayName = "Docker Desktop",
+                Version = string.IsNullOrWhiteSpace(versionText) ? version ?? "未知" : versionText,
+                Architecture = "x64",
+                DownloadUrl = url,
+                FileName = "Docker Desktop Installer.exe",
+                DownloadSize = long.TryParse(lengthText, out var length) ? length : 0,
+                IsRecommended = true,
+                ReleaseChannelText = installed ? $"本机 {installedVersion}" : "官方更新源",
+                IsInstalled = installed,
+                IsReadOnlyInstalled = installed
+            }
+        };
+    }
+
+    public async Task<IReadOnlyList<ManagedToolchainRelease>> GetDockerCliReleasesAsync(CancellationToken cancellationToken)
+    {
+        var manifest = await LoadManifestAsync(cancellationToken).ConfigureAwait(false);
+        using var response = await HttpClient.GetAsync(DockerCliDirectoryUrl, cancellationToken).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        var content = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        var versions = Regex.Matches(content, @"docker-(?<version>[0-9]+\.[0-9]+\.[0-9]+)\.zip")
+            .Select(match => match.Groups["version"].Value)
+            .Where(value => Version.TryParse(value, out _))
+            .Distinct(StringComparer.Ordinal)
+            .OrderByDescending(value => Version.Parse(value))
+            .Take(1)
+            .ToArray();
+        if (versions.Length == 0)
+        {
+            return Array.Empty<ManagedToolchainRelease>();
+        }
+
+        var version = versions[0];
+        var fileName = $"docker-{version}.zip";
+        var zipUrl = $"{DockerCliDirectoryUrl}{fileName}";
+        long size = 0;
+        try
+        {
+            using var head = await HttpClient.SendAsync(new HttpRequestMessage(HttpMethod.Head, zipUrl), cancellationToken).ConfigureAwait(false);
+            if (head.IsSuccessStatusCode) size = head.Content.Headers.ContentLength ?? 0;
+        }
+        catch (OperationCanceledException) { throw; }
+        catch { /* 大小未知时仍允许安装，下载时以实际为准。 */ }
+
+        return new[]
+        {
+            new ManagedToolchainRelease
+            {
+                ToolchainId = "docker",
+                ProviderId = "docker-cli",
+                DisplayName = "docker CLI",
+                Version = version,
+                Architecture = "x64",
+                DownloadUrl = zipUrl,
+                FileName = fileName,
+                DownloadSize = size,
+                IsRecommended = true,
+                IsInstalled = manifest.Installations.Any(item => item.ManagedByXTool &&
+                    item.ToolchainId == "docker" && item.ProviderId == "docker-cli" &&
+                    item.Version == version && Directory.Exists(item.InstallationPath))
+            }
+        };
+    }
+
+    public async Task<IReadOnlyList<ManagedToolchainRelease>> GetMysqlReleasesAsync(CancellationToken cancellationToken)
+    {
+        var manifest = await LoadManifestAsync(cancellationToken).ConfigureAwait(false);
+        using var response = await HttpClient.GetAsync(MysqlEolApiUrl, cancellationToken).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        var cycles = new List<MysqlCycle>();
+        foreach (var item in document.RootElement.EnumerateArray())
+        {
+            if (!item.TryGetProperty("cycle", out var cycleElement) || !item.TryGetProperty("latest", out var latestElement)) continue;
+            var cycle = cycleElement.GetString();
+            var latest = latestElement.GetString();
+            if (string.IsNullOrWhiteSpace(cycle) || string.IsNullOrWhiteSpace(latest)) continue;
+            if (!TryParseMysqlCycle(cycle, out var major)) continue;
+            if (major < 8) continue; // 5.x 及更早版本不列入托管下载。
+            var supported = IsMysqlCycleSupported(item);
+            if (!supported && cycle != "8.0") continue; // 历史兼容区只保留 8.0。
+            cycles.Add(new MysqlCycle(cycle, latest, supported, MysqlLtsCycles.Contains(cycle)));
+        }
+
+        using var gate = new SemaphoreSlim(3);
+        var tasks = cycles.Select(async cycle =>
+        {
+            await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                return await ProbeMysqlReleaseAsync(cycle, manifest, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch
+            {
+                return null;
+            }
+            finally
+            {
+                gate.Release();
+            }
+        });
+
+        var releases = (await Task.WhenAll(tasks).ConfigureAwait(false))
+            .Where(item => item is not null)
+            .Cast<ManagedToolchainRelease>()
+            .OrderByDescending(item => item.IsRecommended)
+            .ThenByDescending(item => item.IsLts)
+            .ThenByDescending(item => item.Version)
+            .ToList();
+        return releases;
+    }
+
+    private async Task<ManagedToolchainRelease?> ProbeMysqlReleaseAsync(
+        MysqlCycle cycle,
+        ManagedToolchainManifest manifest,
+        CancellationToken cancellationToken)
+    {
+        // endoflife 的最新补丁号可能超前于 CDN 归档，从 latest 向下探测最多 5 个补丁。
+        for (var offset = 0; offset < 5; offset++)
+        {
+            var version = DecrementPatchVersion(cycle.Latest, offset);
+            if (version is null) return null;
+            var fileName = $"mysql-{version}-winx64.zip";
+            var zipUrl = $"{MysqlArchivesRoot}{cycle.Cycle}/{fileName}";
+            try
+            {
+                using var head = await HttpClient.SendAsync(new HttpRequestMessage(HttpMethod.Head, zipUrl), cancellationToken).ConfigureAwait(false);
+                if (!head.IsSuccessStatusCode) continue;
+                var size = head.Content.Headers.ContentLength ?? 0;
+                var md5 = await FetchMysqlMd5Async(zipUrl, cancellationToken).ConfigureAwait(false);
+                if (md5 is null || !IsTrustedMysqlDownload(zipUrl, fileName, md5)) continue;
+
+                return new ManagedToolchainRelease
+                {
+                    ToolchainId = "mysql",
+                    ProviderId = "mysql",
+                    DisplayName = $"MySQL {cycle.Cycle}",
+                    Version = version,
+                    Architecture = "x64",
+                    DownloadUrl = zipUrl,
+                    Sha256 = md5,
+                    HashAlgorithm = "MD5",
+                    FileName = fileName,
+                    DownloadSize = size,
+                    FeatureVersion = ParseMajor(version),
+                    IsLts = cycle.IsLts,
+                    IsRecommended = cycle.IsSupported,
+                    ReleaseChannelText = cycle.IsLts ? string.Empty : cycle.IsSupported ? "创新版" : "停止维护",
+                    IsInstalled = manifest.Installations.Any(item => item.ManagedByXTool &&
+                        item.ToolchainId == "mysql" && item.ProviderId == "mysql" &&
+                        item.Version == version && Directory.Exists(item.InstallationPath))
+                };
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch
+            {
+                continue;
+            }
+        }
+        return null;
+    }
+
+    private static async Task<string?> FetchMysqlMd5Async(string zipUrl, CancellationToken cancellationToken)
+    {
+        using var response = await HttpClient.GetAsync(zipUrl + ".md5", cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode) return null;
+        var content = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        var match = Regex.Match(content, @"\b[0-9a-fA-F]{32}\b");
+        return match.Success ? match.Value.ToLowerInvariant() : null;
+    }
+
+    private static bool TryParseMysqlCycle(string cycle, out int major)
+    {
+        major = 0;
+        var parts = cycle.Split('.');
+        return parts.Length >= 1 && int.TryParse(parts[0], out major);
+    }
+
+    private static bool IsMysqlCycleSupported(JsonElement item)
+    {
+        if (!item.TryGetProperty("support", out var support)) return false;
+        if (support.ValueKind == JsonValueKind.True) return true;
+        if (support.ValueKind == JsonValueKind.False) return false;
+        var text = support.GetString();
+        return DateTime.TryParse(text, out var date) && date.Date >= DateTime.UtcNow.Date;
+    }
+
+    private static string? DecrementPatchVersion(string version, int offset)
+    {
+        if (!Version.TryParse(version, out var parsed) || parsed.Build < 0) return null;
+        var patch = parsed.Build - offset;
+        if (patch < 0) return null;
+        return $"{parsed.Major}.{parsed.Minor}.{patch}";
+    }
+
+    private sealed record MysqlCycle(string Cycle, string Latest, bool IsSupported, bool IsLts);
 
     public async Task<IReadOnlyList<ManagedToolchainRelease>> GetVoltaNodeReleasesAsync(CancellationToken cancellationToken)
     {
@@ -433,13 +679,252 @@ public sealed class ManagedToolchainService
         }
     }
 
+    public async Task<ManagedToolchainOperationResult> InstallMysqlAsync(
+        ManagedToolchainRelease release,
+        IProgress<ManagedInstallProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        if (release.ToolchainId != "mysql" || release.ProviderId != "mysql" ||
+            !string.Equals(release.HashAlgorithm, "MD5", StringComparison.OrdinalIgnoreCase) ||
+            !IsTrustedMysqlDownload(release.DownloadUrl, release.FileName, release.Sha256))
+        {
+            return new(false, "安装请求不是受信任的 MySQL 官方归档 ZIP。");
+        }
+
+        Directory.CreateDirectory(DownloadsRoot);
+        Directory.CreateDirectory(MysqlRoot);
+        var operationId = Guid.NewGuid().ToString("N");
+        var archivePath = Path.Combine(DownloadsRoot, $"{operationId}.partial");
+        var stagingPath = Path.Combine(MysqlRoot, $".staging-{operationId}");
+        string? installedPath = null;
+        var manifestCommitted = false;
+        try
+        {
+            progress?.Report(new("正在连接 MySQL 官方 CDN"));
+            await DownloadAsync(release.DownloadUrl, "MySQL 官方 CDN", archivePath, progress, cancellationToken).ConfigureAwait(false);
+            progress?.Report(new("正在校验 MD5"));
+            var actualHash = await ComputeMd5Async(archivePath, cancellationToken).ConfigureAwait(false);
+            if (!string.Equals(actualHash, release.Sha256, StringComparison.OrdinalIgnoreCase))
+            {
+                await WriteLogAsync($"MySQL {release.Version} 校验失败：期望 {release.Sha256}，实际 {actualHash}").ConfigureAwait(false);
+                return new(false, "下载文件的 MD5 与 MySQL 官方校验值不一致，安装已停止。");
+            }
+
+            progress?.Report(new("正在安全解压 MySQL"));
+            Directory.CreateDirectory(stagingPath);
+            await ExtractZipSafelyAsync(archivePath, stagingPath, cancellationToken).ConfigureAwait(false);
+            var extractedRoot = FindMysqlRoot(stagingPath);
+            if (extractedRoot is null)
+            {
+                return new(false, "压缩包内未找到完整的 mysql.exe 与 mysqld.exe。");
+            }
+
+            var safeVersion = SanitizeDirectoryName(release.Version);
+            var destination = Path.Combine(MysqlRoot, $"mysql-{safeVersion}-winx64");
+            if (Directory.Exists(destination))
+            {
+                return new(false, "该 MySQL 版本的托管目录已经存在，请先重新扫描或卸载旧记录。");
+            }
+
+            Directory.Move(extractedRoot, destination);
+            installedPath = destination;
+            var mysqlPath = Path.Combine(destination, "bin", "mysql.exe");
+            var validation = await _commandRunner.RunAsync(mysqlPath, new[] { "--version" }, cancellationToken).ConfigureAwait(false);
+            if (validation.TimedOut || validation.ExitCode != 0)
+            {
+                TryDeleteManagedDirectory(destination);
+                return new(false, "MySQL 解压完成，但 mysql --version 验证失败（可能缺少 VC++ 运行库），已撤销本次安装。");
+            }
+
+            var entry = new ManagedToolchainEntry
+            {
+                ToolchainId = "mysql",
+                ProviderId = "mysql",
+                Version = release.Version,
+                Architecture = release.Architecture,
+                InstallationPath = destination,
+                ExecutablePath = mysqlPath,
+                DownloadUrl = release.DownloadUrl,
+                Sha256 = release.Sha256,
+                HashAlgorithm = "MD5",
+                InstalledAtUtc = DateTime.UtcNow,
+                ManagedByXTool = true
+            };
+            await AddManifestEntryAsync(entry, cancellationToken).ConfigureAwait(false);
+            manifestCommitted = true;
+            await WriteLogAsync($"已安装 MySQL {release.Version} 到 {destination}；校验：MD5 {release.Sha256}").ConfigureAwait(false);
+            progress?.Report(new("安装与版本验证完成", release.DownloadSize, release.DownloadSize));
+            return new(true, $"MySQL {release.Version} 已安装并通过 mysql --version 验证。", entry);
+        }
+        catch (OperationCanceledException)
+        {
+            await WriteLogAsync($"MySQL {release.Version} 安装已取消").ConfigureAwait(false);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            await WriteLogAsync($"MySQL {release.Version} 安装失败：{ex}").ConfigureAwait(false);
+            return new(false, $"安装失败：{ex.Message}");
+        }
+        finally
+        {
+            TryDeleteFile(archivePath);
+            TryDeleteManagedDirectory(stagingPath);
+            if (!manifestCommitted && !string.IsNullOrWhiteSpace(installedPath)) TryDeleteManagedDirectory(installedPath);
+        }
+    }
+
+    public async Task<ManagedToolchainOperationResult> InstallDockerDesktopAsync(
+        ManagedToolchainRelease release,
+        IProgress<ManagedInstallProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        if (release.ToolchainId != "docker" || release.ProviderId != "docker-desktop" ||
+            !IsTrustedDockerDesktopUrl(release.DownloadUrl))
+        {
+            return new(false, "安装请求不是受信任的 Docker Desktop 官方安装器。");
+        }
+
+        Directory.CreateDirectory(DownloadsRoot);
+        var installerPath = Path.Combine(DownloadsRoot, $"docker-desktop-installer-{SanitizeDirectoryName(release.Version)}.exe");
+        var temporary = installerPath + ".partial";
+        try
+        {
+            progress?.Report(new("正在下载 Docker Desktop 安装器"));
+            await DownloadAsync(release.DownloadUrl, "Docker Desktop 官方更新源", temporary, progress, cancellationToken).ConfigureAwait(false);
+            if (File.Exists(installerPath))
+            {
+                TryDeleteFile(installerPath);
+            }
+            File.Move(temporary, installerPath);
+
+            progress?.Report(new("正在校验官方数字签名"));
+            if (!VerifyDockerDesktopSignature(installerPath))
+            {
+                TryDeleteFile(installerPath);
+                return new(false, "安装器数字签名验证失败（非 Docker, Inc. 签名或签名无效），文件已删除。");
+            }
+
+            await WriteLogAsync($"已下载 Docker Desktop {release.Version} 安装器：{installerPath}；签名验证通过").ConfigureAwait(false);
+            progress?.Report(new("正在启动安装向导"));
+            Process.Start(new ProcessStartInfo { FileName = installerPath, UseShellExecute = true });
+            return new(true, $"Docker Desktop {release.Version} 安装器已启动，请按向导完成安装（需要管理员权限与 WSL2）。");
+        }
+        catch (OperationCanceledException)
+        {
+            await WriteLogAsync($"Docker Desktop {release.Version} 下载已取消").ConfigureAwait(false);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            await WriteLogAsync($"Docker Desktop {release.Version} 下载失败：{ex}").ConfigureAwait(false);
+            return new(false, $"下载失败：{ex.Message}");
+        }
+        finally
+        {
+            TryDeleteFile(temporary);
+        }
+    }
+
+    public async Task<ManagedToolchainOperationResult> InstallDockerCliAsync(
+        ManagedToolchainRelease release,
+        IProgress<ManagedInstallProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        if (release.ToolchainId != "docker" || release.ProviderId != "docker-cli" ||
+            !IsTrustedDockerCliDownload(release.DownloadUrl, release.FileName))
+        {
+            return new(false, "安装请求不是受信任的 Docker 官方静态包。");
+        }
+
+        Directory.CreateDirectory(DownloadsRoot);
+        Directory.CreateDirectory(DockerRoot);
+        var operationId = Guid.NewGuid().ToString("N");
+        var archivePath = Path.Combine(DownloadsRoot, $"{operationId}.partial");
+        var stagingPath = Path.Combine(DockerRoot, $".staging-{operationId}");
+        string? installedPath = null;
+        var manifestCommitted = false;
+        try
+        {
+            progress?.Report(new("正在下载 docker CLI 静态包"));
+            await DownloadAsync(release.DownloadUrl, "Docker 官方静态包", archivePath, progress, cancellationToken).ConfigureAwait(false);
+            progress?.Report(new("正在安全解压"));
+            Directory.CreateDirectory(stagingPath);
+            await ExtractZipSafelyAsync(archivePath, stagingPath, cancellationToken).ConfigureAwait(false);
+            var extractedRoot = FindDockerCliRoot(stagingPath);
+            if (extractedRoot is null)
+            {
+                return new(false, "压缩包内未找到 docker.exe。");
+            }
+
+            var safeVersion = SanitizeDirectoryName(release.Version);
+            var destination = Path.Combine(DockerRoot, $"docker-{safeVersion}");
+            if (Directory.Exists(destination))
+            {
+                return new(false, "该 docker CLI 版本的托管目录已经存在，请先重新扫描或卸载旧记录。");
+            }
+
+            Directory.Move(extractedRoot, destination);
+            installedPath = destination;
+            var dockerPath = Path.Combine(destination, "docker.exe");
+            var validation = await _commandRunner.RunAsync(dockerPath, new[] { "--version" }, cancellationToken).ConfigureAwait(false);
+            if (validation.TimedOut || validation.ExitCode != 0)
+            {
+                TryDeleteManagedDirectory(destination);
+                return new(false, "docker CLI 解压完成，但 docker --version 验证失败，已撤销本次安装。");
+            }
+
+            var entry = new ManagedToolchainEntry
+            {
+                ToolchainId = "docker",
+                ProviderId = "docker-cli",
+                Version = release.Version,
+                Architecture = release.Architecture,
+                InstallationPath = destination,
+                ExecutablePath = dockerPath,
+                DownloadUrl = release.DownloadUrl,
+                InstalledAtUtc = DateTime.UtcNow,
+                ManagedByXTool = true
+            };
+            await AddManifestEntryAsync(entry, cancellationToken).ConfigureAwait(false);
+            manifestCommitted = true;
+            await WriteLogAsync($"已安装 docker CLI {release.Version} 到 {destination}").ConfigureAwait(false);
+            progress?.Report(new("安装与版本验证完成", release.DownloadSize, release.DownloadSize));
+            return new(true, $"docker CLI {release.Version} 已安装并通过 docker --version 验证。", entry);
+        }
+        catch (OperationCanceledException)
+        {
+            await WriteLogAsync($"docker CLI {release.Version} 安装已取消").ConfigureAwait(false);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            await WriteLogAsync($"docker CLI {release.Version} 安装失败：{ex}").ConfigureAwait(false);
+            return new(false, $"安装失败：{ex.Message}");
+        }
+        finally
+        {
+            TryDeleteFile(archivePath);
+            TryDeleteManagedDirectory(stagingPath);
+            if (!manifestCommitted && !string.IsNullOrWhiteSpace(installedPath)) TryDeleteManagedDirectory(installedPath);
+        }
+    }
+
     public async Task<ManagedToolchainOperationResult> UninstallAsync(ManagedToolchainRelease release, CancellationToken cancellationToken)
     {
         var manifest = await LoadManifestAsync(cancellationToken).ConfigureAwait(false);
         var entry = manifest.Installations.FirstOrDefault(item => item.ManagedByXTool &&
             item.ToolchainId == release.ToolchainId && item.ProviderId == release.ProviderId && item.Version == release.Version);
         if (entry is null) return new(false, "未找到 X-Tool 托管记录，拒绝删除外部安装。");
-        var expectedRoot = entry.ProviderId == "uv" ? PythonRoot : JavaRoot;
+        var expectedRoot = entry.ToolchainId switch
+        {
+            "java" => JavaRoot,
+            "python" => PythonRoot,
+            "mysql" => MysqlRoot,
+            "docker" => DockerRoot,
+            _ => string.Empty
+        };
+        if (string.IsNullOrWhiteSpace(expectedRoot)) return new(false, "该托管类型没有可删除的安装目录。");
         if (!IsInsideRoot(entry.InstallationPath, expectedRoot)) return new(false, "托管目录超出对应的 X-Tool 根目录，拒绝删除。");
 
         var reference = FindReference(entry);
@@ -596,6 +1081,73 @@ public sealed class ManagedToolchainService
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
+    private static async Task<string> ComputeMd5Async(string path, CancellationToken cancellationToken)
+    {
+        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1024 * 128, useAsync: true);
+        using var md5 = MD5.Create();
+        var hash = await md5.ComputeHashAsync(stream, cancellationToken).ConfigureAwait(false);
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    private static bool VerifyDockerDesktopSignature(string path)
+    {
+        try
+        {
+            using var certificate = new X509Certificate2(X509Certificate.CreateFromSignedFile(path));
+            if (!certificate.Subject.Contains("Docker, Inc.", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            using var chain = new X509Chain();
+            chain.ChainPolicy.RevocationMode = X509RevocationMode.Online;
+            chain.ChainPolicy.VerificationTime = DateTime.Now;
+            return chain.Build(certificate);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool IsDockerDesktopInstalled(out string version)
+    {
+        version = string.Empty;
+        try
+        {
+            foreach (var uninstallRoot in new[]
+                     {
+                         @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+                         @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+                     })
+            {
+                using var baseKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+                using var uninstall = baseKey.OpenSubKey(uninstallRoot);
+                foreach (var keyName in uninstall?.GetSubKeyNames() ?? Array.Empty<string>())
+                {
+                    using var productKey = uninstall?.OpenSubKey(keyName);
+                    var displayName = productKey?.GetValue("DisplayName")?.ToString();
+                    if (string.IsNullOrWhiteSpace(displayName) ||
+                        !displayName.Contains("Docker Desktop", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    version = productKey?.GetValue("DisplayVersion")?.ToString() ?? string.Empty;
+                    return true;
+                }
+            }
+        }
+        catch
+        {
+            // 注册表不可读时退回目录存在性判断。
+        }
+
+        return File.Exists(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+            "Docker", "Docker", "resources", "bin", "docker.exe"));
+    }
+
     private static async Task ExtractZipSafelyAsync(string archivePath, string destination, CancellationToken cancellationToken)
     {
         var destinationRoot = Path.GetFullPath(destination) + Path.DirectorySeparatorChar;
@@ -622,6 +1174,16 @@ public sealed class ManagedToolchainService
         => Directory.EnumerateDirectories(stagingPath, "*", SearchOption.AllDirectories)
             .Prepend(stagingPath)
             .FirstOrDefault(path => File.Exists(Path.Combine(path, "bin", "java.exe")) && File.Exists(Path.Combine(path, "bin", "javac.exe")));
+
+    private static string? FindMysqlRoot(string stagingPath)
+        => Directory.EnumerateDirectories(stagingPath, "*", SearchOption.AllDirectories)
+            .Prepend(stagingPath)
+            .FirstOrDefault(path => File.Exists(Path.Combine(path, "bin", "mysql.exe")) && File.Exists(Path.Combine(path, "bin", "mysqld.exe")));
+
+    private static string? FindDockerCliRoot(string stagingPath)
+        => Directory.EnumerateDirectories(stagingPath, "*", SearchOption.AllDirectories)
+            .Prepend(stagingPath)
+            .FirstOrDefault(path => File.Exists(Path.Combine(path, "docker.exe")));
 
     private async Task<ManagedToolchainManifest> LoadManifestAsync(CancellationToken cancellationToken)
     {
@@ -666,15 +1228,24 @@ public sealed class ManagedToolchainService
 
     private string? FindReference(ManagedToolchainEntry entry)
     {
+        var homeVariables = entry.ToolchainId switch
+        {
+            "java" => new[] { "JAVA_HOME", "JDK_HOME" },
+            "mysql" => new[] { "MYSQL_HOME" },
+            _ => Array.Empty<string>()
+        };
         foreach (var target in new[] { EnvironmentVariableTarget.User, EnvironmentVariableTarget.Machine })
         {
             var scope = target == EnvironmentVariableTarget.User ? "当前用户" : "系统";
-            var javaHome = Environment.GetEnvironmentVariable("JAVA_HOME", target);
-            if (!string.IsNullOrWhiteSpace(javaHome) && PathsEqual(javaHome, entry.InstallationPath))
-                return $"{scope} JAVA_HOME 仍指向该 JDK，请先切换环境后再卸载。";
+            foreach (var variable in homeVariables)
+            {
+                var value = Environment.GetEnvironmentVariable(variable, target);
+                if (!string.IsNullOrWhiteSpace(value) && PathsEqual(value, entry.InstallationPath))
+                    return $"{scope} {variable} 仍指向该安装，请先切换环境后再卸载。";
+            }
             var path = Environment.GetEnvironmentVariable("Path", target) ?? string.Empty;
             if (path.Split(';', StringSplitOptions.RemoveEmptyEntries).Any(item => IsInsideRoot(Environment.ExpandEnvironmentVariables(item.Trim().Trim('"')), entry.InstallationPath)))
-                return $"{scope} PATH 仍引用该 JDK，请先切换环境后再卸载。";
+                return $"{scope} PATH 仍引用该安装，请先切换环境后再卸载。";
         }
         return null;
     }
@@ -699,6 +1270,34 @@ public sealed class ManagedToolchainService
            string.Equals(uri.Host, "github.com", StringComparison.OrdinalIgnoreCase) &&
            fileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
            sha256.Length == 64 && sha256.All(Uri.IsHexDigit);
+
+    private static bool IsTrustedMysqlDownload(string url, string fileName, string md5)
+        => Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps &&
+           string.Equals(uri.Host, "cdn.mysql.com", StringComparison.OrdinalIgnoreCase) &&
+           uri.AbsolutePath.StartsWith("/archives/mysql-", StringComparison.OrdinalIgnoreCase) &&
+           Regex.IsMatch(fileName, @"^mysql-[0-9]+\.[0-9]+\.[0-9]+-winx64\.zip$", RegexOptions.IgnoreCase) &&
+           md5.Length == 32 && md5.All(Uri.IsHexDigit);
+
+    private static bool IsTrustedDockerDesktopUrl(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps ||
+            !string.Equals(uri.Host, "desktop.docker.com", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        // AbsolutePath 会保留 %20 转义，先还原空格再匹配安装器文件名。
+        var path = Uri.UnescapeDataString(uri.AbsolutePath);
+        return path.StartsWith("/win/main/amd64/", StringComparison.OrdinalIgnoreCase) &&
+               path.EndsWith("/Docker Desktop Installer.exe", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsTrustedDockerCliDownload(string url, string fileName)
+        => Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps &&
+           string.Equals(uri.Host, "download.docker.com", StringComparison.OrdinalIgnoreCase) &&
+           string.Equals(Path.GetDirectoryName(uri.AbsolutePath), "/win/static/stable/x86_64", StringComparison.OrdinalIgnoreCase) &&
+           Regex.IsMatch(fileName, @"^docker-[0-9]+\.[0-9]+\.[0-9]+\.zip$", RegexOptions.IgnoreCase) &&
+           string.Equals(Path.GetFileName(uri.AbsolutePath), fileName, StringComparison.OrdinalIgnoreCase);
 
     private static bool IsTrustedUvRelease(string key, string url)
         => key.StartsWith("cpython-", StringComparison.Ordinal) &&
