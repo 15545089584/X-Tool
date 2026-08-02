@@ -372,6 +372,40 @@ public partial class DeveloperToolsView : UserControl
         CancelManagedOperationButton.IsEnabled = true;
     }
 
+    private void OpenManagedRoot_Click(object sender, RoutedEventArgs e)
+    {
+        OpenManagedPath(_managedToolchainService.ManagedRoot, false, "托管目录尚未创建");
+    }
+
+    private void OpenManagedLog_Click(object sender, RoutedEventArgs e)
+    {
+        OpenManagedPath(_managedToolchainService.OperationLogPath, true, "尚无托管操作日志");
+    }
+
+    private void OpenManagedPath(string path, bool isFile, string missingMessage)
+    {
+        var exists = isFile ? File.Exists(path) : Directory.Exists(path);
+        if (!exists)
+        {
+            ManagedCatalogStateText.Text = missingMessage;
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = path,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            ManagedCatalogStateText.Text = isFile ? "无法打开操作日志" : "无法打开托管目录";
+            ManagedCatalogStateText.ToolTip = ex.Message;
+        }
+    }
+
     private void OpenInstallationLocation_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as Button)?.CommandParameter is not ToolchainInstallation installation)

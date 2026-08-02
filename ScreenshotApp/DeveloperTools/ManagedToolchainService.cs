@@ -27,6 +27,8 @@ public sealed class ManagedToolchainService
     public string ManagedRoot { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "X-Tool", "Dev");
 
+    public string OperationLogPath => Path.Combine(ManagedRoot, "Logs", "managed-toolchains.log");
+
     private string ManifestPath => Path.Combine(ManagedRoot, "managed-tools.json");
     private string DownloadsRoot => Path.Combine(ManagedRoot, "Downloads");
     private string JavaRoot => Path.Combine(ManagedRoot, "Java");
@@ -41,7 +43,7 @@ public sealed class ManagedToolchainService
                 : Environment.ExpandEnvironmentVariables(configured.Trim().Trim('"'));
         }
     }
-    private string LogPath => Path.Combine(ManagedRoot, "Logs", "managed-toolchains.log");
+    private string LogPath => OperationLogPath;
 
     public async Task<IReadOnlyList<ManagedToolchainRelease>> GetTemurinReleasesAsync(CancellationToken cancellationToken)
     {

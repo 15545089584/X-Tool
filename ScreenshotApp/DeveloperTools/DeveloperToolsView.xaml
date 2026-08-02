@@ -341,6 +341,10 @@
                                 <TextBlock x:Name="ManagedInstallRootText" Margin="0,7,0,0" FontFamily="Consolas, Microsoft YaHei UI" FontSize="10" Foreground="#6B8297" />
                             </StackPanel>
                             <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal">
+                                <Button Width="88" Margin="0,0,10,0" Style="{StaticResource DeveloperSmallButtonStyle}"
+                                        Content="打开目录" Click="OpenManagedRoot_Click" />
+                                <Button Width="88" Margin="0,0,10,0" Style="{StaticResource DeveloperSmallButtonStyle}"
+                                        Content="查看日志" Click="OpenManagedLog_Click" />
                                 <TextBlock x:Name="ManagedCatalogStateText" Margin="0,0,14,0" VerticalAlignment="Center" FontSize="11" Foreground="#66809A" Text="尚未读取版本目录" />
                                 <Button x:Name="CancelManagedOperationButton" Width="88" Margin="0,0,10,0" Style="{StaticResource DeveloperSmallButtonStyle}"
                                         Content="取消任务" Visibility="Collapsed" Click="CancelManagedOperation_Click" />
