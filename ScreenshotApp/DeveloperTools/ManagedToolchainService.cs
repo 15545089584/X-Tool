@@ -12,9 +12,15 @@ public sealed class ManagedToolchainService
 {
     private static readonly HttpClient HttpClient = CreateHttpClient();
     private static readonly SemaphoreSlim ManifestLock = new(1, 1);
-    private static readonly int[] TemurinMajors = { 8, 11, 17, 21, 25 };
+    private const string AdoptiumAvailableReleasesUrl = "https://api.adoptium.net/v3/info/available_releases";
+    private const string TunaAdoptiumRoot = "https://mirrors.tuna.tsinghua.edu.cn/Adoptium";
     private static readonly int[] PythonMinors = { 10, 11, 12, 13, 14 };
     private readonly SafeDeveloperCommandRunner _commandRunner = new();
+
+    public ManagedDownloadSource TemurinDownloadSource { get; set; } = ManagedDownloadSource.Official;
+    public string TemurinDownloadSourceText => TemurinDownloadSource == ManagedDownloadSource.Tuna
+        ? "清华 TUNA 镜像（失败回退官方源）"
+        : "Eclipse Adoptium 官方源";
 
     public string ManagedRoot { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "X-Tool", "Dev");
@@ -38,48 +44,54 @@ public sealed class ManagedToolchainService
     public async Task<IReadOnlyList<ManagedToolchainRelease>> GetTemurinReleasesAsync(CancellationToken cancellationToken)
     {
         var manifest = await LoadManifestAsync(cancellationToken).ConfigureAwait(false);
-        var releases = new List<ManagedToolchainRelease>();
-        foreach (var major in TemurinMajors)
+        using var infoResponse = await HttpClient.GetAsync(AdoptiumAvailableReleasesUrl, cancellationToken).ConfigureAwait(false);
+        infoResponse.EnsureSuccessStatusCode();
+        await using var infoStream = await infoResponse.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        using var infoDocument = await JsonDocument.ParseAsync(infoStream, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var available = infoDocument.RootElement.GetProperty("available_releases").EnumerateArray()
+            .Select(item => item.GetInt32()).Where(major => major >= 8).Distinct().OrderByDescending(major => major).ToArray();
+        var ltsMajors = infoDocument.RootElement.GetProperty("available_lts_releases").EnumerateArray()
+            .Select(item => item.GetInt32()).ToHashSet();
+        var currentMajor = infoDocument.RootElement.TryGetProperty("most_recent_feature_release", out var current)
+            ? current.GetInt32()
+            : available.FirstOrDefault();
+
+        using var gate = new SemaphoreSlim(4);
+        var tasks = available.Select(async major =>
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var uri = $"https://api.adoptium.net/v3/assets/latest/{major}/hotspot?architecture=x64&image_type=jdk&jvm_impl=hotspot&os=windows&vendor=eclipse";
-            using var response = await HttpClient.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
-            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
-            var first = document.RootElement.EnumerateArray().FirstOrDefault();
-            if (first.ValueKind != JsonValueKind.Object || !first.TryGetProperty("binary", out var binary) ||
-                !binary.TryGetProperty("package", out var package) || !first.TryGetProperty("version", out var version))
+            await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
             {
-                continue;
+                var uri = $"https://api.adoptium.net/v3/assets/latest/{major}/hotspot?architecture=x64&image_type=jdk&jvm_impl=hotspot&os=windows&vendor=eclipse";
+                using var response = await HttpClient.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode) return null;
+                await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+                using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+                var first = document.RootElement.EnumerateArray().FirstOrDefault();
+                if (first.ValueKind != JsonValueKind.Object || !first.TryGetProperty("binary", out var binary) ||
+                    !binary.TryGetProperty("package", out var package) || !first.TryGetProperty("version", out var version)) return null;
+
+                var releaseVersion = version.GetProperty("openjdk_version").GetString() ?? major.ToString();
+                var downloadUrl = package.GetProperty("link").GetString() ?? string.Empty;
+                var sha256 = package.GetProperty("checksum").GetString() ?? string.Empty;
+                var fileName = package.GetProperty("name").GetString() ?? string.Empty;
+                var size = package.TryGetProperty("size", out var sizeValue) ? sizeValue.GetInt64() : 0;
+                if (!IsTrustedTemurinDownload(downloadUrl, fileName, sha256)) return null;
+
+                return new ManagedToolchainRelease
+                {
+                    ToolchainId = "java", ProviderId = "temurin", DisplayName = $"Temurin JDK {major}", Version = releaseVersion,
+                    Architecture = "x64", DownloadUrl = downloadUrl, Sha256 = sha256, FileName = fileName, DownloadSize = size, FeatureVersion = major,
+                    IsLts = ltsMajors.Contains(major), IsRecommended = ltsMajors.Contains(major) || major == currentMajor,
+                    IsInstalled = manifest.Installations.Any(item => item.ManagedByXTool && item.ToolchainId == "java" &&
+                        item.ProviderId == "temurin" && item.Version == releaseVersion && Directory.Exists(item.InstallationPath))
+                };
             }
+            finally { gate.Release(); }
+        });
 
-            var releaseVersion = version.GetProperty("openjdk_version").GetString() ?? major.ToString();
-            var downloadUrl = package.GetProperty("link").GetString() ?? string.Empty;
-            var sha256 = package.GetProperty("checksum").GetString() ?? string.Empty;
-            var fileName = package.GetProperty("name").GetString() ?? string.Empty;
-            var size = package.TryGetProperty("size", out var sizeValue) ? sizeValue.GetInt64() : 0;
-            if (!IsTrustedTemurinDownload(downloadUrl, fileName, sha256)) continue;
-
-            releases.Add(new ManagedToolchainRelease
-            {
-                ToolchainId = "java",
-                ProviderId = "temurin",
-                DisplayName = $"Temurin JDK {major}",
-                Version = releaseVersion,
-                Architecture = "x64",
-                DownloadUrl = downloadUrl,
-                Sha256 = sha256,
-                FileName = fileName,
-                DownloadSize = size,
-                IsLts = string.Equals(version.TryGetProperty("optional", out var optional) ? optional.GetString() : null, "LTS", StringComparison.OrdinalIgnoreCase),
-                IsInstalled = manifest.Installations.Any(item => item.ManagedByXTool &&
-                    item.ToolchainId == "java" && item.ProviderId == "temurin" && item.Version == releaseVersion &&
-                    Directory.Exists(item.InstallationPath))
-            });
-        }
-
-        return releases.OrderByDescending(item => ParseMajor(item.Version)).ToList();
+        var releases = (await Task.WhenAll(tasks).ConfigureAwait(false)).Where(item => item is not null).Cast<ManagedToolchainRelease>();
+        return releases.OrderByDescending(item => item.IsRecommended).ThenByDescending(item => ParseMajor(item.Version)).ToList();
     }
 
     public async Task<IReadOnlyList<ManagedToolchainRelease>> GetUvPythonReleasesAsync(CancellationToken cancellationToken)
@@ -228,7 +240,21 @@ public sealed class ManagedToolchainService
         if (validation.TimedOut || validation.ExitCode != 0 || !validation.CombinedOutput.Contains($"v{release.Version}", StringComparison.OrdinalIgnoreCase))
             return new(false, "Node.js 已缓存，但绝对路径版本验证未通过。");
         await WriteLogAsync($"已通过 Volta 缓存 Node.js {release.Version}：{nodePath}").ConfigureAwait(false);
-        return new(true, $"Node.js {release.Version} 已缓存；当前默认版本未改变。");
+        var entry = new ManagedToolchainEntry
+        {
+            ToolchainId = "node",
+            ProviderId = "volta",
+            Version = release.Version,
+            Architecture = release.Architecture,
+            InstallationPath = Path.GetDirectoryName(nodePath) ?? string.Empty,
+            ExecutablePath = nodePath,
+            DownloadUrl = release.DownloadUrl,
+            PackageKey = release.FileName,
+            Sha256 = "由 Volta 与 Node.js 官方发行目录负责",
+            InstalledAtUtc = DateTime.UtcNow,
+            ManagedByXTool = false
+        };
+        return new(true, $"Node.js {release.Version} 已缓存；当前默认版本未改变。", entry);
     }
 
     private async Task<ManagedToolchainOperationResult> InstallUvPythonAsync(
@@ -320,8 +346,9 @@ public sealed class ManagedToolchainService
         var manifestCommitted = false;
         try
         {
-            progress?.Report(new("正在连接 Eclipse Adoptium"));
-            await DownloadAsync(release.DownloadUrl, archivePath, progress, cancellationToken).ConfigureAwait(false);
+            var selectedSource = TemurinDownloadSourceText;
+            progress?.Report(new($"正在连接 {selectedSource}"));
+            var usedDownloadUrl = await DownloadTemurinWithFallbackAsync(release, archivePath, progress, cancellationToken).ConfigureAwait(false);
             progress?.Report(new("正在校验 SHA-256"));
             var actualHash = await ComputeSha256Async(archivePath, cancellationToken).ConfigureAwait(false);
             if (!string.Equals(actualHash, release.Sha256, StringComparison.OrdinalIgnoreCase))
@@ -364,14 +391,14 @@ public sealed class ManagedToolchainService
                 Architecture = release.Architecture,
                 InstallationPath = destination,
                 ExecutablePath = javaPath,
-                DownloadUrl = release.DownloadUrl,
+                DownloadUrl = usedDownloadUrl,
                 Sha256 = release.Sha256,
                 InstalledAtUtc = DateTime.UtcNow,
                 ManagedByXTool = true
             };
             await AddManifestEntryAsync(entry, cancellationToken).ConfigureAwait(false);
             manifestCommitted = true;
-            await WriteLogAsync($"已安装 Temurin {release.Version} 到 {destination}").ConfigureAwait(false);
+            await WriteLogAsync($"已安装 Temurin {release.Version} 到 {destination}；下载源：{usedDownloadUrl}").ConfigureAwait(false);
             progress?.Report(new("安装与版本验证完成", release.DownloadSize, release.DownloadSize));
             return new(true, $"Temurin {release.Version} 已安装并通过 java -version 验证。", entry);
         }
@@ -486,7 +513,43 @@ public sealed class ManagedToolchainService
         return null;
     }
 
-    private async Task DownloadAsync(string url, string destination, IProgress<ManagedInstallProgress>? progress, CancellationToken cancellationToken)
+    private async Task<string> DownloadTemurinWithFallbackAsync(
+        ManagedToolchainRelease release,
+        string destination,
+        IProgress<ManagedInstallProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        var candidates = new List<(string Url, string Name)>();
+        if (TemurinDownloadSource == ManagedDownloadSource.Tuna)
+        {
+            var mirror = $"{TunaAdoptiumRoot}/{release.FeatureVersion}/jdk/x64/windows/{release.FileName}";
+            if (IsTrustedTunaTemurinMirror(mirror, release.FileName)) candidates.Add((mirror, "清华 TUNA 镜像"));
+        }
+        candidates.Add((release.DownloadUrl, "Eclipse Adoptium 官方源"));
+
+        Exception? lastError = null;
+        foreach (var candidate in candidates)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            TryDeleteFile(destination);
+            try
+            {
+                await DownloadAsync(candidate.Url, candidate.Name, destination, progress, cancellationToken).ConfigureAwait(false);
+                return candidate.Url;
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                lastError = ex;
+                await WriteLogAsync($"Temurin {release.Version} 从 {candidate.Name} 下载失败：{ex.Message}").ConfigureAwait(false);
+                if (!string.Equals(candidate.Url, release.DownloadUrl, StringComparison.OrdinalIgnoreCase))
+                    progress?.Report(new("镜像不可用，正在回退 Eclipse Adoptium 官方源"));
+            }
+        }
+        throw new HttpRequestException("所有受控下载源均失败。", lastError);
+    }
+
+    private async Task DownloadAsync(string url, string sourceName, string destination, IProgress<ManagedInstallProgress>? progress, CancellationToken cancellationToken)
     {
         using var response = await HttpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
@@ -495,13 +558,20 @@ public sealed class ManagedToolchainService
         await using var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1024 * 128, useAsync: true);
         var buffer = new byte[1024 * 128];
         long received = 0;
+        var stopwatch = Stopwatch.StartNew();
+        var lastReport = TimeSpan.Zero;
         while (true)
         {
             var count = await input.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken).ConfigureAwait(false);
             if (count == 0) break;
             await output.WriteAsync(buffer.AsMemory(0, count), cancellationToken).ConfigureAwait(false);
             received += count;
-            progress?.Report(new("正在下载", received, total));
+            if (stopwatch.Elapsed - lastReport >= TimeSpan.FromMilliseconds(250) || received == total)
+            {
+                var rate = stopwatch.Elapsed.TotalSeconds <= 0 ? 0 : received / stopwatch.Elapsed.TotalSeconds;
+                progress?.Report(new($"正在从{sourceName}下载", received, total, rate));
+                lastReport = stopwatch.Elapsed;
+            }
         }
     }
 
@@ -630,6 +700,12 @@ public sealed class ManagedToolchainService
            Uri.TryCreate(release.DownloadUrl, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps &&
            string.Equals(uri.Host, "nodejs.org", StringComparison.OrdinalIgnoreCase) &&
            string.Equals(uri.AbsolutePath.TrimEnd('/'), $"/dist/v{release.Version}", StringComparison.Ordinal);
+
+    private static bool IsTrustedTunaTemurinMirror(string url, string fileName)
+        => Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps &&
+           string.Equals(uri.Host, "mirrors.tuna.tsinghua.edu.cn", StringComparison.OrdinalIgnoreCase) &&
+           string.Equals(Path.GetFileName(uri.AbsolutePath), fileName, StringComparison.Ordinal) &&
+           uri.AbsolutePath.StartsWith("/Adoptium/", StringComparison.Ordinal);
 
     private static bool IsInsideRoot(string path, string root)
     {

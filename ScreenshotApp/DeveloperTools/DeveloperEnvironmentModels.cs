@@ -15,6 +15,7 @@ public sealed class ToolchainInstallation
     public string DisplayName { get; init; } = string.Empty;
     public string Version { get; init; } = "待验证";
     public string ExecutablePath { get; init; } = string.Empty;
+    public string ResolvedExecutablePath { get; init; } = string.Empty;
     public string InstallationPath { get; init; } = string.Empty;
     public string Source { get; init; } = string.Empty;
     public string Architecture { get; init; } = Environment.Is64BitOperatingSystem ? "x64" : "x86";
@@ -26,7 +27,11 @@ public sealed class ToolchainInstallation
     public string StateBackground => IsActive ? "#DCEBFF" : IsVerified ? "#DDF6EA" : "#EEF1F5";
     public string StateForeground => IsActive ? "#326DAF" : IsVerified ? "#367A59" : "#66717E";
     public string LocationText => string.IsNullOrWhiteSpace(InstallationPath) ? ExecutablePath : InstallationPath;
-    public string ConfigurationDisplayText => $"{Version}  ·  {LocationText}";
+    public bool HasResolvedTarget => !string.IsNullOrWhiteSpace(ResolvedExecutablePath) &&
+        !string.Equals(ExecutablePath, ResolvedExecutablePath, StringComparison.OrdinalIgnoreCase);
+    public string ExecutionPathText => HasResolvedTarget ? $"{ExecutablePath}  →  {ResolvedExecutablePath}" : ExecutablePath;
+    public string SourceDetailText => HasResolvedTarget ? $"{Source} · 实际执行目标已解析" : Source;
+    public string ConfigurationDisplayText => $"{Version}  ·  {(HasResolvedTarget ? ResolvedExecutablePath : LocationText)}";
 }
 
 public sealed class ToolchainSummary

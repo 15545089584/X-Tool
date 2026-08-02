@@ -3,6 +3,12 @@ using System.Runtime.CompilerServices;
 
 namespace ScreenshotApp.DeveloperTools;
 
+public enum ManagedDownloadSource
+{
+    Official,
+    Tuna
+}
+
 public sealed class ManagedToolchainRelease : INotifyPropertyChanged
 {
     private bool _isInstalled;
@@ -19,11 +25,17 @@ public sealed class ManagedToolchainRelease : INotifyPropertyChanged
     public string Sha256 { get; init; } = string.Empty;
     public string FileName { get; init; } = string.Empty;
     public long DownloadSize { get; init; }
+    public int FeatureVersion { get; init; }
     public bool IsLts { get; init; }
+    public bool IsRecommended { get; init; }
+    public bool IsHistorical => !IsRecommended;
     public bool IsProviderAvailable { get; init; } = true;
     public bool IsReadOnlyInstalled { get; init; }
 
     public string VersionText => IsLts ? $"{Version} · LTS" : Version;
+    public string SupportText => IsLts ? "LTS" : IsRecommended ? "当前版本" : "历史版本";
+    public string SupportBackground => IsHistorical ? "#FFF0D9" : "#DDF6EA";
+    public string SupportForeground => IsHistorical ? "#9A671A" : "#367A59";
     public string SizeText => DownloadSize <= 0 ? "大小未知" : $"{DownloadSize / 1024d / 1024d:N1} MB";
     public string SourceText => ProviderId switch
     {
@@ -87,12 +99,25 @@ public sealed class ManagedToolchainManifest
     public List<ManagedToolchainEntry> Installations { get; init; } = new();
 }
 
-public sealed record ManagedInstallProgress(string Stage, long BytesReceived = 0, long TotalBytes = 0)
+public sealed record ManagedInstallProgress(
+    string Stage,
+    long BytesReceived = 0,
+    long TotalBytes = 0,
+    double BytesPerSecond = 0)
 {
     public double Percentage => TotalBytes <= 0 ? 0 : Math.Clamp(BytesReceived * 100d / TotalBytes, 0, 100);
-    public string DisplayText => TotalBytes > 0
-        ? $"{Stage} · {BytesReceived / 1024d / 1024d:N1} / {TotalBytes / 1024d / 1024d:N1} MB"
-        : Stage;
+    public string DisplayText
+    {
+        get
+        {
+            if (TotalBytes <= 0) return Stage;
+            var text = $"{Stage} · {BytesReceived / 1024d / 1024d:N1} / {TotalBytes / 1024d / 1024d:N1} MB";
+            if (BytesPerSecond <= 0) return text;
+            var seconds = Math.Max(0, (TotalBytes - BytesReceived) / BytesPerSecond);
+            var remaining = seconds < 60 ? $"约 {Math.Ceiling(seconds):N0} 秒" : $"约 {Math.Ceiling(seconds / 60):N0} 分钟";
+            return $"{text} · {BytesPerSecond / 1024d / 1024d:N1} MB/s · 剩余 {remaining}";
+        }
+    }
 }
 
 public sealed record ManagedToolchainOperationResult(bool Succeeded, string Message, ManagedToolchainEntry? Entry = null);

@@ -147,7 +147,11 @@ public sealed class DeveloperEnvironmentScanner
         ToolCandidate candidate,
         CancellationToken cancellationToken)
     {
-        var installationPath = GetInstallationRoot(definition.Id, candidate.CanonicalExecutablePath);
+        var resolvedExecutablePath = definition.Id == "node"
+            ? await TryResolveVoltaTargetAsync(candidate.ExecutablePath, cancellationToken).ConfigureAwait(false)
+            : null;
+        var validationExecutablePath = resolvedExecutablePath ?? candidate.ExecutablePath;
+        var installationPath = GetInstallationRoot(definition.Id, validationExecutablePath);
         var architecture = GuessArchitecture(candidate.ExecutablePath);
         var version = TryReadVersionFromFiles(definition.Id, installationPath);
         var evidence = string.IsNullOrWhiteSpace(version) ? "已发现命令路径，尚未执行版本验证。" : "根据安装目录中的版本文件识别。";
@@ -157,7 +161,7 @@ public sealed class DeveloperEnvironmentScanner
         {
             try
             {
-                var result = await _commandRunner.RunAsync(candidate.ExecutablePath, definition.VersionArguments, cancellationToken).ConfigureAwait(false);
+                var result = await _commandRunner.RunAsync(validationExecutablePath, definition.VersionArguments, cancellationToken).ConfigureAwait(false);
                 if (!result.TimedOut)
                 {
                     var parsed = ParseVersion(definition.Id, result.CombinedOutput);
@@ -166,6 +170,10 @@ public sealed class DeveloperEnvironmentScanner
                         version = parsed;
                         verified = true;
                         evidence = FirstMeaningfulLine(result.CombinedOutput);
+                        if (!string.IsNullOrWhiteSpace(resolvedExecutablePath))
+                        {
+                            evidence = $"Volta 实际执行目标：{resolvedExecutablePath}{Environment.NewLine}{evidence}";
+                        }
                         if (definition.Id == "java")
                         {
                             var runtimeHome = ParseJavaHome(result.CombinedOutput);
@@ -206,13 +214,40 @@ public sealed class DeveloperEnvironmentScanner
             DisplayName = definition.DisplayName,
             Version = string.IsNullOrWhiteSpace(version) ? "待验证" : version,
             ExecutablePath = candidate.ExecutablePath,
+            ResolvedExecutablePath = resolvedExecutablePath ?? string.Empty,
             InstallationPath = installationPath,
-            Source = candidate.Source,
+            Source = string.IsNullOrWhiteSpace(resolvedExecutablePath) ? candidate.Source : $"{candidate.Source} · Volta 中转入口",
             Architecture = architecture,
             Evidence = evidence,
             IsActive = candidate.IsActive,
             IsVerified = verified
         };
+    }
+
+    private async Task<string?> TryResolveVoltaTargetAsync(string nodePath, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var directory = Path.GetDirectoryName(nodePath);
+            if (string.IsNullOrWhiteSpace(directory)) return null;
+            var voltaPath = Path.Combine(directory, "volta.exe");
+            if (!File.Exists(voltaPath)) return null;
+
+            var result = await _commandRunner.RunAsync(voltaPath, new[] { "which", "node" }, cancellationToken).ConfigureAwait(false);
+            if (result.TimedOut || result.ExitCode != 0) return null;
+            var target = result.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(line => line.Trim().Trim('"'))
+                .FirstOrDefault(path => Path.IsPathFullyQualified(path) && File.Exists(path));
+            return string.IsNullOrWhiteSpace(target) ? null : Path.GetFullPath(target);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private async Task<IReadOnlyList<ToolchainInstallation>> DiscoverDotNetSdksAsync(
@@ -392,6 +427,10 @@ public sealed class DeveloperEnvironmentScanner
         var programFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
         var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var roamingAppData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        var configuredVoltaHome = Environment.GetEnvironmentVariable("VOLTA_HOME", EnvironmentVariableTarget.User);
+        var voltaHome = string.IsNullOrWhiteSpace(configuredVoltaHome)
+            ? Path.Combine(localAppData, "Volta")
+            : Environment.ExpandEnvironmentVariables(configuredVoltaHome.Trim().Trim('"'));
 
         var roots = toolchainId switch
         {
@@ -408,7 +447,11 @@ public sealed class DeveloperEnvironmentScanner
                 Path.Combine(roamingAppData, "uv", "python"),
                 Path.Combine(localAppData, "X-Tool", "Dev", "Python", "uv")
             },
-            "node" => new[] { Path.Combine(programFiles, "nodejs"), Path.Combine(localAppData, "Volta", "tools", "image", "node") },
+            "node" => new[]
+            {
+                Path.Combine(programFiles, "nodejs"),
+                Path.Combine(voltaHome, "tools", "image", "node")
+            },
             "dotnet" => new[] { Path.Combine(programFiles, "dotnet"), Path.Combine(programFilesX86, "dotnet") },
             "git" => new[] { Path.Combine(programFiles, "Git"), Path.Combine(programFilesX86, "Git"), Path.Combine(localAppData, "Programs", "Git") },
             _ => Array.Empty<string>()

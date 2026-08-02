@@ -139,12 +139,13 @@ git log -5 --oneline
 - 配置环境弹层使用覆盖整个开发者工具主内容面板的圆角半透明遮罩，不遮挡左侧一级导航；目标安装与作用范围使用毛玻璃 ComboBox 及圆角下拉列表，下拉列表禁用无意义的水平滚动区域；SDK 与工具链、环境诊断等滚动区域统一使用细圆角毛玻璃滚动条。不得恢复为带内容边距的矩形局部遮罩或 Windows 原生下拉框/滚动条。
 - 自动配置按工具链生成明确计划：Node/Git/.NET 使用已验证命令所在目录，Maven/Gradle 使用 `bin` 并设置对应 HOME，Java 只允许含 `bin\java.exe` 与 `bin\javac.exe` 的 JDK 并设置 `JAVA_HOME`，Python 添加解释器目录与存在的 `Scripts`，但拒绝 WindowsApps 别名和项目虚拟环境。检测到 Volta、nvm 或 fnm 时不把具体 Node 版本目录加入 PATH。
 - 环境写入在管理员子进程中重新读取最新 PATH，跨用户/系统范围规范化去重，并用命名互斥量避免并发覆盖；失败时尝试恢复写入前的 PATH 与配套变量。不得退回把页面加载时取得的整段 PATH 直接交给管理员进程覆盖的实现。
-- “托管安装”从 Adoptium API v3 读取 Temurin Windows x64 JDK 8/11/17/21/25 的最新 ZIP，只接受 `https://github.com/` 官方发行链接和 64 位 SHA-256；下载后先校验哈希，再进行防目录穿越解压，并以绝对路径执行 `java -version` 验证。下载、校验、解压和验证均异步且可取消，不会自动修改 PATH 或 `JAVA_HOME`。
+- “托管安装”从 Adoptium API v3 动态读取当前仍提供 Windows x64 HotSpot JDK ZIP 的全部 Java 主版本；“推荐版本”包含官方 LTS 与当前特性版本，“历史兼容版本”单独列出已经结束维护的短期版本，不能再退回只硬编码 8/11/17/21/25。官方 API 返回的 GitHub 发行地址和 64 位 SHA-256 仍是可信元数据基线；用户可选择 Adoptium 官方源或固定的清华 TUNA Adoptium HTTPS 镜像，镜像不可用时自动回退官方源，任何来源下载完成后都必须用 Adoptium API 的 SHA-256 校验，再进行防目录穿越解压并以绝对路径执行 `java -version`。JDK 下载进度显示已接收大小、平均速度和预计剩余时间；下载、校验、解压和验证均异步且可取消，不会自动修改 PATH 或 `JAVA_HOME`。
 - uv Python 读取本机绝对路径 `uv.exe` 的官方可下载目录，当前列出 CPython 3.10–3.14 Windows x64 最新补丁版本；只接受 uv 返回的 `astral-sh/python-build-standalone` GitHub HTTPS 发行地址与严格的 CPython Windows x64 key。安装通过 `uv python install` 写入 X-Tool 独立目录，并使用 `--no-bin --no-registry --no-config`，不会接管用户原有 uv Python、注册系统 Python 或创建全局命令入口；完成后仍以绝对 `python.exe --version` 验证。
 - 托管根目录为 `%LocalAppData%\X-Tool\Dev`，下载临时文件、Java 安装、JSON 所有权清单和操作日志分别位于其 `Downloads`、`Java`、`managed-tools.json` 和 `Logs`。清单损坏时必须停止安装/卸载，不能猜测目录所有权；只有清单明确标记为 X-Tool 托管、位于 Java 托管根目录内且未被 PATH、`JAVA_HOME` 或运行中进程引用的 JDK 才允许永久删除，外部/MSI/手动安装一律不得直接删除。
 - uv CPython 位于 `%LocalAppData%\X-Tool\Dev\Python\uv`；卸载必须再次调用已验证的 uv，并且同样要求清单所有权、目录边界、PATH 引用和运行进程检查全部通过。安装在清单写入前失败或取消时会调用 uv 回滚，已有但未记入清单的目录不得被自动接管。
 - Node.js 版本目录由 `nodejs.org/dist/index.json` 提供，并与 Node.js 官方 Release 仓库的 `schedule.json` 交叉筛选，只显示当前日期已经发布且仍在支持期内的 Windows x64 主版本。页面不使用硬编码的长期版本表，因此当前样本为 Node.js 26、24 LTS、22 LTS，未来会随官方生命周期变化。
-- Node.js 管理只调用已验证绝对路径的 Volta：未安装 Volta 时显示禁用的“需要 Volta”和独立“通过 WinGet 安装 Volta”入口，用户明确确认后才执行官方 `winget install --id Volta.Volta`，主程序保持普通权限；缓存 Node 只执行 `volta fetch node@版本`，不会调用会改变全局默认版本的 `volta install`，也不会修改 PATH。Volta 缓存可能被多个项目共享，X-Tool 只读标记“已缓存”，不直接删除 Volta 内部目录。
+- Node.js 管理只调用已验证绝对路径的 Volta：未安装 Volta 时显示禁用的“需要 Volta”和独立“通过 WinGet 安装 Volta”入口，用户明确确认后才执行官方 `winget install --id Volta.Volta`，主程序保持普通权限；缓存 Node 只执行 `volta fetch node@版本`，不会调用会改变全局默认版本的 `volta install`，也不会修改 PATH。扫描发现 Volta 的 `node.exe` 中转入口时会通过同目录绝对路径 `volta.exe which node` 解析实际执行目标，并在 SDK 清单与报告中显示“中转入口 → 实际 node.exe”，不能再把 `C:\Program Files\Volta\node.exe` 误报为真实 Node 安装目录；由 `VOLTA_HOME` 确定的共享缓存版本也纳入有限目录发现。Volta 缓存可能被多个项目共享，X-Tool 只读标记“已缓存”，不直接删除 Volta 内部目录。
+- Temurin、uv CPython 或 Volta Node.js 托管操作成功后会立即重新扫描；扫描确认对应绝对路径后自动切到“SDK 与工具链”，可直接查看并按现有受控规则配置环境。若扫描尚未确认路径，页面必须明确提示，不能把安装成功等同于环境已生效。
 - “打开位置”只打开已发现安装目录；“复制报告”输出当前工具链与诊断文本，不读取项目文件，也不包含密码、Token 或凭据。
 
 ### 网络工作台（第三阶段已完成）

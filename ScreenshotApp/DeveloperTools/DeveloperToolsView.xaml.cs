@@ -13,6 +13,7 @@ public partial class DeveloperToolsView : UserControl
     private readonly DeveloperEnvironmentScanner _scanner = new();
     private readonly ManagedToolchainService _managedToolchainService = new();
     private readonly ObservableCollection<ManagedToolchainRelease> _managedReleases = new();
+    private readonly ObservableCollection<ManagedToolchainRelease> _managedHistoricalReleases = new();
     private readonly ObservableCollection<ManagedToolchainRelease> _managedPythonReleases = new();
     private readonly ObservableCollection<ManagedToolchainRelease> _managedNodeReleases = new();
     private CancellationTokenSource? _scanCancellation;
@@ -29,6 +30,7 @@ public partial class DeveloperToolsView : UserControl
         InitializeComponent();
         DataContext = _snapshot;
         ManagedReleasesItemsControl.ItemsSource = _managedReleases;
+        ManagedHistoricalReleasesItemsControl.ItemsSource = _managedHistoricalReleases;
         ManagedPythonReleasesItemsControl.ItemsSource = _managedPythonReleases;
         ManagedNodeReleasesItemsControl.ItemsSource = _managedNodeReleases;
         ManagedInstallRootText.Text = $"托管目录：{_managedToolchainService.ManagedRoot}";
@@ -146,7 +148,7 @@ public partial class DeveloperToolsView : UserControl
         ToolchainsView.Visibility = tab == "Toolchains" ? Visibility.Visible : Visibility.Collapsed;
         ManagedInstallView.Visibility = tab == "Managed" ? Visibility.Visible : Visibility.Collapsed;
         DiagnosticsView.Visibility = tab == "Diagnostics" ? Visibility.Visible : Visibility.Collapsed;
-        if (tab == "Managed" && _managedReleases.Count == 0 && _managedPythonReleases.Count == 0 &&
+        if (tab == "Managed" && _managedReleases.Count == 0 && _managedHistoricalReleases.Count == 0 && _managedPythonReleases.Count == 0 &&
             _managedNodeReleases.Count == 0 && _managedCatalogCancellation is null)
         {
             _ = RefreshManagedCatalogAsync();
@@ -169,8 +171,11 @@ public partial class DeveloperToolsView : UserControl
             var releases = await _managedToolchainService.GetTemurinReleasesAsync(cancellation.Token);
             if (cancellation.IsCancellationRequested) return;
             _managedReleases.Clear();
-            foreach (var release in releases) _managedReleases.Add(release);
+            _managedHistoricalReleases.Clear();
+            foreach (var release in releases.Where(item => item.IsRecommended)) _managedReleases.Add(release);
+            foreach (var release in releases.Where(item => item.IsHistorical)) _managedHistoricalReleases.Add(release);
             ManagedCatalogEmptyState.Visibility = releases.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            ManagedHistoricalSection.Visibility = _managedHistoricalReleases.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
             ManagedCatalogStateText.Text = releases.Count == 0 ? "Temurin 未返回版本" : $"Temurin {releases.Count} 个版本";
 
             try
@@ -202,7 +207,7 @@ public partial class DeveloperToolsView : UserControl
                 ManagedNodeStateText.Text = nodeReleases.Count == 0
                     ? "Node.js 官方目录未返回受支持版本"
                     : voltaAvailable ? $"已读取 {nodeReleases.Count} 个受支持版本" : "未安装 Volta；可先通过 WinGet 安装";
-                ManagedCatalogStateText.Text = $"已读取 {_managedReleases.Count + _managedPythonReleases.Count + nodeReleases.Count} 个官方版本";
+                ManagedCatalogStateText.Text = $"已读取 {_managedReleases.Count + _managedHistoricalReleases.Count + _managedPythonReleases.Count + nodeReleases.Count} 个官方版本";
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -236,6 +241,7 @@ public partial class DeveloperToolsView : UserControl
     {
         if ((sender as Button)?.CommandParameter is not ManagedToolchainRelease release || _managedOperationCancellation is not null) return;
         if (!release.CanExecuteAction) return;
+        var wasInstalled = release.IsInstalled;
         if (release.IsInstalled)
         {
             var confirmation = MessageBox.Show(
@@ -250,7 +256,7 @@ public partial class DeveloperToolsView : UserControl
                     ? $"将调用本机已验证的 uv 安装：\n\n{release.DisplayName} {release.Version}\n{release.Architecture}\n\nuv 将按其官方目录下载并校验，且只安装到 X-Tool 的当前用户托管目录，不注册系统 Python。是否继续？"
                     : release.ProviderId == "volta"
                         ? $"将调用本机已验证的 Volta 缓存：\n\n{release.DisplayName} {release.Version}\n{release.Architecture}\n\n此操作只执行 volta fetch，不会改变当前默认 Node.js，也不会修改 PATH。是否继续？"
-                    : $"将从 Eclipse Adoptium 官方发行页下载并安装：\n\n{release.DisplayName} {release.Version}\n{release.Architecture} · {release.SizeText}\n\n下载完成后会校验 API 提供的 SHA-256，安装到当前用户的 X-Tool 托管目录。是否继续？",
+                    : $"将安装：\n\n{release.DisplayName} {release.Version}\n{release.Architecture} · {release.SizeText}\n下载源：{_managedToolchainService.TemurinDownloadSourceText}\n\n下载完成后仍会校验 Adoptium API 提供的 SHA-256，安装到当前用户的 X-Tool 托管目录。是否继续？",
                 "确认安装托管工具链", MessageBoxButton.YesNo, MessageBoxImage.Question);
             if (confirmation != MessageBoxResult.Yes) return;
         }
@@ -278,6 +284,18 @@ public partial class DeveloperToolsView : UserControl
                 if (release.ProviderId != "volta") release.IsInstalled = !release.IsInstalled;
                 await StartScanAsync();
                 await RefreshManagedCatalogAsync();
+                if (!wasInstalled && result.Entry is not null)
+                {
+                    var synchronized = _snapshot.Toolchains
+                        .FirstOrDefault(toolchain => toolchain.Id == result.Entry.ToolchainId)?
+                        .Installations.Any(installation =>
+                            string.Equals(installation.ExecutablePath, result.Entry.ExecutablePath, StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(installation.ResolvedExecutablePath, result.Entry.ExecutablePath, StringComparison.OrdinalIgnoreCase)) == true;
+                    ManagedCatalogStateText.Text = synchronized
+                        ? $"{release.DisplayName} 已同步到 SDK 与工具链"
+                        : $"{release.DisplayName} 安装成功，但重新扫描尚未确认该路径";
+                    if (synchronized) ToolchainsTab.IsChecked = true;
+                }
             }
         }
         catch (OperationCanceledException)
@@ -293,6 +311,17 @@ public partial class DeveloperToolsView : UserControl
             _managedOperationCancellation?.Dispose();
             _managedOperationCancellation = null;
         }
+    }
+
+    private void ManagedDownloadSource_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (JdkDownloadSourceComboBox.SelectedItem is not ComboBoxItem item) return;
+        _managedToolchainService.TemurinDownloadSource = item.Tag?.ToString() == "Tuna"
+            ? ManagedDownloadSource.Tuna
+            : ManagedDownloadSource.Official;
+        JdkDownloadSourceStateText.Text = _managedToolchainService.TemurinDownloadSource == ManagedDownloadSource.Tuna
+            ? "镜像失败会自动回退官方源，SHA-256 仍以 Adoptium API 为准"
+            : "由 Adoptium API 提供下载地址与 SHA-256";
     }
 
     private async void InstallVolta_Click(object sender, RoutedEventArgs e)
@@ -416,7 +445,7 @@ public partial class DeveloperToolsView : UserControl
 
         var plan = DeveloperEnvironmentConfigurationPlanner.Build(_configurationToolchain, installation);
         _configurationPlan = plan;
-        ConfigurationPathText.Text = $"{installation.Version}  ·  {installation.ExecutablePath}";
+        ConfigurationPathText.Text = $"{installation.Version}  ·  {installation.ExecutionPathText}";
         var target = SelectedConfigurationScope;
         var preview = new StringBuilder();
         if (plan.PathEntries.Count > 0)
@@ -530,6 +559,7 @@ public partial class DeveloperToolsView : UserControl
             foreach (var installation in toolchain.Installations)
             {
                 report.AppendLine($"- {installation.Version} | {installation.StateText} | {installation.ExecutablePath}");
+                if (installation.HasResolvedTarget) report.AppendLine($"  实际执行：{installation.ResolvedExecutablePath}");
                 if (!string.Equals(Path.GetDirectoryName(installation.ExecutablePath), installation.InstallationPath, StringComparison.OrdinalIgnoreCase))
                 {
                     report.AppendLine($"  安装位置：{installation.InstallationPath}");

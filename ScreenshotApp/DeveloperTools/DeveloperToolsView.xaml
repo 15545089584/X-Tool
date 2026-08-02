@@ -219,7 +219,7 @@
         <Grid Grid.Row="2">
             <StackPanel Orientation="Horizontal">
                 <RadioButton x:Name="OverviewTab" GroupName="DeveloperTabs" IsChecked="True" Tag="Overview" Style="{StaticResource DeveloperTabStyle}" Content="开发环境总览" Checked="DeveloperTab_Checked" />
-                <RadioButton GroupName="DeveloperTabs" Tag="Toolchains" Style="{StaticResource DeveloperTabStyle}" Content="SDK 与工具链" Checked="DeveloperTab_Checked" />
+                <RadioButton x:Name="ToolchainsTab" GroupName="DeveloperTabs" Tag="Toolchains" Style="{StaticResource DeveloperTabStyle}" Content="SDK 与工具链" Checked="DeveloperTab_Checked" />
                 <RadioButton GroupName="DeveloperTabs" Tag="Managed" Style="{StaticResource DeveloperTabStyle}" Content="托管安装" Checked="DeveloperTab_Checked" />
                 <RadioButton GroupName="DeveloperTabs" Tag="Diagnostics" Style="{StaticResource DeveloperTabStyle}" Content="环境诊断" Checked="DeveloperTab_Checked" />
             </StackPanel>
@@ -313,7 +313,7 @@
                                                         <Grid.ColumnDefinitions><ColumnDefinition Width="100" /><ColumnDefinition Width="120" /><ColumnDefinition Width="*" /><ColumnDefinition Width="96" /></Grid.ColumnDefinitions>
                                                         <StackPanel VerticalAlignment="Center"><TextBlock FontSize="14" FontWeight="SemiBold" Text="{Binding Version}" /><TextBlock Margin="0,3,0,0" FontSize="10" Foreground="#7D8B99" Text="{Binding Architecture}" /></StackPanel>
                                                         <Border Grid.Column="1" Margin="8,0" Padding="8,4" HorizontalAlignment="Left" VerticalAlignment="Center" Background="{Binding StateBackground}" CornerRadius="8"><TextBlock FontSize="10" Foreground="{Binding StateForeground}" Text="{Binding StateText}" /></Border>
-                                                        <StackPanel Grid.Column="2" Margin="8,0" VerticalAlignment="Center"><TextBlock FontSize="11" Foreground="#496984" Text="{Binding ExecutablePath}" TextTrimming="CharacterEllipsis" ToolTip="{Binding ExecutablePath}" /><TextBlock Margin="0,4,0,0" FontSize="10" Foreground="#8492A0" Text="{Binding Source}" /></StackPanel>
+                                                        <StackPanel Grid.Column="2" Margin="8,0" VerticalAlignment="Center"><TextBlock FontSize="11" Foreground="#496984" Text="{Binding ExecutionPathText}" TextTrimming="CharacterEllipsis" ToolTip="{Binding ExecutionPathText}" /><TextBlock Margin="0,4,0,0" FontSize="10" Foreground="#8492A0" Text="{Binding SourceDetailText}" /></StackPanel>
                                                         <Button Grid.Column="3" Width="88" HorizontalAlignment="Right" Style="{StaticResource DeveloperSmallButtonStyle}" Content="打开位置" CommandParameter="{Binding}" Click="OpenInstallationLocation_Click" />
                                                     </Grid>
                                                 </Border>
@@ -350,12 +350,27 @@
                         </Grid>
                     </Border>
 
-                    <TextBlock Margin="0,20,0,10" FontSize="16" FontWeight="SemiBold" Text="Temurin JDK" />
-                    <TextBlock Margin="0,0,0,12" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}"
-                               Text="首批提供 Eclipse Temurin Windows x64 JDK；下载地址与 SHA-256 均来自 Adoptium API。" />
+                    <Grid Margin="0,20,0,10">
+                        <StackPanel>
+                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="Temurin JDK" />
+                            <TextBlock x:Name="JdkDownloadSourceStateText" Margin="0,5,0,0" FontSize="10" Foreground="#70879D"
+                                       Text="由 Adoptium API 提供下载地址与 SHA-256" />
+                        </StackPanel>
+                        <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal">
+                            <TextBlock Margin="0,0,10,0" VerticalAlignment="Center" FontSize="11" Foreground="#66809A" Text="JDK 下载源" />
+                            <ComboBox x:Name="JdkDownloadSourceComboBox" Width="218" Height="36" Style="{StaticResource DeveloperGlassComboBox}"
+                                      SelectedIndex="0" SelectionChanged="ManagedDownloadSource_SelectionChanged">
+                                <ComboBoxItem Tag="Official" Content="Adoptium 官方源（默认）" />
+                                <ComboBoxItem Tag="Tuna" Content="清华 TUNA 镜像（自动回退）" />
+                            </ComboBox>
+                        </StackPanel>
+                    </Grid>
+                    <TextBlock Margin="0,0,0,12" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}" TextWrapping="Wrap"
+                               Text="版本目录与 SHA-256 均来自 Adoptium API；镜像只替换 ZIP 传输地址，校验不通过时拒绝安装。推荐版本包含 LTS 与当前特性版本，历史版本用于旧项目兼容。" />
                     <Border x:Name="ManagedCatalogEmptyState" Padding="24" Background="#72FFFFFF" BorderBrush="#92FFFFFF" BorderThickness="1" CornerRadius="14">
                         <TextBlock HorizontalAlignment="Center" FontSize="12" Foreground="#74879A" Text="点击“刷新版本”读取官方版本目录" />
                     </Border>
+                    <TextBlock Margin="0,2,0,10" FontSize="13" FontWeight="SemiBold" Foreground="#526E87" Text="推荐版本" />
                     <ItemsControl x:Name="ManagedReleasesItemsControl">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
@@ -368,8 +383,11 @@
                                         <StackPanel Grid.Column="1" Margin="12,0,20,0" VerticalAlignment="Center">
                                             <StackPanel Orientation="Horizontal">
                                                 <TextBlock FontSize="15" FontWeight="SemiBold" Text="{Binding DisplayName}" />
-                                                <Border Margin="10,0,0,0" Padding="8,3" Background="#DDF6EA" CornerRadius="7">
-                                                    <TextBlock FontSize="10" Foreground="#367A59" Text="{Binding VersionText}" />
+                                                <Border Margin="10,0,0,0" Padding="8,3" Background="#DDEEFF" CornerRadius="7">
+                                                    <TextBlock FontSize="10" Foreground="#36709A" Text="{Binding Version}" />
+                                                </Border>
+                                                <Border Margin="7,0,0,0" Padding="8,3" Background="{Binding SupportBackground}" CornerRadius="7">
+                                                    <TextBlock FontSize="10" Foreground="{Binding SupportForeground}" Text="{Binding SupportText}" />
                                                 </Border>
                                             </StackPanel>
                                             <TextBlock Margin="0,5,0,0" FontSize="11" Foreground="#687D91">
@@ -394,6 +412,35 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+
+                    <StackPanel x:Name="ManagedHistoricalSection" Visibility="Collapsed">
+                        <TextBlock Margin="0,12,0,3" FontSize="13" FontWeight="SemiBold" Foreground="#7C643D" Text="历史兼容版本" />
+                        <TextBlock Margin="0,0,0,10" FontSize="10" Foreground="#8B785B" Text="这些短期版本已经结束维护，只建议用于明确要求对应 JDK 的旧项目。" />
+                        <ItemsControl x:Name="ManagedHistoricalReleasesItemsControl">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Margin="0,0,0,10" Padding="16,14" Background="#72FFF9EF" BorderBrush="#99E8D8BA" BorderThickness="1" CornerRadius="13">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="52" /><ColumnDefinition Width="*" /><ColumnDefinition Width="116" /></Grid.ColumnDefinitions>
+                                            <Border Width="42" Height="42" Background="#FFF0D9" CornerRadius="11"><TextBlock FontFamily="Segoe Fluent Icons" FontSize="19" Foreground="#D88B24" Text="&#xE943;" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border>
+                                            <StackPanel Grid.Column="1" Margin="12,0,20,0" VerticalAlignment="Center">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock FontSize="15" FontWeight="SemiBold" Text="{Binding DisplayName}" />
+                                                    <Border Margin="10,0,0,0" Padding="8,3" Background="#F2E8D7" CornerRadius="7"><TextBlock FontSize="10" Foreground="#86622C" Text="{Binding Version}" /></Border>
+                                                    <Border Margin="7,0,0,0" Padding="8,3" Background="{Binding SupportBackground}" CornerRadius="7"><TextBlock FontSize="10" Foreground="{Binding SupportForeground}" Text="{Binding SupportText}" /></Border>
+                                                </StackPanel>
+                                                <TextBlock Margin="0,5,0,0" FontSize="11" Foreground="#756B5D"><Run Text="{Binding SourceText}" /><Run Text="  ·  " /><Run Text="{Binding Architecture}" /><Run Text="  ·  " /><Run Text="{Binding SizeText}" /></TextBlock>
+                                                <TextBlock Margin="0,5,0,0" FontSize="10" Foreground="#8A7A66" Text="{Binding ProgressText}" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                            <Button Grid.Column="2" Width="104" HorizontalAlignment="Right" VerticalAlignment="Center" Content="{Binding ActionText}" CommandParameter="{Binding}" Click="ManagedReleaseAction_Click">
+                                                <Button.Style><Style TargetType="Button" BasedOn="{StaticResource DeveloperSmallButtonStyle}"><Style.Triggers><DataTrigger Binding="{Binding IsBusy}" Value="True"><Setter Property="IsEnabled" Value="False" /></DataTrigger><DataTrigger Binding="{Binding IsInstalled}" Value="True"><Setter Property="Foreground" Value="#B14F4F" /><Setter Property="Background" Value="#FFF0F0" /></DataTrigger></Style.Triggers></Style></Button.Style>
+                                            </Button>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
 
                     <Grid Margin="0,14,0,10">
                         <TextBlock FontSize="16" FontWeight="SemiBold" Text="uv 托管 Python" />
