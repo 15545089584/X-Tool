@@ -862,9 +862,13 @@ public sealed class DeveloperEnvironmentScanner
             return string.Empty;
         }
 
+        if (toolchainId == "java")
+        {
+            return ParseJavaVersion(output);
+        }
+
         var pattern = toolchainId switch
         {
-            "java" => "(?:version\\s+\"|openjdk\\s+)(?<version>[0-9][^\"\\s]*)",
             "python" => "Python\\s+(?<version>[^\\s]+)",
             "node" => "v(?<version>[0-9][^\\s]*)",
             "git" => "git version\\s+(?<version>[^\\s]+)",
@@ -872,6 +876,26 @@ public sealed class DeveloperEnvironmentScanner
         };
         var match = Regex.Match(output, pattern, RegexOptions.IgnoreCase);
         return match.Success ? match.Groups["version"].Value.Trim() : string.Empty;
+    }
+
+    private static string ParseJavaVersion(string output)
+    {
+        // -XshowSettings 会先输出 java.vm.name = OpenJDK 64-Bit Server VM，
+        // 必须限定到标准版本行，避免把“64-Bit”误判为 JDK 版本。
+        var versionLine = Regex.Match(
+            output,
+            "^\\s*(?:openjdk|java)\\s+version\\s+\"(?<version>[^\"]+)\"",
+            RegexOptions.IgnoreCase | RegexOptions.Multiline);
+        if (versionLine.Success)
+        {
+            return versionLine.Groups["version"].Value.Trim();
+        }
+
+        var propertyLine = Regex.Match(
+            output,
+            "^\\s*java\\.version\\s*=\\s*(?<version>[^\\s]+)\\s*$",
+            RegexOptions.IgnoreCase | RegexOptions.Multiline);
+        return propertyLine.Success ? propertyLine.Groups["version"].Value.Trim() : string.Empty;
     }
 
     private static string ParseJavaHome(string output)
