@@ -1,6 +1,6 @@
 # X-Tool 开发交接文档
 
-更新时间：2026-08-02
+更新时间：2026-08-03
 
 项目目录：`D:\Claude Code\X-Tool`
 
@@ -8,13 +8,13 @@
 
 当前分支：`main`
 
-当前最新功能代码基线：`dde2e6d 修复托管JDK版本识别`；其前依次为 `371085f 区分工具链版本并扩展Python历史目录`、`5e7d6fb 修复托管目录加载崩溃`、`a7c0a36 完善托管环境联动与下载管理`、`9d14429 调整Volta安装按钮宽度`。开发者工具从 `0ec0d87 新增开发环境扫描与诊断中心` 开始进入主线；系统诊断最近完整功能基线仍为 `8de56d3`，文件工作台最近已提交基线为 `6f41950`，其后工作区另有未提交待确认改动。本次交接文档提交会位于功能基线之上，开始工作时仍须以最新本地提交和 `git log --oneline` 为准。
+当前最新功能代码基线：`4135b2f 开发者工具新增托管日志弹框与MySQL、Docker托管支持`，其前依次为 `27764a6 快捷键设置移入设置页并改为弹窗`、`f767342 增加托管目录与操作日志入口`、`3f79308 更新开发者工具交接文档`、`dde2e6d 修复托管JDK版本识别`。开发者工具从 `0ec0d87 新增开发环境扫描与诊断中心` 开始进入主线；系统诊断最近完整功能基线仍为 `8de56d3`，文件工作台最近已提交基线为 `6f41950`，其后工作区另有未提交待确认改动。本次交接文档提交会位于功能基线之上，开始工作时仍须以最新本地提交和 `git log --oneline` 为准。
 
 > 自旧基线 `8703c04` 之后，已经完成转换器 PDF/编码转换、离线语音输入、文件工作台、开机自启动、首页重设计和系统工具等多轮功能开发；开始下一轮前请以本文件与 `git log --oneline` 为准，切勿误以为只有交接文档发生变化。
 
 > 本文档以当前代码为准。旧名称“截影 / JieYing”只可能残留在部分内部命名和本机配置目录中，不再代表当前产品定位。
 
-> **当前工作区状态（2026-08-02）**：文件工作台的 Windows Search、完整扫描、重复文件与勾选式永久删除仍处于未提交待确认状态；相关 `FileWorkbench` 文件、`ScreenshotApp.csproj` 和新增搜索/重复文件服务必须继续保留。开发者工具扫描、诊断、受控环境配置、Temurin/uv/Volta 托管及 JDK 版本识别修复均已创建中文本地提交，最新功能提交为 `dde2e6d`，不再属于未提交任务。`ScreenshotApp\App.xaml.cs`、`Translation\TranslationEngineProvider.cs`、`VoiceInput\VoiceInputService.cs` 是已有的其他改动，下一轮不得顺带暂存、覆盖或提交。`ClipboardDiagnostics/` 与 `ScreenshotApp/VoiceInput/Runtime/` 仍是禁止修改、删除或提交的本地临时目录。
+> **当前工作区状态（2026-08-03）**：文件工作台的 Windows Search、完整扫描、重复文件与勾选式永久删除仍处于未提交待确认状态；相关 `FileWorkbench` 文件、`ScreenshotApp.csproj` 和新增搜索/重复文件服务必须继续保留。开发者工具扫描、诊断、受控环境配置、Temurin/uv/Volta 托管、MySQL/Docker 托管、托管日志弹框以及快捷键移入设置页均已创建中文本地提交，最新功能提交为 `4135b2f` 与 `27764a6`。`ScreenshotApp\App.xaml.cs`、`Translation\TranslationEngineProvider.cs`、`VoiceInput\VoiceInputService.cs` 是已有的其他改动，下一轮不得顺带暂存、覆盖或提交。`ClipboardDiagnostics/` 仍是禁止修改、删除或提交的本地临时目录；`ScreenshotApp/VoiceInput/Runtime/` 的 GPU 试验材料已经用户确认删除，不再存在。
 
 ## 一、必须遵守的开发约定
 
@@ -76,10 +76,9 @@ git log -5 --oneline
 6. 资源管理
 7. 系统工具
 8. 开发者工具
-9. 快捷键
-10. 设置
+9. 设置
 
-剪贴板不再是一级侧栏项，而是屏幕工作台的组成部分；首页与屏幕工作台均可进入剪贴板。
+剪贴板不再是一级侧栏项，而是屏幕工作台的组成部分；首页与屏幕工作台均可进入剪贴板。快捷键不再是一级导航项，改为设置页中的可点击条目，点击后弹出毛玻璃快捷键设置窗口（`ShortcutSettingsWindow`）。
 
 ### 文件工作台（Windows Search 优先，完整扫描兜底）
 
@@ -135,7 +134,7 @@ git log -5 --oneline
 ### 开发者工具（扫描诊断与受控环境配置）
 
 - 一级导航“开发者工具”进入独立的“开发环境中心”，首页原“设置”能力卡已替换为开发者工具入口；设置仍保留在左侧底部一级导航。
-- 当前包含“开发环境总览”“SDK 与工具链”“托管安装”“环境诊断”四个页面，扫描支持 Java、Python、Node.js、.NET SDK、Git、Maven 与 Gradle。项目环境、全局版本切换和 Shim 尚未开放；托管安装目前开放 Eclipse Temurin JDK、uv CPython 与 Volta Node.js 缓存。
+- 当前包含“开发环境总览”“SDK 与工具链”“托管安装”“环境诊断”四个页面，扫描支持 Java、Python、Node.js、.NET SDK、Git、Maven、Gradle、MySQL 与 Docker。项目环境、全局版本切换和 Shim 尚未开放；托管安装目前开放 Eclipse Temurin JDK、uv CPython、Volta Node.js 缓存、MySQL 与 Docker（Desktop 安装器 + docker CLI 静态包）。
 - 页面首次进入后异步扫描，蓝色按钮原位切换“重新扫描/取消扫描”；离开页面时取消未完成任务。扫描失败按单个工具隔离，不阻断其他结果，也不会申请管理员权限。
 - 发现来源限定为用户/系统持久 PATH、相关环境变量、Python/Git 注册表、常用安装目录，以及固定磁盘顶层名称匹配的有限目录；不会递归扫描整块磁盘、建立常驻索引或后台持续监测。不得改回直接使用 X-Tool 继承的进程 PATH 作为全局环境依据，因为 Codex、IDE 等启动宿主可能注入私有工具路径。
 - Java、Python、Node.js、.NET 与 Git 的版本验证只运行已经解析出的绝对 EXE 路径，统一限制为 8 秒、64 KB 输出，并支持取消与终止进程树。WindowsApps 下的 Python 应用执行别名不会被自动运行，避免触发商店或安装流程。
@@ -149,13 +148,17 @@ git log -5 --oneline
 - 环境写入在管理员子进程中重新读取最新 PATH，跨用户/系统范围规范化去重，并用命名互斥量避免并发覆盖；失败时尝试恢复写入前的 PATH 与配套变量。不得退回把页面加载时取得的整段 PATH 直接交给管理员进程覆盖的实现。
 - “托管安装”从 Adoptium API v3 动态读取当前仍提供 Windows x64 HotSpot JDK ZIP 的全部 Java 主版本；“推荐版本”包含官方 LTS 与官方最新特性版，“历史兼容版本”单独列出已经结束维护的短期版本，不能再退回只硬编码 8/11/17/21/25。“最新特性版”只表示 Adoptium 当前最新非 LTS 发布线，不代表本机正在使用；本机实际生效版本仍由开发环境总览和 SDK 扫描按 PATH 命令解析展示。官方 API 返回的 GitHub 发行地址和 64 位 SHA-256 仍是可信元数据基线；用户可选择 Adoptium 官方源或固定的清华 TUNA Adoptium HTTPS 镜像，镜像不可用时自动回退官方源，任何来源下载完成后都必须用 Adoptium API 的 SHA-256 校验，再进行防目录穿越解压并以绝对路径执行 `java -version`。JDK 下载进度显示已接收大小、平均速度和预计剩余时间；下载、校验、解压和验证均异步且可取消，不会自动修改 PATH 或 `JAVA_HOME`。
 - uv Python 读取本机绝对路径 `uv.exe` 的官方可下载目录，当前查询 CPython 3.8–3.14 Windows x64 每个次版本的最新补丁：3.10–3.14 按 2026-08 的 Python 官方支持状态列入“推荐版本”，uv 仍提供的 3.8/3.9 列入带停止安全维护警告的“历史兼容版本”。历史版本不等于本机当前生效版本，安装确认框还会再次提示风险；未来调整支持分区时必须同步核对 Python 官方版本状态。只接受 uv 返回的 `astral-sh/python-build-standalone` GitHub HTTPS 发行地址与严格的 CPython Windows x64 key。安装通过 `uv python install` 写入 X-Tool 独立目录，并使用 `--no-bin --no-registry --no-config`，不会接管用户原有 uv Python、注册系统 Python 或创建全局命令入口；完成后仍以绝对 `python.exe --version` 验证。
-- 托管根目录为 `%LocalAppData%\X-Tool\Dev`，下载临时文件、Java 安装、JSON 所有权清单和操作日志分别位于其 `Downloads`、`Java`、`managed-tools.json` 和 `Logs`。清单损坏时必须停止安装/卸载，不能猜测目录所有权；只有清单明确标记为 X-Tool 托管、位于 Java 托管根目录内且未被 PATH、`JAVA_HOME` 或运行中进程引用的 JDK 才允许永久删除，外部/MSI/手动安装一律不得直接删除。
+- 托管根目录为 `%LocalAppData%\X-Tool\Dev`，下载临时文件、各工具安装、JSON 所有权清单和操作日志分别位于其 `Downloads`、`Java`、`Python`、`MySQL`、`Docker`、`managed-tools.json` 和 `Logs`。清单损坏时必须停止安装/卸载，不能猜测目录所有权；只有清单明确标记为 X-Tool 托管、位于对应托管根目录内且未被 PATH、配套环境变量（`JAVA_HOME`/`MYSQL_HOME` 等）或运行中进程引用的安装才允许永久删除，外部/MSI/手动安装一律不得直接删除。
 - uv CPython 位于 `%LocalAppData%\X-Tool\Dev\Python\uv`；卸载必须再次调用已验证的 uv，并且同样要求清单所有权、目录边界、PATH 引用和运行进程检查全部通过。安装在清单写入前失败或取消时会调用 uv 回滚，已有但未记入清单的目录不得被自动接管。
 - Node.js 版本目录由 `nodejs.org/dist/index.json` 提供，并与 Node.js 官方 Release 仓库的 `schedule.json` 交叉筛选，只显示当前日期已经发布且仍在支持期内的 Windows x64 主版本。页面不使用硬编码的长期版本表，因此当前样本为 Node.js 26、24 LTS、22 LTS，未来会随官方生命周期变化。
 - Node.js 管理只调用已验证绝对路径的 Volta：未安装 Volta 时显示禁用的“需要 Volta”和独立“通过 WinGet 安装 Volta”入口，用户明确确认后才执行官方 `winget install --id Volta.Volta`，主程序保持普通权限；缓存 Node 只执行 `volta fetch node@版本`，不会调用会改变全局默认版本的 `volta install`，也不会修改 PATH。扫描发现 Volta 的 `node.exe` 中转入口时会通过同目录绝对路径 `volta.exe which node` 解析实际执行目标，并在 SDK 清单与报告中显示“中转入口 → 实际 node.exe”，不能再把 `C:\Program Files\Volta\node.exe` 误报为真实 Node 安装目录；由 `VOLTA_HOME` 确定的共享缓存版本也纳入有限目录发现。Volta 缓存可能被多个项目共享，X-Tool 只读标记“已缓存”，不直接删除 Volta 内部目录。
-- Temurin、uv CPython 或 Volta Node.js 托管操作成功后会立即重新扫描；扫描确认对应绝对路径后自动切到“SDK 与工具链”，可直接查看并按现有受控规则配置环境。若扫描尚未确认路径，页面必须明确提示，不能把安装成功等同于环境已生效。
+- Temurin、uv CPython、MySQL 或 docker CLI 静态包托管操作成功后会立即重新扫描；扫描确认对应绝对路径后自动切到“SDK 与工具链”，可直接查看并按现有受控规则配置环境。Docker Desktop 安装器由用户完成系统级安装，扫描确认后同样生效。若扫描尚未确认路径，页面必须明确提示，不能把安装成功等同于环境已生效。
 - JDK 推荐/历史卡片中的 `Run.Text` 对只读展示属性必须显式使用 `Mode=OneWay`；否则官方目录返回后实例化历史卡片会抛出 `XamlParseException` 并终止进程。该问题已修复，后续新增内联绑定时不得恢复默认双向绑定。
 - “打开位置”只打开已发现安装目录；“复制报告”输出当前工具链与诊断文本，不读取项目文件，也不包含密码、Token 或凭据。
+- MySQL 托管版本与维护状态来自 endoflife.date，下载地址为 MySQL 官方 CDN 归档（`cdn.mysql.com/archives/`）；官方只提供 MD5 与 PGP 签名，安装按官方 MD5 校验并记录 `HashAlgorithm`。推荐区为 8.4 LTS 与 9.7 LTS，历史兼容区仅保留 8.0（已停止官方安全维护，安装前有警告）。MySQL 托管安装不初始化数据目录、不注册 Windows 服务、不修改 PATH；卸载同样要求清单所有权、目录边界、`MYSQL_HOME`/PATH/运行进程检查。
+- Docker 托管分两种模式：“Docker Desktop 安装器”从官方 `appcast.xml` 读取最新版本，下载后做 Authenticode 数字签名校验并启动安装向导；它是系统级安装，需要管理员权限与 WSL2，X-Tool 不静默安装、不写入托管清单，已安装时只读展示本机版本。docker CLI 静态包从官方目录取最新稳定版，解压到 `%LocalAppData%\X-Tool\Dev\Docker` 并写清单，仅提供 CLI（无守护进程），容器引擎仍需 Docker Desktop 或远程 `DOCKER_HOST`。
+- 环境诊断新增 MySQL 规则（`MYSQL_HOME` 与当前 `mysql.exe` 一致性、mysql/mysqld 是否同安装、EOL 警告）与 Docker 规则（守护进程可用性、Desktop 已安装但 PATH 缺失、WSL2 状态）；扫描版本解析兼容 MySQL 5.x 的 `Distrib 5.7.19` 与 8.x/9.x 的 `Ver 8.4.6` 格式，以及 Docker 的 `Docker version` 格式。
+- 托管安装“查看日志”打开毛玻璃日志弹框（`ManagedLogWindow`），按成功/警告/错误级别展示最近 2000 条记录，支持刷新、复制、打开日志文件与日志目录。
 
 ### 网络工作台（第三阶段已完成）
 
@@ -434,6 +437,8 @@ git log -5 --oneline
 
 ## 九、最近关键提交
 
+- `4135b2f` 开发者工具新增托管日志弹框与MySQL、Docker托管支持
+- `27764a6` 快捷键设置移入设置页并改为弹窗
 - `dde2e6d` 修复托管JDK版本识别
 - `371085f` 区分工具链版本并扩展Python历史目录
 - `5e7d6fb` 修复托管目录加载崩溃
@@ -535,15 +540,15 @@ git log -5 --oneline
 git status --short
 git log -5 --oneline
 
-当前 main 最新功能提交应以 `dde2e6d 修复托管JDK版本识别` 为首，后接 `371085f`、`5e7d6fb`、`a7c0a36`、`9d14429`；其上可能还有本次更新交接文档的中文本地提交。请以实际 git log 为准，不要假设工作区干净，不要 reset、checkout、清理或丢弃任何现有改动。
+当前 main 最新功能提交应以 `4135b2f 开发者工具新增托管日志弹框与MySQL、Docker托管支持` 为首，后接 `27764a6 快捷键设置移入设置页并改为弹窗`、`f767342`、`3f79308`；其上可能还有本次更新交接文档的中文本地提交。请以实际 git log 为准，不要假设工作区干净，不要 reset、checkout、清理或丢弃任何现有改动。
 
-`ClipboardDiagnostics/` 与 `ScreenshotApp/VoiceInput/Runtime/` 是未跟踪的本地临时目录，必须保留，禁止提交、删除或修改。`ScreenshotApp/App.xaml.cs`、`ScreenshotApp/Translation/TranslationEngineProvider.cs`、`ScreenshotApp/VoiceInput/VoiceInputService.cs` 是与后续任务无关的既有修改，禁止顺带暂存、覆盖或提交。文件工作台当前仍有未提交的 Windows Search、完整扫描、重复文件查找和永久删除功能；相关 `ScreenshotApp/FileWorkbench/` 文件、`ScreenshotApp/ScreenshotApp.csproj` 与新增服务必须完整保留，也禁止顺带提交。未经我明确要求不要推送 GitHub。
+`ClipboardDiagnostics/` 是未跟踪的本地临时目录，必须保留，禁止提交、删除或修改；`ScreenshotApp/VoiceInput/Runtime/` 的 GPU 试验材料已经确认删除，不要重新下载或接入。`ScreenshotApp/App.xaml.cs`、`ScreenshotApp/Translation/TranslationEngineProvider.cs`、`ScreenshotApp/VoiceInput/VoiceInputService.cs` 是与后续任务无关的既有修改，禁止顺带暂存、覆盖或提交。文件工作台当前仍有未提交的 Windows Search、完整扫描、重复文件查找和永久删除功能；相关 `ScreenshotApp/FileWorkbench/` 文件、`ScreenshotApp/ScreenshotApp.csproj` 与新增服务必须完整保留，也禁止顺带提交。未经我明确要求不要推送 GitHub。
 
-开发者工具现有“开发环境总览”“SDK 与工具链”“托管安装”“环境诊断”四页。扫描支持 Java、Python、Node.js、.NET SDK、Git、Maven 与 Gradle，使用持久 PATH、环境变量、注册表、常用目录及固定盘顶层有限发现，不得改成全盘递归或常驻监控。版本验证只能运行已解析的绝对 EXE，带超时、输出上限、取消和失败隔离。Java 必须从标准 `java/openjdk version` 行或 `java.version` 解析版本，不能再次把 `OpenJDK 64-Bit Server VM` 中的“64-Bit”识别为版本。
+开发者工具现有“开发环境总览”“SDK 与工具链”“托管安装”“环境诊断”四页。扫描支持 Java、Python、Node.js、.NET SDK、Git、Maven、Gradle、MySQL 与 Docker，使用持久 PATH、环境变量、注册表、常用目录及固定盘顶层有限发现，不得改成全盘递归或常驻监控。版本验证只能运行已解析的绝对 EXE，带超时、输出上限、取消和失败隔离。Java 必须从标准 `java/openjdk version` 行或 `java.version` 解析版本，不能再次把 `OpenJDK 64-Bit Server VM` 中的“64-Bit”识别为版本；MySQL 需兼容 `Distrib 5.7.19` 与 `Ver 8.4.6` 两种输出。
 
 总览“未加入 PATH”和 SDK 清单“配置环境”可在当前页应用受控配置，默认写系统变量并按需请求 UAC，也可切换用户范围。Java 配置 JDK `bin` 与 `JAVA_HOME`；Python 添加解释器目录及存在的 `Scripts`，不设置 `PYTHONHOME`；Node 在检测到 Volta/nvm/fnm 时不得把具体版本目录写入 PATH。写入管理员子进程必须重新读取最新 PATH、规范化去重、加命名互斥量并在失败时尝试恢复，不能用页面加载时的旧 PATH 覆盖系统变量。
 
-“托管安装”已接入 Temurin JDK、uv CPython 和 Volta Node.js。Temurin 版本来自 Adoptium API，支持官方源与固定清华 TUNA 镜像，下载后始终按官方 SHA-256 校验；“最新特性版”只是官方最新非 LTS 发布线，不代表本机当前生效。uv Python 显示 3.10–3.14 推荐版本以及 uv 仍提供的 3.8/3.9 历史兼容版本，历史版本安装前必须提示停止安全维护。Volta 只执行不改变默认版本的 `volta fetch`，不得改成 `volta install`；缓存目录可能被多个项目共享，禁止直接删除。托管安装或卸载只允许操作 X-Tool 清单明确拥有且通过目录边界、PATH/环境变量及运行进程检查的内容，禁止删除外部安装。不得擅自加入静默安装、全局版本切换、项目绑定或 Shim。
+“托管安装”已接入 Temurin JDK、uv CPython、Volta Node.js、MySQL 与 Docker。Temurin 版本来自 Adoptium API，支持官方源与固定清华 TUNA 镜像，下载后始终按官方 SHA-256 校验；“最新特性版”只是官方最新非 LTS 发布线，不代表本机当前生效。uv Python 显示 3.10–3.14 推荐版本以及 uv 仍提供的 3.8/3.9 历史兼容版本，历史版本安装前必须提示停止安全维护。Volta 只执行不改变默认版本的 `volta fetch`，不得改成 `volta install`；缓存目录可能被多个项目共享，禁止直接删除。MySQL 版本来自 endoflife.date 与官方 CDN 归档，按官方 MD5 校验，推荐 8.4/9.7 LTS、历史区仅 8.0。Docker Desktop 安装器来自官方 appcast 并做数字签名校验，只下载并启动安装向导，不得当作绿色安装写入清单或静默安装；docker CLI 静态包可托管到 X-Tool 目录。托管安装或卸载只允许操作 X-Tool 清单明确拥有且通过目录边界、PATH/环境变量及运行进程检查的内容，禁止删除外部安装。不得擅自加入静默安装、全局版本切换、项目绑定或 Shim。
 
 文件工作台默认“开始搜索”使用 `Search.CollatorDSO.1` 查询 `SystemIndex`，必须读取 `System.ItemUrl` 并通过 `Uri.LocalPath` 获取真实路径，不能改回已本地化的 `System.ItemPathDisplay`。顶部“完整扫描”绕过系统索引并异步递归扫描；结果池最多 5,000 项、每页 200 项，筛选和排序只处理当前结果池。不要恢复同步 UI 回填、常驻扫描或自建全盘实时索引。
 
@@ -561,5 +566,5 @@ Release 构建通过后启动：
 
 .\ScreenshotApp\bin\Release\net6.0-windows\XTool.exe
 
-实际 UI 测试默认由我完成。修改完成后只暂存本次任务相关文件，使用恰当的中文名称创建本地 Git 提交。不要提交现有文件工作台改动、`ClipboardDiagnostics/`、`ScreenshotApp/VoiceInput/Runtime/` 或其他无关文件，不要推送远端。
+实际 UI 测试默认由我完成。修改完成后只暂存本次任务相关文件，使用恰当的中文名称创建本地 Git 提交。不要提交现有文件工作台改动、`ClipboardDiagnostics/` 或其他无关文件，不要推送远端。
 ```
