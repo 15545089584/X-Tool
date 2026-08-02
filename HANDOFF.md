@@ -146,6 +146,7 @@ git log -5 --oneline
 - Node.js 版本目录由 `nodejs.org/dist/index.json` 提供，并与 Node.js 官方 Release 仓库的 `schedule.json` 交叉筛选，只显示当前日期已经发布且仍在支持期内的 Windows x64 主版本。页面不使用硬编码的长期版本表，因此当前样本为 Node.js 26、24 LTS、22 LTS，未来会随官方生命周期变化。
 - Node.js 管理只调用已验证绝对路径的 Volta：未安装 Volta 时显示禁用的“需要 Volta”和独立“通过 WinGet 安装 Volta”入口，用户明确确认后才执行官方 `winget install --id Volta.Volta`，主程序保持普通权限；缓存 Node 只执行 `volta fetch node@版本`，不会调用会改变全局默认版本的 `volta install`，也不会修改 PATH。扫描发现 Volta 的 `node.exe` 中转入口时会通过同目录绝对路径 `volta.exe which node` 解析实际执行目标，并在 SDK 清单与报告中显示“中转入口 → 实际 node.exe”，不能再把 `C:\Program Files\Volta\node.exe` 误报为真实 Node 安装目录；由 `VOLTA_HOME` 确定的共享缓存版本也纳入有限目录发现。Volta 缓存可能被多个项目共享，X-Tool 只读标记“已缓存”，不直接删除 Volta 内部目录。
 - Temurin、uv CPython 或 Volta Node.js 托管操作成功后会立即重新扫描；扫描确认对应绝对路径后自动切到“SDK 与工具链”，可直接查看并按现有受控规则配置环境。若扫描尚未确认路径，页面必须明确提示，不能把安装成功等同于环境已生效。
+- JDK 推荐/历史卡片中的 `Run.Text` 对只读展示属性必须显式使用 `Mode=OneWay`；否则官方目录返回后实例化历史卡片会抛出 `XamlParseException` 并终止进程。该问题已修复，后续新增内联绑定时不得恢复默认双向绑定。
 - “打开位置”只打开已发现安装目录；“复制报告”输出当前工具链与诊断文本，不读取项目文件，也不包含密码、Token 或凭据。
 
 ### 网络工作台（第三阶段已完成）

@@ -429,7 +429,7 @@
                                                     <Border Margin="10,0,0,0" Padding="8,3" Background="#F2E8D7" CornerRadius="7"><TextBlock FontSize="10" Foreground="#86622C" Text="{Binding Version}" /></Border>
                                                     <Border Margin="7,0,0,0" Padding="8,3" Background="{Binding SupportBackground}" CornerRadius="7"><TextBlock FontSize="10" Foreground="{Binding SupportForeground}" Text="{Binding SupportText}" /></Border>
                                                 </StackPanel>
-                                                <TextBlock Margin="0,5,0,0" FontSize="11" Foreground="#756B5D"><Run Text="{Binding SourceText}" /><Run Text="  ·  " /><Run Text="{Binding Architecture}" /><Run Text="  ·  " /><Run Text="{Binding SizeText}" /></TextBlock>
+                                                <TextBlock Margin="0,5,0,0" FontSize="11" Foreground="#756B5D"><Run Text="{Binding SourceText, Mode=OneWay}" /><Run Text="  ·  " /><Run Text="{Binding Architecture, Mode=OneWay}" /><Run Text="  ·  " /><Run Text="{Binding SizeText, Mode=OneWay}" /></TextBlock>
                                                 <TextBlock Margin="0,5,0,0" FontSize="10" Foreground="#8A7A66" Text="{Binding ProgressText}" TextWrapping="Wrap" />
                                             </StackPanel>
                                             <Button Grid.Column="2" Width="104" HorizontalAlignment="Right" VerticalAlignment="Center" Content="{Binding ActionText}" CommandParameter="{Binding}" Click="ManagedReleaseAction_Click">
