@@ -14,7 +14,9 @@ public sealed class ManagedToolchainService
     private static readonly SemaphoreSlim ManifestLock = new(1, 1);
     private const string AdoptiumAvailableReleasesUrl = "https://api.adoptium.net/v3/info/available_releases";
     private const string TunaAdoptiumRoot = "https://mirrors.tuna.tsinghua.edu.cn/Adoptium";
-    private static readonly int[] PythonMinors = { 10, 11, 12, 13, 14 };
+    // Python 官方支持状态基线更新于 2026-08；uv 目录是否仍提供对应构建仍以实际查询结果为准。
+    private static readonly int[] PythonMinors = { 8, 9, 10, 11, 12, 13, 14 };
+    private static readonly HashSet<int> SupportedPythonMinors = new() { 10, 11, 12, 13, 14 };
     private readonly SafeDeveloperCommandRunner _commandRunner = new();
 
     public ManagedDownloadSource TemurinDownloadSource { get; set; } = ManagedDownloadSource.Official;
@@ -83,6 +85,7 @@ public sealed class ManagedToolchainService
                     ToolchainId = "java", ProviderId = "temurin", DisplayName = $"Temurin JDK {major}", Version = releaseVersion,
                     Architecture = "x64", DownloadUrl = downloadUrl, Sha256 = sha256, FileName = fileName, DownloadSize = size, FeatureVersion = major,
                     IsLts = ltsMajors.Contains(major), IsRecommended = ltsMajors.Contains(major) || major == currentMajor,
+                    ReleaseChannelText = major == currentMajor && !ltsMajors.Contains(major) ? "最新特性版" : string.Empty,
                     IsInstalled = manifest.Installations.Any(item => item.ManagedByXTool && item.ToolchainId == "java" &&
                         item.ProviderId == "temurin" && item.Version == releaseVersion && Directory.Exists(item.InstallationPath))
                 };
@@ -116,6 +119,7 @@ public sealed class ManagedToolchainService
             var version = candidate.GetProperty("version").GetString() ?? string.Empty;
             var urlText = candidate.GetProperty("url").GetString() ?? string.Empty;
             if (!IsTrustedUvRelease(key, urlText)) continue;
+            var isSupported = SupportedPythonMinors.Contains(minor);
             releases.Add(new ManagedToolchainRelease
             {
                 ToolchainId = "python",
@@ -125,6 +129,9 @@ public sealed class ManagedToolchainService
                 Architecture = "x64",
                 DownloadUrl = urlText,
                 FileName = key,
+                FeatureVersion = minor,
+                IsRecommended = isSupported,
+                ReleaseChannelText = isSupported ? "官方支持" : "历史兼容",
                 IsInstalled = manifest.Installations.Any(item => item.ManagedByXTool && item.ToolchainId == "python" &&
                     item.ProviderId == "uv" && item.Version == version && Directory.Exists(item.InstallationPath))
             });
@@ -133,13 +140,17 @@ public sealed class ManagedToolchainService
                      Directory.Exists(item.InstallationPath) && !releases.Any(release => release.Version == item.Version)))
         {
             if (!IsTrustedUvRelease(entry.PackageKey, entry.DownloadUrl)) continue;
+            var minor = ParsePythonMinor(entry.Version);
+            var isSupported = SupportedPythonMinors.Contains(minor);
             releases.Add(new ManagedToolchainRelease
             {
                 ToolchainId = "python", ProviderId = "uv", DisplayName = $"Python {entry.Version}", Version = entry.Version,
-                Architecture = entry.Architecture, DownloadUrl = entry.DownloadUrl, FileName = entry.PackageKey, IsInstalled = true
+                Architecture = entry.Architecture, DownloadUrl = entry.DownloadUrl, FileName = entry.PackageKey,
+                FeatureVersion = minor, IsRecommended = isSupported,
+                ReleaseChannelText = isSupported ? "官方支持" : "历史兼容", IsInstalled = true
             });
         }
-        return releases.OrderByDescending(item => item.Version).ToList();
+        return releases.OrderByDescending(item => item.IsRecommended).ThenByDescending(item => item.FeatureVersion).ToList();
     }
 
     public Task<ManagedToolchainOperationResult> InstallAsync(
@@ -726,6 +737,12 @@ public sealed class ManagedToolchainService
 
     private static int ParseMajor(string version)
         => int.TryParse(version.Split('.')[0], out var major) ? major : 0;
+
+    private static int ParsePythonMinor(string version)
+    {
+        var parts = version.Split('.');
+        return parts.Length > 1 && int.TryParse(parts[1], out var minor) ? minor : 0;
+    }
 
     private static string SanitizeDirectoryName(string value)
         => string.Concat(value.Select(character => Path.GetInvalidFileNameChars().Contains(character) ? '_' : character));

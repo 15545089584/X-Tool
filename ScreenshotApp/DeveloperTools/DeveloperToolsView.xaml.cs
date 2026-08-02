@@ -15,6 +15,7 @@ public partial class DeveloperToolsView : UserControl
     private readonly ObservableCollection<ManagedToolchainRelease> _managedReleases = new();
     private readonly ObservableCollection<ManagedToolchainRelease> _managedHistoricalReleases = new();
     private readonly ObservableCollection<ManagedToolchainRelease> _managedPythonReleases = new();
+    private readonly ObservableCollection<ManagedToolchainRelease> _managedHistoricalPythonReleases = new();
     private readonly ObservableCollection<ManagedToolchainRelease> _managedNodeReleases = new();
     private CancellationTokenSource? _scanCancellation;
     private CancellationTokenSource? _managedCatalogCancellation;
@@ -32,6 +33,7 @@ public partial class DeveloperToolsView : UserControl
         ManagedReleasesItemsControl.ItemsSource = _managedReleases;
         ManagedHistoricalReleasesItemsControl.ItemsSource = _managedHistoricalReleases;
         ManagedPythonReleasesItemsControl.ItemsSource = _managedPythonReleases;
+        ManagedHistoricalPythonReleasesItemsControl.ItemsSource = _managedHistoricalPythonReleases;
         ManagedNodeReleasesItemsControl.ItemsSource = _managedNodeReleases;
         ManagedInstallRootText.Text = $"托管目录：{_managedToolchainService.ManagedRoot}";
     }
@@ -149,6 +151,7 @@ public partial class DeveloperToolsView : UserControl
         ManagedInstallView.Visibility = tab == "Managed" ? Visibility.Visible : Visibility.Collapsed;
         DiagnosticsView.Visibility = tab == "Diagnostics" ? Visibility.Visible : Visibility.Collapsed;
         if (tab == "Managed" && _managedReleases.Count == 0 && _managedHistoricalReleases.Count == 0 && _managedPythonReleases.Count == 0 &&
+            _managedHistoricalPythonReleases.Count == 0 &&
             _managedNodeReleases.Count == 0 && _managedCatalogCancellation is null)
         {
             _ = RefreshManagedCatalogAsync();
@@ -183,14 +186,19 @@ public partial class DeveloperToolsView : UserControl
                 var pythonReleases = await _managedToolchainService.GetUvPythonReleasesAsync(cancellation.Token);
                 if (cancellation.IsCancellationRequested) return;
                 _managedPythonReleases.Clear();
-                foreach (var release in pythonReleases) _managedPythonReleases.Add(release);
+                _managedHistoricalPythonReleases.Clear();
+                foreach (var release in pythonReleases.Where(item => item.IsRecommended)) _managedPythonReleases.Add(release);
+                foreach (var release in pythonReleases.Where(item => item.IsHistorical)) _managedHistoricalPythonReleases.Add(release);
                 ManagedPythonEmptyState.Visibility = pythonReleases.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+                ManagedHistoricalPythonSection.Visibility = _managedHistoricalPythonReleases.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
                 ManagedPythonStateText.Text = pythonReleases.Count == 0 ? "uv 未返回可安装版本" : $"已读取 {pythonReleases.Count} 个 CPython 版本";
                 ManagedCatalogStateText.Text = $"已读取 {releases.Count + pythonReleases.Count} 个官方版本";
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _managedPythonReleases.Clear();
+                _managedHistoricalPythonReleases.Clear();
+                ManagedHistoricalPythonSection.Visibility = Visibility.Collapsed;
                 ManagedPythonEmptyState.Visibility = Visibility.Visible;
                 ManagedPythonStateText.Text = ex.Message;
             }
@@ -253,7 +261,7 @@ public partial class DeveloperToolsView : UserControl
         {
             var confirmation = MessageBox.Show(
                 release.ProviderId == "uv"
-                    ? $"将调用本机已验证的 uv 安装：\n\n{release.DisplayName} {release.Version}\n{release.Architecture}\n\nuv 将按其官方目录下载并校验，且只安装到 X-Tool 的当前用户托管目录，不注册系统 Python。是否继续？"
+                    ? $"将调用本机已验证的 uv 安装：\n\n{release.DisplayName} {release.Version}\n{release.Architecture}\n\n{(release.IsHistorical ? "警告：该 Python 分支已经结束官方安全维护，只建议用于无法升级的旧项目。\n\n" : string.Empty)}uv 将按其官方目录下载并校验，且只安装到 X-Tool 的当前用户托管目录，不注册系统 Python。是否继续？"
                     : release.ProviderId == "volta"
                         ? $"将调用本机已验证的 Volta 缓存：\n\n{release.DisplayName} {release.Version}\n{release.Architecture}\n\n此操作只执行 volta fetch，不会改变当前默认 Node.js，也不会修改 PATH。是否继续？"
                     : $"将安装：\n\n{release.DisplayName} {release.Version}\n{release.Architecture} · {release.SizeText}\n下载源：{_managedToolchainService.TemurinDownloadSourceText}\n\n下载完成后仍会校验 Adoptium API 提供的 SHA-256，安装到当前用户的 X-Tool 托管目录。是否继续？",

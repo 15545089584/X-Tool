@@ -28,12 +28,15 @@ public sealed class ManagedToolchainRelease : INotifyPropertyChanged
     public int FeatureVersion { get; init; }
     public bool IsLts { get; init; }
     public bool IsRecommended { get; init; }
+    public string ReleaseChannelText { get; init; } = string.Empty;
     public bool IsHistorical => !IsRecommended;
     public bool IsProviderAvailable { get; init; } = true;
     public bool IsReadOnlyInstalled { get; init; }
 
     public string VersionText => IsLts ? $"{Version} · LTS" : Version;
-    public string SupportText => IsLts ? "LTS" : IsRecommended ? "当前版本" : "历史版本";
+    public string SupportText => IsLts ? "LTS" :
+        !string.IsNullOrWhiteSpace(ReleaseChannelText) ? ReleaseChannelText :
+        IsRecommended ? "推荐版本" : "历史版本";
     public string SupportBackground => IsHistorical ? "#FFF0D9" : "#DDF6EA";
     public string SupportForeground => IsHistorical ? "#9A671A" : "#367A59";
     public string SizeText => DownloadSize <= 0 ? "大小未知" : $"{DownloadSize / 1024d / 1024d:N1} MB";

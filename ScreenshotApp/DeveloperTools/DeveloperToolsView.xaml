@@ -447,10 +447,11 @@
                         <TextBlock x:Name="ManagedPythonStateText" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" Foreground="#66809A" Text="等待读取 uv 目录" />
                     </Grid>
                     <TextBlock Margin="0,0,0,12" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}" TextWrapping="Wrap"
-                               Text="复用本机已验证的 uv.exe 与 uv 官方 Python 目录；安装到 X-Tool 独立目录，不写注册表、不创建全局命令入口。" />
+                               Text="复用本机已验证的 uv.exe 与 uv 官方 Python 目录；推荐区显示仍受 Python 官方支持的版本，历史兼容区仅用于旧项目。安装到 X-Tool 独立目录，不写注册表、不创建全局命令入口。" />
                     <Border x:Name="ManagedPythonEmptyState" Padding="20" Background="#72FFFFFF" BorderBrush="#92FFFFFF" BorderThickness="1" CornerRadius="14">
                         <TextBlock HorizontalAlignment="Center" FontSize="12" Foreground="#74879A" Text="未找到 uv，或 uv 未返回可安装的 CPython 版本" />
                     </Border>
+                    <TextBlock Margin="0,2,0,10" FontSize="13" FontWeight="SemiBold" Foreground="#526E87" Text="推荐版本" />
                     <ItemsControl x:Name="ManagedPythonReleasesItemsControl">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
@@ -465,6 +466,9 @@
                                                 <TextBlock FontSize="15" FontWeight="SemiBold" Text="{Binding DisplayName}" />
                                                 <Border Margin="10,0,0,0" Padding="8,3" Background="#DDEEFF" CornerRadius="7">
                                                     <TextBlock FontSize="10" Foreground="#36709A" Text="{Binding VersionText}" />
+                                                </Border>
+                                                <Border Margin="7,0,0,0" Padding="8,3" Background="{Binding SupportBackground}" CornerRadius="7">
+                                                    <TextBlock FontSize="10" Foreground="{Binding SupportForeground}" Text="{Binding SupportText, Mode=OneWay}" />
                                                 </Border>
                                             </StackPanel>
                                             <TextBlock Margin="0,5,0,0" FontSize="11" Foreground="#687D91">
@@ -488,6 +492,37 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+
+                    <StackPanel x:Name="ManagedHistoricalPythonSection" Visibility="Collapsed">
+                        <TextBlock Margin="0,12,0,3" FontSize="13" FontWeight="SemiBold" Foreground="#7C643D" Text="历史兼容版本" />
+                        <TextBlock Margin="0,0,0,10" FontSize="10" Foreground="#8B785B" Text="这些 Python 分支已经结束官方安全维护，只建议用于无法升级的旧项目。" />
+                        <ItemsControl x:Name="ManagedHistoricalPythonReleasesItemsControl">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Margin="0,0,0,10" Padding="16,14" Background="#72FFF9EF" BorderBrush="#99E8D8BA" BorderThickness="1" CornerRadius="13">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="52" /><ColumnDefinition Width="*" /><ColumnDefinition Width="116" /></Grid.ColumnDefinitions>
+                                            <Border Width="42" Height="42" Background="#FFF0D9" CornerRadius="11">
+                                                <TextBlock FontFamily="Consolas" FontSize="17" FontWeight="SemiBold" Foreground="#B0782B" Text="Py" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            </Border>
+                                            <StackPanel Grid.Column="1" Margin="12,0,20,0" VerticalAlignment="Center">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock FontSize="15" FontWeight="SemiBold" Text="{Binding DisplayName}" />
+                                                    <Border Margin="10,0,0,0" Padding="8,3" Background="#F2E8D7" CornerRadius="7"><TextBlock FontSize="10" Foreground="#86622C" Text="{Binding Version, Mode=OneWay}" /></Border>
+                                                    <Border Margin="7,0,0,0" Padding="8,3" Background="{Binding SupportBackground}" CornerRadius="7"><TextBlock FontSize="10" Foreground="{Binding SupportForeground}" Text="{Binding SupportText, Mode=OneWay}" /></Border>
+                                                </StackPanel>
+                                                <TextBlock Margin="0,5,0,0" FontSize="11" Foreground="#756B5D"><Run Text="{Binding SourceText, Mode=OneWay}" /><Run Text="  ·  " /><Run Text="{Binding Architecture, Mode=OneWay}" /></TextBlock>
+                                                <TextBlock Margin="0,5,0,0" FontSize="10" Foreground="#8A7A66" Text="{Binding ProgressText}" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                            <Button Grid.Column="2" Width="104" HorizontalAlignment="Right" VerticalAlignment="Center" Content="{Binding ActionText}" CommandParameter="{Binding}" Click="ManagedReleaseAction_Click">
+                                                <Button.Style><Style TargetType="Button" BasedOn="{StaticResource DeveloperSmallButtonStyle}"><Style.Triggers><DataTrigger Binding="{Binding IsBusy}" Value="True"><Setter Property="IsEnabled" Value="False" /></DataTrigger><DataTrigger Binding="{Binding IsInstalled}" Value="True"><Setter Property="Foreground" Value="#B14F4F" /><Setter Property="Background" Value="#FFF0F0" /></DataTrigger></Style.Triggers></Style></Button.Style>
+                                            </Button>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
 
                     <Grid Margin="0,14,0,10">
                         <TextBlock FontSize="16" FontWeight="SemiBold" Text="Volta 管理 Node.js" />
