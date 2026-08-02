@@ -1,6 +1,6 @@
 # X-Tool 开发交接文档
 
-更新时间：2026-08-01
+更新时间：2026-08-02
 
 项目目录：`D:\Claude Code\X-Tool`
 
@@ -8,13 +8,13 @@
 
 当前分支：`main`
 
-当前已提交功能代码基线：`8de56d3 完善系统诊断程序身份识别`；其前依次为 `413b25e 完善应用故障程序定位操作`、`e9d2ebc 精简系统诊断详情布局`、`da9b5d8 恢复截图工具栏取色入口`、`e097dfb 更新系统诊断开发交接文档`。系统诊断的可靠性监视器对齐与详情重构可继续向前追溯到 `efdfbc8`、`43790e3`、`b449c1a`、`aef3e0b`、`1335755`、`e72387f`；文件工作台最近已提交基线为 `6f41950`。本次交接文档提交会位于功能基线之上，开始工作时仍须以最新本地提交和 `git log --oneline` 为准。
+当前最新功能代码基线：`dde2e6d 修复托管JDK版本识别`；其前依次为 `371085f 区分工具链版本并扩展Python历史目录`、`5e7d6fb 修复托管目录加载崩溃`、`a7c0a36 完善托管环境联动与下载管理`、`9d14429 调整Volta安装按钮宽度`。开发者工具从 `0ec0d87 新增开发环境扫描与诊断中心` 开始进入主线；系统诊断最近完整功能基线仍为 `8de56d3`，文件工作台最近已提交基线为 `6f41950`，其后工作区另有未提交待确认改动。本次交接文档提交会位于功能基线之上，开始工作时仍须以最新本地提交和 `git log --oneline` 为准。
 
 > 自旧基线 `8703c04` 之后，已经完成转换器 PDF/编码转换、离线语音输入、文件工作台、开机自启动、首页重设计和系统工具等多轮功能开发；开始下一轮前请以本文件与 `git log --oneline` 为准，切勿误以为只有交接文档发生变化。
 
 > 本文档以当前代码为准。旧名称“截影 / JieYing”只可能残留在部分内部命名和本机配置目录中，不再代表当前产品定位。
 
-> **当前工作区状态（2026-08-01）**：文件工作台的 Windows Search、完整扫描、重复文件与勾选式永久删除仍处于未提交待确认状态；相关 `FileWorkbench` 文件、`ScreenshotApp.csproj` 和新增搜索/重复文件服务必须继续保留。系统诊断代码已经分批创建中文本地提交，当前最新提交为 `8de56d3`，不再属于未提交任务。`ScreenshotApp\App.xaml.cs`、`Translation\TranslationEngineProvider.cs`、`VoiceInput\VoiceInputService.cs` 是已有的其他改动，下一轮不得顺带暂存、覆盖或提交。`ClipboardDiagnostics/` 与 `ScreenshotApp/VoiceInput/Runtime/` 仍是禁止修改、删除或提交的本地临时目录。
+> **当前工作区状态（2026-08-02）**：文件工作台的 Windows Search、完整扫描、重复文件与勾选式永久删除仍处于未提交待确认状态；相关 `FileWorkbench` 文件、`ScreenshotApp.csproj` 和新增搜索/重复文件服务必须继续保留。开发者工具扫描、诊断、受控环境配置、Temurin/uv/Volta 托管及 JDK 版本识别修复均已创建中文本地提交，最新功能提交为 `dde2e6d`，不再属于未提交任务。`ScreenshotApp\App.xaml.cs`、`Translation\TranslationEngineProvider.cs`、`VoiceInput\VoiceInputService.cs` 是已有的其他改动，下一轮不得顺带暂存、覆盖或提交。`ClipboardDiagnostics/` 与 `ScreenshotApp/VoiceInput/Runtime/` 仍是禁止修改、删除或提交的本地临时目录。
 
 ## 一、必须遵守的开发约定
 
@@ -53,6 +53,14 @@ git log -5 --oneline
 ```
 
 提交时只暂存本次任务文件，禁止使用会误收 `ClipboardDiagnostics/` 的宽泛暂存方式。
+
+### Markdown 文档状态
+
+- `HANDOFF.md` 是当前唯一的开发交接基线；每轮较大功能结束后应更新日期、最新提交和对应模块状态。
+- `THIRD-PARTY-NOTICES.md` 与各模型目录中的 README/UPSTREAM-README 属于许可证、模型来源或分发说明，必须保留。`ScreenshotApp/Models/Translation/zh-en/UPSTREAM-README.md` 当前由 `.gitignore` 明确忽略，仍作为本地上游来源说明保留，不要当作垃圾文件删除。
+- 根目录 `design-qa.md` 与 `ScreenshotApp/design-qa.md` 是已完成界面迭代的一次性核验记录，包含临时截图路径和旧版界面结论，当前运行、构建和许可均不依赖；可在用户明确确认清理文档时删除。
+- `NETWORK-WORKBENCH-PHASE3.md` 是已完成第三阶段的历史设计与验收记录，仍被本文网络章节引用，其中 ETW 精确流量描述属于历史实现且当前入口已移除；如需精简，应先把仍有价值的验收边界合并回本文，再删除该文件和引用。
+- `ScreenshotApp/README.md` 仍使用旧产品名“截影”且只描述早期截图功能，内容已过时；它适合后续重写为当前 X-Tool 项目 README，不建议直接删除。
 
 ## 二、当前产品定位与主导航
 
@@ -426,6 +434,21 @@ git log -5 --oneline
 
 ## 九、最近关键提交
 
+- `dde2e6d` 修复托管JDK版本识别
+- `371085f` 区分工具链版本并扩展Python历史目录
+- `5e7d6fb` 修复托管目录加载崩溃
+- `a7c0a36` 完善托管环境联动与下载管理
+- `9d14429` 调整Volta安装按钮宽度
+- `11381b4` 接入Volta管理Node版本
+- `1dd0246` 接入uv托管Python安装
+- `5d96bf6` 新增Temurin托管安装基础能力
+- `5e516e3` 对齐工具链操作并完善诊断证据
+- `db3baeb` 统一工具链环境配置入口
+- `26df675` 修复环境配置下拉占位区域
+- `ba8a9c3` 统一开发环境弹层与滚动样式
+- `817cbf0` 新增开发工具环境一键配置
+- `8d04687` 修正开发环境识别与诊断依据
+- `0ec0d87` 新增开发环境扫描与诊断中心
 - `8de56d3` 完善系统诊断程序身份识别
 - `413b25e` 完善应用故障程序定位操作
 - `e9d2ebc` 精简系统诊断详情布局
@@ -507,15 +530,36 @@ git log -5 --oneline
 ```text
 请继续开发 D:\Claude Code\X-Tool 的 X-Tool WPF 项目。
 
-先完整阅读项目根目录 HANDOFF.md，并严格遵循其中记录的当前基线、UTF-8 文件处理要求、构建与启动方式、提交约定、工作区保护规则和各模块现状。开始前先执行 `git status --short` 和 `git log -5 --oneline`。当前 main 的最新功能代码基线应为 `8de56d3 完善系统诊断程序身份识别`，其前依次为 `413b25e`、`e9d2ebc`、`da9b5d8`、`e097dfb`；其上会有本次更新交接文档的中文本地提交，请以实际 `git log` 为准。不要假设工作区干净，也不要重置或丢弃现有改动。
+先完整阅读项目根目录 HANDOFF.md，并严格遵循其中记录的当前基线、UTF-8 文件处理要求、构建与启动方式、提交约定、工作区保护规则和各模块现状。开始前执行：
 
-`ClipboardDiagnostics/` 与 `ScreenshotApp/VoiceInput/Runtime/` 是未跟踪的本地临时目录，必须保留，禁止提交、删除或修改。`ScreenshotApp/App.xaml.cs`、`Translation/TranslationEngineProvider.cs`、`VoiceInput/VoiceInputService.cs` 也有与当前任务无关的既有修改，禁止顺带暂存或覆盖。未经我明确要求不要推送 GitHub。
+git status --short
+git log -5 --oneline
 
-当前已完成：首页、屏幕工作台、转换器工作台（图片/音频/视频/PDF/编码）、文件工作台、网络工作台第三阶段、资源管理、系统工具、开发者工具第一阶段及第二阶段前三个增量、快捷键和设置。开发者工具可扫描 Java、Python、Node.js、.NET SDK、Git、Maven 与 Gradle，提供实际命令识别、有限目录发现、PATH/JAVA_HOME/Python-pip 冲突诊断和受控环境配置；“托管安装”已接入 Temurin、uv CPython 和 Volta Node.js，Node 只执行不改变默认版本的 `volta fetch`，Volta 缺失时可在明确确认后通过 WinGet 安装。不得擅自扩大为静默安装、删除外部安装或 Volta 共享缓存、全局版本切换或 Shim。屏幕截图标注工具栏的独立“取色”按钮位于“形状”之后，已接回选中状态和点击处理，不要再次隐藏。文件工作台当前处于**未提交待确认**状态：默认“开始搜索”为 Windows Search 优先，使用 `Search.CollatorDSO.1` 查询 `SystemIndex`；必须取 `System.ItemUrl` 并用 `Uri.LocalPath` 获取真实路径，不能使用已本地化的 `System.ItemPathDisplay`。用户可点“完整扫描”绕过系统索引做异步递归扫描；结果最多保留 5,000 项、每页 200 项，类型/时间/多列排序只处理当前结果池。网络工作台当前顶栏为网络总览、网卡与路由、代理与 DNS、Wi-Fi、网络方案；实时曲线在切页期间仍持续采样，并使用“新峰值立即扩展、旧峰值平滑回落”的纵轴缩放。资源管理包含端口、进程、服务、关联关系；系统工具包含静态设备信息、折叠的 Windows PnP 驱动清单、只读存储容量概览、环境变量与已提交的按需只读系统诊断。系统诊断按可靠性监视器口径展示 24 小时/7 天/14 天/30 天时间格、分级事件组和右侧详情；固定建议/等级说明卡已移除，原始事件正文限制在独立滚动框内。应用故障会解析友好程序名、EXE、发布者和身份依据，主操作为“打开程序位置”；其他事件仍打开事件查看器。不得恢复实时传感器监控、启动项管理、计划任务或管理员助手。当前语音输入是稳定 CPU 方案，不要重新启用 GPU 运行时；顶部 ETW 精确流量入口已移除，不要擅自恢复。下一项功能由我在后续消息指定。
+当前 main 最新功能提交应以 `dde2e6d 修复托管JDK版本识别` 为首，后接 `371085f`、`5e7d6fb`、`a7c0a36`、`9d14429`；其上可能还有本次更新交接文档的中文本地提交。请以实际 git log 为准，不要假设工作区干净，不要 reset、checkout、清理或丢弃任何现有改动。
 
-补充更新：开发者工具已不再是完全只读阶段。总览“未加入 PATH”和 SDK 清单“配置环境”可在当前页应用受控配置；默认写系统变量并按需请求 UAC，也可切换用户范围。仅支持已验证安装与既定工具规则；托管安装/卸载仅限 X-Tool 清单拥有的 Temurin JDK 与独立目录 uv CPython，Node.js 仅通过 Volta 安装器和共享缓存机制管理，不包含外部安装卸载、Volta 缓存删除、全局版本切换或 Shim。
+`ClipboardDiagnostics/` 与 `ScreenshotApp/VoiceInput/Runtime/` 是未跟踪的本地临时目录，必须保留，禁止提交、删除或修改。`ScreenshotApp/App.xaml.cs`、`ScreenshotApp/Translation/TranslationEngineProvider.cs`、`ScreenshotApp/VoiceInput/VoiceInputService.cs` 是与后续任务无关的既有修改，禁止顺带暂存、覆盖或提交。文件工作台当前仍有未提交的 Windows Search、完整扫描、重复文件查找和永久删除功能；相关 `ScreenshotApp/FileWorkbench/` 文件、`ScreenshotApp/ScreenshotApp.csproj` 与新增服务必须完整保留，也禁止顺带提交。未经我明确要求不要推送 GitHub。
+
+开发者工具现有“开发环境总览”“SDK 与工具链”“托管安装”“环境诊断”四页。扫描支持 Java、Python、Node.js、.NET SDK、Git、Maven 与 Gradle，使用持久 PATH、环境变量、注册表、常用目录及固定盘顶层有限发现，不得改成全盘递归或常驻监控。版本验证只能运行已解析的绝对 EXE，带超时、输出上限、取消和失败隔离。Java 必须从标准 `java/openjdk version` 行或 `java.version` 解析版本，不能再次把 `OpenJDK 64-Bit Server VM` 中的“64-Bit”识别为版本。
+
+总览“未加入 PATH”和 SDK 清单“配置环境”可在当前页应用受控配置，默认写系统变量并按需请求 UAC，也可切换用户范围。Java 配置 JDK `bin` 与 `JAVA_HOME`；Python 添加解释器目录及存在的 `Scripts`，不设置 `PYTHONHOME`；Node 在检测到 Volta/nvm/fnm 时不得把具体版本目录写入 PATH。写入管理员子进程必须重新读取最新 PATH、规范化去重、加命名互斥量并在失败时尝试恢复，不能用页面加载时的旧 PATH 覆盖系统变量。
+
+“托管安装”已接入 Temurin JDK、uv CPython 和 Volta Node.js。Temurin 版本来自 Adoptium API，支持官方源与固定清华 TUNA 镜像，下载后始终按官方 SHA-256 校验；“最新特性版”只是官方最新非 LTS 发布线，不代表本机当前生效。uv Python 显示 3.10–3.14 推荐版本以及 uv 仍提供的 3.8/3.9 历史兼容版本，历史版本安装前必须提示停止安全维护。Volta 只执行不改变默认版本的 `volta fetch`，不得改成 `volta install`；缓存目录可能被多个项目共享，禁止直接删除。托管安装或卸载只允许操作 X-Tool 清单明确拥有且通过目录边界、PATH/环境变量及运行进程检查的内容，禁止删除外部安装。不得擅自加入静默安装、全局版本切换、项目绑定或 Shim。
+
+文件工作台默认“开始搜索”使用 `Search.CollatorDSO.1` 查询 `SystemIndex`，必须读取 `System.ItemUrl` 并通过 `Uri.LocalPath` 获取真实路径，不能改回已本地化的 `System.ItemPathDisplay`。顶部“完整扫描”绕过系统索引并异步递归扫描；结果池最多 5,000 项、每页 200 项，筛选和排序只处理当前结果池。不要恢复同步 UI 回填、常驻扫描或自建全盘实时索引。
+
+系统工具只保留静态设备信息、PnP 驱动、只读存储概览、环境变量和按需只读系统诊断。系统诊断按 Windows 可靠性监视器口径提供最近 24 小时、7 天、14 天和 30 天时间格，事件按关键、错误、警告分组；应用故障通过 `SystemProgramIdentityResolver` 解析友好程序名、原始 EXE、发布者、Windows 服务和身份依据，主操作为“打开程序位置”。不得恢复实时传感器监控、启动项管理、管理员助手、计划任务或 LibreHardwareMonitor。
+
+网络工作台顶部 ETW 精确流量入口已经移除，不要恢复。语音输入保持 CPU 方案，不得重新接入 `ScreenshotApp/VoiceInput/Runtime/` 中的 GPU 运行时。屏幕截图标注工具栏的独立“取色”按钮位于“形状”之后，已接回选中状态和点击处理，不要再次隐藏。
 
 若需要继续优化 UI，请保持现有浅色毛玻璃设计语言，不要破坏已实现的异步、取消、失败提示、日志、单飞刷新、历史持久化和权限确认逻辑。任何 ETW、系统网络配置、防火墙、服务、受保护进程或系统环境变量写操作都只能在用户明确点击后按需申请管理员权限，不得让主程序默认长期以管理员运行。
 
-完成任务后关闭旧进程，构建 Release，启动 `ScreenshotApp\bin\Release\net6.0-windows\XTool.exe`。实际 UI 测试默认交给我；我确认验证通过后，再只提交本次任务文件并创建中文本地 Git 提交。不要提交 `ClipboardDiagnostics/` 或 `ScreenshotApp/VoiceInput/Runtime/`，不要推送远端。
+完成代码修改后关闭 XTool/JieYing，执行：
+
+dotnet build .\ScreenshotApp\ScreenshotApp.csproj -c Release
+
+Release 构建通过后启动：
+
+.\ScreenshotApp\bin\Release\net6.0-windows\XTool.exe
+
+实际 UI 测试默认由我完成。修改完成后只暂存本次任务相关文件，使用恰当的中文名称创建本地 Git 提交。不要提交现有文件工作台改动、`ClipboardDiagnostics/`、`ScreenshotApp/VoiceInput/Runtime/` 或其他无关文件，不要推送远端。
 ```
