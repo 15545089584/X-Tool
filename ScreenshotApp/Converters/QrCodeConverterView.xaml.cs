@@ -29,6 +29,33 @@ public partial class QrCodeConverterView : UserControl
         MarginValueText.Text = ((int)MarginSlider.Value).ToString();
         ShowContentType();
         LoadHistory();
+        IsVisibleChanged += OnIsVisibleChanged;
+    }
+
+    /// <summary>切出页面时清除本次停留产生的状态提示；重新进入时按当前输入恢复预览。</summary>
+    private void OnIsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (IsVisible)
+        {
+            if (string.IsNullOrWhiteSpace(BuildContent()))
+            {
+                _currentBitmap = null;
+                QrPreviewImage.Source = null;
+                QrPreviewEmptyText.Visibility = Visibility.Visible;
+                PreviewInfoText.Text = "等待输入内容";
+                PreviewErrorText.Text = string.Empty;
+            }
+            else
+            {
+                QueuePreview();
+            }
+        }
+        else
+        {
+            StatusText.Text = string.Empty;
+            DecodeStatusText.Text = string.Empty;
+            PreviewErrorText.Text = string.Empty;
+        }
     }
 
     private void ModeButton_Click(object sender, RoutedEventArgs e)
