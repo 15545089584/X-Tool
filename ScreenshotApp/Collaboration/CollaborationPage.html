@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>X-Tool 协作中心</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: linear-gradient(180deg, #eef6fb, #e3edf7); min-height: 100vh; color: #2f4a66; padding: 18px; }
+  .head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .head h1 { font-size: 20px; margin: 0; font-weight: 600; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: #6b7a8c; }
+  .dot.on { background: #16b99b; box-shadow: 0 0 8px rgba(22,185,155,.7); }
+  .card { background: rgba(255,255,255,.72); border: 1px solid rgba(160,199,225,.8); border-radius: 14px; padding: 14px; margin-bottom: 12px; box-shadow: 0 6px 18px rgba(45,75,105,.10); }
+  .card h2 { font-size: 14px; margin: 0 0 10px; color: #3d5b78; }
+  textarea { width: 100%; min-height: 74px; border: 1px solid #b9d3e6; border-radius: 10px; padding: 10px; font-size: 14px; color: #2f4a66; background: #f8fcff; resize: vertical; }
+  textarea.ro { background: #eef5fb; }
+  .row { display: flex; gap: 8px; margin-top: 10px; }
+  .row img { max-width: 100%; max-height: 220px; border-radius: 10px; border: 1px solid #cfe2f0; }
+  button { flex: 1; height: 42px; border: 1px solid #9fcbe4; border-radius: 10px; background: #ffffff; color: #2f4a66; font-size: 14px; font-weight: 600; }
+  button.primary { background: #4d7cf4; border-color: #7ea4ff; color: #fff; }
+  button:active { opacity: .72; }
+  .file { display: flex; justify-content: space-between; align-items: center; padding: 9px 4px; border-bottom: 1px solid #e3eef6; font-size: 13px; }
+  .file a { color: #2f6bc4; text-decoration: none; }
+  .tip { font-size: 11px; color: #7b93a8; margin-top: 8px; }
+  #statusText { font-size: 12px; color: #7b93a8; margin-left: auto; }
+</style>
+</head>
+<body>
+  <div class="head">
+    <div class="dot" id="dot"></div>
+    <h1>X-Tool 协作中心</h1>
+    <div id="statusText">连接中…</div>
+  </div>
+
+  <div class="card">
+    <h2>电脑 → 手机（剪贴板）</h2>
+    <textarea id="receivedText" class="ro" readonly placeholder="电脑复制的内容会显示在这里"></textarea>
+    <div id="receivedImage"></div>
+    <div class="row">
+      <button onclick="copyReceived()">复制文本</button>
+    </div>
+    <div class="tip">图片可长按保存；文本可长按选择后复制。每 3 秒自动检查电脑剪贴板。</div>
+  </div>
+
+  <div class="card">
+    <h2>手机 → 电脑（剪贴板）</h2>
+    <textarea id="sendText" placeholder="输入或粘贴要发送到电脑的内容"></textarea>
+    <div class="row">
+      <button class="primary" onclick="sendText()">发送到电脑</button>
+      <button onclick="readPhoneClipboard()">读取手机剪贴板</button>
+    </div>
+    <div class="tip">部分手机浏览器不开放网页读取剪贴板，可先在输入框内长按粘贴再点“发送到电脑”。</div>
+  </div>
+
+  <div class="card">
+    <h2>文件传输（手机 → 电脑）</h2>
+    <input type="file" id="fileInput" multiple>
+    <div class="row">
+      <button class="primary" onclick="uploadFiles()">上传到电脑</button>
+    </div>
+    <div id="uploadTip" class="tip"></div>
+  </div>
+
+  <div class="card">
+    <h2>电脑 → 手机（文件）</h2>
+    <div id="fileList">加载中…</div>
+  </div>
+
+<script>
+var TOKEN = '__TOKEN__';
+var HOST = '__HOST__';
+var lastSeq = 0;
+
+function url(path) { return HOST + path + (path.indexOf('?') >= 0 ? '&' : '?') + 't=' + TOKEN; }
+
+async function refreshStatus() {
+  try {
+    var r = await fetch(url('/api/status'));
+    var s = await r.json();
+    document.getElementById('dot').className = 'dot on';
+    document.getElementById('statusText').textContent = '已连接';
+    if (s.latestKind === 'text' && s.latestAt) {
+      document.getElementById('receivedText').value = s.latestText;
+    } else if (s.latestKind === 'image' && s.latestImage) {
+      document.getElementById('receivedImage').innerHTML = '<img src="data:image/png;base64,' + s.latestImage + '">';
+    }
+    if (s.clipboardSeq > lastSeq) {
+      await pullClipboard();
+    }
+  } catch (e) {
+    document.getElementById('dot').className = 'dot';
+    document.getElementById('statusText').textContent = '连接中断';
+  }
+}
+
+async function pullClipboard() {
+  try {
+    var r = await fetch(url('/api/clipboard/pull?since=' + lastSeq));
+    var d = await r.json();
+    lastSeq = d.currentSeq;
+    if (d.entries && d.entries.length) {
+      var last = d.entries[d.entries.length - 1];
+      if (last.kind === 'text') {
+        document.getElementById('receivedText').value = last.text;
+        document.getElementById('receivedImage').innerHTML = '';
+      } else if (last.kind === 'image') {
+        document.getElementById('receivedImage').innerHTML = '<img src="data:image/png;base64,' + last.image + '">';
+        document.getElementById('receivedText').value = '';
+      }
+    }
+  } catch (e) {}
+}
+
+async function sendText() {
+  var text = document.getElementById('sendText').value;
+  if (!text.trim()) { return; }
+  try {
+    await fetch(url('/api/clipboard/push'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: text }) });
+    document.getElementById('sendText').value = '';
+    document.getElementById('uploadTip').textContent = '已发送到电脑剪贴板';
+  } catch (e) {
+    document.getElementById('uploadTip').textContent = '发送失败，请检查连接';
+  }
+}
+
+async function readPhoneClipboard() {
+  try {
+    if (navigator.clipboard && navigator.clipboard.readText) {
+      var text = await navigator.clipboard.readText();
+      document.getElementById('sendText').value = text;
+      document.getElementById('uploadTip').textContent = '已读取手机剪贴板，可点“发送到电脑”';
+    } else {
+      document.getElementById('uploadTip').textContent = '当前浏览器不支持网页读取剪贴板，请长按粘贴到输入框';
+    }
+  } catch (e) {
+    document.getElementById('uploadTip').textContent = '读取剪贴板被拒绝：请在输入框内长按粘贴';
+  }
+}
+
+function copyReceived() {
+  var box = document.getElementById('receivedText');
+  box.focus();
+  box.select();
+  try { document.execCommand('copy'); document.getElementById('uploadTip').textContent = '已复制'; }
+  catch (e) { document.getElementById('uploadTip').textContent = '请长按文本选择复制'; }
+}
+
+async function uploadFiles() {
+  var input = document.getElementById('fileInput');
+  var files = input.files;
+  if (!files || !files.length) { document.getElementById('uploadTip').textContent = '请先选择文件'; return; }
+  var done = 0;
+  for (var i = 0; i < files.length; i++) {
+    var f = files[i];
+    try {
+      await fetch(url('/api/files/upload?name=' + encodeURIComponent(f.name)), { method: 'PUT', body: f });
+      done++;
+    } catch (e) {}
+  }
+  document.getElementById('uploadTip').textContent = '已上传 ' + done + '/' + files.length + ' 个文件';
+  loadFiles();
+}
+
+async function loadFiles() {
+  try {
+    var r = await fetch(url('/api/files/list?dir=outgoing'));
+    var d = await r.json();
+    var box = document.getElementById('fileList');
+    if (!d.files || !d.files.length) { box.innerHTML = '<div class="tip">电脑端发送的文件会显示在这里</div>'; return; }
+    var html = '';
+    for (var i = 0; i < d.files.length; i++) {
+      var f = d.files[i];
+      html += '<div class="file"><span>' + f.name + ' · ' + (f.size / 1024 / 1024).toFixed(1) + ' MB</span><a href="' + HOST + '/api/files/download?dir=outgoing&name=' + encodeURIComponent(f.name) + '&t=' + TOKEN + '">下载</a></div>';
+    }
+    box.innerHTML = html;
+  } catch (e) {
+    document.getElementById('fileList').innerHTML = '<div class="tip">文件列表加载失败</div>';
+  }
+}
+
+refreshStatus();
+loadFiles();
+setInterval(refreshStatus, 3000);
+setInterval(loadFiles, 10000);
+</script>
+</body>
+</html>

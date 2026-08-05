@@ -13,6 +13,7 @@ using Microsoft.Win32;
 using Forms = System.Windows.Forms;
 using ScreenshotApp.Capture;
 using ScreenshotApp.ClipboardUi;
+using ScreenshotApp.Collaboration;
 using ScreenshotApp.Converters;
 using ScreenshotApp.History;
 using ScreenshotApp.Recording;
@@ -281,6 +282,7 @@ public partial class MainWindow : Window
         ResourceManagementView.Visibility = page == "ResourceManagement" ? Visibility.Visible : Visibility.Collapsed;
         SystemToolsView.Visibility = page == "SystemTools" ? Visibility.Visible : Visibility.Collapsed;
         DeveloperToolsView.Visibility = page == "DeveloperTools" ? Visibility.Visible : Visibility.Collapsed;
+        CollaborationView.Visibility = page == "Collaboration" ? Visibility.Visible : Visibility.Collapsed;
         if (page == "ImageConverter")
         {
             Dispatcher.BeginInvoke(new Action(() => NormalizeImageConverterLabels(ImageConverterView)), DispatcherPriority.Loaded);
@@ -733,6 +735,7 @@ public partial class MainWindow : Window
                 LogClipboardCapture($"文本已保存 {savedTextPath}");
                 InsertClipboardItem(savedTextPath, isText: true);
                 LogClipboardCapture("文本缓存插入完成");
+                CollaborationService.Instance.PushClipboardText(content);
             }
             else if (Clipboard.ContainsImage())
             {
@@ -755,6 +758,7 @@ public partial class MainWindow : Window
                 LogClipboardCapture($"图片已保存 {savedImagePath}");
                 InsertClipboardItem(savedImagePath, isText: false);
                 LogClipboardCapture("图片缓存插入完成");
+                CollaborationService.Instance.PushClipboardImage(image);
             }
             else
             {

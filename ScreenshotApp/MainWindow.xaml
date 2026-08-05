@@ -6,6 +6,7 @@
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:primitives="clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework"
         xmlns:converters="clr-namespace:ScreenshotApp.Converters"
+        xmlns:collaboration="clr-namespace:ScreenshotApp.Collaboration"
         xmlns:fileWorkbench="clr-namespace:ScreenshotApp.FileWorkbench"
         xmlns:systemTools="clr-namespace:ScreenshotApp.SystemTools"
         xmlns:networkWorkbench="clr-namespace:ScreenshotApp.NetworkWorkbench"
@@ -426,6 +427,15 @@
                                 <TextBlock Style="{StaticResource IconTextStyle}" FontSize="17" Text="&#xE943;" Foreground="#626971" />
                             </Border>
                             <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" FontSize="15" Text="开发者工具" />
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="CollaborationNav" GroupName="Navigation" Style="{StaticResource NavItemStyle}"
+                                 Tag="Collaboration" Checked="NavButton_Checked">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Width="34" Height="34" Background="#F7F8FA" CornerRadius="9">
+                                <TextBlock Style="{StaticResource IconTextStyle}" FontSize="17" Text="&#xE72D;" Foreground="#626971" />
+                            </Border>
+                            <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" FontSize="15" Text="协作中心" />
                         </StackPanel>
                     </RadioButton>
                     </StackPanel>
@@ -947,6 +957,7 @@
                             <systemTools:SystemToolsView x:Name="ResourceManagementView" Visibility="Collapsed" />
                             <systemTools:SystemToolsView x:Name="SystemToolsView" EnvironmentOnly="True" Visibility="Collapsed" />
                             <developerTools:DeveloperToolsView x:Name="DeveloperToolsView" Visibility="Collapsed" />
+                            <collaboration:CollaborationView x:Name="CollaborationView" Visibility="Collapsed" />
 
                             <!-- 设置页 -->
                             <Grid x:Name="SettingsView" Visibility="Collapsed" Margin="58,44">
