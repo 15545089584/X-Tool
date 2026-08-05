@@ -683,6 +683,7 @@ public partial class MainWindow : Window
             await Task.Delay(80);
             if (Clipboard.ContainsData(ClipboardService.InternalFormat))
             {
+                LogClipboardCapture("跳过：X-Tool 内部内容");
                 return;
             }
             if (Clipboard.ContainsText())
@@ -696,12 +697,16 @@ public partial class MainWindow : Window
                 var signature = $"text:{content}";
                 if (signature == _lastExternalClipboardSignature)
                 {
+                    LogClipboardCapture("跳过：文本签名重复");
                     return;
                 }
 
                 _lastExternalClipboardSignature = signature;
+                LogClipboardCapture($"文本复制 {content.Length} 字符，开始保存");
                 var savedTextPath = await _historyStore.SaveClipboardTextAsync(content);
+                LogClipboardCapture($"文本已保存 {savedTextPath}");
                 InsertClipboardItem(savedTextPath, isText: true);
+                LogClipboardCapture("文本缓存插入完成");
             }
             else if (Clipboard.ContainsImage())
             {
@@ -714,12 +719,16 @@ public partial class MainWindow : Window
                 var signature = $"image:{image.PixelWidth}x{image.PixelHeight}";
                 if (signature == _lastExternalClipboardSignature)
                 {
+                    LogClipboardCapture("跳过：图片签名重复");
                     return;
                 }
 
                 _lastExternalClipboardSignature = signature;
+                LogClipboardCapture($"图片复制 {image.PixelWidth}x{image.PixelHeight}，开始保存");
                 var savedImagePath = await _historyStore.SaveClipboardImageAsync(image);
+                LogClipboardCapture($"图片已保存 {savedImagePath}");
                 InsertClipboardItem(savedImagePath, isText: false);
+                LogClipboardCapture("图片缓存插入完成");
             }
             else
             {
@@ -727,10 +736,31 @@ public partial class MainWindow : Window
             }
 
             await RefreshHistoryAsync();
+            LogClipboardCapture("全量刷新完成");
+        }
+        catch (Exception exception)
+        {
+            LogClipboardCapture($"捕获异常：{exception.GetBaseException().Message}");
+            // 剪贴板可能被其他程序短暂占用，下一次复制时会自然重试。
+        }
+    }
+
+    private static void LogClipboardCapture(string message)
+    {
+        try
+        {
+            var directory = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "X-Tool",
+                "Logs");
+            Directory.CreateDirectory(directory);
+            File.AppendAllText(
+                Path.Combine(directory, "clipboard-capture.log"),
+                $"{DateTime.Now:HH:mm:ss.fff} {message}{Environment.NewLine}");
         }
         catch
         {
-            // 剪贴板可能被其他程序短暂占用，下一次复制时会自然重试。
+            // 日志写入失败不影响剪贴板功能。
         }
     }
 
@@ -744,8 +774,9 @@ public partial class MainWindow : Window
             // 历史页正在展示时同步更新列表，剪贴板历史与浮窗都能立即看到新内容。
             ApplyHistoryFilter();
         }
-        catch
+        catch (Exception exception)
         {
+            LogClipboardCapture($"缓存插入异常：{exception.GetBaseException().Message}");
             // 条目构造失败时由随后的全量刷新兜底。
         }
     }
@@ -1032,12 +1063,25 @@ public partial class MainWindow : Window
         NavigateToPage("History");
     }
 
-    private Task ShowClipboardPickerAsync()
+    private async Task ShowClipboardPickerAsync()
     {
         if (_clipboardPicker is not null)
         {
             _clipboardPicker.Close();
-            return Task.CompletedTask;
+            return;
+        }
+
+        // 打开浮窗前同步捕获最近一次外部复制，避免刚复制的内容还未写入历史缓存。
+        try
+        {
+            if (!Clipboard.ContainsData(ClipboardService.InternalFormat))
+            {
+                await CaptureExternalClipboardAsync();
+            }
+        }
+        catch
+        {
+            // 捕获失败时仍按现有缓存展示。
         }
 
         _clipboardPasteTarget = NativeMethods.GetForegroundWindow();
@@ -1048,7 +1092,7 @@ public partial class MainWindow : Window
         if (choices.Length == 0)
         {
             ShowToast("剪贴板还没有可粘贴的内容");
-            return Task.CompletedTask;
+            return;
         }
 
         var picker = new ClipboardPickerWindow(choices);
@@ -1068,7 +1112,6 @@ public partial class MainWindow : Window
             }
         };
         picker.Show();
-        return Task.CompletedTask;
     }
 
     private async void ClipboardPicker_ItemSelected(object? sender, ScreenshotHistoryItem item)
