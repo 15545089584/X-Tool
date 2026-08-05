@@ -226,15 +226,22 @@ public partial class QrCodeConverterView : UserControl
                 }
                 Dispatcher.BeginInvoke(new Action(() =>
                 {
-                    if (cts.IsCancellationRequested)
+                    try
                     {
-                        return;
+                        if (cts.IsCancellationRequested)
+                        {
+                            return;
+                        }
+                        _currentBitmap = bitmap;
+                        QrPreviewImage.Source = bitmap;
+                        QrPreviewEmptyText.Visibility = Visibility.Collapsed;
+                        PreviewInfoText.Text = $"{bitmap.PixelWidth} × {bitmap.PixelHeight} 像素 · 内容 {QrCodeService.FriendlySize(content)} · {QrCodeService.CategoryText(QrCodeService.Classify(content))}";
+                        PreviewErrorText.Text = string.Empty;
                     }
-                    _currentBitmap = bitmap;
-                    QrPreviewImage.Source = bitmap;
-                    QrPreviewEmptyText.Visibility = Visibility.Collapsed;
-                    PreviewInfoText.Text = $"{bitmap.PixelWidth} × {bitmap.PixelHeight} 像素 · 内容 {QrCodeService.FriendlySize(content)} · {QrCodeService.CategoryText(QrCodeService.Classify(content))}";
-                    PreviewErrorText.Text = string.Empty;
+                    catch (Exception uiEx)
+                    {
+                        PreviewErrorText.Text = "预览显示失败：" + uiEx.Message;
+                    }
                 }), System.Windows.Threading.DispatcherPriority.Background);
             }
             catch (Exception ex)
@@ -410,6 +417,13 @@ public partial class QrCodeConverterView : UserControl
         if (System.Windows.Clipboard.ContainsImage())
         {
             var image = System.Windows.Clipboard.GetImage();
+            if (image == null)
+            {
+                DecodeStatusText.Text = "剪贴板图片读取失败，请重新复制后重试";
+                return;
+            }
+            // 剪贴板位图在 UI 线程创建，冻结后再交给后台解码线程读取。
+            image = QrCodeService.FreezeForCrossThread(image);
             await RunDecodeCoreAsync(new List<(string, Func<BitmapSource>)> { ("剪贴板图片", () => image) });
         }
         else if (System.Windows.Clipboard.ContainsText())

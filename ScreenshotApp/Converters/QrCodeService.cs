@@ -79,7 +79,10 @@ public static class QrCodeService
             }
         }
 
-        return BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, pixels, stride);
+        var bitmap = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, pixels, stride);
+        // 在创建线程冻结，允许回到 UI 线程安全赋值。
+        bitmap.Freeze();
+        return bitmap;
     }
 
     /// <summary>从位图识别二维码，自动尝试旋转并支持同图多个二维码。</summary>
@@ -123,8 +126,27 @@ public static class QrCodeService
     {
         using var stream = File.OpenRead(path);
         var decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
-        var frame = decoder.Frames[0];
-        return new FormatConvertedBitmap(frame, PixelFormats.Bgra32, null, 0);
+        return FreezeForCrossThread(decoder.Frames[0]);
+    }
+
+    /// <summary>在创建线程把位图冻结为可跨线程读取的副本；无法冻结时复制像素重建。</summary>
+    public static BitmapSource FreezeForCrossThread(BitmapSource source)
+    {
+        if (source.CanFreeze)
+        {
+            source.Freeze();
+            return source;
+        }
+
+        var width = source.PixelWidth;
+        var height = source.PixelHeight;
+        var stride = width * 4;
+        var pixels = new byte[stride * height];
+        var converted = new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+        converted.CopyPixels(pixels, stride, 0);
+        var copy = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, pixels, stride);
+        copy.Freeze();
+        return copy;
     }
 
     public static QrContentCategory Classify(string? content)
