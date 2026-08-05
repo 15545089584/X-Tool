@@ -3,7 +3,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <UserControl.Resources>
         <Style x:Key="Card" TargetType="Border"><Setter Property="Background" Value="#74FFFFFF" /><Setter Property="BorderBrush" Value="#A9D7EAF8" /><Setter Property="BorderThickness" Value="1" /><Setter Property="CornerRadius" Value="14" /><Setter Property="Effect"><Setter.Value><DropShadowEffect BlurRadius="15" ShadowDepth="3" Direction="270" Opacity="0.08" Color="#456581" /></Setter.Value></Setter></Style>
-        <Style x:Key="Input" TargetType="TextBox"><Setter Property="Background" Value="#BFFFFFFF" /><Setter Property="BorderBrush" Value="#A8CEE8F8" /><Setter Property="BorderThickness" Value="1" /><Setter Property="Foreground" Value="#405F7C" /><Setter Property="Padding" Value="12,8" /><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TextBox"><Border x:Name="Root" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10"><ScrollViewer x:Name="PART_ContentHost" HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" /></Border><ControlTemplate.Triggers><Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Root" Property="Background" Value="#EAF4FFFF" /><Setter TargetName="Root" Property="BorderBrush" Value="#609BFE" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
+        <Style x:Key="QrGlassScrollBar" TargetType="ScrollBar"><Setter Property="Width" Value="9" /><Setter Property="Margin" Value="3,7,3,7" /><Setter Property="Background" Value="#38D3E5F5" /><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ScrollBar"><Border Background="{TemplateBinding Background}" CornerRadius="5" Padding="2"><Track x:Name="PART_Track" IsDirectionReversed="True"><Track.DecreaseRepeatButton><RepeatButton Command="ScrollBar.PageUpCommand" Background="Transparent" BorderThickness="0" /></Track.DecreaseRepeatButton><Track.Thumb><Thumb Background="#89A9C7E5" Cursor="Hand"><Thumb.Template><ControlTemplate TargetType="Thumb"><Border x:Name="ThumbRoot" Background="{TemplateBinding Background}" CornerRadius="4" /><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ThumbRoot" Property="Background" Value="#C14D7CFE" /></Trigger><Trigger Property="IsDragging" Value="True"><Setter TargetName="ThumbRoot" Property="Background" Value="#E54D7CFE" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Thumb.Template></Thumb></Track.Thumb><Track.IncreaseRepeatButton><RepeatButton Command="ScrollBar.PageDownCommand" Background="Transparent" BorderThickness="0" /></Track.IncreaseRepeatButton></Track></Border></ControlTemplate></Setter.Value></Setter></Style>
+        <Style x:Key="Input" TargetType="TextBox"><Setter Property="Background" Value="#BFFFFFFF" /><Setter Property="BorderBrush" Value="#A8CEE8F8" /><Setter Property="BorderThickness" Value="1" /><Setter Property="Foreground" Value="#405F7C" /><Setter Property="Padding" Value="12,8" /><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TextBox"><Border x:Name="Root" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10"><ScrollViewer x:Name="PART_ContentHost" HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"><ScrollViewer.Resources><Style TargetType="ScrollBar" BasedOn="{StaticResource QrGlassScrollBar}" /></ScrollViewer.Resources></ScrollViewer></Border><ControlTemplate.Triggers><Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Root" Property="Background" Value="#EAF4FFFF" /><Setter TargetName="Root" Property="BorderBrush" Value="#609BFE" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
         <Style x:Key="Button" TargetType="Button"><Setter Property="Height" Value="46" /><Setter Property="Padding" Value="19,0" /><Setter Property="Background" Value="#A8FFFFFF" /><Setter Property="BorderBrush" Value="#9FD0E7F8" /><Setter Property="BorderThickness" Value="1" /><Setter Property="Foreground" Value="#42617D" /><Setter Property="FontWeight" Value="SemiBold" /><Setter Property="Cursor" Value="Hand" /><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="Root" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="13"><Border.Effect><DropShadowEffect BlurRadius="10" ShadowDepth="2" Direction="270" Opacity="0.08" Color="#4E7191" /></Border.Effect><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True" TextElement.Foreground="{TemplateBinding Foreground}" /></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Background" Value="#DCEBFAFF" /><Setter TargetName="Root" Property="BorderBrush" Value="#78A9E7FF" /></Trigger><Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.78" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
         <Style x:Key="ActionButton" TargetType="Button" BasedOn="{StaticResource Button}"><Setter Property="Background" Value="#4D7CFE" /><Setter Property="BorderBrush" Value="#8AAEFF" /><Setter Property="Foreground" Value="White" /></Style>
         <Style x:Key="DangerButton" TargetType="Button" BasedOn="{StaticResource Button}"><Setter Property="Background" Value="#FFF2F2" /><Setter Property="BorderBrush" Value="#F3B9B9" /><Setter Property="Foreground" Value="#B74444" /></Style>
@@ -22,7 +23,7 @@
             <Setter Property="FontSize" Value="13" />
             <Setter Property="Foreground" Value="#405D78" />
             <Setter Property="ItemContainerStyle"><Setter.Value><Style TargetType="ComboBoxItem"><Setter Property="Padding" Value="13,10" /><Setter Property="FontSize" Value="13" /><Setter Property="Foreground" Value="#405D78" /><Setter Property="Background" Value="Transparent" /><Style.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#DCEBFF" /></Trigger><Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="#CEE0FF" /></Trigger></Style.Triggers></Style></Setter.Value></Setter>
-            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBox"><Grid><ToggleButton x:Name="ToggleButton" Background="Transparent" BorderThickness="0" ClickMode="Press" IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"><ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><Border x:Name="Root" Background="{TemplateBinding Background}" BorderBrush="#ABCBE7F8" BorderThickness="1" CornerRadius="11"><Grid><ContentPresenter Margin="13,0,38,0" VerticalAlignment="Center" Content="{Binding SelectionBoxItem, RelativeSource={RelativeSource AncestorType=ComboBox}}" /><TextBlock HorizontalAlignment="Right" Margin="0,0,13,0" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#6082A7" Text="&#xE70D;" /></Grid></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Background" Value="#EAF3FF" /></Trigger><Trigger Property="IsChecked" Value="True"><Setter TargetName="Root" Property="Background" Value="#DCEBFF" /></Trigger></ControlTemplate.Triggers></ControlTemplate></ToggleButton.Template></ToggleButton><Popup x:Name="PART_Popup" AllowsTransparency="True" Focusable="False" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" PopupAnimation="Fade"><Border Width="{Binding ActualWidth, ElementName=ToggleButton}" Margin="0,5,0,0" Padding="5" Background="#F4FBFFFF" BorderBrush="#B5D1E9FA" BorderThickness="1" CornerRadius="11"><Border.Effect><DropShadowEffect BlurRadius="14" ShadowDepth="3" Direction="270" Opacity="0.16" Color="#456886" /></Border.Effect><ScrollViewer MaxHeight="190" CanContentScroll="True"><StackPanel IsItemsHost="True" /></ScrollViewer></Border></Popup></Grid></ControlTemplate></Setter.Value></Setter>
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBox"><Grid><ToggleButton x:Name="ToggleButton" Background="Transparent" BorderThickness="0" ClickMode="Press" IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"><ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><Border x:Name="Root" Background="{TemplateBinding Background}" BorderBrush="#ABCBE7F8" BorderThickness="1" CornerRadius="11"><Grid><ContentPresenter Margin="13,0,38,0" VerticalAlignment="Center" Content="{Binding SelectionBoxItem, RelativeSource={RelativeSource AncestorType=ComboBox}}" /><TextBlock HorizontalAlignment="Right" Margin="0,0,13,0" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#6082A7" Text="&#xE70D;" /></Grid></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Background" Value="#EAF3FF" /></Trigger><Trigger Property="IsChecked" Value="True"><Setter TargetName="Root" Property="Background" Value="#DCEBFF" /></Trigger></ControlTemplate.Triggers></ControlTemplate></ToggleButton.Template></ToggleButton><Popup x:Name="PART_Popup" AllowsTransparency="True" Focusable="False" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" PopupAnimation="Fade"><Border Width="{Binding ActualWidth, ElementName=ToggleButton}" Margin="0,5,0,0" Padding="5" Background="#F4FBFFFF" BorderBrush="#B5D1E9FA" BorderThickness="1" CornerRadius="11"><Border.Effect><DropShadowEffect BlurRadius="14" ShadowDepth="3" Direction="270" Opacity="0.16" Color="#456886" /></Border.Effect><ScrollViewer MaxHeight="190" CanContentScroll="True"><ScrollViewer.Resources><Style TargetType="ScrollBar" BasedOn="{StaticResource QrGlassScrollBar}" /></ScrollViewer.Resources><StackPanel IsItemsHost="True" /></ScrollViewer></Border></Popup></Grid></ControlTemplate></Setter.Value></Setter>
         </Style>
         <Style x:Key="ConverterSliderStyle" TargetType="Slider">
             <Setter Property="Height" Value="44" />
@@ -60,7 +61,9 @@
             <Grid x:Name="GeneratePanel">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="18" /><ColumnDefinition Width="0.92*" /></Grid.ColumnDefinitions>
 
-                <StackPanel>
+                <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="0,0,4,0">
+                    <ScrollViewer.Resources><Style TargetType="ScrollBar" BasedOn="{StaticResource QrGlassScrollBar}" /></ScrollViewer.Resources>
+                    <StackPanel>
                     <Border Padding="16" Style="{StaticResource Card}">
                         <StackPanel>
                             <TextBlock FontSize="15" FontWeight="SemiBold" Text="内容类型" />
@@ -106,14 +109,14 @@
                                 </Grid>
                                 <!-- 邮件 -->
                                 <Grid x:Name="EmailFields" Visibility="Collapsed">
-                                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="90" /></Grid.RowDefinitions>
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                                     <StackPanel><TextBlock Style="{StaticResource FieldLabel}" Text="收件人" /><TextBox x:Name="EmailToInput" Style="{StaticResource Input}" Height="38" VerticalContentAlignment="Center" TextChanged="ContentInput_TextChanged" /></StackPanel>
                                     <StackPanel Grid.Row="2"><TextBlock Style="{StaticResource FieldLabel}" Text="主题" /><TextBox x:Name="EmailSubjectInput" Style="{StaticResource Input}" Height="38" VerticalContentAlignment="Center" TextChanged="ContentInput_TextChanged" /></StackPanel>
                                     <StackPanel Grid.Row="4"><TextBlock Style="{StaticResource FieldLabel}" Text="正文" /><TextBox x:Name="EmailBodyInput" Style="{StaticResource Input}" Height="90" AcceptsReturn="True" TextWrapping="Wrap" TextChanged="ContentInput_TextChanged" /></StackPanel>
                                 </Grid>
                                 <!-- 电话/短信 -->
                                 <Grid x:Name="SmsFields" Visibility="Collapsed">
-                                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="90" /></Grid.RowDefinitions>
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                                     <StackPanel><TextBlock Style="{StaticResource FieldLabel}" Text="电话号码" /><TextBox x:Name="SmsPhoneInput" Style="{StaticResource Input}" Height="38" VerticalContentAlignment="Center" TextChanged="ContentInput_TextChanged" /></StackPanel>
                                     <StackPanel Grid.Row="2"><TextBlock Style="{StaticResource FieldLabel}" Text="短信内容（可留空，仅拨打）" /><TextBox x:Name="SmsBodyInput" Style="{StaticResource Input}" Height="90" AcceptsReturn="True" TextWrapping="Wrap" TextChanged="ContentInput_TextChanged" /></StackPanel>
                                 </Grid>
@@ -154,7 +157,7 @@
                                 </StackPanel>
                             </Grid>
                             <Grid Margin="0,12,0,0">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="18" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                                 <StackPanel>
                                     <TextBlock Style="{StaticResource FieldLabel}" Text="前景色" />
                                     <StackPanel Orientation="Horizontal">
@@ -167,7 +170,7 @@
                                         <TextBox x:Name="ForegroundHexInput" Width="76" Height="34" Padding="8,0" VerticalContentAlignment="Center" Style="{StaticResource Input}" Text="#000000" LostFocus="ForegroundHexInput_LostFocus" ToolTip="HEX 颜色，如 #1F3864" />
                                     </StackPanel>
                                 </StackPanel>
-                                <StackPanel Grid.Column="2">
+                                <StackPanel Grid.Row="2">
                                     <TextBlock Style="{StaticResource FieldLabel}" Text="背景色" />
                                     <StackPanel Orientation="Horizontal">
                                         <Button Style="{StaticResource SwatchButton}" Tag="#FFFFFF" Background="White" Click="BackgroundSwatch_Click" ToolTip="白色" />
@@ -191,6 +194,7 @@
                         </StackPanel>
                     </Border>
                 </StackPanel>
+                </ScrollViewer>
 
                 <Border Grid.Column="2" Padding="18" Style="{StaticResource Card}">
                     <Grid>
@@ -229,6 +233,7 @@
                         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                         <TextBlock FontSize="15" FontWeight="SemiBold" Text="识别结果" />
                         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                            <ScrollViewer.Resources><Style TargetType="ScrollBar" BasedOn="{StaticResource QrGlassScrollBar}" /></ScrollViewer.Resources>
                             <ItemsControl x:Name="DecodeResultList">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
@@ -279,6 +284,7 @@
                         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                         <TextBlock FontSize="15" FontWeight="SemiBold" Text="历史记录（最多保留 500 条）" />
                         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                            <ScrollViewer.Resources><Style TargetType="ScrollBar" BasedOn="{StaticResource QrGlassScrollBar}" /></ScrollViewer.Resources>
                             <ItemsControl x:Name="HistoryList">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
