@@ -14,7 +14,7 @@
 
 > 本文档以当前代码为准。旧名称“截影 / JieYing”只可能残留在部分内部命名和本机配置目录中，不再代表当前产品定位。
 
-> **当前工作区状态（2026-08-05）**：文件工作台的 Windows Search、完整扫描、重复文件与勾选式永久删除仍处于未提交待确认状态；相关 `FileWorkbench` 文件、`ScreenshotApp.csproj` 和新增搜索/重复文件服务必须继续保留。开发者工具扫描、诊断、受控环境配置、Temurin/uv/Volta 托管、MySQL/Docker 托管、托管日志弹框、快捷键移入设置页以及转换器二维码生成与识别均已创建中文本地提交，最新功能提交为 `aa50fd3`，此前为 `4135b2f` 与 `27764a6`。`ScreenshotApp\App.xaml.cs`、`Translation\TranslationEngineProvider.cs`、`VoiceInput\VoiceInputService.cs` 是已有的其他改动，下一轮不得顺带暂存、覆盖或提交。`ClipboardDiagnostics/` 仍是禁止修改、删除或提交的本地临时目录；`ScreenshotApp/VoiceInput/Runtime/` 的 GPU 试验材料已经用户确认删除，不再存在。
+> **当前工作区状态（2026-08-06）**：文件工作台的 Windows Search、完整扫描、重复文件与勾选式永久删除仍处于未提交待确认状态；相关 `FileWorkbench` 文件、`ScreenshotApp.csproj` 和新增搜索/重复文件服务必须继续保留。开发者工具扫描、诊断、受控环境配置、Temurin/uv/Volta 托管、MySQL/Docker 托管、托管日志弹框、快捷键移入设置页、转换器二维码生成与识别、磁盘用量历史以及协作中心（局域网配对/剪贴板桥/文件传输一期）均已创建中文本地提交，最新功能提交为 `3f1e2ab`。`ScreenshotApp\App.xaml.cs`、`Translation\TranslationEngineProvider.cs`、`VoiceInput\VoiceInputService.cs` 是已有的其他改动，下一轮不得顺带暂存、覆盖或提交。`ClipboardDiagnostics/` 仍是禁止修改、删除或提交的本地临时目录；`ScreenshotApp/VoiceInput/Runtime/` 的 GPU 试验材料已经用户确认删除，不再存在。另需说明：`System.Data.OleDb` 包引用随体积优化提交 `5fe6188` 一并进入历史，该行本属文件工作台任务，重写历史风险较大故未回退，请知悉。
 
 ## 一、必须遵守的开发约定
 
@@ -77,7 +77,8 @@ git log -5 --oneline
 6. 资源管理
 7. 系统工具
 8. 开发者工具
-9. 设置
+9. 协作中心
+10. 设置
 
 剪贴板不再是一级侧栏项，而是屏幕工作台的组成部分；首页与屏幕工作台均可进入剪贴板。快捷键不再是一级导航项，改为设置页中的可点击条目，点击后弹出毛玻璃快捷键设置窗口（`ShortcutSettingsWindow`）。
 
@@ -160,6 +161,17 @@ git log -5 --oneline
 - Docker 托管分两种模式：“Docker Desktop 安装器”从官方 `appcast.xml` 读取最新版本，下载后做 Authenticode 数字签名校验并启动安装向导；它是系统级安装，需要管理员权限与 WSL2，X-Tool 不静默安装、不写入托管清单，已安装时只读展示本机版本。docker CLI 静态包从官方目录取最新稳定版，解压到 `%LocalAppData%\X-Tool\Dev\Docker` 并写清单，仅提供 CLI（无守护进程），容器引擎仍需 Docker Desktop 或远程 `DOCKER_HOST`。
 - 环境诊断新增 MySQL 规则（`MYSQL_HOME` 与当前 `mysql.exe` 一致性、mysql/mysqld 是否同安装、EOL 警告）与 Docker 规则（守护进程可用性、Desktop 已安装但 PATH 缺失、WSL2 状态）；扫描版本解析兼容 MySQL 5.x 的 `Distrib 5.7.19` 与 8.x/9.x 的 `Ver 8.4.6` 格式，以及 Docker 的 `Docker version` 格式。
 - 托管安装“查看日志”打开毛玻璃日志弹框（`ManagedLogWindow`），按成功/警告/错误级别展示最近 2000 条记录，支持刷新、复制、打开日志文件与日志目录。
+
+### 协作中心（一期已实现，原生手机 App 为独立阶段）
+
+- 一级导航新增“协作中心”，页面为 `ScreenshotApp\Collaboration\CollaborationView.xaml(.cs)`，服务为 `CollaborationService.cs`，手机端网页为内嵌资源 `CollaborationPage.html`。
+- 电脑端以普通权限 `TcpListener` 自建极简 HTTP 服务（默认端口 18120，无 URL ACL 需求，零新依赖），同一局域网（同一 WiFi 或电脑热点）下手机可访问。
+- 配对：服务启动生成 6 位 PIN 与配对地址，页面用 ZXing 生成二维码；手机扫码进入 `/pair?pin=xxx` 校验后获得 24 小时会话令牌，后续 API 均需令牌。
+- 剪贴板桥：电脑外部复制（文本/图片）经现有捕获链路转发到服务（`PushClipboardText`/`PushClipboardImage`），手机网页每 3 秒轮询拉取并展示（文本可复制、图片可长按保存）；手机页面“发送到电脑”经 JSON/PNG 推送，由电脑写入系统剪贴板并记入剪贴板历史。页面提供“电脑→手机同步”玻璃开关；手机网页受浏览器限制无法后台监听剪贴板，读取手机剪贴板在支持 `navigator.clipboard` 的浏览器可用，否则降级为长按粘贴。
+- 文件传输：手机网页 `PUT` 上传到 `%LocalAppData%\X-Tool\Transfer\Incoming`；电脑端“发送文件到手机…”复制到 `Outgoing` 目录，手机页面列出发送目录并下载；同名自动避让。
+- 防火墙：服务运行中可点击“放行防火墙…”按需 UAC 添加 `netsh advfirewall` 入站规则；不放行时手机无法连接但服务仍可本机自测。
+- 已知边界：`System.Text.Json` 默认把非 ASCII 字符转义为 `\uXXXX`（手机 JS 正常解码）；图片以 PNG base64 传输；网页端不支持后台自动读取手机剪贴板；原生 Android App（无障碍服务 + 前台服务实现后台剪贴板同步）与 iOS 能力边界分析已完成，作为独立阶段待开发。
+- 当前验证：冒烟端到端 7 项全通过（配对页面令牌注入、状态、剪贴板拉取、手机推送、文件上传、列表、下载）；Release 构建 0 警告 0 错误。
 
 ### 网络工作台（第三阶段已完成）
 
@@ -429,6 +441,7 @@ git log -5 --oneline
 | Windows 后缀关联图标缓存 | `ScreenshotApp\FileWorkbench\FileTypeIconProvider.cs` |
 | 普通搜索与重复文件永久删除 | `ScreenshotApp\FileWorkbench\FileWorkbenchService.cs`、`FileWorkbenchView.xaml(.cs)` |
 | 开发环境扫描、工具链列表、托管安装与环境诊断 | `ScreenshotApp\DeveloperTools\DeveloperToolsView.xaml(.cs)`、`DeveloperEnvironmentScanner.cs`、`DeveloperEnvironmentModels.cs`、`SafeDeveloperCommandRunner.cs`、`ManagedToolchainModels.cs`、`ManagedToolchainService.cs` |
+| 协作中心（配对、剪贴板桥、文件传输） | `ScreenshotApp\Collaboration\CollaborationView.xaml(.cs)`、`CollaborationService.cs`、`CollaborationPage.html` |
 | 系统工具（设备信息、折叠 PnP 驱动清单、存储容量概览、环境变量、系统诊断） | `ScreenshotApp\SystemTools\SystemToolsView.xaml(.cs)`、`SystemToolsService.cs`、`SystemDiagnosticService.cs`、`SystemDiagnosticModels.cs`、`SystemDiagnosticRules.cs`、`SystemProgramIdentityResolver.cs` |
 | 网络工作台主页面 | `ScreenshotApp\NetworkWorkbench\NetworkWorkbenchView.xaml(.cs)` |
 | 网络状态与方案服务 | `ScreenshotApp\NetworkWorkbench\NetworkWorkbenchService.cs` |
@@ -452,9 +465,11 @@ git log -5 --oneline
 10. **重复文件与删除回归**：使用包含同名不同内容、不同名相同内容、大文件、硬链接、被占用文件和无权限文件的目录验证重复分组、取消与失败提示；验证普通搜索选择“删除文件”后才显示玻璃复选框，勾选可跨分页、筛选和排序保留并实时同步右侧预览，未勾选时删除按钮不可用，确认后永久删除且不进入回收站；重复文件页必须每组至少保留一个文件，红色按钮永久删除明确勾选的副本且不会进入回收站，需重点验证强确认、部分失败反馈和删除后列表刷新。
 11. **开发环境中心回归**：在未安装工具、同一工具多个版本、PATH 含中文/空格/重复/失效目录、WindowsApps Python 别名、项目虚拟环境、版本管理器入口、版本命令超时和普通权限目录不可读场景验证扫描、取消、证据与失败隔离；分别验证系统/用户 PATH 的确认、UAC 取消、去重、失败回滚、写入后自动重扫及界面不冻结。Temurin 托管安装还需人工验证大文件下载进度、取消清理、错误哈希拒绝、`java -version` 验证、清单损坏保护，以及被 PATH/JAVA_HOME/运行进程引用时拒绝卸载；uv Python 需验证本机无 uv 时的降级提示、3.10–3.14 目录、安装取消/回滚、与外部 uv 安装隔离、`python --version` 验证和 uv 安全卸载；Volta Node.js 需验证无 Volta 降级、WinGet/UAC 取消、安装后重检、受支持版本生命周期筛选、`volta fetch` 不改变默认版本、下载取消和缓存版本只读显示。不得擅自加入静默安装、外部安装目录删除、Volta 缓存目录删除、全局版本切换或 Shim。
 12. **二维码人工回归**：分别验证自由文本/网址、WiFi、vCard、邮件、电话/短信与批量生成的预览、保存、复制与中文内容扫码；验证参数变化（纠错、尺寸、留白、前景/背景色）实时刷新且不卡界面；用多二维码图片、旋转图片、含中文的二维码、损坏图片和无二维码图片验证识别、取消、失败隔离与分类徽章；验证网址打开的确认拦截、历史保存开关、搜索筛选、单条删除与清空；确认“保存历史”关闭后生成/识别不落库。
+13. **协作中心人工回归**：同一 WiFi 与热点两种网络下验证扫码配对、PIN 失效更换、24 小时会话、电脑→手机文本/图片同步、手机→电脑文本推送并写入系统剪贴板、双向文件传输与同名避让、停止服务后手机断连、防火墙未放行时的提示，以及“电脑→手机同步”开关关闭后仅手机→电脑可用；网页端需覆盖不支持 `navigator.clipboard` 的浏览器的降级路径。
 
 ## 九、最近关键提交
 
+- `3f1e2ab` 新增协作中心局域网配对剪贴板桥与文件传输
 - `aa50fd3` 新增转换器二维码生成与识别工具
 - `4135b2f` 开发者工具新增托管日志弹框与MySQL、Docker托管支持
 - `27764a6` 快捷键设置移入设置页并改为弹窗
