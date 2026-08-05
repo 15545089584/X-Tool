@@ -6,6 +6,9 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- 仅面向 Windows x64：避免 onnxruntime/OpenCvSharp 等包复制全部平台原生库，输出体积可缩减约 400 MB。 -->
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
     <AssemblyName>XTool</AssemblyName>
     <RootNamespace>ScreenshotApp</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
@@ -44,6 +47,8 @@
     <PackageReference Include="System.Management" Version="6.0.0" />
     <!-- 系统诊断按需读取 Windows System/Application 事件日志，不订阅实时事件。 -->
     <PackageReference Include="System.Diagnostics.EventLog" Version="6.0.0" />
+    <!-- Windows Search 的只读 OLE DB 查询接口；索引不可用时文件工作台会自动回退到本地扫描。 -->
+    <PackageReference Include="System.Data.OleDb" Version="6.0.1" />
   </ItemGroup>
 
   <ItemGroup>

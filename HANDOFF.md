@@ -33,10 +33,11 @@
 Set-Location 'D:\Claude Code\X-Tool'
 Get-Process XTool,JieYing -ErrorAction SilentlyContinue | Stop-Process -Force
 dotnet build .\ScreenshotApp\ScreenshotApp.csproj -c Release
-Start-Process '.\ScreenshotApp\bin\Release\net6.0-windows\XTool.exe'
+Start-Process '.\ScreenshotApp\bin\Release\net6.0-windows\win-x64\XTool.exe'
 ```
 
 - 当前程序集名与正式可执行文件均为 `XTool` / `XTool.exe`。
+- 项目已固定 `RuntimeIdentifier=win-x64`（非自包含），Release 输出位于 `bin\Release\net6.0-windows\win-x64\`，原生库直接复制到该目录根；onnxruntime/OpenCvSharp 等 NuGet 包不再复制 win-x86、macOS、Linux、iOS、Android 等平台原生库，输出体积由约 1.50 GB 降至约 1.08 GB（减少约 420 MB）。启动与回归路径均以 `win-x64` 子目录为准。
 - 构建前必须关闭正在运行的新版或旧版进程，否则 Release 文件可能被锁定。
 - 完成功能后应关闭旧进程、Release 构建并启动新版；除非用户明确要求代理测试，实际 UI/功能验证由用户完成。较大且已验证的改动创建中文本地 Git 提交。
 - 未经用户明确要求，不得推送 GitHub。
@@ -582,7 +583,7 @@ dotnet build .\ScreenshotApp\ScreenshotApp.csproj -c Release
 
 Release 构建通过后启动：
 
-.\ScreenshotApp\bin\Release\net6.0-windows\XTool.exe
+.\ScreenshotApp\bin\Release\net6.0-windows\win-x64\XTool.exe
 
 实际 UI 测试默认由我完成。修改完成后只暂存本次任务相关文件，使用恰当的中文名称创建本地 Git 提交。不要提交现有文件工作台改动、`ClipboardDiagnostics/` 或其他无关文件，不要推送远端。
 ```
