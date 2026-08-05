@@ -564,7 +564,8 @@ public partial class QrCodeConverterView : UserControl
         {
             DecodeResultList.Items.Add(row);
         }
-        RefreshDecodeRows();
+        // 容器延迟生成，等模板应用完成后再填充行内元素。
+        Dispatcher.BeginInvoke(new Action(RefreshDecodeRows), System.Windows.Threading.DispatcherPriority.Loaded);
         if (rows.Count == 0)
         {
             DecodeEmptyText.Visibility = Visibility.Visible;
@@ -591,21 +592,28 @@ public partial class QrCodeConverterView : UserControl
             var contentText = presenter.ContentTemplate.FindName("ContentText", presenter) as TextBlock;
             var openButton = presenter.ContentTemplate.FindName("OpenResultButton", presenter) as Button;
             var category = row.Content == null ? QrContentCategory.PlainText : QrCodeService.Classify(row.Content);
-            if (badgeHost != null && badgeText != null)
+            try
             {
-                SetBadge(badgeHost, badgeText, QrCodeService.CategoryText(category));
+                if (badgeHost != null && badgeText != null)
+                {
+                    SetBadge(badgeHost, badgeText, QrCodeService.CategoryText(category));
+                }
+                if (contentText != null)
+                {
+                    contentText.Text = row.Content != null
+                        ? (row.FileName == "剪贴板图片" ? row.Content : $"[{row.FileName}] {row.Content}")
+                        : (row.Error ?? string.Empty);
+                }
+                if (openButton != null)
+                {
+                    openButton.Visibility = row.Content != null && category == QrContentCategory.Url
+                        ? Visibility.Visible
+                        : Visibility.Collapsed;
+                }
             }
-            if (contentText != null)
+            catch (InvalidOperationException)
             {
-                contentText.Text = row.Content != null
-                    ? (row.FileName == "剪贴板图片" ? row.Content : $"[{row.FileName}] {row.Content}")
-                    : (row.Error ?? string.Empty);
-            }
-            if (openButton != null)
-            {
-                openButton.Visibility = row.Content != null && category == QrContentCategory.Url
-                    ? Visibility.Visible
-                    : Visibility.Collapsed;
+                // 容器模板尚未应用时跳过，下一轮刷新会补齐。
             }
         }
     }
@@ -705,7 +713,8 @@ public partial class QrCodeConverterView : UserControl
             HistoryList.Items.Add(entry);
         }
         HistoryEmptyText.Visibility = entries.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        RefreshHistoryRows();
+        // 容器延迟生成，等模板应用完成后再填充行内元素。
+        Dispatcher.BeginInvoke(new Action(RefreshHistoryRows), System.Windows.Threading.DispatcherPriority.Loaded);
     }
 
     private void RefreshHistoryRows()
@@ -722,26 +731,33 @@ public partial class QrCodeConverterView : UserControl
             var timeText = presenter.ContentTemplate.FindName("HistoryTimeText", presenter) as TextBlock;
             var kindText = presenter.ContentTemplate.FindName("HistoryKindText", presenter) as TextBlock;
             var contentText = presenter.ContentTemplate.FindName("HistoryContentText", presenter) as TextBlock;
-            if (badgeHost != null && badgeText != null)
+            try
             {
-                SetBadge(badgeHost, badgeText, entry.Category);
-            }
-            if (timeText != null)
-            {
-                timeText.Text = entry.CreatedAt.ToString("yyyy-MM-dd HH:mm");
-            }
-            if (kindText != null)
-            {
-                kindText.Text = entry.Kind == "Generated" ? "生成" : "识别";
-            }
-            if (contentText != null)
-            {
-                var content = entry.Content;
-                if (content.Length > 200)
+                if (badgeHost != null && badgeText != null)
                 {
-                    content = content.Substring(0, 200) + "…";
+                    SetBadge(badgeHost, badgeText, entry.Category);
                 }
-                contentText.Text = content;
+                if (timeText != null)
+                {
+                    timeText.Text = entry.CreatedAt.ToString("yyyy-MM-dd HH:mm");
+                }
+                if (kindText != null)
+                {
+                    kindText.Text = entry.Kind == "Generated" ? "生成" : "识别";
+                }
+                if (contentText != null)
+                {
+                    var content = entry.Content;
+                    if (content.Length > 200)
+                    {
+                        content = content.Substring(0, 200) + "…";
+                    }
+                    contentText.Text = content;
+                }
+            }
+            catch (InvalidOperationException)
+            {
+                // 容器模板尚未应用时跳过，下一轮刷新会补齐。
             }
         }
     }

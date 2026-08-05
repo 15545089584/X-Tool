@@ -258,8 +258,8 @@
                                                 </Border>
                                                 <TextBlock x:Name="ContentText" Grid.Column="1" VerticalAlignment="Center" FontSize="13" Foreground="#405F7C" TextWrapping="Wrap" />
                                                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <Button x:Name="CopyResultButton" Margin="8,0,0,0" Style="{StaticResource SmallButton}" Tag="{Binding}" Click="CopyDecoded_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="复制" /></Button>
-                                                    <Button x:Name="OpenResultButton" Margin="8,0,0,0" Style="{StaticResource SmallActionButton}" Tag="{Binding}" Click="OpenDecoded_Click"><TextBlock Foreground="White" Text="打开链接" /></Button>
+                                                    <Button x:Name="CopyResultButton" Margin="8,0,0,0" Height="38" MinWidth="88" Padding="18,0" Style="{StaticResource SmallButton}" Tag="{Binding}" Click="CopyDecoded_Click"><TextBlock Margin="2,0" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="复制" /></Button>
+                                                    <Button x:Name="OpenResultButton" Margin="8,0,0,0" Height="38" MinWidth="88" Padding="18,0" Style="{StaticResource SmallActionButton}" Tag="{Binding}" Click="OpenDecoded_Click"><TextBlock Margin="2,0" Foreground="White" Text="打开链接" /></Button>
                                                 </StackPanel>
                                             </Grid>
                                         </Border>
@@ -288,7 +288,7 @@
                         </Border>
                         <StackPanel Grid.Column="3" Margin="14,0,0,0" Orientation="Horizontal" VerticalAlignment="Center">
                             <CheckBox x:Name="SaveHistoryCheckBox" VerticalAlignment="Center" FontSize="12" Foreground="#526F8B" Content="保存历史" IsChecked="True" />
-                            <Button Margin="14,0,0,0" Style="{StaticResource SmallButton}" Click="ClearHistory_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="清空历史" /></Button>
+                            <Button Margin="14,0,0,0" MinWidth="104" Padding="20,0" Style="{StaticResource Button}" Click="ClearHistory_Click"><TextBlock Margin="2,0" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="清空历史" /></Button>
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -311,10 +311,10 @@
                                                     <TextBlock x:Name="HistoryTimeText" FontSize="11" Foreground="#7A93AC" />
                                                     <TextBlock x:Name="HistoryKindText" Margin="0,3,0,0" FontSize="11" Foreground="#8A9AAC" />
                                                 </StackPanel>
-                                                <TextBlock x:Name="HistoryContentText" Grid.Column="2" VerticalAlignment="Center" FontSize="12" Foreground="#405F7C" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="64" />
+                                                <TextBlock x:Name="HistoryContentText" Grid.Column="2" VerticalAlignment="Center" FontSize="12" Foreground="#405F7C" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="64" ToolTip="{Binding Content}" />
                                                 <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <Button x:Name="CopyHistoryButton" Margin="8,0,0,0" Style="{StaticResource SmallButton}" Tag="{Binding}" Click="CopyHistory_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="复制" /></Button>
-                                                    <Button x:Name="DeleteHistoryButton" Margin="8,0,0,0" Style="{StaticResource SmallButton}" Tag="{Binding}" Click="DeleteHistory_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="删除" /></Button>
+                                                    <Button x:Name="CopyHistoryButton" Margin="8,0,0,0" Height="38" MinWidth="88" Padding="18,0" Style="{StaticResource SmallButton}" Tag="{Binding}" Click="CopyHistory_Click"><TextBlock Margin="2,0" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="复制" /></Button>
+                                                    <Button x:Name="DeleteHistoryButton" Margin="8,0,0,0" Height="38" MinWidth="88" Padding="18,0" Style="{StaticResource SmallButton}" Tag="{Binding}" Click="DeleteHistory_Click"><TextBlock Margin="2,0" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="删除" /></Button>
                                                 </StackPanel>
                                             </Grid>
                                         </Border>

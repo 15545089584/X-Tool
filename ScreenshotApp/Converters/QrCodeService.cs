@@ -340,6 +340,8 @@ public static class QrHistoryStore
 
     private static readonly string HistoryFile = Path.Combine(RootDirectory, "history.json");
     private static readonly object Gate = new();
+    private static List<QrHistoryEntry>? _cache;
+    private static DateTime _cacheFileTime = DateTime.MinValue;
 
     public static IReadOnlyList<QrHistoryEntry> Load()
     {
@@ -349,11 +351,19 @@ public static class QrHistoryStore
             {
                 if (!File.Exists(HistoryFile))
                 {
+                    _cache = null;
                     return Array.Empty<QrHistoryEntry>();
+                }
+                var fileTime = File.GetLastWriteTimeUtc(HistoryFile);
+                if (_cache != null && _cacheFileTime == fileTime)
+                {
+                    return _cache;
                 }
                 var json = File.ReadAllText(HistoryFile, Encoding.UTF8);
                 var entries = JsonSerializer.Deserialize<List<QrHistoryEntry>>(json);
-                return entries ?? new List<QrHistoryEntry>();
+                _cache = entries ?? new List<QrHistoryEntry>();
+                _cacheFileTime = fileTime;
+                return _cache;
             }
             catch
             {
@@ -377,6 +387,7 @@ public static class QrHistoryStore
                     entries.RemoveRange(MaxEntries, entries.Count - MaxEntries);
                 }
                 WriteUnsafe(entries);
+                _cache = null;
             }
             catch
             {
@@ -400,6 +411,7 @@ public static class QrHistoryStore
                 if (removed > 0)
                 {
                     WriteUnsafe(entries);
+                    _cache = null;
                 }
             }
             catch
@@ -419,6 +431,7 @@ public static class QrHistoryStore
                 {
                     File.Delete(HistoryFile);
                 }
+                _cache = null;
             }
             catch
             {
