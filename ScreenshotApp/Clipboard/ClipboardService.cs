@@ -10,16 +10,25 @@ internal static class ClipboardService
 {
     internal const string InternalFormat = "X-Tool.InternalClipboard";
 
-    internal static void SetText(string content)
+    /// <summary>用户主动“复制内容”时触发，由主窗口写入剪贴板历史，浮窗立即可见。</summary>
+    internal static event Action<string>? TextRecordRequested;
+
+    internal static event Action<BitmapSource>? ImageRecordRequested;
+
+    internal static void SetText(string content, bool recordToHistory = false)
     {
         var data = new Forms.DataObject();
         data.SetText(content, Forms.TextDataFormat.UnicodeText);
         data.SetData(Forms.DataFormats.Text, true, content);
         data.SetData(InternalFormat, true);
         SetDataObjectWithShortRetry(data);
+        if (recordToHistory)
+        {
+            TextRecordRequested?.Invoke(content);
+        }
     }
 
-    internal static void SetImage(BitmapSource image)
+    internal static void SetImage(BitmapSource image, bool recordToHistory = false)
     {
         using var pngStream = new MemoryStream();
         var encoder = new PngBitmapEncoder();
@@ -32,6 +41,10 @@ internal static class ClipboardService
         data.SetImage(new System.Drawing.Bitmap(bitmap));
         data.SetData(InternalFormat, true);
         SetDataObjectWithShortRetry(data);
+        if (recordToHistory)
+        {
+            ImageRecordRequested?.Invoke(image);
+        }
     }
 
     private static void SetDataObjectWithShortRetry(Forms.DataObject data)

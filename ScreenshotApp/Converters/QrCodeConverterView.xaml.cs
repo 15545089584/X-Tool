@@ -380,7 +380,7 @@ public partial class QrCodeConverterView : UserControl
 
         try
         {
-            ClipboardService.SetImage(_currentBitmap);
+            ClipboardService.SetImage(_currentBitmap, recordToHistory: true);
             StatusText.Text = "二维码图片已复制到剪贴板";
             AddHistory("Generated", BuildContent(), null, null);
         }
@@ -711,7 +711,7 @@ public partial class QrCodeConverterView : UserControl
     {
         try
         {
-            ClipboardService.SetText(content);
+            ClipboardService.SetText(content, recordToHistory: true);
             StatusText.Text = "内容已复制到剪贴板";
         }
         catch (Exception ex)

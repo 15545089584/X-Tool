@@ -85,7 +85,7 @@ public partial class QrHistoryPreviewWindow : Window
     {
         try
         {
-            ClipboardService.SetText(_entry.Content);
+            ClipboardService.SetText(_entry.Content, recordToHistory: true);
             CopyContentButton_Status();
         }
         catch
@@ -107,7 +107,7 @@ public partial class QrHistoryPreviewWindow : Window
         }
         try
         {
-            ClipboardService.SetImage(_qrSource);
+            ClipboardService.SetImage(_qrSource, recordToHistory: true);
             InfoText.Text = $"{_pixelWidth} × {_pixelHeight} 像素 · 二维码图片已复制";
         }
         catch

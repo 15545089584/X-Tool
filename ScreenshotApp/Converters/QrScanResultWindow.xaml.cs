@@ -41,7 +41,7 @@ public partial class QrScanResultWindow : Window
         {
             try
             {
-                ClipboardService.SetText(item.Content);
+                ClipboardService.SetText(item.Content, recordToHistory: true);
                 SummaryText.Text = "内容已复制到剪贴板";
                 ExitCaptureRequested = true;
                 Close();

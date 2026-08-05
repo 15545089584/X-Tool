@@ -72,6 +72,32 @@ public partial class MainWindow : Window
         InitializeComponent();
         _historyStore = new ScreenshotHistoryStore(_preferences);
         QrCodeConverterViewHost.HistoryStore = _historyStore;
+        ClipboardService.TextRecordRequested += async content =>
+        {
+            try
+            {
+                var path = await _historyStore.SaveClipboardTextAsync(content);
+                InsertClipboardItem(path, isText: true);
+                LogClipboardCapture("主动复制文本已写入历史");
+            }
+            catch (Exception exception)
+            {
+                LogClipboardCapture($"主动复制文本入史失败：{exception.GetBaseException().Message}");
+            }
+        };
+        ClipboardService.ImageRecordRequested += async image =>
+        {
+            try
+            {
+                var path = await _historyStore.SaveClipboardImageAsync(image);
+                InsertClipboardItem(path, isText: false);
+                LogClipboardCapture("主动复制图片已写入历史");
+            }
+            catch (Exception exception)
+            {
+                LogClipboardCapture($"主动复制图片入史失败：{exception.GetBaseException().Message}");
+            }
+        };
         _ = GlobalShortcut.TryParse(_preferences.ScreenshotShortcut, GlobalShortcut.ScreenshotDefault, out _screenshotShortcut);
         _ = GlobalShortcut.TryParse(_preferences.ClipboardShortcut, GlobalShortcut.ClipboardDefault, out _clipboardShortcut);
         _ = GlobalShortcut.TryParse(_preferences.VoiceInputShortcut, GlobalShortcut.VoiceDefault, out _voiceInputShortcut);
