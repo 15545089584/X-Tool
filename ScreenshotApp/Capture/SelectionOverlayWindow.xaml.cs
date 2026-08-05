@@ -6,6 +6,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using ScreenshotApp.Converters;
 using ScreenshotApp.Ocr;
 using ScreenshotApp.Translation;
 using ScreenshotApp.History;
@@ -35,6 +36,7 @@ public partial class SelectionOverlayWindow : Window
     private AnnotationShape _selectedShape = AnnotationShape.Rectangle;
     private List<Point>? _workingPoints;
     private bool _ocrInProgress;
+    private bool _qrScanInProgress;
     private bool _translationInProgress;
     private ResizeHandle? _activeResizeHandle;
     private Rect _resizeStartSelection;
@@ -403,6 +405,45 @@ public partial class SelectionOverlayWindow : Window
             OcrToolButtonText.Text = "提取文字";
             OcrToolButton.IsEnabled = true;
             _ocrInProgress = false;
+        }
+    }
+
+    private async void QrToolButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_qrScanInProgress || _selection.IsEmpty)
+        {
+            return;
+        }
+
+        _qrScanInProgress = true;
+        QrToolButton.IsEnabled = false;
+        QrToolButtonText.Text = "识别中…";
+        var previousHint = HintText.Text;
+        HintText.Text = "正在识别框选区域内的二维码…";
+        SetActiveAnnotationTool(ScreenshotAnnotationTool.None);
+        try
+        {
+            var bitmap = CreateSelectionBitmap(includeAnnotations: false);
+            var frozen = QrCodeService.FreezeForCrossThread(bitmap);
+            var results = await Task.Run(() => QrCodeService.Decode(frozen));
+            var selectionScreenBounds = new Rect(
+                Left + _selection.Left,
+                Top + _selection.Top,
+                _selection.Width,
+                _selection.Height);
+            var resultWindow = new QrScanResultWindow(results, selectionScreenBounds) { Owner = this };
+            resultWindow.ShowDialog();
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(this, $"二维码识别失败：{exception.Message}", "二维码识别", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        finally
+        {
+            HintText.Text = previousHint;
+            QrToolButtonText.Text = "二维码";
+            QrToolButton.IsEnabled = true;
+            _qrScanInProgress = false;
         }
     }
 
