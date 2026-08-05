@@ -5,7 +5,6 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Win32;
-using ScreenshotApp.Capture;
 using ScreenshotApp.ClipboardUi;
 using ScreenshotApp.History;
 using ScreenshotApp.NetworkWorkbench;
@@ -23,6 +22,9 @@ public partial class QrCodeConverterView : UserControl
     private BitmapSource? _currentBitmap;
     private CancellationTokenSource? _previewCts;
     private CancellationTokenSource? _decodeCts;
+    private static IReadOnlyList<ScreenshotHistoryItem>? _cachedPickerImages;
+    private static DateTime _pickerImagesCacheTime = DateTime.MinValue;
+    private const int PickerImagesCacheSeconds = 300;
 
     /// <summary>由主窗口注入的剪贴板历史存储，用于“从剪贴板识别”的图片选择。</summary>
     public ScreenshotHistoryStore? HistoryStore { get; set; }
@@ -515,23 +517,27 @@ public partial class QrCodeConverterView : UserControl
         }
     }
 
-    /// <summary>弹出仅含图片的剪贴板历史小窗，选择后关闭并直接识别所选图片。</summary>
+    /// <summary>弹出独立的居中图片选择弹窗，选择后关闭并直接识别所选图片；历史数据缓存 5 分钟。</summary>
     private async Task ShowClipboardImagePickerAsync()
     {
         try
         {
-            // 先弹出浮窗显示“正在加载”，图片数据在后台线程准备，避免等待几秒才出现窗口。
-            var picker = new ClipboardPickerWindow("Image");
             var window = Window.GetWindow(this);
-            if (window != null && NativeMethods.GetCursorPos(out var cursor))
+            var picker = new QrImagePickerWindow { Owner = window };
+            var cacheFresh = _cachedPickerImages != null &&
+                DateTime.UtcNow - _pickerImagesCacheTime < TimeSpan.FromSeconds(PickerImagesCacheSeconds);
+            if (cacheFresh)
             {
-                var workArea = SystemParameters.WorkArea;
-                picker.Left = Math.Clamp(cursor.X - picker.Width / 2, workArea.Left + 8, workArea.Right - picker.Width - 8);
-                picker.Top = Math.Clamp(cursor.Y - 72, workArea.Top + 8, workArea.Bottom - picker.Height - 8);
+                picker.SetItems(_cachedPickerImages!);
             }
             picker.Show();
-            var items = await HistoryStore!.LoadAsync(120, imagesOnly: true);
-            picker.SetItems(items);
+            if (!cacheFresh)
+            {
+                var items = await HistoryStore!.LoadAsync(120, imagesOnly: true);
+                _cachedPickerImages = items;
+                _pickerImagesCacheTime = DateTime.UtcNow;
+                picker.SetItems(items);
+            }
             picker.ItemSelected += (_, item) =>
             {
                 picker.Close();

@@ -41,6 +41,7 @@ public partial class ClipboardPickerWindow : Window
     public ClipboardPickerWindow(string initialFilter = "All")
         : this(Array.Empty<ScreenshotHistoryItem>(), initialFilter)
     {
+        LoadingText.Visibility = Visibility.Visible;
     }
 
     public void SetItems(IEnumerable<ScreenshotHistoryItem> items)
