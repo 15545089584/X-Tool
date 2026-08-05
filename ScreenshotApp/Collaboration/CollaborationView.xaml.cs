@@ -6,6 +6,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Win32;
+using ScreenshotApp.ClipboardUi;
 using ScreenshotApp.Converters;
 using ZXing.QrCode.Internal;
 
@@ -62,8 +63,30 @@ public partial class CollaborationView : UserControl
         ClipboardStateText.Text = "已更换配对 PIN，旧 PIN 立即失效";
     }
 
+    private void CopyUrl_Click(object sender, RoutedEventArgs e)
+    {
+        var service = CollaborationService.Instance;
+        if (!service.IsRunning)
+        {
+            return;
+        }
+        try
+        {
+            ClipboardService.SetText($"http://{service.LocalIpAddress}:{service.Port}/pair?pin={service.Pin}");
+            ClipboardStateText.Text = "配对地址已复制到剪贴板";
+        }
+        catch
+        {
+            ClipboardStateText.Text = "复制失败，请重试";
+        }
+    }
+
     private void ClipboardBridge_Changed(object sender, RoutedEventArgs e)
     {
+        if (!IsLoaded)
+        {
+            return;
+        }
         CollaborationService.Instance.ClipboardBridgeEnabled = ClipboardBridgeCheckBox.IsChecked == true;
         RefreshStatus();
     }
@@ -166,29 +189,76 @@ public partial class CollaborationView : UserControl
         var service = CollaborationService.Instance;
         var running = service.IsRunning;
         ServiceStateText.Text = running ? "服务运行中" : "服务未启动";
-        ServiceStateText.Foreground = new SolidColorBrush(running ? Color.FromRgb(22, 185, 155) : Color.FromRgb(124, 138, 152));
+        ServiceStateText.Foreground = new SolidColorBrush(running ? Color.FromRgb(22, 185, 155) : Color.FromRgb(74, 107, 140));
+        StatusDot.Background = new SolidColorBrush(running ? Color.FromRgb(22, 185, 155) : Color.FromRgb(154, 169, 184));
         StartServiceButton.Visibility = running ? Visibility.Collapsed : Visibility.Visible;
         StopServiceButton.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
         RegeneratePinButton.IsEnabled = running;
         AllowFirewallButton.IsEnabled = running;
+        CopyUrlButton.IsEnabled = running;
         if (!running)
         {
             PinText.Text = "—";
             PairUrlText.Text = "启动后生成配对地址";
+            ManualUrlText.Text = "—";
             QrEmptyText.Visibility = Visibility.Visible;
             PairQrImage.Source = null;
-            SessionText.Text = string.Empty;
+            SessionText.Text = "等待配对";
+            SessionText.Foreground = new SolidColorBrush(Color.FromRgb(123, 147, 168));
+            ClipboardStateText.Text = "等待服务启动";
+            RecentSyncImage.Visibility = Visibility.Collapsed;
+            RecentSyncTimeText.Text = string.Empty;
             return;
         }
 
         PinText.Text = service.Pin;
         var pairUrl = $"http://{service.LocalIpAddress}:{service.Port}/pair?pin={service.Pin}";
-        PairUrlText.Text = $"手机访问：{pairUrl}";
-        SessionText.Text = service.SessionCount > 0 ? $"● 已有手机配对连接（{service.SessionCount}）" : string.Empty;
+        PairUrlText.Text = pairUrl.Replace("http://", string.Empty);
+        ManualUrlText.Text = pairUrl;
+        SessionText.Foreground = new SolidColorBrush(service.SessionCount > 0 ? Color.FromRgb(22, 185, 155) : Color.FromRgb(123, 147, 168));
+        SessionText.Text = service.SessionCount > 0 ? $"● {service.SessionCount} 台已连接" : "等待手机扫码";
         RefreshQrCode(pairUrl);
-        ClipboardStateText.Text = ClipboardBridgeCheckBox.IsChecked == true
-            ? $"桥接运行中 · 已同步 {service.ClipboardSeq} 条"
-            : "电脑→手机同步已关闭，手机→电脑仍可用";
+        UpdateRecentSync(service);
+    }
+
+    private void UpdateRecentSync(CollaborationService service)
+    {
+        var entry = service.LastClipboardEntry;
+        if (entry == null)
+        {
+            ClipboardStateText.Text = ClipboardBridgeCheckBox.IsChecked == true
+                ? $"桥接运行中 · 已同步 {service.ClipboardSeq} 条"
+                : "电脑→手机同步已关闭，手机→电脑仍可用";
+            RecentSyncImage.Visibility = Visibility.Collapsed;
+            RecentSyncTimeText.Text = string.Empty;
+            return;
+        }
+
+        RecentSyncTimeText.Text = $"第 {entry.Seq} 条 · {entry.CreatedAt:HH:mm:ss}";
+        if (entry.Kind == "image" && entry.ImagePngBase64.Length > 0)
+        {
+            try
+            {
+                using var stream = new MemoryStream(Convert.FromBase64String(entry.ImagePngBase64));
+                var image = new BitmapImage();
+                image.BeginInit();
+                image.CacheOption = BitmapCacheOption.OnLoad;
+                image.StreamSource = stream;
+                image.EndInit();
+                image.Freeze();
+                RecentSyncImage.Source = image;
+                RecentSyncImage.Visibility = Visibility.Visible;
+                ClipboardStateText.Text = "最近同步：图片";
+                return;
+            }
+            catch
+            {
+                // 图片解码失败时按文本方式处理。
+            }
+        }
+        RecentSyncImage.Visibility = Visibility.Collapsed;
+        var text = entry.Text;
+        ClipboardStateText.Text = text.Length > 120 ? text.Substring(0, 120) + "…" : text;
     }
 
     private void RefreshQrCode(string content)

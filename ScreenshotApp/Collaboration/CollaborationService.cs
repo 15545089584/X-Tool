@@ -54,6 +54,18 @@ public sealed class CollaborationService
         get { lock (_sync) { return _clipboardSeq; } }
     }
 
+    /// <summary>最近一条进入剪贴板桥的条目，用于页面展示同步内容。</summary>
+    public CollaborationClipboardEntry? LastClipboardEntry
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _clipboardHistory.LastOrDefault();
+            }
+        }
+    }
+
     public string IncomingDirectory => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "X-Tool",

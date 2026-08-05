@@ -3,96 +3,155 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <UserControl.Resources>
         <Style x:Key="Card" TargetType="Border"><Setter Property="Background" Value="#74FFFFFF" /><Setter Property="BorderBrush" Value="#A9D7EAF8" /><Setter Property="BorderThickness" Value="1" /><Setter Property="CornerRadius" Value="14" /><Setter Property="Effect"><Setter.Value><DropShadowEffect BlurRadius="15" ShadowDepth="3" Direction="270" Opacity="0.08" Color="#456581" /></Setter.Value></Setter></Style>
-        <Style x:Key="Button" TargetType="Button"><Setter Property="Height" Value="46" /><Setter Property="Padding" Value="24,0" /><Setter Property="MinWidth" Value="112" /><Setter Property="Background" Value="#A8FFFFFF" /><Setter Property="BorderBrush" Value="#9FD0E7F8" /><Setter Property="BorderThickness" Value="1" /><Setter Property="Foreground" Value="#42617D" /><Setter Property="FontWeight" Value="SemiBold" /><Setter Property="Cursor" Value="Hand" /><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="Root" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="13"><Border.Effect><DropShadowEffect BlurRadius="10" ShadowDepth="2" Direction="270" Opacity="0.08" Color="#4E7191" /></Border.Effect><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}" /></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Background" Value="#DCEBFAFF" /></Trigger><Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.78" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
+        <Style x:Key="Button" TargetType="Button"><Setter Property="Height" Value="46" /><Setter Property="Padding" Value="24,0" /><Setter Property="MinWidth" Value="116" /><Setter Property="Background" Value="#A8FFFFFF" /><Setter Property="BorderBrush" Value="#9FD0E7F8" /><Setter Property="BorderThickness" Value="1" /><Setter Property="Foreground" Value="#42617D" /><Setter Property="FontWeight" Value="SemiBold" /><Setter Property="Cursor" Value="Hand" /><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="Root" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="13"><Border.Effect><DropShadowEffect BlurRadius="10" ShadowDepth="2" Direction="270" Opacity="0.08" Color="#4E7191" /></Border.Effect><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}" /></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Background" Value="#DCEBFAFF" /></Trigger><Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.78" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
         <Style x:Key="ActionButton" TargetType="Button" BasedOn="{StaticResource Button}"><Setter Property="Background" Value="#4D7CFE" /><Setter Property="BorderBrush" Value="#8AAEFF" /><Setter Property="Foreground" Value="White" /></Style>
-        <Style x:Key="FieldLabel" TargetType="TextBlock"><Setter Property="FontSize" Value="12" /><Setter Property="FontWeight" Value="SemiBold" /><Setter Property="Foreground" Value="#526F8B" /><Setter Property="Margin" Value="0,0,0,5" /></Style>
-        <Style x:Key="ValueText" TargetType="TextBlock"><Setter Property="FontSize" Value="14" /><Setter Property="FontWeight" Value="SemiBold" /><Setter Property="Foreground" Value="#2E4B67" /><Setter Property="TextWrapping" Value="Wrap" /></Style>
+        <Style x:Key="CardTitle" TargetType="TextBlock"><Setter Property="FontSize" Value="15" /><Setter Property="FontWeight" Value="SemiBold" /><Setter Property="Foreground" Value="#2E4B67" /></Style>
+        <Style x:Key="FieldLabel" TargetType="TextBlock"><Setter Property="FontSize" Value="11" /><Setter Property="FontWeight" Value="SemiBold" /><Setter Property="Foreground" Value="#7B93A8" /><Setter Property="Margin" Value="0,0,0,4" /></Style>
         <Style x:Key="QrGlassCheckBox" TargetType="CheckBox"><Setter Property="Cursor" Value="Hand" /><Setter Property="VerticalContentAlignment" Value="Center" /><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="CheckBox"><StackPanel Orientation="Horizontal"><Border x:Name="Box" Width="20" Height="20" Background="#BFFFFFFF" BorderBrush="#9FC6D4E3" BorderThickness="1" CornerRadius="6"><Border.Effect><DropShadowEffect BlurRadius="6" ShadowDepth="1" Direction="270" Opacity="0.14" Color="#36506A" /></Border.Effect><Path x:Name="Check" Margin="3" Data="M1.5,4.5 L5,8 L11.5,1.5" Stroke="#FFFFFF" StrokeThickness="2.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Visibility="Collapsed" /></Border><ContentPresenter Margin="9,0,0,0" VerticalAlignment="Center" /></StackPanel><ControlTemplate.Triggers><Trigger Property="IsChecked" Value="True"><Setter TargetName="Box" Property="Background" Value="#4D7CFE" /><Setter TargetName="Box" Property="BorderBrush" Value="#7EA8F7" /><Setter TargetName="Check" Property="Visibility" Value="Visible" /></Trigger><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Box" Property="Opacity" Value="0.8" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
     </UserControl.Resources>
 
     <Grid>
-        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="14" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-        <StackPanel>
-            <TextBlock FontSize="30" FontWeight="SemiBold" Text="协作中心" />
-            <TextBlock Margin="0,9,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}" Text="同一局域网内与手机互传剪贴板与文件；配对过程与内容仅在本机局域网内处理" />
-        </StackPanel>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="16" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="16" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="14" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
 
-        <Grid Grid.Row="2">
-            <Grid.ColumnDefinitions><ColumnDefinition Width="1.05*" /><ColumnDefinition Width="18" /><ColumnDefinition Width="0.95*" /></Grid.ColumnDefinitions>
+        <!-- 标题行 -->
+        <Grid>
             <StackPanel>
-                <Border Padding="18" Style="{StaticResource Card}">
-                    <StackPanel>
-                    <Grid>
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                        <StackPanel>
-                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="连接与配对" />
-                            <TextBlock x:Name="ServiceStateText" Margin="0,8,0,0" Style="{StaticResource ValueText}" Text="服务未启动" />
-                            <TextBlock x:Name="PairUrlText" Margin="0,6,0,0" FontSize="12" Foreground="#63809C" TextWrapping="Wrap" Text="启动后生成配对地址" />
-                            <TextBlock Margin="0,12,0,0" Style="{StaticResource FieldLabel}" Text="配对 PIN" />
-                            <TextBlock x:Name="PinText" Style="{StaticResource ValueText}" FontSize="22" Text="—" />
-                            <TextBlock x:Name="SessionText" Margin="0,10,0,0" FontSize="12" Foreground="#16B99B" Text="" />
-                            <TextBlock Margin="0,10,0,0" FontSize="11" Foreground="#7B93A8" TextWrapping="Wrap" Text="手机扫描二维码即可配对；请勿在公共 Wi-Fi 下传输敏感内容。若防火墙未放行，手机可能无法连接，可点击“放行防火墙”按提示操作。" />
-                        </StackPanel>
-                        <StackPanel Grid.Column="1" VerticalAlignment="Top">
-                            <Border Width="196" Height="196" Background="White" BorderBrush="#D8E7F4" BorderThickness="1" CornerRadius="14">
-                                <Grid>
-                                    <Image x:Name="PairQrImage" MaxWidth="176" MaxHeight="176" Stretch="Uniform" RenderOptions.BitmapScalingMode="NearestNeighbor" />
-                                    <TextBlock x:Name="QrEmptyText" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="12" Foreground="#9AADBF" Text="启动后生成二维码" />
-                                </Grid>
-                            </Border>
-                        </StackPanel>
-                    </Grid>
-                    <Grid Margin="0,14,0,0">
-                        <StackPanel Orientation="Horizontal">
-                            <Button x:Name="StartServiceButton" Style="{StaticResource ActionButton}" Click="StartService_Click"><TextBlock Foreground="White" Text="启动服务" /></Button>
-                            <Button x:Name="StopServiceButton" Margin="10,0,0,0" Style="{StaticResource Button}" Visibility="Collapsed" Click="StopService_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="停止服务" /></Button>
-                            <Button x:Name="RegeneratePinButton" Margin="10,0,0,0" Style="{StaticResource Button}" Click="RegeneratePin_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="更换 PIN" /></Button>
-                        </StackPanel>
-                        <Button x:Name="AllowFirewallButton" Margin="10,0,0,0" HorizontalAlignment="Right" Style="{StaticResource Button}" Click="AllowFirewall_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="放行防火墙…" /></Button>
-                    </Grid>
-                    </StackPanel>
-                </Border>
-
-                <Border Margin="0,14,0,0" Padding="18" Style="{StaticResource Card}">
-                    <Grid>
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                        <StackPanel>
-                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="剪贴板桥" />
-                            <TextBlock Margin="0,8,0,0" FontSize="12" Foreground="#63809C" TextWrapping="Wrap" Text="电脑复制的内容自动同步到手机页面；手机页面发送的内容自动写入电脑剪贴板，并记入剪贴板历史。" />
-                            <TextBlock x:Name="ClipboardStateText" Margin="0,10,0,0" FontSize="12" Foreground="#63809C" Text="等待服务启动" />
-                        </StackPanel>
-                        <CheckBox x:Name="ClipboardBridgeCheckBox" Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource QrGlassCheckBox}" IsChecked="True" Content="电脑→手机同步" FontSize="12" Foreground="#526F8B" Checked="ClipboardBridge_Changed" Unchecked="ClipboardBridge_Changed" />
-                    </Grid>
-                </Border>
+                <TextBlock FontSize="30" FontWeight="SemiBold" Text="协作中心" />
+                <TextBlock Margin="0,9,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}" Text="同一局域网内与手机互传剪贴板与文件；配对过程与内容仅在本机局域网内处理" />
             </StackPanel>
-
-            <StackPanel Grid.Column="2">
-                <Border Padding="18" Style="{StaticResource Card}">
-                    <StackPanel>
-                        <TextBlock FontSize="16" FontWeight="SemiBold" Text="文件传输" />
-                        <TextBlock Margin="0,8,0,0" FontSize="12" Foreground="#63809C" TextWrapping="Wrap" Text="手机网页可上传文件到电脑；电脑发送的文件进入发送目录，手机端可下载。" />
-                        <Grid Margin="0,14,0,0">
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="14" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                            <Border Padding="12" Background="#46EAF3FF" BorderBrush="#A5CFE6F8" BorderThickness="1" CornerRadius="12">
-                                <StackPanel>
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="手机上传目录" />
-                                    <TextBlock x:Name="IncomingPathText" Style="{StaticResource ValueText}" FontSize="12" />
-                                    <Button Margin="0,10,0,0" Style="{StaticResource Button}" Height="38" Click="OpenIncoming_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="打开目录" /></Button>
-                                </StackPanel>
-                            </Border>
-                            <Border Grid.Column="2" Padding="12" Background="#46EAF3FF" BorderBrush="#A5CFE6F8" BorderThickness="1" CornerRadius="12">
-                                <StackPanel>
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="电脑发送目录" />
-                                    <TextBlock x:Name="OutgoingPathText" Style="{StaticResource ValueText}" FontSize="12" />
-                                    <Button Margin="0,10,0,0" Style="{StaticResource Button}" Height="38" Click="OpenOutgoing_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="打开目录" /></Button>
-                                </StackPanel>
-                            </Border>
-                        </Grid>
-                        <Button Margin="0,14,0,0" Style="{StaticResource Button}" Click="SendFile_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="发送文件到手机…" /></Button>
-                        <TextBlock x:Name="TransferStateText" Margin="0,10,0,0" FontSize="12" Foreground="#63809C" TextWrapping="Wrap" Text="手机上传的文件会出现在左侧目录；电脑发送的文件出现在右侧目录，手机端在页面内下载。" />
-                    </StackPanel>
-                </Border>
+            <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button x:Name="StartServiceButton" Style="{StaticResource ActionButton}" Click="StartService_Click"><TextBlock Margin="2,0" Foreground="White" Text="启动服务" /></Button>
+                <Button x:Name="StopServiceButton" Margin="10,0,0,0" Style="{StaticResource Button}" Visibility="Collapsed" Click="StopService_Click"><TextBlock Margin="2,0" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="停止服务" /></Button>
             </StackPanel>
         </Grid>
+
+        <!-- 状态条 -->
+        <Border Grid.Row="2" Padding="18,14" Style="{StaticResource Card}">
+            <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <Border Padding="12,6" CornerRadius="10" Background="#E8F1FA">
+                    <StackPanel Orientation="Horizontal">
+                        <Border x:Name="StatusDot" Width="9" Height="9" CornerRadius="4.5" Background="#9AA9B8" VerticalAlignment="Center" />
+                        <TextBlock x:Name="ServiceStateText" Margin="7,0,0,0" FontSize="12" FontWeight="SemiBold" Foreground="#4A6B8C" Text="服务未启动" />
+                    </StackPanel>
+                </Border>
+                <StackPanel Grid.Column="1" Margin="20,0,0,0" VerticalAlignment="Center">
+                    <TextBlock Style="{StaticResource FieldLabel}" Text="本机地址" />
+                    <TextBlock x:Name="PairUrlText" FontSize="12" FontWeight="SemiBold" Foreground="#2E4B67" Text="—" />
+                </StackPanel>
+                <StackPanel Grid.Column="2" Margin="24,0,0,0" VerticalAlignment="Center">
+                    <TextBlock Style="{StaticResource FieldLabel}" Text="配对 PIN" />
+                    <TextBlock x:Name="PinText" FontSize="18" FontWeight="SemiBold" Foreground="#2E4B67" Text="—" />
+                </StackPanel>
+                <StackPanel Grid.Column="3" Margin="24,0,0,0" VerticalAlignment="Center">
+                    <TextBlock Style="{StaticResource FieldLabel}" Text="手机连接" />
+                    <TextBlock x:Name="SessionText" FontSize="12" FontWeight="SemiBold" Foreground="#16B99B" Text="等待配对" />
+                </StackPanel>
+                <StackPanel Grid.Column="5" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="CopyUrlButton" Height="40" MinWidth="104" Padding="20,0" Style="{StaticResource Button}" Click="CopyUrl_Click"><TextBlock Margin="2,0" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="复制地址" /></Button>
+                    <Button x:Name="RegeneratePinButton" Margin="10,0,0,0" Height="40" MinWidth="104" Padding="20,0" Style="{StaticResource Button}" Click="RegeneratePin_Click"><TextBlock Margin="2,0" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="更换 PIN" /></Button>
+                    <Button x:Name="AllowFirewallButton" Margin="10,0,0,0" Height="40" MinWidth="120" Padding="20,0" Style="{StaticResource Button}" Click="AllowFirewall_Click"><TextBlock Margin="2,0" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="放行防火墙…" /></Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- 主功能区 -->
+        <Grid Grid.Row="4">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="0.92*" /><ColumnDefinition Width="16" /><ColumnDefinition Width="1.04*" /><ColumnDefinition Width="16" /><ColumnDefinition Width="1.04*" /></Grid.ColumnDefinitions>
+
+            <!-- 手机配对 -->
+            <Border Padding="18" Style="{StaticResource Card}">
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="14" /><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="17" Foreground="#4D7CFE" Text="&#xE72D;" />
+                        <TextBlock Margin="8,0,0,0" VerticalAlignment="Center" Style="{StaticResource CardTitle}" Text="手机配对" />
+                    </StackPanel>
+                    <Border Grid.Row="2" Height="214" Background="White" BorderBrush="#D8E7F4" BorderThickness="1" CornerRadius="14" HorizontalAlignment="Center" Width="214">
+                        <Grid>
+                            <Image x:Name="PairQrImage" MaxWidth="194" MaxHeight="194" Stretch="Uniform" RenderOptions.BitmapScalingMode="NearestNeighbor" />
+                            <TextBlock x:Name="QrEmptyText" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="12" Foreground="#9AADBF" Text="启动服务后生成二维码" />
+                        </Grid>
+                    </Border>
+                    <StackPanel Grid.Row="4">
+                        <TextBlock x:Name="QrHintText" FontSize="12" Foreground="#63809C" TextWrapping="Wrap" Text="手机连接同一 WiFi 后扫码进入配对页面；若手机与电脑使用不同网段或访问超时，可改用电脑热点。" />
+                        <Border Margin="0,12,0,0" Padding="12" Background="#46EAF3FF" BorderBrush="#A5CFE6F8" BorderThickness="1" CornerRadius="11">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="配对地址（可手动输入）" />
+                                <TextBlock x:Name="ManualUrlText" FontSize="13" FontWeight="SemiBold" Foreground="#2E4B67" Text="—" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- 剪贴板桥 -->
+            <Border Grid.Column="2" Padding="18" Style="{StaticResource Card}">
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /><RowDefinition Height="14" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                    <Grid>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="17" Foreground="#16B99B" Text="&#xE77F;" />
+                            <TextBlock Margin="8,0,0,0" VerticalAlignment="Center" Style="{StaticResource CardTitle}" Text="剪贴板桥" />
+                        </StackPanel>
+                        <CheckBox x:Name="ClipboardBridgeCheckBox" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource QrGlassCheckBox}" IsChecked="True" Content="电脑→手机同步" FontSize="12" Foreground="#526F8B" Checked="ClipboardBridge_Changed" Unchecked="ClipboardBridge_Changed" />
+                    </Grid>
+                    <TextBlock Grid.Row="2" FontSize="12" Foreground="#63809C" TextWrapping="Wrap" Text="电脑复制的内容自动同步到手机页面；手机页面发送的内容自动写入电脑剪贴板，并记入剪贴板历史。" />
+                    <Border Grid.Row="4" Padding="14" Background="#EFF5FB" BorderBrush="#D3E4F1" BorderThickness="1" CornerRadius="12">
+                        <Grid>
+                            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="*" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                            <TextBlock Style="{StaticResource FieldLabel}" Text="最近同步" />
+                            <TextBlock x:Name="ClipboardStateText" Grid.Row="2" FontSize="12" Foreground="#405F7C" TextWrapping="Wrap" Text="等待服务启动" />
+                            <Image x:Name="RecentSyncImage" Grid.Row="2" MaxHeight="150" Stretch="Uniform" Visibility="Collapsed" />
+                            <TextBlock x:Name="RecentSyncTimeText" Grid.Row="4" FontSize="11" Foreground="#7B93A8" Text="" />
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <!-- 文件传输 -->
+            <Border Grid.Column="4" Padding="18" Style="{StaticResource Card}">
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /><RowDefinition Height="14" /><RowDefinition Height="Auto" /><RowDefinition Height="14" /><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="17" Foreground="#D8754E" Text="&#xE8A5;" />
+                        <TextBlock Margin="8,0,0,0" VerticalAlignment="Center" Style="{StaticResource CardTitle}" Text="文件传输" />
+                    </StackPanel>
+                    <TextBlock Grid.Row="2" FontSize="12" Foreground="#63809C" TextWrapping="Wrap" Text="手机网页可上传文件到电脑；电脑发送的文件进入发送目录，手机端在页面内下载。" />
+                    <Grid Grid.Row="4">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="10" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <Border Padding="12" Background="#46EAF3FF" BorderBrush="#A5CFE6F8" BorderThickness="1" CornerRadius="11">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="手机上传目录" />
+                                <TextBlock x:Name="IncomingPathText" FontSize="11" Foreground="#52708C" TextWrapping="Wrap" />
+                                <Button Margin="0,10,0,0" Height="38" MinWidth="96" Padding="18,0" Style="{StaticResource Button}" Click="OpenIncoming_Click"><TextBlock Margin="2,0" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="打开目录" /></Button>
+                            </StackPanel>
+                        </Border>
+                        <Border Grid.Column="2" Padding="12" Background="#46EAF3FF" BorderBrush="#A5CFE6F8" BorderThickness="1" CornerRadius="11">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="电脑发送目录" />
+                                <TextBlock x:Name="OutgoingPathText" FontSize="11" Foreground="#52708C" TextWrapping="Wrap" />
+                                <Button Margin="0,10,0,0" Height="38" MinWidth="96" Padding="18,0" Style="{StaticResource Button}" Click="OpenOutgoing_Click"><TextBlock Margin="2,0" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="打开目录" /></Button>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                    <Button Grid.Row="6" Height="46" Style="{StaticResource ActionButton}" Click="SendFile_Click"><TextBlock Margin="2,0" Foreground="White" Text="发送文件到手机…" /></Button>
+                    <TextBlock x:Name="TransferStateText" Grid.Row="8" FontSize="11" Foreground="#7B93A8" TextWrapping="Wrap" Text="上传的文件出现在左侧目录；发送的文件出现在右侧目录，手机端在页面内下载。" />
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- 安全提示 -->
+        <Border Grid.Row="6" Padding="14,10" Background="#5BFFFFFF" BorderBrush="#A5CFE6F8" BorderThickness="1" CornerRadius="12">
+            <TextBlock FontSize="11" Foreground="#7B93A8" TextWrapping="Wrap" Text="内容仅在同一局域网内传输；请勿在公共 Wi-Fi 下传输敏感信息。若手机无法访问，请确认双方处于同一网络、防火墙已放行，或改用电脑热点。" />
+        </Border>
     </Grid>
 </UserControl>
