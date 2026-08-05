@@ -482,6 +482,41 @@ public static class NetworkWorkbenchService
         }
     }
 
+    /// <summary>读取当前已连接 WiFi 的 SSID、明文密码与认证方式，供二维码工具一键生成。</summary>
+    public static WifiQrSnapshot GetCurrentWifiForQrCode()
+    {
+        var details = GetWifiDetails();
+        if (string.IsNullOrWhiteSpace(details.Ssid) || details.Ssid == "—")
+        {
+            return WifiQrSnapshot.Empty;
+        }
+
+        var password = string.Empty;
+        try
+        {
+            // 普通权限下通常可读取本用户配置的明文密钥；失败时保持为空由用户补充。
+            var output = RunProcessAsync("netsh.exe", $"wlan show profile name=\"{details.Ssid}\" key=clear", CancellationToken.None)
+                .GetAwaiter().GetResult();
+            foreach (var line in output.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var match = KeyValueLine.Match(line);
+                if (match.Success &&
+                    (match.Groups["key"].Value.Contains("关键内容", StringComparison.OrdinalIgnoreCase) ||
+                     match.Groups["key"].Value.Contains("Key Content", StringComparison.OrdinalIgnoreCase)))
+                {
+                    password = match.Groups["value"].Value.Trim();
+                    break;
+                }
+            }
+        }
+        catch
+        {
+            // 密码读取失败不影响 SSID 与认证方式回填。
+        }
+
+        return new WifiQrSnapshot(details.Ssid, password, details.Authentication);
+    }
+
     private static bool IsVirtualAdapter(NetworkInterface adapter)
     {
         if (adapter.NetworkInterfaceType is NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel or NetworkInterfaceType.Ppp) return true;
@@ -744,6 +779,11 @@ public static class NetworkWorkbenchService
         public long LatencyMilliseconds => Effective.Succeeded ? Effective.ElapsedMilliseconds : Direct.ElapsedMilliseconds;
         public string Route => Effective.Succeeded ? Effective.Route : Direct.Route;
     }
+}
+
+public sealed record WifiQrSnapshot(string Ssid, string Password, string Authentication)
+{
+    public static WifiQrSnapshot Empty { get; } = new(string.Empty, string.Empty, string.Empty);
 }
 
 public sealed record NetworkOverviewSnapshot(string ConnectivityText, bool IsInternetAvailable, bool HasPhysicalConnection, string ActiveAdapterId, string ActiveAdapterName, string ActiveAdapterDescription, string ActiveAdapterType, string IPv4Address, string IPv6Address, string Gateway, string DnsServers, string DhcpText, long LinkSpeedBitsPerSecond, long BytesReceived, long BytesSent, string WifiSsid, string WifiSignal, string WifiChannel, string WifiReceiveRate, string WifiTransmitRate, string WifiBssid, string WifiRadioType, string WifiAuthentication, string WifiChannelWidth, string ProxyText, string ConnectionDetail, string ConnectivityProbeText, DateTime ConnectivityProbeCapturedAt, long GatewayLatencyMs, long DnsLatencyMs, long HttpLatencyMs, bool DirectHttpSucceeded, long DirectHttpLatencyMs, bool EffectiveHttpSucceeded, long EffectiveHttpLatencyMs, string EffectiveHttpRoute, int ActivePhysicalAdapterCount, DateTime CapturedAt);

@@ -6,6 +6,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Win32;
 using ScreenshotApp.ClipboardUi;
+using ScreenshotApp.NetworkWorkbench;
 using ZXing;
 using ZXing.Common;
 using ZXing.QrCode.Internal;
@@ -54,6 +55,46 @@ public partial class QrCodeConverterView : UserControl
         }
         ShowContentType();
         QueuePreview();
+    }
+
+    /// <summary>从网络工作台读取当前已连接 WiFi，一键填入生成信息。</summary>
+    private void ReadCurrentWifi_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var snapshot = NetworkWorkbenchService.GetCurrentWifiForQrCode();
+            if (string.IsNullOrWhiteSpace(snapshot.Ssid))
+            {
+                StatusText.Text = "未检测到已连接的 WiFi 网络";
+                return;
+            }
+
+            WifiSsidInput.Text = snapshot.Ssid;
+            WifiPasswordInput.Text = snapshot.Password;
+            WifiAuthComboBox.SelectedIndex = ResolveWifiAuth(snapshot.Authentication);
+            StatusText.Text = snapshot.Password.Length > 0
+                ? "已读取当前 WiFi 信息，可直接生成"
+                : "已读取 SSID；密码需手动输入（系统未提供明文）";
+            QueuePreview();
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = "读取 WiFi 失败：" + ex.Message;
+        }
+    }
+
+    private static int ResolveWifiAuth(string? authentication)
+    {
+        var text = authentication ?? string.Empty;
+        if (text.Contains("WEP", StringComparison.OrdinalIgnoreCase))
+        {
+            return 1;
+        }
+        if (text.Contains("Open", StringComparison.OrdinalIgnoreCase) || text.Contains("无", StringComparison.OrdinalIgnoreCase))
+        {
+            return 2;
+        }
+        return 0;
     }
 
     private void ShowContentType()
