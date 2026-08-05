@@ -5,7 +5,9 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Win32;
+using ScreenshotApp.Capture;
 using ScreenshotApp.ClipboardUi;
+using ScreenshotApp.History;
 using ScreenshotApp.NetworkWorkbench;
 using ZXing;
 using ZXing.Common;
@@ -21,6 +23,9 @@ public partial class QrCodeConverterView : UserControl
     private BitmapSource? _currentBitmap;
     private CancellationTokenSource? _previewCts;
     private CancellationTokenSource? _decodeCts;
+
+    /// <summary>由主窗口注入的剪贴板历史存储，用于“从剪贴板识别”的图片选择。</summary>
+    public ScreenshotHistoryStore? HistoryStore { get; set; }
 
     public QrCodeConverterView()
     {
@@ -482,6 +487,12 @@ public partial class QrCodeConverterView : UserControl
 
     private async void DecodeClipboard_Click(object sender, RoutedEventArgs e)
     {
+        if (HistoryStore != null)
+        {
+            await ShowClipboardImagePickerAsync();
+            return;
+        }
+
         if (System.Windows.Clipboard.ContainsImage())
         {
             var image = System.Windows.Clipboard.GetImage();
@@ -501,6 +512,41 @@ public partial class QrCodeConverterView : UserControl
         else
         {
             DecodeStatusText.Text = "剪贴板中没有可识别的图片";
+        }
+    }
+
+    /// <summary>弹出仅含图片的剪贴板历史小窗，选择后关闭并直接识别所选图片。</summary>
+    private async Task ShowClipboardImagePickerAsync()
+    {
+        try
+        {
+            var items = await HistoryStore!.LoadAsync(160);
+            var picker = new ClipboardPickerWindow(items, "Image");
+            var window = Window.GetWindow(this);
+            if (window != null && NativeMethods.GetCursorPos(out var cursor))
+            {
+                var workArea = SystemParameters.WorkArea;
+                picker.Left = Math.Clamp(cursor.X - picker.Width / 2, workArea.Left + 8, workArea.Right - picker.Width - 8);
+                picker.Top = Math.Clamp(cursor.Y - 72, workArea.Top + 8, workArea.Bottom - picker.Height - 8);
+            }
+            picker.ItemSelected += (_, item) =>
+            {
+                picker.Close();
+                var thumbnail = item.Thumbnail;
+                if (thumbnail == null)
+                {
+                    DecodeStatusText.Text = "所选图片无法读取";
+                    return;
+                }
+                // 缩略图在 UI 线程创建，冻结后交给后台解码线程。
+                thumbnail = QrCodeService.FreezeForCrossThread(thumbnail);
+                _ = RunDecodeCoreAsync(new List<(string, Func<BitmapSource>)> { ("剪贴板图片", () => thumbnail) });
+            };
+            picker.Show();
+        }
+        catch (Exception ex)
+        {
+            DecodeStatusText.Text = "加载剪贴板历史失败：" + ex.Message;
         }
     }
 
@@ -565,7 +611,7 @@ public partial class QrCodeConverterView : UserControl
             DecodeResultList.Items.Add(row);
         }
         // 容器延迟生成，等模板应用完成后再填充行内元素。
-        Dispatcher.BeginInvoke(new Action(RefreshDecodeRows), System.Windows.Threading.DispatcherPriority.Loaded);
+        _ = Dispatcher.BeginInvoke(new Action(RefreshDecodeRows), System.Windows.Threading.DispatcherPriority.Loaded);
         if (rows.Count == 0)
         {
             DecodeEmptyText.Visibility = Visibility.Visible;
@@ -714,7 +760,7 @@ public partial class QrCodeConverterView : UserControl
         }
         HistoryEmptyText.Visibility = entries.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         // 容器延迟生成，等模板应用完成后再填充行内元素。
-        Dispatcher.BeginInvoke(new Action(RefreshHistoryRows), System.Windows.Threading.DispatcherPriority.Loaded);
+        _ = Dispatcher.BeginInvoke(new Action(RefreshHistoryRows), System.Windows.Threading.DispatcherPriority.Loaded);
     }
 
     private void RefreshHistoryRows()
@@ -783,6 +829,15 @@ public partial class QrCodeConverterView : UserControl
         if (sender is FrameworkElement { Tag: QrHistoryEntry entry })
         {
             TryCopyText(entry.Content);
+        }
+    }
+
+    private void ViewHistoryQr_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: QrHistoryEntry entry })
+        {
+            var window = new QrHistoryPreviewWindow(entry) { Owner = Window.GetWindow(this) };
+            window.ShowDialog();
         }
     }
 

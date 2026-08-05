@@ -70,6 +70,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         _historyStore = new ScreenshotHistoryStore(_preferences);
+        QrCodeConverterViewHost.HistoryStore = _historyStore;
         _ = GlobalShortcut.TryParse(_preferences.ScreenshotShortcut, GlobalShortcut.ScreenshotDefault, out _screenshotShortcut);
         _ = GlobalShortcut.TryParse(_preferences.ClipboardShortcut, GlobalShortcut.ClipboardDefault, out _clipboardShortcut);
         _ = GlobalShortcut.TryParse(_preferences.VoiceInputShortcut, GlobalShortcut.VoiceDefault, out _voiceInputShortcut);

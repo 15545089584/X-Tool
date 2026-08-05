@@ -14,11 +14,17 @@ public partial class ClipboardPickerWindow : Window
     private readonly IReadOnlyList<ScreenshotHistoryItem> _items;
     private HwndSource? _windowSource;
 
-    public ClipboardPickerWindow(IEnumerable<ScreenshotHistoryItem> items)
+    public ClipboardPickerWindow(IEnumerable<ScreenshotHistoryItem> items, string initialFilter = "All")
     {
         InitializeComponent();
         _items = items.ToArray();
-        ApplyFilter("All");
+        if (initialFilter == "Image")
+        {
+            // 仅图片模式：只展示图片类历史，隐藏分类切换，标题同步说明用途。
+            FilterBar.Visibility = Visibility.Collapsed;
+            TitleText.Text = "选择剪贴板图片";
+        }
+        ApplyFilter(initialFilter);
         SourceInitialized += OnSourceInitialized;
         Closed += (_, _) => _windowSource?.RemoveHook(WindowMessageHook);
         PreviewKeyDown += (_, eventArgs) =>

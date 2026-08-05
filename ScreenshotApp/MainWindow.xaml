@@ -739,7 +739,7 @@
                                 <Grid Grid.Row="2">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="76" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                                     <converters:ConverterToolRail SelectedTool="QrCode" ToolRequested="ConverterToolRail_ToolRequested" />
-                                    <converters:QrCodeConverterView Grid.Column="2" />
+                                    <converters:QrCodeConverterView x:Name="QrCodeConverterViewHost" Grid.Column="2" />
                                 </Grid>
                             </Grid>
 
