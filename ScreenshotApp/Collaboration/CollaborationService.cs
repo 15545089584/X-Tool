@@ -30,6 +30,11 @@ public sealed class CollaborationService
     private long _clipboardSeq;
     private string? _pin;
     private string? _pageHtml;
+    private static readonly string[] VirtualAdapterKeywords =
+    {
+        "virtual", "vmware", "virtualbox", "hyper-v", "vethernet", "wsl", "radmin", "inode",
+        "tap", "tun", "loopback", "tunnel", "vpn", "bluetooth", "docker"
+    };
 
     public static CollaborationService Instance { get; } = new();
 
@@ -340,6 +345,12 @@ public sealed class CollaborationService
                 return;
             }
 
+            if (path == "/")
+            {
+                await WriteTextAsync(stream, 200, "text/plain; charset=utf-8", "X-Tool 协作中心：请使用手机扫描电脑端二维码完成配对。");
+                return;
+            }
+
             if (path == "/api/status")
             {
                 object statusPayload;
@@ -448,12 +459,6 @@ public sealed class CollaborationService
                 }
                 var bytes = await File.ReadAllBytesAsync(filePath);
                 await WriteBytesAsync(stream, 200, "application/octet-stream", bytes);
-                return;
-            }
-
-            if (path == "/")
-            {
-                await WriteTextAsync(stream, 200, "text/plain; charset=utf-8", "X-Tool 协作中心：请使用手机扫描电脑端二维码完成配对。");
                 return;
             }
 
@@ -581,6 +586,11 @@ public sealed class CollaborationService
                 var type = adapter.NetworkInterfaceType;
                 if (type is System.Net.NetworkInformation.NetworkInterfaceType.Loopback or System.Net.NetworkInformation.NetworkInterfaceType.Tunnel)
                 {
+                    continue;
+                }
+                if (VirtualAdapterKeywords.Any(keyword => adapter.Name.Contains(keyword, StringComparison.OrdinalIgnoreCase)))
+                {
+                    // 虚拟网卡、VPN、Hyper-V 等地址手机不可达，跳过。
                     continue;
                 }
                 foreach (var unicast in adapter.GetIPProperties().UnicastAddresses)
