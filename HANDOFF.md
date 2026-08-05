@@ -1,6 +1,6 @@
 # X-Tool 开发交接文档
 
-更新时间：2026-08-03
+更新时间：2026-08-05
 
 项目目录：`D:\Claude Code\X-Tool`
 
@@ -14,7 +14,7 @@
 
 > 本文档以当前代码为准。旧名称“截影 / JieYing”只可能残留在部分内部命名和本机配置目录中，不再代表当前产品定位。
 
-> **当前工作区状态（2026-08-03）**：文件工作台的 Windows Search、完整扫描、重复文件与勾选式永久删除仍处于未提交待确认状态；相关 `FileWorkbench` 文件、`ScreenshotApp.csproj` 和新增搜索/重复文件服务必须继续保留。开发者工具扫描、诊断、受控环境配置、Temurin/uv/Volta 托管、MySQL/Docker 托管、托管日志弹框以及快捷键移入设置页均已创建中文本地提交，最新功能提交为 `4135b2f` 与 `27764a6`。`ScreenshotApp\App.xaml.cs`、`Translation\TranslationEngineProvider.cs`、`VoiceInput\VoiceInputService.cs` 是已有的其他改动，下一轮不得顺带暂存、覆盖或提交。`ClipboardDiagnostics/` 仍是禁止修改、删除或提交的本地临时目录；`ScreenshotApp/VoiceInput/Runtime/` 的 GPU 试验材料已经用户确认删除，不再存在。
+> **当前工作区状态（2026-08-05）**：文件工作台的 Windows Search、完整扫描、重复文件与勾选式永久删除仍处于未提交待确认状态；相关 `FileWorkbench` 文件、`ScreenshotApp.csproj` 和新增搜索/重复文件服务必须继续保留。开发者工具扫描、诊断、受控环境配置、Temurin/uv/Volta 托管、MySQL/Docker 托管、托管日志弹框、快捷键移入设置页以及转换器二维码生成与识别均已创建中文本地提交，最新功能提交为 `aa50fd3`，此前为 `4135b2f` 与 `27764a6`。`ScreenshotApp\App.xaml.cs`、`Translation\TranslationEngineProvider.cs`、`VoiceInput\VoiceInputService.cs` 是已有的其他改动，下一轮不得顺带暂存、覆盖或提交。`ClipboardDiagnostics/` 仍是禁止修改、删除或提交的本地临时目录；`ScreenshotApp/VoiceInput/Runtime/` 的 GPU 试验材料已经用户确认删除，不再存在。
 
 ## 一、必须遵守的开发约定
 
@@ -383,6 +383,21 @@ git log -5 --oneline
 
 全部能力均为离线本地处理：Base64、URL Encode/Decode、Unicode 编码/解码、JWT Header/Payload 只读解析、Unix 秒/毫秒时间戳与日期时间互转、UUID v4 批量生成（1-100 个）。JWT 不上传内容且不验证签名；解析结果会明确显示这一点。
 
+### 7. 二维码（已实现）
+
+入口：转换器工作台左侧第六个“二维码”图标，页面为
+`ScreenshotApp\Converters\QrCodeConverterView.xaml(.cs)`，服务与历史为
+`QrCodeService.cs`。
+
+已实现：
+
+- 生成类型：自由文本/网址、WiFi（WPA/WEP/无密码并转义特殊字符）、名片 vCard、邮件、电话/短信（SMSTO）、批量生成（每行一条，支持“名称|内容”指定文件名）。
+- 参数：纠错等级 L/M/Q/H、像素尺寸 256–1024、留白 0–8、前景/背景色板与 HEX 输入；预览实时异步生成并取消旧任务，不阻塞界面。
+- 识别：支持多选图片文件与剪贴板图片，后台线程逐张解码、可取消、单张失败隔离；自动尝试旋转并支持同图多个二维码；结果按网址/邮件/电话/WiFi/名片/文本分类展示，网址可复制并在用户明确确认后打开。
+- 历史：保存到 `%LocalAppData%\X-Tool\QRCode\history.json`，最多 500 条，按生成/识别筛选与关键词搜索、单条删除与清空；“保存历史”开关默认开启，关闭后不再落库。
+- 依赖：NuGet `ZXing.Net` 0.16.11（Apache-2.0，零传递依赖，实际仅一个约 0.5 MB 的托管 DLL），已登记在根目录 `THIRD-PARTY-NOTICES.md`。
+- 验证：生成→保存→解码闭环已独立验证通过（中文与 URL 内容一致）；Release 构建 0 警告 0 错误并启动新版。
+
 ## 七、关键代码地图
 
 | 模块 | 位置 |
@@ -406,6 +421,7 @@ git log -5 --oneline
 | PDF 页面与任务队列 | `ScreenshotApp\Converters\PdfConverterView.xaml(.cs)`、`PdfQueueItem.cs` |
 | PDF 转换与引擎回退 | `ScreenshotApp\Converters\PdfConversionService.cs` |
 | 编码转换 | `ScreenshotApp\Converters\EncodingConverterView.xaml(.cs)`、`EncodingConversionService.cs` |
+| 二维码生成、识别与历史 | `ScreenshotApp\Converters\QrCodeConverterView.xaml(.cs)`、`QrCodeService.cs` |
 | 文件工作台 UI 与批处理 | `ScreenshotApp\FileWorkbench\FileWorkbenchView.xaml(.cs)`、`FileWorkbenchService.cs` |
 | Windows Search 查询后端 | `ScreenshotApp\FileWorkbench\WindowsSearchFileSearchBackend.cs`（`System.ItemUrl` + `Uri.LocalPath`；勿改回 `System.ItemPathDisplay`） |
 | 重复文件内容校验 | `ScreenshotApp\FileWorkbench\DuplicateFileFinderService.cs` |
@@ -434,9 +450,11 @@ git log -5 --oneline
 9. **文件工作台索引覆盖回归**：分别验证已索引目录的“开始搜索”、Windows Search 关闭/未覆盖目录时的自动回退、以及“完整扫描”的取消与无权限目录跳过；不得为了追求秒级全盘搜索而恢复同步 UI 回填、常驻扫描或自建全盘实时索引。
 10. **重复文件与删除回归**：使用包含同名不同内容、不同名相同内容、大文件、硬链接、被占用文件和无权限文件的目录验证重复分组、取消与失败提示；验证普通搜索选择“删除文件”后才显示玻璃复选框，勾选可跨分页、筛选和排序保留并实时同步右侧预览，未勾选时删除按钮不可用，确认后永久删除且不进入回收站；重复文件页必须每组至少保留一个文件，红色按钮永久删除明确勾选的副本且不会进入回收站，需重点验证强确认、部分失败反馈和删除后列表刷新。
 11. **开发环境中心回归**：在未安装工具、同一工具多个版本、PATH 含中文/空格/重复/失效目录、WindowsApps Python 别名、项目虚拟环境、版本管理器入口、版本命令超时和普通权限目录不可读场景验证扫描、取消、证据与失败隔离；分别验证系统/用户 PATH 的确认、UAC 取消、去重、失败回滚、写入后自动重扫及界面不冻结。Temurin 托管安装还需人工验证大文件下载进度、取消清理、错误哈希拒绝、`java -version` 验证、清单损坏保护，以及被 PATH/JAVA_HOME/运行进程引用时拒绝卸载；uv Python 需验证本机无 uv 时的降级提示、3.10–3.14 目录、安装取消/回滚、与外部 uv 安装隔离、`python --version` 验证和 uv 安全卸载；Volta Node.js 需验证无 Volta 降级、WinGet/UAC 取消、安装后重检、受支持版本生命周期筛选、`volta fetch` 不改变默认版本、下载取消和缓存版本只读显示。不得擅自加入静默安装、外部安装目录删除、Volta 缓存目录删除、全局版本切换或 Shim。
+12. **二维码人工回归**：分别验证自由文本/网址、WiFi、vCard、邮件、电话/短信与批量生成的预览、保存、复制与中文内容扫码；验证参数变化（纠错、尺寸、留白、前景/背景色）实时刷新且不卡界面；用多二维码图片、旋转图片、含中文的二维码、损坏图片和无二维码图片验证识别、取消、失败隔离与分类徽章；验证网址打开的确认拦截、历史保存开关、搜索筛选、单条删除与清空；确认“保存历史”关闭后生成/识别不落库。
 
 ## 九、最近关键提交
 
+- `aa50fd3` 新增转换器二维码生成与识别工具
 - `4135b2f` 开发者工具新增托管日志弹框与MySQL、Docker托管支持
 - `27764a6` 快捷键设置移入设置页并改为弹窗
 - `dde2e6d` 修复托管JDK版本识别
