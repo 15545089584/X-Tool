@@ -10,7 +10,7 @@
         <Style x:Key="DangerButton" TargetType="Button" BasedOn="{StaticResource Button}"><Setter Property="Background" Value="#FFF2F2" /><Setter Property="BorderBrush" Value="#F3B9B9" /><Setter Property="Foreground" Value="#B74444" /></Style>
         <Style x:Key="ModeButton" TargetType="Button" BasedOn="{StaticResource Button}"><Setter Property="Height" Value="48" /><Setter Property="Margin" Value="0,0,12,0" /><Setter Property="MinWidth" Value="112" /></Style>
         <Style x:Key="FieldLabel" TargetType="TextBlock"><Setter Property="FontSize" Value="12" /><Setter Property="FontWeight" Value="SemiBold" /><Setter Property="Foreground" Value="#526F8B" /><Setter Property="Margin" Value="0,0,0,5" /></Style>
-        <Style x:Key="SwatchButton" TargetType="Button"><Setter Property="Width" Value="28" /><Setter Property="Height" Value="28" /><Setter Property="Margin" Value="0,0,8,0" /><Setter Property="Padding" Value="0" /><Setter Property="Cursor" Value="Hand" /><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="Swatch" Width="28" Height="28" Background="{TemplateBinding Background}" BorderBrush="#5A8AA9C4" BorderThickness="2" CornerRadius="8" /><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Swatch" Property="Opacity" Value="0.75" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
+        <Style x:Key="SwatchButton" TargetType="Button"><Setter Property="Width" Value="26" /><Setter Property="Height" Value="26" /><Setter Property="Margin" Value="0,0,6,0" /><Setter Property="Padding" Value="0" /><Setter Property="Cursor" Value="Hand" /><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="Swatch" Width="26" Height="26" Background="{TemplateBinding Background}" BorderBrush="#5A8AA9C4" BorderThickness="2" CornerRadius="7" /><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Swatch" Property="Opacity" Value="0.75" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
         <Style x:Key="CategoryBadge" TargetType="Border"><Setter Property="Padding" Value="10,4" /><Setter Property="CornerRadius" Value="9" /><Setter Property="VerticalAlignment" Value="Center" /><Setter Property="Margin" Value="0,0,12,0" /></Style>
         <Style x:Key="SmallButton" TargetType="Button" BasedOn="{StaticResource Button}"><Setter Property="Height" Value="34" /><Setter Property="Padding" Value="14,0" /><Setter Property="FontSize" Value="12" /></Style>
         <Style x:Key="SmallActionButton" TargetType="Button" BasedOn="{StaticResource SmallButton}"><Setter Property="Background" Value="#4D7CFE" /><Setter Property="BorderBrush" Value="#8AAEFF" /><Setter Property="Foreground" Value="White" /></Style>
@@ -160,37 +160,40 @@
                                 <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                                 <StackPanel>
                                     <TextBlock Style="{StaticResource FieldLabel}" Text="前景色" />
-                                    <StackPanel Orientation="Horizontal">
+                                    <WrapPanel>
                                         <Button Style="{StaticResource SwatchButton}" Tag="#000000" Background="#1A1A1A" Click="ForegroundSwatch_Click" ToolTip="黑色" />
                                         <Button Style="{StaticResource SwatchButton}" Tag="#1F3864" Background="#1F3864" Click="ForegroundSwatch_Click" ToolTip="深蓝" />
                                         <Button Style="{StaticResource SwatchButton}" Tag="#0F5E5E" Background="#0F5E5E" Click="ForegroundSwatch_Click" ToolTip="深青" />
                                         <Button Style="{StaticResource SwatchButton}" Tag="#4B2E83" Background="#4B2E83" Click="ForegroundSwatch_Click" ToolTip="深紫" />
                                         <Button Style="{StaticResource SwatchButton}" Tag="#1E6B3A" Background="#1E6B3A" Click="ForegroundSwatch_Click" ToolTip="深绿" />
                                         <Button Style="{StaticResource SwatchButton}" Tag="#7A2E2E" Background="#7A2E2E" Click="ForegroundSwatch_Click" ToolTip="深红" />
-                                        <TextBox x:Name="ForegroundHexInput" Width="76" Height="34" Padding="8,0" VerticalContentAlignment="Center" Style="{StaticResource Input}" Text="#000000" LostFocus="ForegroundHexInput_LostFocus" ToolTip="HEX 颜色，如 #1F3864" />
-                                    </StackPanel>
+                                        <Button Style="{StaticResource SwatchButton}" Tag="#5C3A21" Background="#5C3A21" Click="ForegroundSwatch_Click" ToolTip="深棕" />
+                                        <Button Style="{StaticResource SwatchButton}" Tag="#3A3A3A" Background="#3A3A3A" Click="ForegroundSwatch_Click" ToolTip="深灰" />
+                                        <Button Style="{StaticResource SwatchButton}" Tag="#162B4D" Background="#162B4D" Click="ForegroundSwatch_Click" ToolTip="藏蓝" />
+                                        <Button Style="{StaticResource SwatchButton}" Tag="#7A4A1F" Background="#7A4A1F" Click="ForegroundSwatch_Click" ToolTip="深橙" />
+                                        <TextBox x:Name="ForegroundHexInput" Width="112" Height="34" Padding="8,0" VerticalContentAlignment="Center" Style="{StaticResource Input}" Text="#000000" LostFocus="ForegroundHexInput_LostFocus" ToolTip="HEX 颜色，如 #1F3864" />
+                                    </WrapPanel>
                                 </StackPanel>
                                 <StackPanel Grid.Row="2">
                                     <TextBlock Style="{StaticResource FieldLabel}" Text="背景色" />
-                                    <StackPanel Orientation="Horizontal">
+                                    <WrapPanel>
                                         <Button Style="{StaticResource SwatchButton}" Tag="#FFFFFF" Background="White" Click="BackgroundSwatch_Click" ToolTip="白色" />
                                         <Button Style="{StaticResource SwatchButton}" Tag="#F2F4F7" Background="#F2F4F7" Click="BackgroundSwatch_Click" ToolTip="浅灰" />
                                         <Button Style="{StaticResource SwatchButton}" Tag="#FFF7E0" Background="#FFF7E0" Click="BackgroundSwatch_Click" ToolTip="浅黄" />
                                         <Button Style="{StaticResource SwatchButton}" Tag="#EAF3FF" Background="#EAF3FF" Click="BackgroundSwatch_Click" ToolTip="浅蓝" />
                                         <Button Style="{StaticResource SwatchButton}" Tag="#EAFBF0" Background="#EAFBF0" Click="BackgroundSwatch_Click" ToolTip="浅绿" />
                                         <Button Style="{StaticResource SwatchButton}" Tag="#FFF0F0" Background="#FFF0F0" Click="BackgroundSwatch_Click" ToolTip="浅粉" />
-                                        <TextBox x:Name="BackgroundHexInput" Width="76" Height="34" Padding="8,0" VerticalContentAlignment="Center" Style="{StaticResource Input}" Text="#FFFFFF" LostFocus="BackgroundHexInput_LostFocus" ToolTip="HEX 颜色，如 #EAF3FF" />
-                                    </StackPanel>
+                                        <Button Style="{StaticResource SwatchButton}" Tag="#F3EFFF" Background="#F3EFFF" Click="BackgroundSwatch_Click" ToolTip="浅紫" />
+                                        <Button Style="{StaticResource SwatchButton}" Tag="#EAF7F7" Background="#EAF7F7" Click="BackgroundSwatch_Click" ToolTip="浅青" />
+                                        <Button Style="{StaticResource SwatchButton}" Tag="#FBF7EF" Background="#FBF7EF" Click="BackgroundSwatch_Click" ToolTip="浅米" />
+                                        <Button Style="{StaticResource SwatchButton}" Tag="#FFF0F4" Background="#FFF0F4" Click="BackgroundSwatch_Click" ToolTip="浅玫红" />
+                                        <TextBox x:Name="BackgroundHexInput" Width="112" Height="34" Padding="8,0" VerticalContentAlignment="Center" Style="{StaticResource Input}" Text="#FFFFFF" LostFocus="BackgroundHexInput_LostFocus" ToolTip="HEX 颜色，如 #EAF3FF" />
+                                    </WrapPanel>
                                 </StackPanel>
                             </Grid>
                         </StackPanel>
                     </Border>
 
-                    <Border Margin="0,14,0,0" Padding="16" Style="{StaticResource Card}">
-                        <StackPanel Orientation="Horizontal">
-                            <Button x:Name="SaveBatchButton" Style="{StaticResource Button}" Visibility="Collapsed" Click="SaveBatch_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="批量保存…" /></Button>
-                        </StackPanel>
-                    </Border>
                 </StackPanel>
                 </ScrollViewer>
 
@@ -213,6 +216,7 @@
                             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                                 <Button x:Name="SaveQrButton" Padding="26,0" Style="{StaticResource ActionButton}" Click="SaveQr_Click"><TextBlock Margin="2,0" Foreground="White" Text="保存 PNG" /></Button>
                                 <Button x:Name="CopyQrButton" Margin="10,0,0,0" Padding="26,0" Style="{StaticResource Button}" Click="CopyQr_Click"><TextBlock Margin="2,0" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="复制图片" /></Button>
+                                <Button x:Name="SaveBatchButton" Margin="10,0,0,0" Padding="30,0" Style="{StaticResource Button}" Visibility="Collapsed" Click="SaveBatch_Click"><TextBlock Margin="2,0" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="批量保存…" /></Button>
                             </StackPanel>
                         </Grid>
                     </Grid>
