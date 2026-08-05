@@ -188,9 +188,7 @@
 
                     <Border Margin="0,14,0,0" Padding="16" Style="{StaticResource Card}">
                         <StackPanel Orientation="Horizontal">
-                            <Button x:Name="SaveQrButton" Style="{StaticResource ActionButton}" Click="SaveQr_Click"><TextBlock Foreground="White" Text="保存 PNG" /></Button>
-                            <Button x:Name="CopyQrButton" Margin="12,0,0,0" Style="{StaticResource Button}" Click="CopyQr_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="复制图片" /></Button>
-                            <Button x:Name="SaveBatchButton" Margin="12,0,0,0" Style="{StaticResource Button}" Visibility="Collapsed" Click="SaveBatch_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="批量保存…" /></Button>
+                            <Button x:Name="SaveBatchButton" Style="{StaticResource Button}" Visibility="Collapsed" Click="SaveBatch_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="批量保存…" /></Button>
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -206,10 +204,17 @@
                                 <TextBlock x:Name="QrPreviewEmptyText" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="13" Foreground="#9AADBF" Text="输入内容后在此预览" />
                             </Grid>
                         </Border>
-                        <StackPanel Grid.Row="4">
-                            <TextBlock x:Name="PreviewInfoText" FontSize="12" Foreground="#63809C" Text="等待输入内容" TextWrapping="Wrap" />
-                            <TextBlock x:Name="PreviewErrorText" Margin="0,6,0,0" FontSize="12" Foreground="#C0504D" TextWrapping="Wrap" />
-                        </StackPanel>
+                        <Grid Grid.Row="4">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                                <TextBlock x:Name="PreviewInfoText" FontSize="12" Foreground="#63809C" Text="等待输入内容" TextWrapping="Wrap" />
+                                <TextBlock x:Name="PreviewErrorText" Margin="0,6,0,0" FontSize="12" Foreground="#C0504D" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button x:Name="SaveQrButton" Padding="26,0" Style="{StaticResource ActionButton}" Click="SaveQr_Click"><TextBlock Margin="2,0" Foreground="White" Text="保存 PNG" /></Button>
+                                <Button x:Name="CopyQrButton" Margin="10,0,0,0" Padding="26,0" Style="{StaticResource Button}" Click="CopyQr_Click"><TextBlock Margin="2,0" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="复制图片" /></Button>
+                            </StackPanel>
+                        </Grid>
                     </Grid>
                 </Border>
             </Grid>
