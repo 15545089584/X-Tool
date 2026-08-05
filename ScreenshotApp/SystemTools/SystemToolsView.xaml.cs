@@ -7,6 +7,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
+using WpfShapes = System.Windows.Shapes;
 using System.Windows.Threading;
 using ScreenshotApp.StorageAnalysis;
 
@@ -37,6 +38,9 @@ public partial class SystemToolsView : UserControl
     private IReadOnlyList<DeviceDriverEntry> _allDrivers = Array.Empty<DeviceDriverEntry>();
     private IReadOnlyList<SystemDiagnosticGroup> _allDiagnosticGroups = Array.Empty<SystemDiagnosticGroup>();
     private IReadOnlyList<SystemDiagnosticTimelineBucket> _diagnosticTimelineBuckets = Array.Empty<SystemDiagnosticTimelineBucket>();
+    private IReadOnlyList<DiskHistoryPoint> _diskHistoryPoints = Array.Empty<DiskHistoryPoint>();
+    private int _diskHistoryDays = 30;
+    private string? _historyVolumeId;
     private SystemDiagnosticSnapshot? _diagnosticSnapshot;
     private int _selectedDiagnosticBucketIndex = -1;
     private CancellationTokenSource? _diagnosticCancellation;
@@ -220,6 +224,7 @@ public partial class SystemToolsView : UserControl
             StorageSummaryText.Text = overview.SummaryText;
             StorageVolumeEmptyState.Visibility = _storageVolumes.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             PhysicalStorageEmptyState.Visibility = _physicalStorage.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            await LoadDiskHistoryAsync();
         }
         catch (Exception exception)
         {
@@ -229,6 +234,298 @@ public partial class SystemToolsView : UserControl
         {
             _isRefreshingStorage = false;
         }
+    }
+
+    /// <summary>补采今日快照并刷新用量历史图表。</summary>
+    private async Task LoadDiskHistoryAsync()
+    {
+        try
+        {
+            await DiskHistoryStore.EnsureTodaySnapshotAsync();
+            PopulateHistoryVolumeCombo();
+            var volumeId = (HistoryVolumeComboBox.SelectedItem as ComboBoxItem)?.Tag as string;
+            if (string.IsNullOrEmpty(volumeId))
+            {
+                _diskHistoryPoints = Array.Empty<DiskHistoryPoint>();
+                DrawDiskHistoryChart();
+                DiskHistorySummaryText.Text = "未找到可记录的固定卷，无法建立用量历史。";
+                return;
+            }
+
+            _historyVolumeId = volumeId;
+            _diskHistoryPoints = await DiskHistoryStore.LoadHistoryAsync(volumeId, _diskHistoryDays);
+            DrawDiskHistoryChart();
+            UpdateHistoryRangeStates();
+            DiskHistorySummaryText.Text = BuildDiskHistorySummary();
+        }
+        catch (Exception exception)
+        {
+            DiskHistorySummaryText.Text = "用量历史读取失败：" + exception.Message;
+        }
+    }
+
+    private void PopulateHistoryVolumeCombo()
+    {
+        var previous = _historyVolumeId;
+        HistoryVolumeComboBox.Items.Clear();
+        foreach (var volume in _storageVolumes)
+        {
+            var label = string.IsNullOrWhiteSpace(volume.VolumeLabel) ? string.Empty : " " + volume.VolumeLabel;
+            HistoryVolumeComboBox.Items.Add(new ComboBoxItem { Tag = volume.DriveName, Content = volume.DriveName.TrimEnd('\\') + label });
+        }
+        if (HistoryVolumeComboBox.Items.Count > 0)
+        {
+            var match = HistoryVolumeComboBox.Items
+                .Cast<ComboBoxItem>()
+                .FirstOrDefault(item => string.Equals(item.Tag as string, previous, StringComparison.OrdinalIgnoreCase));
+            HistoryVolumeComboBox.SelectedItem = match ?? HistoryVolumeComboBox.Items[0];
+        }
+    }
+
+    private void HistoryVolume_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded || HistoryVolumeComboBox.SelectedItem is not ComboBoxItem { Tag: string volumeId })
+        {
+            return;
+        }
+        _historyVolumeId = volumeId;
+        _ = RefreshDiskHistoryAsync();
+    }
+
+    private void HistoryRange_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: string days } && int.TryParse(days, out var parsed))
+        {
+            _diskHistoryDays = parsed;
+            UpdateHistoryRangeStates();
+            _ = RefreshDiskHistoryAsync();
+        }
+    }
+
+    private async Task RefreshDiskHistoryAsync()
+    {
+        try
+        {
+            _diskHistoryPoints = _historyVolumeId == null
+                ? Array.Empty<DiskHistoryPoint>()
+                : await DiskHistoryStore.LoadHistoryAsync(_historyVolumeId, _diskHistoryDays);
+            DrawDiskHistoryChart();
+            DiskHistorySummaryText.Text = BuildDiskHistorySummary();
+        }
+        catch (Exception exception)
+        {
+            DiskHistorySummaryText.Text = "用量历史读取失败：" + exception.Message;
+        }
+    }
+
+    private async void CaptureDiskSnapshot_Click(object sender, RoutedEventArgs e)
+    {
+        CaptureSnapshotButton.IsEnabled = false;
+        try
+        {
+            await DiskHistoryStore.EnsureTodaySnapshotAsync();
+            await RefreshDiskHistoryAsync();
+            DiskHistorySummaryText.Text = "已记录今日快照。" + BuildDiskHistorySummary();
+        }
+        catch (Exception exception)
+        {
+            DiskHistorySummaryText.Text = "快照失败：" + exception.Message;
+        }
+        finally
+        {
+            CaptureSnapshotButton.IsEnabled = true;
+        }
+    }
+
+    private async void ClearDiskHistory_Click(object sender, RoutedEventArgs e)
+    {
+        var window = Window.GetWindow(this);
+        if (MessageBox.Show(window,
+                "确定清空全部磁盘用量历史？此操作不会影响磁盘上的任何文件。",
+                "清理用量历史",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning) != MessageBoxResult.Yes)
+        {
+            return;
+        }
+        try
+        {
+            await DiskHistoryStore.ClearAsync();
+            _diskHistoryPoints = Array.Empty<DiskHistoryPoint>();
+            DrawDiskHistoryChart();
+            DiskHistorySummaryText.Text = "用量历史已清空，明天会自动重新开始记录。";
+        }
+        catch (Exception exception)
+        {
+            DiskHistorySummaryText.Text = "清理失败：" + exception.Message;
+        }
+    }
+
+    private void UpdateHistoryRangeStates()
+    {
+        SetRangeButtonState(HistoryRange7Button, _diskHistoryDays == 7);
+        SetRangeButtonState(HistoryRange30Button, _diskHistoryDays == 30);
+        SetRangeButtonState(HistoryRange90Button, _diskHistoryDays == 90);
+    }
+
+    private static void SetRangeButtonState(Button button, bool selected)
+    {
+        button.Background = new SolidColorBrush(selected ? Color.FromRgb(222, 236, 255) : Color.FromArgb(134, 255, 255, 255));
+        button.BorderBrush = new SolidColorBrush(selected ? Color.FromRgb(102, 158, 255) : Color.FromArgb(166, 209, 232, 247));
+    }
+
+    private string BuildDiskHistorySummary()
+    {
+        if (_diskHistoryPoints.Count == 0)
+        {
+            return "暂无记录，点击“立即快照”或明天打开页面后自动开始记录。";
+        }
+
+        var latest = _diskHistoryPoints[^1];
+        var first = _diskHistoryPoints[0];
+        var usedDelta = latest.UsedBytes - first.UsedBytes;
+        var sign = usedDelta >= 0 ? "增加" : "减少";
+        return $"{_diskHistoryDays} 天内有 {_diskHistoryPoints.Count} 条记录 · 当前已用 {FormatCapacity(latest.UsedBytes)} / 总 {FormatCapacity(latest.TotalBytes)} · 区间内{sign} {FormatCapacity(Math.Abs(usedDelta))}";
+    }
+
+    private static string FormatCapacity(long bytes)
+    {
+        if (bytes >= 1024L * 1024 * 1024)
+        {
+            return $"{bytes / 1024.0 / 1024 / 1024:0.0} GB";
+        }
+        return $"{bytes / 1024.0 / 1024:0.0} MB";
+    }
+
+    private void DiskHistoryCanvas_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (IsLoaded)
+        {
+            DrawDiskHistoryChart();
+        }
+    }
+
+    /// <summary>在画布上自绘容量趋势：已用面积、已用折线、总容量参考线与日期刻度。</summary>
+    private void DrawDiskHistoryChart()
+    {
+        DiskHistoryCanvas.Children.Clear();
+        var width = Math.Max(DiskHistoryCanvas.ActualWidth, 320);
+        const double height = 190;
+        var left = 8.0;
+        var right = width - 58;
+        var top = 10.0;
+        var bottom = height - 24;
+        var plotWidth = right - left;
+        var plotHeight = bottom - top;
+
+        var points = _diskHistoryPoints;
+        if (points.Count == 0)
+        {
+            var empty = new TextBlock
+            {
+                Text = "暂无用量记录",
+                FontSize = 12,
+                Foreground = new SolidColorBrush(Color.FromRgb(138, 154, 172))
+            };
+            Canvas.SetLeft(empty, width / 2 - 40);
+            Canvas.SetTop(empty, height / 2 - 10);
+            DiskHistoryCanvas.Children.Add(empty);
+            return;
+        }
+
+        var maxTotal = points.Max(point => point.TotalBytes);
+        var yTop = Math.Max(maxTotal, 1L);
+
+        // 网格线（0 / 50% / 100%）。
+        for (var i = 0; i <= 2; i++)
+        {
+            var y = top + plotHeight * i / 2.0;
+            DiskHistoryCanvas.Children.Add(new WpfShapes.Line
+            {
+                X1 = left,
+                X2 = right,
+                Y1 = y,
+                Y2 = y,
+                Stroke = new SolidColorBrush(Color.FromArgb(50, 112, 146, 178)),
+                StrokeThickness = 1
+            });
+        }
+
+        // 总容量参考虚线。
+        DiskHistoryCanvas.Children.Add(new WpfShapes.Line
+        {
+            X1 = left,
+            X2 = right,
+            Y1 = top,
+            Y2 = top,
+            Stroke = new SolidColorBrush(Color.FromRgb(22, 185, 155)),
+            StrokeThickness = 1.2,
+            StrokeDashArray = new DoubleCollection { 5, 4 }
+        });
+
+        // 右轴容量刻度。
+        AddAxisLabel(width - 54, top - 7, FormatCapacity(maxTotal));
+        AddAxisLabel(width - 54, top + plotHeight / 2 - 7, FormatCapacity(maxTotal / 2));
+        AddAxisLabel(width - 54, bottom - 7, "0");
+
+        var scaleX = plotWidth / Math.Max(points.Count - 1, 1);
+        var usedPolyline = new PointCollection();
+        var areaPolygon = new PointCollection { new Point(left, bottom) };
+        for (var i = 0; i < points.Count; i++)
+        {
+            var x = left + scaleX * i;
+            var y = bottom - plotHeight * points[i].UsedBytes / yTop;
+            usedPolyline.Add(new Point(x, y));
+            areaPolygon.Add(new Point(x, y));
+        }
+        areaPolygon.Add(new Point(right, bottom));
+
+        DiskHistoryCanvas.Children.Add(new WpfShapes.Polygon
+        {
+            Points = areaPolygon,
+            Fill = new SolidColorBrush(Color.FromArgb(42, 77, 124, 254))
+        });
+        DiskHistoryCanvas.Children.Add(new WpfShapes.Polyline
+        {
+            Points = usedPolyline,
+            Stroke = new SolidColorBrush(Color.FromRgb(77, 124, 254)),
+            StrokeThickness = 2,
+            StrokeLineJoin = PenLineJoin.Round
+        });
+
+        if (points.Count == 1)
+        {
+            DiskHistoryCanvas.Children.Add(new WpfShapes.Ellipse
+            {
+                Width = 7,
+                Height = 7,
+                Fill = new SolidColorBrush(Color.FromRgb(77, 124, 254)),
+                Stroke = new SolidColorBrush(Colors.White),
+                StrokeThickness = 1.5
+            });
+            Canvas.SetLeft(DiskHistoryCanvas.Children[^1], usedPolyline[0].X - 3.5);
+            Canvas.SetTop(DiskHistoryCanvas.Children[^1], usedPolyline[0].Y - 3.5);
+        }
+
+        // X 轴日期标签（首 / 中 / 尾）。
+        var first = points[0].Date;
+        var last = points[^1].Date;
+        var middle = points[points.Count / 2].Date;
+        AddAxisLabel(left - 14, bottom + 5, first.ToString("MM-dd"));
+        AddAxisLabel(left + plotWidth / 2 - 14, bottom + 5, middle.ToString("MM-dd"));
+        AddAxisLabel(right - 24, bottom + 5, last.ToString("MM-dd"));
+    }
+
+    private void AddAxisLabel(double x, double y, string text)
+    {
+        DiskHistoryCanvas.Children.Add(new TextBlock
+        {
+            Text = text,
+            FontSize = 10,
+            Foreground = new SolidColorBrush(Color.FromRgb(120, 144, 166))
+        });
+        Canvas.SetLeft(DiskHistoryCanvas.Children[^1], x);
+        Canvas.SetTop(DiskHistoryCanvas.Children[^1], y);
     }
 
     /// <summary>按需读取可靠性记录，并用分段事件日志补充诊断细节；全过程只读。</summary>

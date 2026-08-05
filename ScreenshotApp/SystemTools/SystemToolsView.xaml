@@ -230,6 +230,25 @@
                                 </ItemsControl>
                                 <StackPanel x:Name="StorageVolumeEmptyState" HorizontalAlignment="Center" Margin="0,22" Visibility="Collapsed"><TextBlock HorizontalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="26" Foreground="#7690AA" Text="&#xEDA2;" /><TextBlock Margin="0,7,0,0" HorizontalAlignment="Center" FontSize="12" FontWeight="SemiBold" Foreground="#45627E" Text="未读取到可用的本地卷" /><TextBlock Margin="0,3,0,0" HorizontalAlignment="Center" FontSize="10" Foreground="#728195" Text="请检查磁盘是否已挂载后刷新。" /></StackPanel>
                             </Grid>
+                            <Grid Margin="0,18,0,7">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock FontSize="16" FontWeight="SemiBold" Foreground="#2E4B67" Text="用量历史" />
+                                    <ComboBox x:Name="HistoryVolumeComboBox" Margin="12,0,0,0" Width="160" Height="34" Style="{StaticResource SystemComboBox}" SelectionChanged="HistoryVolume_SelectionChanged" />
+                                    <Button x:Name="HistoryRange7Button" Margin="10,0,0,0" Height="34" Padding="13,0" Style="{StaticResource SystemButton}" Tag="7" Click="HistoryRange_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="7 天" /></Button>
+                                    <Button x:Name="HistoryRange30Button" Margin="6,0,0,0" Height="34" Padding="13,0" Style="{StaticResource SystemButton}" Tag="30" Click="HistoryRange_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="30 天" /></Button>
+                                    <Button x:Name="HistoryRange90Button" Margin="6,0,0,0" Height="34" Padding="13,0" Style="{StaticResource SystemButton}" Tag="90" Click="HistoryRange_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="90 天" /></Button>
+                                </StackPanel>
+                                <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button x:Name="CaptureSnapshotButton" Height="34" Padding="15,0" Style="{StaticResource SystemButton}" Click="CaptureDiskSnapshot_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="立即快照" /></Button>
+                                    <Button Margin="8,0,0,0" Height="34" Padding="15,0" Style="{StaticResource SystemButton}" Click="ClearDiskHistory_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="清理历史" /></Button>
+                                </StackPanel>
+                            </Grid>
+                            <Border x:Name="DiskHistoryPanel" Padding="14" Background="#54FFFFFF" BorderBrush="#8ED6E9F8" BorderThickness="1" CornerRadius="13">
+                                <Grid>
+                                    <Canvas x:Name="DiskHistoryCanvas" Height="190" ClipToBounds="True" Background="#26FFFFFF" SizeChanged="DiskHistoryCanvas_SizeChanged" />
+                                </Grid>
+                            </Border>
+                            <TextBlock x:Name="DiskHistorySummaryText" Margin="2,8,2,0" FontSize="11" Foreground="#637E9B" TextWrapping="Wrap" Text="打开页面后自动记录每日容量快照，可在 7 / 30 / 90 天范围内查看变化趋势。" />
                             <TextBlock Margin="0,10,0,7" FontSize="16" FontWeight="SemiBold" Foreground="#2E4B67" Text="物理磁盘" />
                             <Grid>
                                 <ItemsControl x:Name="PhysicalStorageItems">
