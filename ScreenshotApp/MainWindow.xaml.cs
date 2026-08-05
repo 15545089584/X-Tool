@@ -49,6 +49,7 @@ public partial class MainWindow : Window
     private bool _clipboardListenerRegistered;
     private bool _captureInProgress;
     private bool _historyRefreshInProgress;
+    private bool _historyRefreshPending;
     private bool _suppressClipboardCapture;
     private string? _lastExternalClipboardSignature;
     private ClipboardPickerWindow? _clipboardPicker;
@@ -699,7 +700,8 @@ public partial class MainWindow : Window
                 }
 
                 _lastExternalClipboardSignature = signature;
-                await _historyStore.SaveClipboardTextAsync(content);
+                var savedTextPath = await _historyStore.SaveClipboardTextAsync(content);
+                InsertClipboardItem(savedTextPath, isText: true);
             }
             else if (Clipboard.ContainsImage())
             {
@@ -716,7 +718,8 @@ public partial class MainWindow : Window
                 }
 
                 _lastExternalClipboardSignature = signature;
-                await _historyStore.SaveClipboardImageAsync(image);
+                var savedImagePath = await _historyStore.SaveClipboardImageAsync(image);
+                InsertClipboardItem(savedImagePath, isText: false);
             }
             else
             {
@@ -728,6 +731,20 @@ public partial class MainWindow : Window
         catch
         {
             // 剪贴板可能被其他程序短暂占用，下一次复制时会自然重试。
+        }
+    }
+
+    /// <summary>复制内容保存后立即进入剪贴板浮窗缓存，不等全量扫描完成。</summary>
+    private void InsertClipboardItem(string savedPath, bool isText)
+    {
+        try
+        {
+            var item = _historyStore.CreateClipboardItem(savedPath, isText);
+            _allHistoryItems = new[] { item }.Concat(_allHistoryItems).Take(200).ToArray();
+        }
+        catch
+        {
+            // 条目构造失败时由随后的全量刷新兜底。
         }
     }
 
@@ -772,6 +789,7 @@ public partial class MainWindow : Window
     {
         if (_historyRefreshInProgress)
         {
+            _historyRefreshPending = true;
             return;
         }
 
@@ -790,6 +808,11 @@ public partial class MainWindow : Window
         finally
         {
             _historyRefreshInProgress = false;
+            if (_historyRefreshPending)
+            {
+                _historyRefreshPending = false;
+                _ = RefreshHistoryAsync();
+            }
         }
     }
 

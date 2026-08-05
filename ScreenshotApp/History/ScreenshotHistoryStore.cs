@@ -246,6 +246,27 @@ public sealed class ScreenshotHistoryStore
             thumbnail);
     }
 
+    /// <summary>外部剪贴板保存完成后立即构造历史条目，避免等待全量扫描才出现在剪贴板浮窗。</summary>
+    public ScreenshotHistoryItem CreateClipboardItem(string savedPath, bool isText)
+    {
+        if (isText)
+        {
+            var content = File.ReadAllText(savedPath, Encoding.UTF8);
+            var timestamp = File.GetLastWriteTime(savedPath);
+            return new ScreenshotHistoryItem(
+                HistoryEntryKind.ExternalClipboard,
+                "外部复制",
+                savedPath,
+                Path.GetFileName(savedPath),
+                timestamp,
+                timestamp.ToString("yyyy-MM-dd  HH:mm:ss"),
+                $"{content.Count(character => !char.IsWhiteSpace(character)):N0} 个字符",
+                CreatePreview(content),
+                null);
+        }
+        return CreateImageItem(savedPath, HistoryEntryKind.ExternalClipboard);
+    }
+
     private static BitmapSource LoadThumbnail(string filePath)
     {
         var thumbnail = new BitmapImage();
