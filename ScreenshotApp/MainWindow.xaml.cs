@@ -741,6 +741,8 @@ public partial class MainWindow : Window
         {
             var item = _historyStore.CreateClipboardItem(savedPath, isText);
             _allHistoryItems = new[] { item }.Concat(_allHistoryItems).Take(200).ToArray();
+            // 历史页正在展示时同步更新列表，剪贴板历史与浮窗都能立即看到新内容。
+            ApplyHistoryFilter();
         }
         catch
         {
