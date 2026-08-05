@@ -520,8 +520,8 @@ public partial class QrCodeConverterView : UserControl
     {
         try
         {
-            var items = await HistoryStore!.LoadAsync(160);
-            var picker = new ClipboardPickerWindow(items, "Image");
+            // 先弹出浮窗显示“正在加载”，图片数据在后台线程准备，避免等待几秒才出现窗口。
+            var picker = new ClipboardPickerWindow("Image");
             var window = Window.GetWindow(this);
             if (window != null && NativeMethods.GetCursorPos(out var cursor))
             {
@@ -529,6 +529,9 @@ public partial class QrCodeConverterView : UserControl
                 picker.Left = Math.Clamp(cursor.X - picker.Width / 2, workArea.Left + 8, workArea.Right - picker.Width - 8);
                 picker.Top = Math.Clamp(cursor.Y - 72, workArea.Top + 8, workArea.Bottom - picker.Height - 8);
             }
+            picker.Show();
+            var items = await HistoryStore!.LoadAsync(120, imagesOnly: true);
+            picker.SetItems(items);
             picker.ItemSelected += (_, item) =>
             {
                 picker.Close();

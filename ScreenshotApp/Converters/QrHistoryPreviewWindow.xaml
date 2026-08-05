@@ -65,7 +65,7 @@
             <Border Grid.Row="4" Background="White" BorderBrush="#D8E7F4" BorderThickness="1" CornerRadius="14">
                 <Grid>
                     <Image x:Name="QrImage" MaxWidth="340" MaxHeight="340" Stretch="Uniform" RenderOptions.BitmapScalingMode="NearestNeighbor" />
-                    <TextBlock x:Name="EmptyText" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="13" Foreground="#9AADBF" Text="无法显示二维码" />
+                    <TextBlock x:Name="EmptyText" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="13" Foreground="#9AADBF" Text="无法显示二维码" Visibility="Collapsed" />
                 </Grid>
             </Border>
             <StackPanel Grid.Row="6">

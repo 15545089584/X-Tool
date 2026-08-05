@@ -38,7 +38,23 @@ public partial class QrHistoryPreviewWindow : Window
                 source = null;
             }
         }
-        source ??= QrCodeService.Generate(entry.Content, 384, 2, ErrorCorrectionLevel.M, Colors.Black, Colors.White);
+        if (source == null)
+        {
+            try
+            {
+                source = QrCodeService.Generate(entry.Content, 384, 2, ErrorCorrectionLevel.M, Colors.Black, Colors.White);
+            }
+            catch
+            {
+                source = null;
+            }
+        }
+        if (source == null)
+        {
+            EmptyText.Visibility = Visibility.Visible;
+            InfoText.Text = "无法显示二维码";
+            return;
+        }
         QrImage.Source = source;
         _pixelWidth = source.PixelWidth;
         _pixelHeight = source.PixelHeight;

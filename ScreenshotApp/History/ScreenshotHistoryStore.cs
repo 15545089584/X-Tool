@@ -63,18 +63,21 @@ public sealed class ScreenshotHistoryStore
         });
     }
 
-    public Task<IReadOnlyList<ScreenshotHistoryItem>> LoadAsync(int maximumCount = 160)
+    public Task<IReadOnlyList<ScreenshotHistoryItem>> LoadAsync(int maximumCount = 160, bool imagesOnly = false)
     {
         return Task.Run<IReadOnlyList<ScreenshotHistoryItem>>(() =>
         {
             var items = new List<ScreenshotHistoryItem>();
             var loadedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            LoadImageEntries(items, _preferences.ScreenshotDirectory, HistoryEntryKind.Screenshot, loadedFiles, detectLongCapture: true);
-            LoadImageEntries(items, _preferences.LongScreenshotDirectory, HistoryEntryKind.LongScreenshot, loadedFiles);
-            LoadTextEntries(items, _preferences.TextExtractionDirectory, HistoryEntryKind.TextExtraction, "文字提取", loadedFiles);
-            LoadTextEntries(items, _preferences.TranslationDirectory, HistoryEntryKind.Translation, "翻译", loadedFiles);
-            LoadRecordingEntries(items, _preferences.RecordingDirectory);
-            LoadExternalClipboardEntries(items, _preferences.ClipboardDirectory, loadedFiles);
+            LoadImageEntries(items, _preferences.ScreenshotDirectory, HistoryEntryKind.Screenshot, loadedFiles, detectLongCapture: true, newestOnly: imagesOnly ? 80 : null);
+            LoadImageEntries(items, _preferences.LongScreenshotDirectory, HistoryEntryKind.LongScreenshot, loadedFiles, newestOnly: imagesOnly ? 80 : null);
+            if (!imagesOnly)
+            {
+                LoadTextEntries(items, _preferences.TextExtractionDirectory, HistoryEntryKind.TextExtraction, "文字提取", loadedFiles);
+                LoadTextEntries(items, _preferences.TranslationDirectory, HistoryEntryKind.Translation, "翻译", loadedFiles);
+            }
+            LoadRecordingEntries(items, _preferences.RecordingDirectory, newestOnly: imagesOnly ? 40 : null);
+            LoadExternalClipboardEntries(items, _preferences.ClipboardDirectory, loadedFiles, imagesOnly: imagesOnly);
             return items
                 .OrderByDescending(item => item.CapturedAt)
                 .Take(maximumCount)
@@ -87,10 +90,19 @@ public sealed class ScreenshotHistoryStore
         string directory,
         HistoryEntryKind expectedKind,
         ISet<string> loadedFiles,
-        bool detectLongCapture = false)
+        bool detectLongCapture = false,
+        int? newestOnly = null)
     {
         Directory.CreateDirectory(directory);
-        foreach (var filePath in Directory.EnumerateFiles(directory, "*.png", SearchOption.TopDirectoryOnly))
+        var files = Directory.EnumerateFiles(directory, "*.png", SearchOption.TopDirectoryOnly);
+        if (newestOnly.HasValue)
+        {
+            // 仅图片模式只取最近文件，避免为历史全量解码缩略图。
+            files = files
+                .OrderByDescending(file => File.GetLastWriteTimeUtc(file))
+                .Take(newestOnly.Value);
+        }
+        foreach (var filePath in files)
         {
             try
             {
@@ -149,10 +161,17 @@ public sealed class ScreenshotHistoryStore
         }
     }
 
-    private static void LoadRecordingEntries(ICollection<ScreenshotHistoryItem> items, string directory)
+    private static void LoadRecordingEntries(ICollection<ScreenshotHistoryItem> items, string directory, int? newestOnly = null)
     {
         Directory.CreateDirectory(directory);
-        foreach (var filePath in Directory.EnumerateFiles(directory, "*.mp4", SearchOption.TopDirectoryOnly))
+        var files = Directory.EnumerateFiles(directory, "*.mp4", SearchOption.TopDirectoryOnly);
+        if (newestOnly.HasValue)
+        {
+            files = files
+                .OrderByDescending(file => File.GetLastWriteTimeUtc(file))
+                .Take(newestOnly.Value);
+        }
+        foreach (var filePath in files)
         {
             try
             {
@@ -183,10 +202,14 @@ public sealed class ScreenshotHistoryStore
     private static void LoadExternalClipboardEntries(
         ICollection<ScreenshotHistoryItem> items,
         string directory,
-        ISet<string> loadedFiles)
+        ISet<string> loadedFiles,
+        bool imagesOnly = false)
     {
-        LoadImageEntries(items, directory, HistoryEntryKind.ExternalClipboard, loadedFiles);
-        LoadTextEntries(items, directory, HistoryEntryKind.ExternalClipboard, "外部复制", loadedFiles);
+        LoadImageEntries(items, directory, HistoryEntryKind.ExternalClipboard, loadedFiles, newestOnly: imagesOnly ? 80 : null);
+        if (!imagesOnly)
+        {
+            LoadTextEntries(items, directory, HistoryEntryKind.ExternalClipboard, "外部复制", loadedFiles);
+        }
     }
 
     private static ScreenshotHistoryItem CreateImageItem(string filePath, HistoryEntryKind kind)

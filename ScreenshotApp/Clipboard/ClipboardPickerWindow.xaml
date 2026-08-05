@@ -131,6 +131,7 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </ScrollViewer>
+            <TextBlock x:Name="LoadingText" Grid.Row="3" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="13" Foreground="#8A9AAC" Text="正在加载图片…" IsHitTestVisible="False" />
         </Grid>
     </Border>
 </Window>
