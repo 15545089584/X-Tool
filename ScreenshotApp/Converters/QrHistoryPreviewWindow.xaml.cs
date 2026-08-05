@@ -14,6 +14,7 @@ public partial class QrHistoryPreviewWindow : Window
     private readonly QrHistoryEntry _entry;
     private readonly int _pixelWidth;
     private readonly int _pixelHeight;
+    private readonly BitmapSource? _qrSource;
 
     public QrHistoryPreviewWindow(QrHistoryEntry entry)
     {
@@ -55,6 +56,7 @@ public partial class QrHistoryPreviewWindow : Window
             InfoText.Text = "无法显示二维码";
             return;
         }
+        _qrSource = source;
         QrImage.Source = source;
         _pixelWidth = source.PixelWidth;
         _pixelHeight = source.PixelHeight;
@@ -95,6 +97,23 @@ public partial class QrHistoryPreviewWindow : Window
     private void CopyContentButton_Status()
     {
         InfoText.Text = $"{_pixelWidth} × {_pixelHeight} 像素 · 内容已复制";
+    }
+
+    private void CopyQr_Click(object sender, RoutedEventArgs e)
+    {
+        if (_qrSource == null)
+        {
+            return;
+        }
+        try
+        {
+            ClipboardService.SetImage(_qrSource);
+            InfoText.Text = $"{_pixelWidth} × {_pixelHeight} 像素 · 二维码图片已复制";
+        }
+        catch
+        {
+            InfoText.Text = "复制失败，请重试";
+        }
     }
 
     private void CloseButton_Click(object sender, RoutedEventArgs e) => Close();

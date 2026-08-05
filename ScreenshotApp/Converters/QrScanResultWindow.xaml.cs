@@ -10,6 +10,9 @@ public partial class QrScanResultWindow : Window
     private const double PlacementGap = 14;
     private readonly Rect? _selectionScreenBounds;
 
+    /// <summary>打开外部链接成功后为 true，截图窗口据此自动退出截图模式。</summary>
+    public bool ExitCaptureRequested { get; private set; }
+
     public QrScanResultWindow(IReadOnlyList<string> results, Rect? selectionScreenBounds = null)
     {
         InitializeComponent();
@@ -63,6 +66,8 @@ public partial class QrScanResultWindow : Window
             try
             {
                 QrCodeService.OpenUrl(item.Content);
+                ExitCaptureRequested = true;
+                Close();
             }
             catch (Exception ex)
             {

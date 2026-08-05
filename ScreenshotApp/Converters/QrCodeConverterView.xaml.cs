@@ -833,14 +833,6 @@ public partial class QrCodeConverterView : UserControl
             DateTime.Now));
     }
 
-    private void CopyHistory_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is FrameworkElement { Tag: QrHistoryEntry entry })
-        {
-            TryCopyText(entry.Content);
-        }
-    }
-
     private void ViewHistoryQr_Click(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement { Tag: QrHistoryEntry entry })

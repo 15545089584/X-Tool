@@ -315,7 +315,6 @@
                                                 <TextBlock x:Name="HistoryContentText" Grid.Column="2" VerticalAlignment="Center" FontSize="12" Foreground="#405F7C" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="64" ToolTip="{Binding Content}" />
                                                 <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
                                                     <Button x:Name="ViewHistoryButton" Margin="8,0,0,0" Height="38" MinWidth="88" Padding="18,0" Style="{StaticResource SmallActionButton}" Tag="{Binding}" Click="ViewHistoryQr_Click"><TextBlock Margin="2,0" Foreground="White" Text="查看" /></Button>
-                                                    <Button x:Name="CopyHistoryButton" Margin="8,0,0,0" Height="38" MinWidth="88" Padding="18,0" Style="{StaticResource SmallButton}" Tag="{Binding}" Click="CopyHistory_Click"><TextBlock Margin="2,0" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="复制" /></Button>
                                                     <Button x:Name="DeleteHistoryButton" Margin="8,0,0,0" Height="38" MinWidth="88" Padding="18,0" Style="{StaticResource SmallButton}" Tag="{Binding}" Click="DeleteHistory_Click"><TextBlock Margin="2,0" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="删除" /></Button>
                                                 </StackPanel>
                                             </Grid>

@@ -78,7 +78,8 @@
                 </Border>
             </StackPanel>
             <StackPanel Grid.Row="8" Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button Style="{StaticResource GlassButton}" Click="CopyContent_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="复制内容" /></Button>
+                <Button Style="{StaticResource GlassActionButton}" Click="CopyQr_Click"><TextBlock Foreground="White" Text="复制二维码" /></Button>
+                <Button Margin="12,0,0,0" Style="{StaticResource GlassButton}" Click="CopyContent_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="复制内容" /></Button>
                 <Button Margin="12,0,0,0" Style="{StaticResource GlassActionButton}" Click="CloseButton_Click"><TextBlock Foreground="White" Text="关闭" /></Button>
             </StackPanel>
         </Grid>

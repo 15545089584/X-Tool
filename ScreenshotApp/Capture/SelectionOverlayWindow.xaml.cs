@@ -433,6 +433,11 @@ public partial class SelectionOverlayWindow : Window
                 _selection.Height);
             var resultWindow = new QrScanResultWindow(results, selectionScreenBounds) { Owner = this };
             resultWindow.ShowDialog();
+            if (resultWindow.ExitCaptureRequested)
+            {
+                // 用户已跳转到外部链接，自动结束截图流程，避免停留在截图界面造成卡死错觉。
+                Close();
+            }
         }
         catch (Exception exception)
         {
