@@ -208,6 +208,7 @@ public partial class CollaborationView : UserControl
             ClipboardStateText.Text = "等待服务启动";
             RecentSyncImage.Visibility = Visibility.Collapsed;
             RecentSyncTimeText.Text = string.Empty;
+            SyncCountText.Text = string.Empty;
             return;
         }
 
@@ -229,12 +230,14 @@ public partial class CollaborationView : UserControl
             ClipboardStateText.Text = ClipboardBridgeCheckBox.IsChecked == true
                 ? $"桥接运行中 · 已同步 {service.ClipboardSeq} 条"
                 : "电脑→手机同步已关闭，手机→电脑仍可用";
+            SyncCountText.Text = $"累计同步 {service.ClipboardSeq} 条";
             RecentSyncImage.Visibility = Visibility.Collapsed;
             RecentSyncTimeText.Text = string.Empty;
             return;
         }
 
         RecentSyncTimeText.Text = $"第 {entry.Seq} 条 · {entry.CreatedAt:HH:mm:ss}";
+        SyncCountText.Text = $"累计同步 {service.ClipboardSeq} 条";
         if (entry.Kind == "image" && entry.ImagePngBase64.Length > 0)
         {
             try

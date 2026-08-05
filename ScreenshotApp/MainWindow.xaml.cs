@@ -72,6 +72,8 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         _historyStore = new ScreenshotHistoryStore(_preferences);
+        CollaborationService.Instance.IncomingDirectory = _preferences.CollaborationIncomingDirectory;
+        CollaborationService.Instance.OutgoingDirectory = _preferences.CollaborationOutgoingDirectory;
         QrCodeConverterViewHost.HistoryStore = _historyStore;
         ClipboardService.TextRecordRequested += async content =>
         {
@@ -1026,6 +1028,8 @@ public partial class MainWindow : Window
         "翻译" => _preferences.TranslationDirectory,
         "屏幕录制" => _preferences.RecordingDirectory,
         "外部复制" => _preferences.ClipboardDirectory,
+        "协作接收" => _preferences.CollaborationIncomingDirectory,
+        "协作发送" => _preferences.CollaborationOutgoingDirectory,
         _ => string.Empty
     };
 
@@ -1052,6 +1056,14 @@ public partial class MainWindow : Window
             case "外部复制":
                 _preferences.ClipboardDirectory = fullPath;
                 break;
+            case "协作接收":
+                _preferences.CollaborationIncomingDirectory = fullPath;
+                CollaborationService.Instance.IncomingDirectory = fullPath;
+                break;
+            case "协作发送":
+                _preferences.CollaborationOutgoingDirectory = fullPath;
+                CollaborationService.Instance.OutgoingDirectory = fullPath;
+                break;
         }
     }
 
@@ -1063,6 +1075,8 @@ public partial class MainWindow : Window
         TranslationStoragePathText.Text = _preferences.TranslationDirectory;
         RecordingStoragePathText.Text = _preferences.RecordingDirectory;
         ClipboardStoragePathText.Text = _preferences.ClipboardDirectory;
+        CollaborationIncomingPathText.Text = _preferences.CollaborationIncomingDirectory;
+        CollaborationOutgoingPathText.Text = _preferences.CollaborationOutgoingDirectory;
     }
 
     private void OpenHistoryItem_Click(object sender, RoutedEventArgs e)

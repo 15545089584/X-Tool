@@ -66,13 +66,13 @@ public sealed class CollaborationService
         }
     }
 
-    public string IncomingDirectory => Path.Combine(
+    public string IncomingDirectory { get; set; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "X-Tool",
         "Transfer",
         "Incoming");
 
-    public string OutgoingDirectory => Path.Combine(
+    public string OutgoingDirectory { get; set; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "X-Tool",
         "Transfer",
