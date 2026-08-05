@@ -729,6 +729,20 @@
                                 </Grid>
                             </Grid>
 
+                            <!-- 二维码：生成与识别全部在本地完成，无网络依赖。 -->
+                            <Grid x:Name="QrCodeConverterView" Visibility="Collapsed" Margin="44,42,52,38">
+                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="20" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                <StackPanel>
+                                    <TextBlock FontSize="30" FontWeight="SemiBold" Text="转换器工作台" />
+                                    <TextBlock Margin="0,9,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}" Text="二维码生成、图片识别与本地历史记录" />
+                                </StackPanel>
+                                <Grid Grid.Row="2">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="76" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                    <converters:ConverterToolRail SelectedTool="QrCode" ToolRequested="ConverterToolRail_ToolRequested" />
+                                    <converters:QrCodeConverterView Grid.Column="2" />
+                                </Grid>
+                            </Grid>
+
                             <!-- 统一剪贴板页：屏幕工作台内容与外部复制内容统一回看。 -->
                             <Grid x:Name="HistoryView" Visibility="Collapsed" Margin="58,32,48,38">
                                 <Grid.RowDefinitions>

@@ -14,6 +14,7 @@
             <Button x:Name="VideoButton" Style="{StaticResource ToolButton}" Tag="Video" ToolTip="视频处理" Click="ToolButton_Click"><Border Width="34" Height="34" Background="#ECE4FF" CornerRadius="10"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="#7B61D8" Text="&#xE714;" /></Border></Button>
             <Button x:Name="PdfButton" Style="{StaticResource ToolButton}" Tag="Pdf" ToolTip="转 PDF" Click="ToolButton_Click"><Border Width="34" Height="34" Background="#FFE9DE" CornerRadius="10"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="#D8754E" Text="&#xEA90;" /></Border></Button>
             <Button x:Name="EncodingButton" Style="{StaticResource ToolButton}" Tag="Encoding" ToolTip="编码转换" Click="ToolButton_Click"><Border Width="34" Height="34" Background="#E1F0FF" CornerRadius="10"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="#377BC4" Text="&#xE943;" /></Border></Button>
+            <Button x:Name="QrCodeButton" Style="{StaticResource ToolButton}" Tag="QrCode" ToolTip="二维码" Click="ToolButton_Click"><Border Width="34" Height="34" Background="#DFF5F2" CornerRadius="10"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="#2BA08F" Text="&#xED14;" /></Border></Button>
         </StackPanel>
     </Border>
 </UserControl>

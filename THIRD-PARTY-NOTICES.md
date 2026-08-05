@@ -21,6 +21,13 @@
 - 许可证：MIT License。
 - 项目与许可证：<https://www.nuget.org/packages/PDFsharp/6.2.4>。
 
+## ZXing.Net 0.16.11
+
+- 用途：转换器工作台二维码功能的本地生成与图片识别，全程离线处理。
+- 引用方式：NuGet `ZXing.Net` 0.16.11。
+- 许可证：Apache License 2.0。
+- 项目与许可证：<https://www.nuget.org/packages/ZXing.Net/0.16.11>。
+
 ## sherpa-onnx 1.13.4 与 SenseVoice int8 模型
 
 - 用途：本地离线语音输入的麦克风语音识别。

@@ -247,6 +247,7 @@ public partial class MainWindow : Window
           VideoConverterView.Visibility = page == "VideoConverter" ? Visibility.Visible : Visibility.Collapsed;
           PdfConverterView.Visibility = page == "PdfConverter" ? Visibility.Visible : Visibility.Collapsed;
           EncodingConverterView.Visibility = page == "EncodingConverter" ? Visibility.Visible : Visibility.Collapsed;
+          QrCodeConverterView.Visibility = page == "QrCodeConverter" ? Visibility.Visible : Visibility.Collapsed;
         FileWorkbenchView.Visibility = page == "FileWorkbench" ? Visibility.Visible : Visibility.Collapsed;
         NetworkWorkbenchView.Visibility = page == "NetworkWorkbench" ? Visibility.Visible : Visibility.Collapsed;
         ResourceManagementView.Visibility = page == "ResourceManagement" ? Visibility.Visible : Visibility.Collapsed;
@@ -1719,6 +1720,7 @@ public partial class MainWindow : Window
               "Video" => "VideoConverter",
               "Pdf" => "PdfConverter",
               "Encoding" => "EncodingConverter",
+              "QrCode" => "QrCodeConverter",
               _ => "ImageConverter"
         });
     }
