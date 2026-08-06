@@ -1,12 +1,13 @@
 package com.xtool.collab
 
-import android.content.ClipData
-import android.content.ClipboardManager
+import android.Manifest
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -41,7 +42,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -55,20 +55,17 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.FileProvider
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import com.xtool.collab.data.CollabApi
 import com.xtool.collab.data.SessionStore
+import com.xtool.collab.service.ClipboardAccessibilityService
+import com.xtool.collab.service.ClipboardBridge
+import com.xtool.collab.service.SyncForegroundService
 import com.xtool.collab.ui.XToolCollabTheme
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.ByteArrayOutputStream
-import java.io.File
-import java.util.Base64
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -86,6 +83,7 @@ private enum class Screen { Pair, Home }
 
 @Composable
 private fun AppRoot(session: SessionStore) {
+    val appContext = LocalContext.current
     var screen by remember { mutableStateOf(if (session.token.isNotEmpty() && session.host.isNotEmpty()) Screen.Home else Screen.Pair) }
     var host by remember { mutableStateOf(session.host) }
     var token by remember { mutableStateOf(session.token) }
@@ -117,9 +115,11 @@ private fun AppRoot(session: SessionStore) {
                 }
             )
             Screen.Home -> HomeScreen(
+                session = session,
                 host = host,
                 token = token,
                 onDisconnect = {
+                    SyncForegroundService.stop(appContext)
                     session.clear()
                     screen = Screen.Pair
                 }
@@ -255,81 +255,50 @@ private fun PairScreen(
 
 @Composable
 private fun HomeScreen(
+    session: SessionStore,
     host: String,
     token: String,
     onDisconnect: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var autoSync by remember { mutableStateOf(true) }
-    var latestText by remember { mutableStateOf("") }
-    var latestImage by remember { mutableStateOf<Bitmap?>(null) }
+    var autoSync by remember { mutableStateOf(session.syncEnabled) }
     var sendText by remember { mutableStateOf("") }
-    var status by remember { mutableStateOf("已连接到 $host") }
-    var lastSeq by remember { mutableLongStateOf(0L) }
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    var localStatus by remember { mutableStateOf("已连接到 $host") }
+    var receivedText by remember { mutableStateOf(ClipboardBridge.SyncState.lastText) }
+    var receivedImage by remember { mutableStateOf(ClipboardBridge.SyncState.lastImage) }
+    var syncStatus by remember { mutableStateOf(ClipboardBridge.SyncState.status) }
+    val accessibilityOn = remember { isAccessibilityEnabled(context) }
 
-    // 电脑 → 手机：轮询拉取并写入手机剪贴板。
-    LaunchedEffect(autoSync, token) {
-        if (!autoSync || token.isBlank()) return@LaunchedEffect
-        while (isActive) {
-            val (current, entries) = withContext(Dispatchers.IO) {
-                CollabApi(host).pullClipboard(token, lastSeq)
-            }
-            if (current > lastSeq) {
-                lastSeq = current
-                entries.lastOrNull()?.let { entry ->
-                    if (entry.kind == "text" && entry.text.isNotEmpty()) {
-                        latestText = entry.text
-                        latestImage = null
-                        clipboard.setPrimaryClip(ClipData.newPlainText(ClipLabel, entry.text))
-                    } else if (entry.kind == "image" && entry.imageBase64.isNotEmpty()) {
-                        val bitmap = decodeImage(entry.imageBase64)
-                        if (bitmap != null) {
-                            latestImage = bitmap
-                            latestText = ""
-                            writeImageToClipboard(context, bitmap)
-                        }
-                    }
-                }
-            }
-            delay(3000)
+    // 订阅电脑 → 手机同步状态，用于界面展示。
+    DisposableEffect(Unit) {
+        val unsubscribe = ClipboardBridge.SyncState.onChange {
+            receivedText = ClipboardBridge.SyncState.lastText
+            receivedImage = ClipboardBridge.SyncState.lastImage
+            syncStatus = ClipboardBridge.SyncState.status
         }
+        onDispose { unsubscribe() }
     }
 
-    // 手机 → 电脑：监听手机剪贴板变化并推送；跳过自己写入的内容避免回环。
+    // 同步开关控制前台服务启停。
     DisposableEffect(autoSync) {
-        val listener = ClipboardManager.OnPrimaryClipChangedListener {
-            if (!autoSync) return@OnPrimaryClipChangedListener
-            val clip = clipboard.primaryClip ?: return@OnPrimaryClipChangedListener
-            if (clip.description?.label == ClipLabel) return@OnPrimaryClipChangedListener
-            val item = clip.getItemAt(0)
-            val text = item.coerceToText(context)?.toString()
-            if (!text.isNullOrBlank()) {
-                scope.launch {
-                    val ok = withContext(Dispatchers.IO) { CollabApi(host).pushClipboardText(token, text) }
-                    status = if (ok) "已同步手机剪贴板到电脑" else "同步失败"
-                }
-            } else if (item.uri != null || clip.description?.hasMimeType("image/*") == true) {
-                scope.launch {
-                    // 剪贴板图片以 content Uri 携带，从流解码为位图。
-                    val bitmap = item.uri?.let { uri ->
-                        runCatching {
-                            context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
-                        }.getOrNull()
-                    }
-                    if (bitmap != null) {
-                        val png = ByteArrayOutputStream().apply {
-                            bitmap.compress(Bitmap.CompressFormat.PNG, 100, this)
-                        }.toByteArray()
-                        val ok = withContext(Dispatchers.IO) { CollabApi(host).pushClipboardImage(token, png) }
-                        status = if (ok) "已同步手机图片到电脑" else "图片同步失败"
-                    }
-                }
-            }
+        session.syncEnabled = autoSync
+        if (autoSync && token.isNotBlank()) {
+            SyncForegroundService.start(context, host, token)
+        } else {
+            SyncForegroundService.stop(context)
         }
-        clipboard.addPrimaryClipChangedListener(listener)
-        onDispose { clipboard.removePrimaryClipChangedListener(listener) }
+        onDispose { }
+    }
+
+    // Android 13+ 请求通知权限（前台服务通知需要）。
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
 
     Column(
@@ -366,17 +335,39 @@ private fun HomeScreen(
                     Switch(checked = autoSync, onCheckedChange = { autoSync = it })
                 }
                 Text(
-                    if (autoSync) "手机与电脑剪贴板实时同步（需保持本应用在前台；后台自动同步将在无障碍版本接入）" else "已关闭自动同步",
+                    if (autoSync) "后台常驻同步中：电脑内容自动进入手机剪贴板，手机复制自动推送电脑" else "已关闭自动同步",
                     fontSize = 12.sp,
                     color = Color(0xFF7B93A8),
                     modifier = Modifier.padding(top = 6.dp)
                 )
 
+                if (!accessibilityOn) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF6E5))
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                "未开启无障碍服务：App 退到后台后，手机复制的内容将无法自动推送到电脑。",
+                                fontSize = 12.sp,
+                                color = Color(0xFF8A5B12)
+                            )
+                            OutlinedButton(
+                                onClick = {
+                                    context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                                },
+                                modifier = Modifier.padding(top = 8.dp)
+                            ) { Text("去开启无障碍服务", fontSize = 12.sp) }
+                        }
+                    }
+                }
+
                 Spacer(Modifier.height(14.dp))
                 Text("最近收到", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF7B93A8))
-                if (latestImage != null) {
+                if (receivedImage != null) {
                     Image(
-                        bitmap = latestImage!!.asImageBitmap(),
+                        bitmap = receivedImage!!.asImageBitmap(),
                         contentDescription = "电脑同步的图片",
                         modifier = Modifier
                             .fillMaxWidth()
@@ -386,12 +377,18 @@ private fun HomeScreen(
                     )
                 } else {
                     Text(
-                        latestText.ifEmpty { "暂无内容，电脑端复制的内容会显示在这里" },
+                        receivedText.ifEmpty { "暂无内容，电脑端复制的内容会显示在这里" },
                         fontSize = 14.sp,
                         color = Color(0xFF405F7C),
                         modifier = Modifier.padding(top = 6.dp)
                     )
                 }
+                Text(
+                    syncStatus.ifEmpty { "等待同步…" },
+                    fontSize = 12.sp,
+                    color = Color(0xFF7B93A8),
+                    modifier = Modifier.padding(top = 8.dp)
+                )
 
                 Spacer(Modifier.height(14.dp))
                 OutlinedTextField(
@@ -405,7 +402,7 @@ private fun HomeScreen(
                         if (sendText.isBlank()) return@Button
                         scope.launch {
                             val ok = withContext(Dispatchers.IO) { CollabApi(host).pushClipboardText(token, sendText) }
-                            status = if (ok) "已发送到电脑剪贴板" else "发送失败"
+                            localStatus = if (ok) "已发送到电脑剪贴板" else "发送失败"
                             if (ok) sendText = ""
                         }
                     },
@@ -413,7 +410,7 @@ private fun HomeScreen(
                     modifier = Modifier.fillMaxWidth().height(46.dp).padding(top = 10.dp)
                 ) { Text("发送", fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
 
-                Text(status, fontSize = 12.sp, color = Color(0xFF7B93A8), modifier = Modifier.padding(top = 10.dp))
+                Text(localStatus, fontSize = 12.sp, color = Color(0xFF7B93A8), modifier = Modifier.padding(top = 10.dp))
             }
         }
 
@@ -435,27 +432,9 @@ private fun HomeScreen(
     }
 }
 
-private const val ClipLabel = "XTool-collab"
-
-private fun decodeImage(base64: String): Bitmap? {
-    return try {
-        val bytes = Base64.getDecoder().decode(base64)
-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-    } catch (_: Exception) {
-        null
-    }
-}
-
-private fun writeImageToClipboard(context: Context, bitmap: Bitmap) {
-    try {
-        val dir = File(context.cacheDir, "shared")
-        dir.mkdirs()
-        val file = File(dir, "clip.png")
-        file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
-        val uri: Uri = FileProvider.getUriForFile(context, "com.xtool.collab.fileprovider", file)
-        val clip = ClipData.newUri(context.contentResolver, ClipLabel, uri)
-        (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(clip)
-    } catch (_: Exception) {
-        // 图片写入失败不影响文本同步。
-    }
+private fun isAccessibilityEnabled(context: Context): Boolean {
+    val expected = "${context.packageName}/${ClipboardAccessibilityService::class.java.name}"
+    val enabled = Settings.Secure.getString(context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
+        ?: return false
+    return enabled.split(':').any { it.equals(expected, ignoreCase = true) }
 }

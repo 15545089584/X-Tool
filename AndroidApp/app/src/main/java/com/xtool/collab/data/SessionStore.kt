@@ -18,6 +18,11 @@ class SessionStore(context: Context) {
         get() = prefs.getString("pin", "") ?: ""
         set(value) = prefs.edit().putString("pin", value).apply()
 
+    /** 剪贴板自动同步总开关，前台服务与无障碍服务共用。 */
+    var syncEnabled: Boolean
+        get() = prefs.getBoolean("sync_enabled", true)
+        set(value) = prefs.edit().putBoolean("sync_enabled", value).apply()
+
     fun clear() {
         prefs.edit().clear().apply()
     }
