@@ -351,6 +351,20 @@ public sealed class CollaborationService
                 return;
             }
 
+            // 手机原生 App 使用的 JSON 配对端点；网页端仍走 /pair 返回页面。
+            if (path == "/api/pair" && request.Method == "GET")
+            {
+                if (!IsRunning || query.GetValueOrDefault("pin") != _pin)
+                {
+                    await WriteJsonAsync(stream, 401, new { ok = false, error = "配对 PIN 不正确" });
+                    return;
+                }
+                var token = Guid.NewGuid().ToString("N");
+                _sessions[token] = DateTime.UtcNow.AddHours(SessionLifetimeHours);
+                await WriteJsonAsync(stream, 200, new { ok = true, token, host = $"{LocalIpAddress}:{Port}" });
+                return;
+            }
+
             if (!IsValidSession(query.GetValueOrDefault("t")))
             {
                 await WriteJsonAsync(stream, 401, new { error = "未授权或会话已过期" });
