@@ -47,6 +47,14 @@ class CollabApi(private val host: String) {
         client.newCall(request).execute().use { return it.isSuccessful }
     }
 
+    /** 把手机图片（PNG 字节）推送到电脑剪贴板。 */
+    fun pushClipboardImage(token: String, pngBytes: ByteArray): Boolean {
+        val request = Request.Builder().url("${baseUrl()}/api/clipboard/push?t=$token")
+            .post(pngBytes.toRequestBody(pngMedia))
+            .build()
+        client.newCall(request).execute().use { return it.isSuccessful }
+    }
+
     /** 拉取自 since 之后的新剪贴板条目，返回 (最新序号, 条目列表)。 */
     fun pullClipboard(token: String, since: Long): Pair<Long, List<ClipboardEntry>> {
         val request = Request.Builder().url("${baseUrl()}/api/clipboard/pull?t=$token&since=$since").build()
