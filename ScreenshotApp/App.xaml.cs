@@ -5,6 +5,7 @@ using System.Windows.Interop;
 using Forms = System.Windows.Forms;
 using ScreenshotApp.SystemTools;
 using ScreenshotApp.NetworkWorkbench;
+using ScreenshotApp.Translation;
 
 namespace ScreenshotApp;
 
@@ -108,6 +109,18 @@ public partial class App : System.Windows.Application
         Shutdown();
     }
 
+    /// <summary>托盘气泡通知（协作中心收到手机内容时使用）。</summary>
+    internal void ShowTrayBalloon(string title, string text)
+    {
+        if (_trayIcon is null)
+        {
+            return;
+        }
+        _trayIcon.BalloonTipTitle = title;
+        _trayIcon.BalloonTipText = text;
+        _trayIcon.ShowBalloonTip(2600);
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
         if (_trayIcon is not null)
@@ -121,6 +134,7 @@ public partial class App : System.Windows.Application
         _trayDrawingIcon = null;
         _singleInstanceCoordinator?.Dispose();
         _singleInstanceCoordinator = null;
+        TranslationEngineProvider.Dispose();
         base.OnExit(e);
     }
 

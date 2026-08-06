@@ -24,7 +24,8 @@ public sealed class CollaborationService
 
     private readonly object _sync = new();
     private readonly List<CollaborationClipboardEntry> _clipboardHistory = new();
-    private readonly ConcurrentDictionary<string, DateTime> _sessions = new(StringComparer.Ordinal);
+    private sealed record SessionInfo(DateTime Expires, DateTime LastSeen);
+    private readonly ConcurrentDictionary<string, SessionInfo> _sessions = new(StringComparer.Ordinal);
     private TcpListener? _listener;
     private CancellationTokenSource? _acceptCts;
     private long _clipboardSeq;
@@ -39,6 +40,9 @@ public sealed class CollaborationService
     public static CollaborationService Instance { get; } = new();
 
     public bool IsRunning { get; private set; }
+
+    /// <summary>手机内容写入电脑剪贴板成功后触发，参数为 (kind, 摘要)。</summary>
+    public event Action<string, string>? MobileClipboardReceived;
 
     public int Port { get; private set; } = DefaultPort;
 
@@ -122,8 +126,12 @@ public sealed class CollaborationService
         get
         {
             var now = DateTime.UtcNow;
-            var expired = _sessions.Where(pair => pair.Value <= now).Select(pair => pair.Key).ToArray();
-            foreach (var key in expired)
+            var cutoff = now.AddMinutes(-5);
+            var stale = _sessions
+                .Where(pair => pair.Value.Expires <= now || pair.Value.LastSeen < cutoff)
+                .Select(pair => pair.Key)
+                .ToArray();
+            foreach (var key in stale)
             {
                 _sessions.TryRemove(key, out _);
             }
@@ -343,7 +351,7 @@ public sealed class CollaborationService
                     return;
                 }
                 var token = Guid.NewGuid().ToString("N");
-                _sessions[token] = DateTime.UtcNow.AddHours(SessionLifetimeHours);
+                _sessions[token] = new SessionInfo(DateTime.UtcNow.AddHours(SessionLifetimeHours), DateTime.UtcNow);
                 var html = (_pageHtml ?? string.Empty)
                     .Replace("__TOKEN__", token)
                     .Replace("__HOST__", $"http://{LocalIpAddress}:{Port}");
@@ -360,7 +368,7 @@ public sealed class CollaborationService
                     return;
                 }
                 var token = Guid.NewGuid().ToString("N");
-                _sessions[token] = DateTime.UtcNow.AddHours(SessionLifetimeHours);
+                _sessions[token] = new SessionInfo(DateTime.UtcNow.AddHours(SessionLifetimeHours), DateTime.UtcNow);
                 await WriteJsonAsync(stream, 200, new { ok = true, token, host = $"{LocalIpAddress}:{Port}" });
                 return;
             }
@@ -517,6 +525,8 @@ public sealed class CollaborationService
                 if (text != null)
                 {
                     ClipboardService.SetText(text, recordToHistory: true);
+                    var summary = text.Length > 60 ? text.Substring(0, 60) + "…" : text;
+                    MobileClipboardReceived?.Invoke("text", summary);
                 }
                 else if (imageBytes is { Length: > 0 })
                 {
@@ -528,6 +538,7 @@ public sealed class CollaborationService
                     image.EndInit();
                     image.Freeze();
                     ClipboardService.SetImage(image, recordToHistory: true);
+                    MobileClipboardReceived?.Invoke("image", "图片");
                 }
             }
             catch
@@ -543,8 +554,10 @@ public sealed class CollaborationService
         {
             return false;
         }
-        if (_sessions.TryGetValue(token, out var expires) && expires > DateTime.UtcNow)
+        var now = DateTime.UtcNow;
+        if (_sessions.TryGetValue(token, out var info) && info.Expires > now)
         {
+            _sessions[token] = info with { LastSeen = now };
             return true;
         }
         _sessions.TryRemove(token, out _);

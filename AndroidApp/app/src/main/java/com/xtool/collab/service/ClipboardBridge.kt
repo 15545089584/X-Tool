@@ -67,6 +67,12 @@ object ClipboardBridge {
         if (clip.description?.label == Label) return
         val item = clip.getItemAt(0)
         val text = item.coerceToText(context)?.toString()
+        val signature = text ?: item.uri?.toString() ?: return
+        // 多监听器（无障碍服务 + 前台服务）并发触发时去重，避免重复推送。
+        val now = System.currentTimeMillis()
+        val previous = lastPush[signature]
+        if (previous != null && now - previous < 5000) return
+        lastPush[signature] = now
         if (!text.isNullOrBlank()) {
             Thread {
                 runCatching { CollabApi(host).pushClipboardText(token, text) }
@@ -106,12 +112,11 @@ object ClipboardBridge {
                 } else if (entry.kind == "image" && entry.imageBase64.isNotEmpty()) {
                     val bitmap = decodeImage(entry.imageBase64)
                     if (bitmap != null) {
-                        // 图片不自动写入剪贴板：电脑复制图片常为电脑本地用途，
-                        // 改为在 App 内展示，由用户点击“复制到剪贴板”或“保存到相册”。
+                        writeImageToClipboard(context, bitmap)
                         SyncState.update {
                             lastImage = bitmap
                             lastText = ""
-                            status = "收到电脑图片：可复制到剪贴板或保存到相册"
+                            status = "已同步电脑图片到手机"
                         }
                     }
                 }
@@ -119,4 +124,6 @@ object ClipboardBridge {
         }
         return current
     }
+
+    private val lastPush = java.util.concurrent.ConcurrentHashMap<String, Long>()
 }

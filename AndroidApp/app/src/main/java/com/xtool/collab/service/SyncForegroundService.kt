@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.os.IBinder
@@ -42,6 +43,13 @@ class SyncForegroundService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var lastSeqValue = 0L
+    private var host = ""
+    private var token = ""
+    private val clipboardListener = ClipboardManager.OnPrimaryClipChangedListener {
+        // 前台服务作为推送兜底：App 在前台时手机复制也能推送到电脑
+        // （后台读取豁免仍由无障碍服务负责）。
+        ClipboardBridge.pushFromClipboard(this@SyncForegroundService, host, token)
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -56,6 +64,10 @@ class SyncForegroundService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        this.host = host
+        this.token = token
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.addPrimaryClipChangedListener(clipboardListener)
         scope.launch {
             while (isActive) {
                 runCatching {
@@ -73,6 +85,8 @@ class SyncForegroundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.removePrimaryClipChangedListener(clipboardListener)
         scope.cancel()
         super.onDestroy()
     }

@@ -74,6 +74,15 @@ public partial class MainWindow : Window
         _historyStore = new ScreenshotHistoryStore(_preferences);
         CollaborationService.Instance.IncomingDirectory = _preferences.CollaborationIncomingDirectory;
         CollaborationService.Instance.OutgoingDirectory = _preferences.CollaborationOutgoingDirectory;
+        CollaborationService.Instance.MobileClipboardReceived += (kind, summary) =>
+        {
+            if (Application.Current is App app)
+            {
+                app.ShowTrayBalloon(
+                    kind == "image" ? "收到手机图片" : "收到手机文本",
+                    $"{summary} · 已写入剪贴板");
+            }
+        };
         QrCodeConverterViewHost.HistoryStore = _historyStore;
         ClipboardService.TextRecordRequested += async content =>
         {
