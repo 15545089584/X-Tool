@@ -110,13 +110,14 @@
                         <Border Width="34" Height="34" Background="#FFE9DE" CornerRadius="10"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="17" Foreground="#D8754E" Text="&#xE8A5;" /></Border>
                         <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Style="{StaticResource CardTitle}" Text="文件传输" />
                     </StackPanel>
-                    <Button HorizontalAlignment="Right" Height="40" MinWidth="132" Padding="20,0" Style="{StaticResource Button}" Click="OpenSettings_Click"><TextBlock Margin="2,0" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="收发位置…" /></Button>
+                    <Button HorizontalAlignment="Right" Height="40" MinWidth="132" Padding="20,0" Style="{StaticResource Button}" Click="OpenSettings_Click"><TextBlock Margin="2,0" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="收发位置" /></Button>
                 </Grid>
                 <TextBlock Grid.Row="2" FontSize="12" Foreground="#63809C" TextWrapping="Wrap" Text="手机上传的文件自动存入接收目录；电脑发送的文件自动进入发送目录，手机端自动下载。收发目录在设置中统一调整。" />
 
                 <Grid Grid.Row="4">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="1.08*" /><ColumnDefinition Width="18" /><ColumnDefinition Width="0.92*" /></Grid.ColumnDefinitions>
-                    <Border x:Name="FileDropZone" MinHeight="230" AllowDrop="True" DragOver="FileDropZone_DragOver" Drop="FileDropZone_Drop" Background="#2EFFFFFF" BorderBrush="#A9CFE9FA" BorderThickness="1.5" CornerRadius="14" Padding="24">
+                    <Border x:Name="FileDropZone" MinHeight="230" AllowDrop="True" DragOver="FileDropZone_DragOver" Drop="FileDropZone_Drop" Background="#46FFFFFF" BorderBrush="#C9B9D8EB" BorderThickness="1.5" CornerRadius="14" Padding="24">
+                        <Border.Effect><DropShadowEffect BlurRadius="18" ShadowDepth="4" Direction="270" Opacity="0.28" Color="#D8754E" /></Border.Effect>
                         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                             <TextBlock HorizontalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="40" Foreground="#D8754E" Text="&#xE898;" />
                             <TextBlock Margin="0,14,0,0" HorizontalAlignment="Center" FontSize="17" FontWeight="SemiBold" Foreground="#2E4B67" Text="拖拽文件到这里" />
@@ -128,15 +129,19 @@
                     <Grid Grid.Column="2">
                         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="6" /><RowDefinition Height="*" /><RowDefinition Height="12" /><RowDefinition Height="Auto" /><RowDefinition Height="6" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                         <TextBlock Style="{StaticResource CardTitle}" FontSize="13" Text="手机上传的文件" />
-                        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                            <ScrollViewer.Resources><Style TargetType="ScrollBar" BasedOn="{StaticResource QrGlassScrollBar}" /></ScrollViewer.Resources>
-                            <StackPanel x:Name="IncomingFilesList" />
-                        </ScrollViewer>
+                        <Border Grid.Row="2" Padding="4" Background="#26FFFFFF" BorderBrush="#B9D9EAF8" BorderThickness="1" CornerRadius="10">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                <ScrollViewer.Resources><Style TargetType="ScrollBar" BasedOn="{StaticResource QrGlassScrollBar}" /></ScrollViewer.Resources>
+                                <StackPanel x:Name="IncomingFilesList" />
+                            </ScrollViewer>
+                        </Border>
                         <TextBlock Grid.Row="4" Style="{StaticResource CardTitle}" FontSize="13" Text="电脑发送的文件" />
-                        <ScrollViewer Grid.Row="6" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                            <ScrollViewer.Resources><Style TargetType="ScrollBar" BasedOn="{StaticResource QrGlassScrollBar}" /></ScrollViewer.Resources>
-                            <StackPanel x:Name="OutgoingFilesList" />
-                        </ScrollViewer>
+                        <Border Grid.Row="6" Padding="4" Background="#26FFFFFF" BorderBrush="#B9D9EAF8" BorderThickness="1" CornerRadius="10">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                <ScrollViewer.Resources><Style TargetType="ScrollBar" BasedOn="{StaticResource QrGlassScrollBar}" /></ScrollViewer.Resources>
+                                <StackPanel x:Name="OutgoingFilesList" />
+                            </ScrollViewer>
+                        </Border>
                     </Grid>
                 </Grid>
 

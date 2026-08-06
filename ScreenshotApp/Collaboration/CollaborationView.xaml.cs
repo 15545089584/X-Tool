@@ -278,12 +278,18 @@ public partial class CollaborationView : UserControl
         {
             if (!Directory.Exists(directory))
             {
+                AddEmptyHint(panel);
                 return;
             }
             var files = Directory.EnumerateFiles(directory)
                 .Select(file => new FileInfo(file))
                 .OrderByDescending(info => info.LastWriteTime)
                 .Take(10);
+            if (!files.Any())
+            {
+                AddEmptyHint(panel);
+                return;
+            }
             foreach (var info in files)
             {
                 var name = new TextBlock { Text = info.Name, FontSize = 12, FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(Color.FromRgb(64, 95, 124)), TextTrimming = TextTrimming.CharacterEllipsis };
@@ -314,7 +320,19 @@ public partial class CollaborationView : UserControl
         catch
         {
             // 目录读取失败时保持列表为空。
+            AddEmptyHint(panel);
         }
+    }
+
+    private static void AddEmptyHint(StackPanel panel)
+    {
+        panel.Children.Add(new TextBlock
+        {
+            Text = "暂无文件",
+            FontSize = 11,
+            Foreground = new SolidColorBrush(Color.FromArgb(140, 123, 147, 168)),
+            Margin = new Thickness(8, 6, 8, 6)
+        });
     }
 
     private static string FormatSize(long bytes)
