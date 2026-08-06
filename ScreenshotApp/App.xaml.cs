@@ -14,6 +14,7 @@ public partial class App : System.Windows.Application
     private const string SingleInstanceMutexName = @"Local\JieYing.Desktop.SingleInstance.v1";
     private const string ActivationEventName = @"Local\JieYing.Desktop.Activate.v1";
     private Forms.NotifyIcon? _trayIcon;
+    private Action? _trayBalloonAction;
     private Icon? _trayDrawingIcon;
     private bool _trayHintShown;
     private SingleInstanceCoordinator? _singleInstanceCoordinator;
@@ -110,7 +111,7 @@ public partial class App : System.Windows.Application
     }
 
     /// <summary>托盘气泡通知（协作中心收到手机内容时使用）。</summary>
-    internal void ShowTrayBalloon(string title, string text)
+    internal void ShowTrayBalloon(string title, string text, Action? onClick = null)
     {
         if (_trayIcon is null)
         {
@@ -118,6 +119,7 @@ public partial class App : System.Windows.Application
         }
         _trayIcon.BalloonTipTitle = title;
         _trayIcon.BalloonTipText = text;
+        _trayBalloonAction = onClick;
         _trayIcon.ShowBalloonTip(2600);
     }
 
@@ -163,5 +165,11 @@ public partial class App : System.Windows.Application
             Visible = true
         };
         _trayIcon.DoubleClick += (_, _) => Dispatcher.Invoke(ShowMainWindow);
+        _trayIcon.BalloonTipClicked += (_, _) =>
+        {
+            var action = _trayBalloonAction;
+            _trayBalloonAction = null;
+            action?.Invoke();
+        };
     }
 }

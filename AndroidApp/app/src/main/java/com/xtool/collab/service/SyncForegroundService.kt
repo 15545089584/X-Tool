@@ -104,10 +104,10 @@ class SyncForegroundService : Service() {
                     val files = withContext(Dispatchers.IO) { CollabApi(host).listOutgoingFiles(token) }
                     for (file in files) {
                         if (file.name in knownOutgoingFiles) continue
-                        val saved = downloadToMediaStore(file)
-                        if (saved) {
+                        val uri = downloadToMediaStore(file)
+                        if (uri != null) {
                             knownOutgoingFiles.add(file.name)
-                            notifyFileReceived(file.name)
+                            notifyFileReceived(file.name, uri)
                         }
                     }
                 }
@@ -117,7 +117,7 @@ class SyncForegroundService : Service() {
         return START_STICKY
     }
 
-    private fun downloadToMediaStore(file: RemoteFile): Boolean {
+    private fun downloadToMediaStore(file: RemoteFile): Uri? {
         return try {
             val values = ContentValues().apply {
                 put(MediaStore.Downloads.DISPLAY_NAME, file.name)
@@ -126,26 +126,36 @@ class SyncForegroundService : Service() {
                     put(MediaStore.Downloads.RELATIVE_PATH, "Download/XTool")
                 }
             }
-            val uri: Uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return false
+            val uri: Uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return null
             val ok = contentResolver.openOutputStream(uri)?.let { output ->
                 CollabApi(host).downloadFileStreaming(token, file.name) { output }
             } ?: false
             if (!ok) {
                 contentResolver.delete(uri, null, null)
+                return null
             }
-            ok
+            uri
         } catch (_: Exception) {
-            false
+            null
         }
     }
 
-    private fun notifyFileReceived(name: String) {
+    private fun notifyFileReceived(name: String, uri: Uri) {
         val channel = NotificationChannel(FileChannelId, "X-Tool 文件传输", NotificationManager.IMPORTANCE_DEFAULT)
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        val openIntent = Intent(Intent.ACTION_VIEW, uri)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        val pending = PendingIntent.getActivity(
+            this,
+            0,
+            openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
         val notification = NotificationCompat.Builder(this, FileChannelId)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setContentTitle("收到电脑文件")
             .setContentText("$name 已保存到手机下载/XTool 目录")
+            .setContentIntent(pending)
             .setAutoCancel(true)
             .build()
         getSystemService(NotificationManager::class.java).notify(2001, notification)

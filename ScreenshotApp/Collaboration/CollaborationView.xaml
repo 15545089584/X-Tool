@@ -146,8 +146,15 @@
                 </Grid>
 
                 <Grid Grid.Row="10">
-                    <Button HorizontalAlignment="Left" MinWidth="150" Style="{StaticResource Button}" Click="SendFile_Click"><TextBlock Margin="2,0" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="发送文件到手机…" /></Button>
-                    <TextBlock x:Name="TransferStateText" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" Foreground="#7B93A8" TextWrapping="Wrap" Text="收到手机文件会显示在上方列表并弹出系统通知。" />
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="12" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <Border x:Name="FileDropZone" Height="54" AllowDrop="True" DragOver="FileDropZone_DragOver" Drop="FileDropZone_Drop" Background="#26FFFFFF" BorderBrush="#9FD0E7F8" BorderThickness="1.5" CornerRadius="11" Padding="14,0">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="#D8754E" Text="&#xE898;" />
+                            <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" FontSize="13" Foreground="#52708C" Text="将文件拖到这里，自动发送到手机（手机端自动下载）" />
+                        </StackPanel>
+                    </Border>
+                    <Button Grid.Column="2" MinWidth="170" Style="{StaticResource Button}" Click="SendFile_Click"><TextBlock Margin="2,0" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="选择文件发送…" /></Button>
+                    <TextBlock x:Name="TransferStateText" Grid.Row="12" Margin="0,6,0,0" FontSize="11" Foreground="#7B93A8" TextWrapping="Wrap" Text="收到手机文件会显示在上方列表并弹出系统通知。" />
                 </Grid>
             </Grid>
         </Border>

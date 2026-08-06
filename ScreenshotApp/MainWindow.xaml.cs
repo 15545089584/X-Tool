@@ -78,7 +78,18 @@ public partial class MainWindow : Window
         {
             if (Application.Current is App app)
             {
-                app.ShowTrayBalloon("收到手机文件", $"{name}（{FormatCollaborationSize(size)}）已存入接收目录");
+                var directory = CollaborationService.Instance.IncomingDirectory;
+                app.ShowTrayBalloon("收到手机文件", $"{name}（{FormatCollaborationSize(size)}）已存入接收目录，点击打开", () =>
+                {
+                    try
+                    {
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{directory}\"") { UseShellExecute = true });
+                    }
+                    catch
+                    {
+                        // 打开目录失败时忽略。
+                    }
+                });
             }
         };
         QrCodeConverterViewHost.HistoryStore = _historyStore;

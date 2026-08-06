@@ -179,6 +179,41 @@ public partial class CollaborationView : UserControl
         }
     }
 
+    private void FileDropZone_DragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void FileDropZone_Drop(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetData(DataFormats.FileDrop) is not string[] files || files.Length == 0)
+        {
+            return;
+        }
+        try
+        {
+            Directory.CreateDirectory(CollaborationService.Instance.OutgoingDirectory);
+            var copied = 0;
+            foreach (var file in files)
+            {
+                if (!File.Exists(file))
+                {
+                    continue;
+                }
+                var target = UniquePath(Path.Combine(CollaborationService.Instance.OutgoingDirectory, Path.GetFileName(file)));
+                File.Copy(file, target);
+                copied++;
+            }
+            TransferStateText.Text = $"已拖入发送目录 {copied} 个文件，手机端自动下载";
+            RefreshFiles();
+        }
+        catch (Exception exception)
+        {
+            TransferStateText.Text = "发送失败：" + exception.Message;
+        }
+    }
+
     private static string UniquePath(string path)
     {
         if (!File.Exists(path))

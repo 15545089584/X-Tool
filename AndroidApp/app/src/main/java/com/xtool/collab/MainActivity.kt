@@ -54,6 +54,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -74,6 +75,7 @@ import com.xtool.collab.ui.XToolCollabTheme
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -110,7 +112,15 @@ private fun AppRoot(session: SessionStore) {
         }
     }
 
-    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = Color.Transparent
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Brush.verticalGradient(listOf(Color(0xFFEFF7FC), Color(0xFFE2EDF7))))
+        ) {
         when (screen) {
             Screen.Pair -> PairScreen(
                 initialHost = host,
@@ -135,6 +145,7 @@ private fun AppRoot(session: SessionStore) {
                     screen = Screen.Pair
                 }
             )
+        }
         }
     }
 }
@@ -210,7 +221,7 @@ private fun PairScreen(
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(18.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xF2FFFFFF)),
+            colors = CardDefaults.cardColors(containerColor = Color(0xE8FFFFFF)),
             elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
         ) {
             Column(modifier = Modifier.padding(22.dp)) {
@@ -288,6 +299,16 @@ private fun HomeScreen(
     var uploadingName by remember { mutableStateOf<String?>(null) }
     var uploadPercent by remember { mutableStateOf(0) }
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
+
+    // 电脑服务断开后自动退回配对页（缓冲 8 秒，期间恢复连接则取消）。
+    LaunchedEffect(connected) {
+        if (!connected) {
+            delay(8000)
+            if (!connected) {
+                onDisconnect()
+            }
+        }
+    }
 
     // 从系统设置返回后刷新无障碍与电池优化状态，避免提示残留。
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -406,7 +427,7 @@ private fun HomeScreen(
         Card(
             modifier = Modifier.fillMaxWidth().padding(top = 18.dp),
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xF2FFFFFF))
+            colors = CardDefaults.cardColors(containerColor = Color(0xE8FFFFFF))
         ) {
             Column(modifier = Modifier.padding(18.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -537,7 +558,7 @@ private fun HomeScreen(
         Card(
             modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xF2FFFFFF))
+            colors = CardDefaults.cardColors(containerColor = Color(0xE8FFFFFF))
         ) {
             Column(modifier = Modifier.padding(18.dp)) {
                 Text("文件传输", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF2F4A66))
