@@ -433,7 +433,7 @@
                                  Tag="Collaboration" Checked="NavButton_Checked">
                         <StackPanel Orientation="Horizontal">
                             <Border Width="34" Height="34" Background="#F7F8FA" CornerRadius="9">
-                                <TextBlock Style="{StaticResource IconTextStyle}" FontSize="17" Text="&#xE8E4;" Foreground="#626971" />
+                                <TextBlock Style="{StaticResource IconTextStyle}" FontSize="17" Text="&#xE753;" Foreground="#626971" />
                             </Border>
                             <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" FontSize="15" Text="协作中心" />
                         </StackPanel>
