@@ -42,6 +42,16 @@ class CollabApi(private val host: String) {
         }
     }
 
+    /** 主动登出：通知电脑端移除会话，设备数立即归零。 */
+    fun logout(token: String): Boolean {
+        return try {
+            val request = Request.Builder().url("${baseUrl()}/api/logout?t=$token").build()
+            client.newCall(request).execute().use { it.isSuccessful }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     /** 查询电脑端状态：服务是否运行、当前剪贴板序号与最新条目。 */
     fun status(token: String): JSONObject? {
         val request = Request.Builder().url("${baseUrl()}/api/status?t=$token").build()

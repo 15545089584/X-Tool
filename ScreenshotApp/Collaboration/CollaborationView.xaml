@@ -8,6 +8,7 @@
         <Style x:Key="CardTitle" TargetType="TextBlock"><Setter Property="FontSize" Value="15" /><Setter Property="FontWeight" Value="SemiBold" /><Setter Property="Foreground" Value="#2E4B67" /></Style>
         <Style x:Key="FieldLabel" TargetType="TextBlock"><Setter Property="FontSize" Value="11" /><Setter Property="FontWeight" Value="SemiBold" /><Setter Property="Foreground" Value="#7B93A8" /><Setter Property="Margin" Value="0,0,0,4" /></Style>
         <Style x:Key="QrGlassCheckBox" TargetType="CheckBox"><Setter Property="Cursor" Value="Hand" /><Setter Property="VerticalContentAlignment" Value="Center" /><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="CheckBox"><StackPanel Orientation="Horizontal"><Border x:Name="Box" Width="20" Height="20" Background="#BFFFFFFF" BorderBrush="#9FC6D4E3" BorderThickness="1" CornerRadius="6"><Border.Effect><DropShadowEffect BlurRadius="6" ShadowDepth="1" Direction="270" Opacity="0.14" Color="#36506A" /></Border.Effect><Path x:Name="Check" Margin="3" Data="M1.5,4.5 L5,8 L11.5,1.5" Stroke="#FFFFFF" StrokeThickness="2.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Visibility="Collapsed" /></Border><ContentPresenter Margin="9,0,0,0" VerticalAlignment="Center" /></StackPanel><ControlTemplate.Triggers><Trigger Property="IsChecked" Value="True"><Setter TargetName="Box" Property="Background" Value="#4D7CFE" /><Setter TargetName="Box" Property="BorderBrush" Value="#7EA8F7" /><Setter TargetName="Check" Property="Visibility" Value="Visible" /></Trigger><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Box" Property="Opacity" Value="0.8" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
+        <Style x:Key="QrGlassScrollBar" TargetType="ScrollBar"><Setter Property="Width" Value="9" /><Setter Property="Margin" Value="3,7,3,7" /><Setter Property="Background" Value="#38D3E5F5" /><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ScrollBar"><Border Background="{TemplateBinding Background}" CornerRadius="5" Padding="2"><Track x:Name="PART_Track" IsDirectionReversed="True"><Track.DecreaseRepeatButton><RepeatButton Command="ScrollBar.PageUpCommand" Background="Transparent" BorderThickness="0" /></Track.DecreaseRepeatButton><Track.Thumb><Thumb Background="#89A9C7E5" Cursor="Hand"><Thumb.Template><ControlTemplate TargetType="Thumb"><Border x:Name="ThumbRoot" Background="{TemplateBinding Background}" CornerRadius="4" /><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ThumbRoot" Property="Background" Value="#C14D7CFE" /></Trigger><Trigger Property="IsDragging" Value="True"><Setter TargetName="ThumbRoot" Property="Background" Value="#E54D7CFE" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Thumb.Template></Thumb></Track.Thumb><Track.IncreaseRepeatButton><RepeatButton Command="ScrollBar.PageDownCommand" Background="Transparent" BorderThickness="0" /></Track.IncreaseRepeatButton></Track></Border></ControlTemplate></Setter.Value></Setter></Style>
     </UserControl.Resources>
 
     <Grid>
@@ -101,61 +102,45 @@
         </Border>
 
         <!-- 文件传输：全宽大卡 -->
-        <Border Grid.Row="4" Padding="18" Style="{StaticResource Card}">
+        <Border Grid.Row="4" Padding="20" Style="{StaticResource Card}">
             <Grid>
-                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="Auto" /><RowDefinition Height="14" /><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="*" /><RowDefinition Height="12" /><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                <StackPanel Orientation="Horizontal">
-                    <Border Width="30" Height="30" Background="#FFE9DE" CornerRadius="9"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="15" Foreground="#D8754E" Text="&#xE8A5;" /></Border>
-                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Style="{StaticResource CardTitle}" Text="文件传输" />
-                </StackPanel>
-                <TextBlock Grid.Row="2" FontSize="12" Foreground="#63809C" TextWrapping="Wrap" Text="手机上传的文件自动存入接收目录；电脑发送的文件自动进入发送目录，手机端自动下载。收发目录可在左下角设置中修改。" />
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="Auto" /><RowDefinition Height="16" /><RowDefinition Height="*" /><RowDefinition Height="12" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                <Grid>
+                    <StackPanel Orientation="Horizontal">
+                        <Border Width="34" Height="34" Background="#FFE9DE" CornerRadius="10"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="17" Foreground="#D8754E" Text="&#xE8A5;" /></Border>
+                        <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Style="{StaticResource CardTitle}" Text="文件传输" />
+                    </StackPanel>
+                    <Button HorizontalAlignment="Right" Height="40" MinWidth="132" Padding="20,0" Style="{StaticResource Button}" Click="OpenSettings_Click"><TextBlock Margin="2,0" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="收发位置…" /></Button>
+                </Grid>
+                <TextBlock Grid.Row="2" FontSize="12" Foreground="#63809C" TextWrapping="Wrap" Text="手机上传的文件自动存入接收目录；电脑发送的文件自动进入发送目录，手机端自动下载。收发目录在设置中统一调整。" />
 
                 <Grid Grid.Row="4">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="10" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                    <Border Padding="12" Background="#46EAF3FF" BorderBrush="#A5CFE6F8" BorderThickness="1" CornerRadius="11">
-                        <Grid>
-                            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="6" /><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                            <TextBlock Style="{StaticResource FieldLabel}" Text="手机上传目录" />
-                            <TextBlock x:Name="IncomingPathText" Grid.Row="2" FontSize="11" Foreground="#52708C" TextWrapping="Wrap" MaxHeight="42" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" />
-                            <Button Grid.Row="4" Height="34" MinWidth="92" Padding="16,0" HorizontalAlignment="Left" Style="{StaticResource Button}" Click="OpenIncoming_Click"><TextBlock Margin="2,0" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="打开目录" /></Button>
-                        </Grid>
-                    </Border>
-                    <Border Grid.Column="2" Padding="12" Background="#46EAF3FF" BorderBrush="#A5CFE6F8" BorderThickness="1" CornerRadius="11">
-                        <Grid>
-                            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="6" /><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                            <TextBlock Style="{StaticResource FieldLabel}" Text="电脑发送目录" />
-                            <TextBlock x:Name="OutgoingPathText" Grid.Row="2" FontSize="11" Foreground="#52708C" TextWrapping="Wrap" MaxHeight="42" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" />
-                            <Button Grid.Row="4" Height="34" MinWidth="92" Padding="16,0" HorizontalAlignment="Left" Style="{StaticResource Button}" Click="OpenOutgoing_Click"><TextBlock Margin="2,0" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="打开目录" /></Button>
-                        </Grid>
-                    </Border>
-                </Grid>
-
-                <Grid Grid.Row="6">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                    <TextBlock Style="{StaticResource CardTitle}" FontSize="13" Text="手机上传的文件" />
-                    <TextBlock Grid.Column="2" Style="{StaticResource CardTitle}" FontSize="13" Text="电脑发送的文件" />
-                </Grid>
-                <Grid Grid.Row="8">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" MaxHeight="170">
-                        <StackPanel x:Name="IncomingFilesList" />
-                    </ScrollViewer>
-                    <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" MaxHeight="170">
-                        <StackPanel x:Name="OutgoingFilesList" />
-                    </ScrollViewer>
-                </Grid>
-
-                <Grid Grid.Row="10">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="12" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                    <Border x:Name="FileDropZone" Height="54" AllowDrop="True" DragOver="FileDropZone_DragOver" Drop="FileDropZone_Drop" Background="#26FFFFFF" BorderBrush="#9FD0E7F8" BorderThickness="1.5" CornerRadius="11" Padding="14,0">
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="#D8754E" Text="&#xE898;" />
-                            <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" FontSize="13" Foreground="#52708C" Text="将文件拖到这里，自动发送到手机（手机端自动下载）" />
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="1.08*" /><ColumnDefinition Width="18" /><ColumnDefinition Width="0.92*" /></Grid.ColumnDefinitions>
+                    <Border x:Name="FileDropZone" MinHeight="230" AllowDrop="True" DragOver="FileDropZone_DragOver" Drop="FileDropZone_Drop" Background="#2EFFFFFF" BorderBrush="#A9CFE9FA" BorderThickness="1.5" CornerRadius="14" Padding="24">
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock HorizontalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="40" Foreground="#D8754E" Text="&#xE898;" />
+                            <TextBlock Margin="0,14,0,0" HorizontalAlignment="Center" FontSize="17" FontWeight="SemiBold" Foreground="#2E4B67" Text="拖拽文件到这里" />
+                            <TextBlock Margin="0,6,0,0" HorizontalAlignment="Center" FontSize="12" Foreground="#7B93A8" Text="自动发送到手机 · 手机端自动下载" />
+                            <Button Margin="0,18,0,0" HorizontalAlignment="Center" MinWidth="160" Style="{StaticResource Button}" Click="SendFile_Click"><TextBlock Margin="2,0" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="或选择文件发送…" /></Button>
                         </StackPanel>
                     </Border>
-                    <Button Grid.Column="2" MinWidth="170" Style="{StaticResource Button}" Click="SendFile_Click"><TextBlock Margin="2,0" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="选择文件发送…" /></Button>
-                    <TextBlock x:Name="TransferStateText" Grid.Row="12" Margin="0,6,0,0" FontSize="11" Foreground="#7B93A8" TextWrapping="Wrap" Text="收到手机文件会显示在上方列表并弹出系统通知。" />
+
+                    <Grid Grid.Column="2">
+                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="6" /><RowDefinition Height="*" /><RowDefinition Height="12" /><RowDefinition Height="Auto" /><RowDefinition Height="6" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                        <TextBlock Style="{StaticResource CardTitle}" FontSize="13" Text="手机上传的文件" />
+                        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <ScrollViewer.Resources><Style TargetType="ScrollBar" BasedOn="{StaticResource QrGlassScrollBar}" /></ScrollViewer.Resources>
+                            <StackPanel x:Name="IncomingFilesList" />
+                        </ScrollViewer>
+                        <TextBlock Grid.Row="4" Style="{StaticResource CardTitle}" FontSize="13" Text="电脑发送的文件" />
+                        <ScrollViewer Grid.Row="6" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <ScrollViewer.Resources><Style TargetType="ScrollBar" BasedOn="{StaticResource QrGlassScrollBar}" /></ScrollViewer.Resources>
+                            <StackPanel x:Name="OutgoingFilesList" />
+                        </ScrollViewer>
+                    </Grid>
                 </Grid>
+
+                <TextBlock x:Name="TransferStateText" Grid.Row="6" FontSize="11" Foreground="#7B93A8" TextWrapping="Wrap" Text="收到手机文件会显示在左侧列表并弹出系统通知。" />
             </Grid>
         </Border>
     </Grid>

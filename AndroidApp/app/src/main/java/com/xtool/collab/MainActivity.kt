@@ -97,6 +97,7 @@ private enum class Screen { Pair, Home }
 @Composable
 private fun AppRoot(session: SessionStore) {
     val appContext = LocalContext.current
+    val scope = rememberCoroutineScope()
     var screen by remember { mutableStateOf(if (session.token.isNotEmpty() && session.host.isNotEmpty()) Screen.Home else Screen.Pair) }
     var host by remember { mutableStateOf(session.host) }
     var token by remember { mutableStateOf(session.token) }
@@ -140,7 +141,16 @@ private fun AppRoot(session: SessionStore) {
                 host = host,
                 token = token,
                 onDisconnect = {
+                    val target = host
+                    val activeToken = token
                     SyncForegroundService.stop(appContext)
+                    scope.launch {
+                        withContext(Dispatchers.IO) {
+                            if (target.isNotBlank() && activeToken.isNotBlank()) {
+                                runCatching { CollabApi(target).logout(activeToken) }
+                            }
+                        }
+                    }
                     session.clear()
                     screen = Screen.Pair
                 }

@@ -388,6 +388,21 @@ public sealed class CollaborationService
                 return;
             }
 
+            if (path == "/api/logout")
+            {
+                var token = query.GetValueOrDefault("t");
+                if (!string.IsNullOrEmpty(token))
+                {
+                    _sessions.TryRemove(token, out _);
+                    foreach (var pair in _deviceSessions.Where(pair => pair.Value == token).Select(pair => pair.Key).ToArray())
+                    {
+                        _deviceSessions.TryRemove(pair, out _);
+                    }
+                }
+                await WriteJsonAsync(stream, 200, new { ok = true });
+                return;
+            }
+
             if (path == "/")
             {
                 await WriteTextAsync(stream, 200, "text/plain; charset=utf-8", "X-Tool 协作中心：请使用手机扫描电脑端二维码完成配对。");
