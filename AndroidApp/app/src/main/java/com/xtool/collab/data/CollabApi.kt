@@ -3,6 +3,7 @@ package com.xtool.collab.data
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
@@ -20,9 +21,9 @@ class CollabApi(private val host: String) {
     private fun baseUrl() = "http://$host"
 
     /** 用 PIN 配对；成功返回令牌，失败返回可展示的原因。 */
-    fun pair(pin: String): PairResult {
+    fun pair(pin: String, deviceId: String): PairResult {
         return try {
-            val request = Request.Builder().url("${baseUrl()}/api/pair?pin=$pin").build()
+            val request = Request.Builder().url("${baseUrl()}/api/pair?pin=$pin&device=$deviceId").build()
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
                     return PairResult(
@@ -99,9 +100,68 @@ class CollabApi(private val host: String) {
     }
 
     /** 读取电脑发送目录文件列表（JSON 字符串，解析后展示）。 */
-    fun listOutgoingFiles(token: String): String {
+    fun listOutgoingFiles(token: String): List<RemoteFile> {
         val request = Request.Builder().url("${baseUrl()}/api/files/list?t=$token&dir=outgoing").build()
-        client.newCall(request).execute().use { return it.body?.string() ?: "{}" }
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return emptyList()
+            val json = JSONObject(response.body?.string() ?: return emptyList())
+            val files = json.optJSONArray("files") ?: return emptyList()
+            return (0 until files.length()).mapNotNull { index ->
+                val item = files.optJSONObject(index) ?: return@mapNotNull null
+                RemoteFile(
+                    name = item.optString("name"),
+                    size = item.optLong("size"),
+                    at = item.optString("at")
+                )
+            }
+        }
+    }
+
+    /** 流式上传文件到电脑接收目录，onProgress 在 IO 线程回调。 */
+    fun uploadFileStreaming(
+        token: String,
+        name: String,
+        openInput: () -> java.io.InputStream,
+        totalBytes: Long,
+        onProgress: (Long, Long) -> Unit
+    ): Boolean {
+        val body = object : RequestBody() {
+            override fun contentType() = "application/octet-stream".toMediaType()
+            override fun contentLength() = totalBytes
+            override fun writeTo(sink: okio.BufferedSink) {
+                val buffer = ByteArray(64 * 1024)
+                var uploaded = 0L
+                openInput().use { input ->
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        sink.write(buffer, 0, read)
+                        uploaded += read
+                        onProgress(uploaded, totalBytes)
+                    }
+                }
+            }
+        }
+        val request = Request.Builder()
+            .url("${baseUrl()}/api/files/upload?t=$token&name=${java.net.URLEncoder.encode(name, "UTF-8")}")
+            .put(body)
+            .build()
+        client.newCall(request).execute().use { return it.isSuccessful }
+    }
+
+    /** 流式下载电脑发送目录的文件并写入输出流。 */
+    fun downloadFileStreaming(token: String, name: String, openOutput: () -> java.io.OutputStream): Boolean {
+        val request = Request.Builder()
+            .url("${baseUrl()}/api/files/download?t=$token&dir=outgoing&name=${java.net.URLEncoder.encode(name, "UTF-8")}")
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return false
+            val input = response.body?.byteStream() ?: return false
+            input.use { source ->
+                openOutput().use { target -> source.copyTo(target) }
+            }
+            return true
+        }
     }
 }
 
@@ -113,3 +173,5 @@ data class ClipboardEntry(
 )
 
 data class PairResult(val token: String?, val error: String?)
+
+data class RemoteFile(val name: String, val size: Long, val at: String)

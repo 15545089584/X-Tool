@@ -26,6 +26,7 @@ public sealed class CollaborationService
     private readonly List<CollaborationClipboardEntry> _clipboardHistory = new();
     private sealed record SessionInfo(DateTime Expires, DateTime LastSeen);
     private readonly ConcurrentDictionary<string, SessionInfo> _sessions = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, string> _deviceSessions = new(StringComparer.Ordinal);
     private TcpListener? _listener;
     private CancellationTokenSource? _acceptCts;
     private long _clipboardSeq;
@@ -117,13 +118,13 @@ public sealed class CollaborationService
     /// <summary>重新生成配对 PIN；旧 PIN 立即失效，已配对的会话不受影响。</summary>
     public void RegeneratePin() => _pin = Random.Shared.Next(100000, 1000000).ToString(CultureInfo.InvariantCulture);
 
-    /// <summary>当前有效的已配对会话数，用于界面显示“手机已连接”。</summary>
+    /// <summary>当前活跃设备数：同一设备重复配对只计一台，网页会话按匿名计数。</summary>
     public int SessionCount
     {
         get
         {
             var now = DateTime.UtcNow;
-            var cutoff = now.AddMinutes(-5);
+            var cutoff = now.AddSeconds(-30);
             var stale = _sessions
                 .Where(pair => pair.Value.Expires <= now || pair.Value.LastSeen < cutoff)
                 .Select(pair => pair.Key)
@@ -132,7 +133,14 @@ public sealed class CollaborationService
             {
                 _sessions.TryRemove(key, out _);
             }
-            return _sessions.Count;
+            foreach (var pair in _deviceSessions.Where(pair => !_sessions.ContainsKey(pair.Value)).Select(pair => pair.Key).ToArray())
+            {
+                _deviceSessions.TryRemove(pair, out _);
+            }
+            var activeTokens = _sessions.Where(pair => pair.Value.LastSeen >= cutoff).Select(pair => pair.Key).ToHashSet();
+            var deviceCount = _deviceSessions.Values.Count(token => activeTokens.Contains(token));
+            var anonymousCount = activeTokens.Count(token => !_deviceSessions.Values.Contains(token));
+            return deviceCount + anonymousCount;
         }
     }
 
@@ -348,7 +356,7 @@ public sealed class CollaborationService
                     return;
                 }
                 var token = Guid.NewGuid().ToString("N");
-                _sessions[token] = new SessionInfo(DateTime.UtcNow.AddHours(SessionLifetimeHours), DateTime.UtcNow);
+                RegisterSession(token, query.GetValueOrDefault("device"));
                 var html = (_pageHtml ?? string.Empty)
                     .Replace("__TOKEN__", token)
                     .Replace("__HOST__", $"http://{LocalIpAddress}:{Port}");
@@ -365,7 +373,7 @@ public sealed class CollaborationService
                     return;
                 }
                 var token = Guid.NewGuid().ToString("N");
-                _sessions[token] = new SessionInfo(DateTime.UtcNow.AddHours(SessionLifetimeHours), DateTime.UtcNow);
+                RegisterSession(token, query.GetValueOrDefault("device"));
                 await WriteJsonAsync(stream, 200, new { ok = true, token, host = $"{LocalIpAddress}:{Port}" });
                 return;
             }
@@ -556,6 +564,21 @@ public sealed class CollaborationService
         }
         _sessions.TryRemove(token, out _);
         return false;
+    }
+
+    /// <summary>注册配对会话；带设备 ID 时同一设备重复配对替换旧会话，不重复计数。</summary>
+    private void RegisterSession(string token, string? deviceId)
+    {
+        _sessions[token] = new SessionInfo(DateTime.UtcNow.AddHours(SessionLifetimeHours), DateTime.UtcNow);
+        if (string.IsNullOrWhiteSpace(deviceId))
+        {
+            return;
+        }
+        if (_deviceSessions.TryGetValue(deviceId, out var oldToken))
+        {
+            _sessions.TryRemove(oldToken, out _);
+        }
+        _deviceSessions[deviceId] = token;
     }
 
     private static Dictionary<string, string> ParseQuery(string query)

@@ -9,8 +9,11 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.provider.MediaStore
+import android.provider.OpenableColumns
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -63,6 +66,7 @@ import androidx.compose.ui.unit.sp
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import com.xtool.collab.data.CollabApi
+import com.xtool.collab.data.RemoteFile
 import com.xtool.collab.data.SessionStore
 import com.xtool.collab.service.ClipboardAccessibilityService
 import com.xtool.collab.service.ClipboardBridge
@@ -73,6 +77,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -162,6 +167,7 @@ private fun PairScreen(
     onScanRequest: () -> Unit,
     onConnected: (String, String) -> Unit
 ) {
+    val context = LocalContext.current
     var host by remember(initialHost) { mutableStateOf(initialHost) }
     var pin by remember { mutableStateOf(initialPin ?: "") }
     var status by remember { mutableStateOf("输入电脑地址与配对 PIN，或扫描电脑端二维码") }
@@ -178,7 +184,7 @@ private fun PairScreen(
         loading = true
         status = "正在配对…"
         scope.launch {
-            val result = withContext(Dispatchers.IO) { CollabApi(target).pair(code) }
+            val result = withContext(Dispatchers.IO) { CollabApi(target).pair(code, SessionStore(context).deviceId) }
             loading = false
             if (result.token != null) {
                 status = "配对成功"
@@ -278,6 +284,11 @@ private fun HomeScreen(
     var syncStatus by remember { mutableStateOf(ClipboardBridge.SyncState.status) }
     var accessibilityOn by remember { mutableStateOf(isAccessibilityEnabled(context)) }
     var batteryIgnored by remember { mutableStateOf(isBatteryOptimizationIgnored(context)) }
+    var remoteFiles by remember { mutableStateOf<List<RemoteFile>>(emptyList()) }
+    var fileStatus by remember { mutableStateOf("") }
+    var uploadingName by remember { mutableStateOf<String?>(null) }
+    var uploadPercent by remember { mutableStateOf(0) }
+    val mainHandler = remember { Handler(Looper.getMainLooper()) }
 
     // 从系统设置返回后刷新无障碍与电池优化状态，避免提示残留。
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -325,6 +336,50 @@ private fun HomeScreen(
         ) {
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
+    }
+
+    suspend fun refreshFiles() {
+        remoteFiles = withContext(Dispatchers.IO) { CollabApi(host).listOutgoingFiles(token) }
+    }
+
+    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        scope.launch {
+            for (uri in uris) {
+                val name = queryDisplayName(context, uri)
+                uploadingName = name
+                uploadPercent = 0
+                // 先落缓存文件保证 Content-Length 完整，再流式上传并回报进度。
+                val ok = withContext(Dispatchers.IO) {
+                    val cacheFile = File(context.cacheDir, "upload_${System.currentTimeMillis()}_$name")
+                    try {
+                        context.contentResolver.openInputStream(uri)?.use { input ->
+                            cacheFile.outputStream().use { input.copyTo(it) }
+                        }
+                        val total = cacheFile.length()
+                        val result = CollabApi(host).uploadFileStreaming(
+                            token,
+                            name,
+                            { cacheFile.inputStream() },
+                            total
+                        ) { done, all ->
+                            mainHandler.post { uploadPercent = if (all > 0) (done * 100 / all).toInt() else 0 }
+                        }
+                        result
+                    } catch (_: Exception) {
+                        false
+                    } finally {
+                        cacheFile.delete()
+                    }
+                }
+                uploadingName = null
+                fileStatus = if (ok) "已上传 $name 到电脑" else "上传失败 $name"
+            }
+            refreshFiles()
+        }
+    }
+
+    LaunchedEffect(token) {
+        refreshFiles()
     }
 
     Column(
@@ -510,11 +565,75 @@ private fun HomeScreen(
             Column(modifier = Modifier.padding(18.dp)) {
                 Text("文件传输", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF2F4A66))
                 Text(
-                    "上传与下载功能将在后续版本接入，电脑端网页已支持",
+                    "上传到电脑接收目录；电脑端发送的文件可下载到手机“下载/XTool”目录。",
                     fontSize = 12.sp,
                     color = Color(0xFF7B93A8),
                     modifier = Modifier.padding(top = 6.dp)
                 )
+                Spacer(Modifier.height(12.dp))
+                Button(
+                    onClick = { filePicker.launch(arrayOf("image/*", "video/*", "audio/*", "application/*", "text/*", "*/*")) },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4D7CFE)),
+                    modifier = Modifier.fillMaxWidth().height(46.dp)
+                ) { Text("选择文件上传到电脑", fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
+                if (uploadingName != null) {
+                    Text(
+                        "上传中 $uploadingName · $uploadPercent%",
+                        fontSize = 12.sp,
+                        color = Color(0xFF2F6BC4),
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+                Text(
+                    fileStatus.ifEmpty { "手机上传的文件会保存到电脑的接收目录" },
+                    fontSize = 12.sp,
+                    color = Color(0xFF7B93A8),
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+
+                Spacer(Modifier.height(14.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("电脑发送的文件", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF2F4A66))
+                    Spacer(Modifier.weight(1f))
+                    OutlinedButton(
+                        onClick = { scope.launch { refreshFiles() } },
+                        modifier = Modifier.height(34.dp)
+                    ) { Text("刷新", fontSize = 12.sp) }
+                }
+                if (remoteFiles.isEmpty()) {
+                    Text(
+                        "暂无文件，可在电脑端协作中心点“发送文件到手机…”",
+                        fontSize = 12.sp,
+                        color = Color(0xFF7B93A8),
+                        modifier = Modifier.padding(top = 6.dp)
+                    )
+                } else {
+                    remoteFiles.forEach { file ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(file.name, fontSize = 13.sp, color = Color(0xFF405F7C), maxLines = 1)
+                                Text(formatFileSize(file.size), fontSize = 11.sp, color = Color(0xFF7B93A8))
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    scope.launch {
+                                        fileStatus = "正在下载 ${file.name}…"
+                                        val ok = withContext(Dispatchers.IO) {
+                                            val target = saveToDownloads(context, file.name)
+                                            if (target == null) false
+                                            else CollabApi(host).downloadFileStreaming(token, file.name) { target }
+                                        }
+                                        fileStatus = if (ok) "已保存到手机下载/XTool" else "下载失败 ${file.name}"
+                                    }
+                                },
+                                modifier = Modifier.height(34.dp)
+                            ) { Text("下载", fontSize = 12.sp) }
+                        }
+                    }
+                }
             }
         }
     }
@@ -549,4 +668,38 @@ private fun saveImageToGallery(context: Context, bitmap: Bitmap): Boolean {
     } catch (_: Exception) {
         false
     }
+}
+
+private fun queryDisplayName(context: Context, uri: Uri): String {
+    context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+        val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+        if (index >= 0 && cursor.moveToFirst()) {
+            val name = cursor.getString(index)
+            if (!name.isNullOrBlank()) return name
+        }
+    }
+    return "file_${System.currentTimeMillis()}"
+}
+
+private fun saveToDownloads(context: Context, name: String): java.io.OutputStream? {
+    return try {
+        val values = ContentValues().apply {
+            put(MediaStore.Downloads.DISPLAY_NAME, name)
+            put(MediaStore.Downloads.MIME_TYPE, "application/octet-stream")
+            if (Build.VERSION.SDK_INT >= 29) {
+                put(MediaStore.Downloads.RELATIVE_PATH, "Download/XTool")
+            }
+        }
+        val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return null
+        context.contentResolver.openOutputStream(uri)
+    } catch (_: Exception) {
+        null
+    }
+}
+
+private fun formatFileSize(bytes: Long): String {
+    if (bytes >= 1024L * 1024 * 1024) return String.format("%.1f GB", bytes / 1024.0 / 1024 / 1024)
+    if (bytes >= 1024L * 1024) return String.format("%.1f MB", bytes / 1024.0 / 1024)
+    if (bytes >= 1024) return String.format("%.1f KB", bytes / 1024.0)
+    return "$bytes B"
 }
