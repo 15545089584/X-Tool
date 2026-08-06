@@ -18,6 +18,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".PortraitScanActivity"
+            android:configChanges="orientation|screenSize"
+            android:exported="false"
+            android:screenOrientation="portrait" />
         <!-- 图片剪贴板写入使用：把缓存图片以 content Uri 写入系统剪贴板。 -->
         <provider
             android:name="androidx.core.content.FileProvider"

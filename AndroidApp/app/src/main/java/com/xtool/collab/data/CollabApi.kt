@@ -19,13 +19,25 @@ class CollabApi(private val host: String) {
 
     private fun baseUrl() = "http://$host"
 
-    /** 用 PIN 配对，成功返回会话令牌。 */
-    fun pair(pin: String): String? {
-        val request = Request.Builder().url("${baseUrl()}/api/pair?pin=$pin").build()
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) return null
-            val json = JSONObject(response.body?.string() ?: return null)
-            return if (json.optBoolean("ok")) json.optString("token").takeIf { it.isNotEmpty() } else null
+    /** 用 PIN 配对；成功返回令牌，失败返回可展示的原因。 */
+    fun pair(pin: String): PairResult {
+        return try {
+            val request = Request.Builder().url("${baseUrl()}/api/pair?pin=$pin").build()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    return PairResult(
+                        token = null,
+                        error = if (response.code == 401) "配对 PIN 不正确" else "电脑端返回错误（${response.code}）"
+                    )
+                }
+                val json = JSONObject(response.body?.string() ?: return PairResult(null, "电脑端响应为空"))
+                val token = json.optString("token").takeIf { it.isNotEmpty() }
+                PairResult(token, if (token == null) "电脑端未返回会话令牌" else null)
+            }
+        } catch (_: java.io.IOException) {
+            PairResult(null, "无法连接电脑：请检查地址、双方网络与防火墙")
+        } catch (_: Exception) {
+            PairResult(null, "配对请求异常，请重试")
         }
     }
 
@@ -99,3 +111,5 @@ data class ClipboardEntry(
     val text: String,
     val imageBase64: String
 )
+
+data class PairResult(val token: String?, val error: String?)

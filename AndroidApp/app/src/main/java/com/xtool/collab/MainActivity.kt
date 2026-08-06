@@ -144,6 +144,7 @@ private fun parsePairUrl(content: String): PairUrl? {
 private fun scanOptions() = ScanOptions().apply {
     setDesiredBarcodeFormats(ScanOptions.QR_CODE)
     setPrompt("扫描电脑端协作中心的配对二维码")
+    setCaptureActivity(PortraitScanActivity::class.java)
     setBeepEnabled(false)
 }
 
@@ -154,7 +155,7 @@ private fun PairScreen(
     onScanRequest: () -> Unit,
     onConnected: (String, String) -> Unit
 ) {
-    var host by remember { mutableStateOf(initialHost) }
+    var host by remember(initialHost) { mutableStateOf(initialHost) }
     var pin by remember { mutableStateOf(initialPin ?: "") }
     var status by remember { mutableStateOf("输入电脑地址与配对 PIN，或扫描电脑端二维码") }
     var loading by remember { mutableStateOf(false) }
@@ -172,11 +173,11 @@ private fun PairScreen(
         scope.launch {
             val result = withContext(Dispatchers.IO) { CollabApi(target).pair(code) }
             loading = false
-            if (result == null) {
-                status = "配对失败：请确认电脑服务已启动、地址与 PIN 正确、双方在同一网络"
-            } else {
+            if (result.token != null) {
                 status = "配对成功"
-                onConnected(target, result)
+                onConnected(target, result.token)
+            } else {
+                status = result.error ?: "配对失败，请重试"
             }
         }
     }
