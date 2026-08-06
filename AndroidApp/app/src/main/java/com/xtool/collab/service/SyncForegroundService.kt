@@ -12,6 +12,7 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.xtool.collab.MainActivity
 import com.xtool.collab.R
+import com.xtool.collab.data.CollabApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -20,11 +21,17 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import android.content.ContentValues
+import android.net.Uri
+import android.os.Build
+import android.provider.MediaStore
+import com.xtool.collab.data.RemoteFile
 
 /** 常驻前台服务：后台轮询电脑端剪贴板并写入手机剪贴板，保持同步连接。 */
 class SyncForegroundService : Service() {
     companion object {
         private const val ChannelId = "collab_sync"
+        private const val FileChannelId = "collab_file"
         private const val NotificationId = 1001
         private const val ExtraHost = "host"
         private const val ExtraToken = "token"
@@ -45,6 +52,7 @@ class SyncForegroundService : Service() {
     private var lastSeqValue = 0L
     private var host = ""
     private var token = ""
+    private val knownOutgoingFiles = mutableSetOf<String>()
     private val clipboardListener = ClipboardManager.OnPrimaryClipChangedListener {
         // 前台服务作为推送兜底：App 在前台时手机复制也能推送到电脑
         // （后台读取豁免仍由无障碍服务负责）。
@@ -66,6 +74,14 @@ class SyncForegroundService : Service() {
         }
         this.host = host
         this.token = token
+        // 记录当前发送目录文件，避免服务重启后重复下载。
+        scope.launch {
+            val initialFiles = runCatching<List<RemoteFile>> {
+                withContext(Dispatchers.IO) { CollabApi(host).listOutgoingFiles(token) }
+            }
+                .getOrDefault(emptyList())
+            initialFiles.forEach { knownOutgoingFiles.add(it.name) }
+        }
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.addPrimaryClipChangedListener(clipboardListener)
         scope.launch {
@@ -76,10 +92,63 @@ class SyncForegroundService : Service() {
                     }
                     lastSeqValue = current
                 }
+                    .onSuccess { ClipboardBridge.SyncState.update { connected = true } }
+                    .onFailure { ClipboardBridge.SyncState.update { connected = false } }
                 delay(1000)
             }
         }
+        // 文件自动下载：每 5 秒检查电脑发送目录的新文件。
+        scope.launch {
+            while (isActive) {
+                runCatching {
+                    val files = withContext(Dispatchers.IO) { CollabApi(host).listOutgoingFiles(token) }
+                    for (file in files) {
+                        if (file.name in knownOutgoingFiles) continue
+                        val saved = downloadToMediaStore(file)
+                        if (saved) {
+                            knownOutgoingFiles.add(file.name)
+                            notifyFileReceived(file.name)
+                        }
+                    }
+                }
+                delay(5000)
+            }
+        }
         return START_STICKY
+    }
+
+    private fun downloadToMediaStore(file: RemoteFile): Boolean {
+        return try {
+            val values = ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, file.name)
+                put(MediaStore.Downloads.MIME_TYPE, "application/octet-stream")
+                if (Build.VERSION.SDK_INT >= 29) {
+                    put(MediaStore.Downloads.RELATIVE_PATH, "Download/XTool")
+                }
+            }
+            val uri: Uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return false
+            val ok = contentResolver.openOutputStream(uri)?.let { output ->
+                CollabApi(host).downloadFileStreaming(token, file.name) { output }
+            } ?: false
+            if (!ok) {
+                contentResolver.delete(uri, null, null)
+            }
+            ok
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun notifyFileReceived(name: String) {
+        val channel = NotificationChannel(FileChannelId, "X-Tool 文件传输", NotificationManager.IMPORTANCE_DEFAULT)
+        getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        val notification = NotificationCompat.Builder(this, FileChannelId)
+            .setSmallIcon(android.R.drawable.stat_sys_download_done)
+            .setContentTitle("收到电脑文件")
+            .setContentText("$name 已保存到手机下载/XTool 目录")
+            .setAutoCancel(true)
+            .build()
+        getSystemService(NotificationManager::class.java).notify(2001, notification)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -115,4 +184,5 @@ class SyncForegroundService : Service() {
             .setOngoing(true)
             .build()
     }
+
 }

@@ -68,7 +68,6 @@ import com.journeyapps.barcodescanner.ScanOptions
 import com.xtool.collab.data.CollabApi
 import com.xtool.collab.data.RemoteFile
 import com.xtool.collab.data.SessionStore
-import com.xtool.collab.service.ClipboardAccessibilityService
 import com.xtool.collab.service.ClipboardBridge
 import com.xtool.collab.service.SyncForegroundService
 import com.xtool.collab.ui.XToolCollabTheme
@@ -282,7 +281,7 @@ private fun HomeScreen(
     var receivedText by remember { mutableStateOf(ClipboardBridge.SyncState.lastText) }
     var receivedImage by remember { mutableStateOf(ClipboardBridge.SyncState.lastImage) }
     var syncStatus by remember { mutableStateOf(ClipboardBridge.SyncState.status) }
-    var accessibilityOn by remember { mutableStateOf(isAccessibilityEnabled(context)) }
+    var connected by remember { mutableStateOf(ClipboardBridge.SyncState.connected) }
     var batteryIgnored by remember { mutableStateOf(isBatteryOptimizationIgnored(context)) }
     var remoteFiles by remember { mutableStateOf<List<RemoteFile>>(emptyList()) }
     var fileStatus by remember { mutableStateOf("") }
@@ -295,7 +294,6 @@ private fun HomeScreen(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                accessibilityOn = isAccessibilityEnabled(context)
                 batteryIgnored = isBatteryOptimizationIgnored(context)
                 // 兜底：系统限制后台读剪贴板时，回到前台立即补推后台期间复制的内容。
                 if (token.isNotBlank()) {
@@ -313,6 +311,7 @@ private fun HomeScreen(
             receivedText = ClipboardBridge.SyncState.lastText
             receivedImage = ClipboardBridge.SyncState.lastImage
             syncStatus = ClipboardBridge.SyncState.status
+            connected = ClipboardBridge.SyncState.connected
         }
         onDispose { unsubscribe() }
     }
@@ -389,20 +388,20 @@ private fun HomeScreen(
             .padding(20.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("已连接", fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF2F4A66))
+            Text(if (connected) "已连接" else "已断开", fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF2F4A66))
             Spacer(Modifier.width(8.dp))
             Box(
                 modifier = Modifier
                     .width(9.dp)
                     .height(9.dp)
-                    .background(Color(0xFF16B99B), RoundedCornerShape(5.dp))
+                    .background(if (connected) Color(0xFF16B99B) else Color(0xFFE05B5B), RoundedCornerShape(5.dp))
             )
             Spacer(Modifier.weight(1f))
             OutlinedButton(onClick = onDisconnect) {
                 Text("断开", fontSize = 13.sp)
             }
         }
-        Text("电脑端：$host", fontSize = 13.sp, color = Color(0xFF63809C), modifier = Modifier.padding(top = 6.dp))
+        Text(if (connected) "电脑端：$host" else "电脑端服务已断开，正在自动重连…", fontSize = 13.sp, color = Color(0xFF63809C), modifier = Modifier.padding(top = 6.dp))
 
         Card(
             modifier = Modifier.fillMaxWidth().padding(top = 18.dp),
@@ -421,28 +420,6 @@ private fun HomeScreen(
                     color = Color(0xFF7B93A8),
                     modifier = Modifier.padding(top = 6.dp)
                 )
-
-                if (!accessibilityOn) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF6E5))
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Text(
-                                "未开启无障碍服务：App 退到后台后，手机复制的内容将无法自动推送到电脑。",
-                                fontSize = 12.sp,
-                                color = Color(0xFF8A5B12)
-                            )
-                            OutlinedButton(
-                                onClick = {
-                                    context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                                },
-                                modifier = Modifier.padding(top = 8.dp)
-                            ) { Text("去开启无障碍服务", fontSize = 12.sp) }
-                        }
-                    }
-                }
 
                 if (!batteryIgnored) {
                     Card(
@@ -637,13 +614,6 @@ private fun HomeScreen(
             }
         }
     }
-}
-
-private fun isAccessibilityEnabled(context: Context): Boolean {
-    val expected = "${context.packageName}/${ClipboardAccessibilityService::class.java.name}"
-    val enabled = Settings.Secure.getString(context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
-        ?: return false
-    return enabled.split(':').any { it.equals(expected, ignoreCase = true) }
 }
 
 private fun isBatteryOptimizationIgnored(context: Context): Boolean {

@@ -13,7 +13,9 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="16" />
+            <RowDefinition Height="14" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="14" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -34,7 +36,7 @@
                             </StackPanel>
                         </Border>
                     </Grid>
-                    <TextBlock Margin="0,8,0,0" FontSize="13" Foreground="#63809C" TextWrapping="Wrap" Text="同一局域网内与手机互传剪贴板与文件；配对过程与内容仅在本机局域网内处理。" />
+                    <TextBlock Margin="0,8,0,0" FontSize="13" Foreground="#63809C" TextWrapping="Wrap" Text="同一局域网内与手机互传文件与剪贴板；配对过程与内容仅在本机局域网内处理。" />
 
                     <Grid Margin="0,16,0,0">
                         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
@@ -48,7 +50,7 @@
                         <Border Grid.Column="2" Padding="12,10" Background="#B3EDE7FF" BorderBrush="#C0B2F5" BorderThickness="1" CornerRadius="11">
                             <StackPanel>
                                 <TextBlock Style="{StaticResource FieldLabel}" Foreground="#6A54C8" Text="手机连接" />
-                                <TextBlock x:Name="SessionText" FontSize="13" FontWeight="SemiBold" Foreground="#6A54C8" Text="等待配对" />
+                                <TextBlock x:Name="SessionText" FontSize="13" FontWeight="SemiBold" Foreground="#9AA9B8" Text="等待配对" />
                             </StackPanel>
                         </Border>
                         <Border Grid.Row="2" Padding="12,10" Background="#B3DCEBFF" BorderBrush="#8FB5F7" BorderThickness="1" CornerRadius="11">
@@ -83,54 +85,71 @@
             </Grid>
         </Border>
 
-        <!-- 功能卡 -->
-        <Grid Grid.Row="2">
-            <Grid.ColumnDefinitions><ColumnDefinition Width="1.02*" /><ColumnDefinition Width="16" /><ColumnDefinition Width="0.98*" /></Grid.ColumnDefinitions>
+        <!-- 剪贴板桥：小条展示，单向同步说明 -->
+        <Border Grid.Row="2" Padding="14,9" Style="{StaticResource Card}">
+            <Grid>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="15" Foreground="#16B99B" Text="&#xE77F;" />
+                    <TextBlock Margin="9,0,0,0" VerticalAlignment="Center" Style="{StaticResource CardTitle}" Text="剪贴板桥" />
+                    <TextBlock Margin="12,0,0,0" VerticalAlignment="Center" FontSize="12" Foreground="#63809C" Text="电脑→手机自动同步；手机→电脑需回到 App 前台自动补推（系统剪贴板保护限制）" />
+                </StackPanel>
+                <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock x:Name="ClipboardStateText" Margin="0,0,12,0" VerticalAlignment="Center" FontSize="12" Foreground="#63809C" Text="等待服务启动" />
+                    <CheckBox x:Name="ClipboardBridgeCheckBox" Style="{StaticResource QrGlassCheckBox}" IsChecked="True" Content="电脑→手机同步" FontSize="12" Foreground="#526F8B" Checked="ClipboardBridge_Changed" Unchecked="ClipboardBridge_Changed" />
+                </StackPanel>
+            </Grid>
+        </Border>
 
-            <!-- 剪贴板桥 -->
-            <Border Padding="18" Style="{StaticResource Card}">
-                <Grid>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="Auto" /><RowDefinition Height="14" /><RowDefinition Height="*" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                    <Grid>
-                        <StackPanel Orientation="Horizontal">
-                            <Border Width="30" Height="30" Background="#DFF5F2" CornerRadius="9"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="15" Foreground="#16B99B" Text="&#xE77F;" /></Border>
-                            <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Style="{StaticResource CardTitle}" Text="剪贴板桥" />
-                        </StackPanel>
-                        <CheckBox x:Name="ClipboardBridgeCheckBox" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource QrGlassCheckBox}" IsChecked="True" Content="电脑→手机同步" FontSize="12" Foreground="#526F8B" Checked="ClipboardBridge_Changed" Unchecked="ClipboardBridge_Changed" />
-                    </Grid>
-                    <TextBlock Grid.Row="2" FontSize="12" Foreground="#63809C" TextWrapping="Wrap" Text="电脑复制的内容自动同步到手机页面；手机页面发送的内容自动写入电脑剪贴板，并记入剪贴板历史。" />
-                    <Border Grid.Row="4" Padding="14" Background="#EFF5FB" BorderBrush="#D3E4F1" BorderThickness="1" CornerRadius="12">
+        <!-- 文件传输：全宽大卡 -->
+        <Border Grid.Row="4" Padding="18" Style="{StaticResource Card}">
+            <Grid>
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="Auto" /><RowDefinition Height="14" /><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="*" /><RowDefinition Height="12" /><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                <StackPanel Orientation="Horizontal">
+                    <Border Width="30" Height="30" Background="#FFE9DE" CornerRadius="9"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="15" Foreground="#D8754E" Text="&#xE8A5;" /></Border>
+                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Style="{StaticResource CardTitle}" Text="文件传输" />
+                </StackPanel>
+                <TextBlock Grid.Row="2" FontSize="12" Foreground="#63809C" TextWrapping="Wrap" Text="手机上传的文件自动存入接收目录；电脑发送的文件自动进入发送目录，手机端自动下载。收发目录可在左下角设置中修改。" />
+
+                <Grid Grid.Row="4">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="10" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                    <Border Padding="12" Background="#46EAF3FF" BorderBrush="#A5CFE6F8" BorderThickness="1" CornerRadius="11">
                         <Grid>
-                            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                            <TextBlock Style="{StaticResource FieldLabel}" Text="最近同步" />
-                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                                <StackPanel>
-                                    <Image x:Name="RecentSyncImage" MaxHeight="150" Stretch="Uniform" Visibility="Collapsed" HorizontalAlignment="Center" />
-                                    <TextBlock x:Name="ClipboardStateText" FontSize="13" Foreground="#405F7C" TextWrapping="Wrap" Text="等待服务启动" />
-                                </StackPanel>
-                            </ScrollViewer>
-                            <TextBlock x:Name="RecentSyncTimeText" Grid.Row="2" Margin="0,8,0,0" FontSize="11" Foreground="#7B93A8" Text="" />
+                            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="6" /><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                            <TextBlock Style="{StaticResource FieldLabel}" Text="手机上传目录" />
+                            <TextBlock x:Name="IncomingPathText" Grid.Row="2" FontSize="11" Foreground="#52708C" TextWrapping="Wrap" MaxHeight="42" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" />
+                            <Button Grid.Row="4" Height="34" MinWidth="92" Padding="16,0" HorizontalAlignment="Left" Style="{StaticResource Button}" Click="OpenIncoming_Click"><TextBlock Margin="2,0" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="打开目录" /></Button>
                         </Grid>
                     </Border>
-                    <TextBlock x:Name="SyncCountText" Grid.Row="6" FontSize="11" Foreground="#7B93A8" Text="" />
+                    <Border Grid.Column="2" Padding="12" Background="#46EAF3FF" BorderBrush="#A5CFE6F8" BorderThickness="1" CornerRadius="11">
+                        <Grid>
+                            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="6" /><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                            <TextBlock Style="{StaticResource FieldLabel}" Text="电脑发送目录" />
+                            <TextBlock x:Name="OutgoingPathText" Grid.Row="2" FontSize="11" Foreground="#52708C" TextWrapping="Wrap" MaxHeight="42" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" />
+                            <Button Grid.Row="4" Height="34" MinWidth="92" Padding="16,0" HorizontalAlignment="Left" Style="{StaticResource Button}" Click="OpenOutgoing_Click"><TextBlock Margin="2,0" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="打开目录" /></Button>
+                        </Grid>
+                    </Border>
                 </Grid>
-            </Border>
 
-            <!-- 文件传输 -->
-            <Border Grid.Column="2" Padding="18" Style="{StaticResource Card}">
-                <Grid>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="Auto" /><RowDefinition Height="14" /><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-                    <StackPanel Orientation="Horizontal">
-                        <Border Width="30" Height="30" Background="#FFE9DE" CornerRadius="9"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="15" Foreground="#D8754E" Text="&#xE8A5;" /></Border>
-                        <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Style="{StaticResource CardTitle}" Text="文件传输" />
-                    </StackPanel>
-                    <TextBlock Grid.Row="2" FontSize="12" Foreground="#63809C" TextWrapping="Wrap" Text="手机网页可上传文件到电脑；电脑发送的文件进入发送目录，手机端在页面内下载。" />
-                    <Button Grid.Row="4" Height="44" HorizontalAlignment="Left" MinWidth="132" Style="{StaticResource Button}" Click="OpenSettings_Click"><TextBlock Margin="2,0" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="收发位置…" /></Button>
-                    <Button Grid.Row="6" Height="44" Style="{StaticResource ActionButton}" Click="SendFile_Click"><TextBlock Margin="2,0" Foreground="White" Text="发送文件到手机…" /></Button>
-                    <TextBlock x:Name="TransferStateText" Grid.Row="8" Margin="0,6,0,0" FontSize="11" Foreground="#7B93A8" TextWrapping="Wrap" Text="手机上传的文件会保存到接收目录；发送的文件进入发送目录，手机端在页面内下载。" />
+                <Grid Grid.Row="6">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                    <TextBlock Style="{StaticResource CardTitle}" FontSize="13" Text="手机上传的文件" />
+                    <TextBlock Grid.Column="2" Style="{StaticResource CardTitle}" FontSize="13" Text="电脑发送的文件" />
                 </Grid>
-            </Border>
-        </Grid>
+                <Grid Grid.Row="8">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" MaxHeight="170">
+                        <StackPanel x:Name="IncomingFilesList" />
+                    </ScrollViewer>
+                    <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" MaxHeight="170">
+                        <StackPanel x:Name="OutgoingFilesList" />
+                    </ScrollViewer>
+                </Grid>
 
+                <Grid Grid.Row="10">
+                    <Button HorizontalAlignment="Left" MinWidth="150" Style="{StaticResource Button}" Click="SendFile_Click"><TextBlock Margin="2,0" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="发送文件到手机…" /></Button>
+                    <TextBlock x:Name="TransferStateText" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" Foreground="#7B93A8" TextWrapping="Wrap" Text="收到手机文件会显示在上方列表并弹出系统通知。" />
+                </Grid>
+            </Grid>
+        </Border>
     </Grid>
 </UserControl>

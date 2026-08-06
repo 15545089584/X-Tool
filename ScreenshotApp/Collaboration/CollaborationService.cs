@@ -18,7 +18,8 @@ public sealed class CollaborationService
 {
     public const int DefaultPort = 18120;
     private const int MaxRequestHeaderBytes = 8192;
-    private const int MaxJsonBodyBytes = 16 * 1024 * 1024;
+    // 请求体上限：剪贴板文本与文件上传共用；单文件上限 512 MB，超出会连接失败。
+    private const int MaxRequestBodyBytes = 512 * 1024 * 1024;
     private const int ClipboardHistoryCount = 20;
     private const int SessionLifetimeHours = 24;
 
@@ -41,6 +42,9 @@ public sealed class CollaborationService
     public static CollaborationService Instance { get; } = new();
 
     public bool IsRunning { get; private set; }
+
+    /// <summary>手机文件上传成功后触发，参数为 (文件名, 字节数)。</summary>
+    public event Action<string, long>? FileReceived;
 
     public int Port { get; private set; } = DefaultPort;
 
@@ -312,7 +316,7 @@ public sealed class CollaborationService
             var remaining = length - total;
             if (remaining > 0)
             {
-                if (remaining > MaxJsonBodyBytes)
+                if (remaining > MaxRequestBodyBytes)
                 {
                     return null;
                 }
@@ -468,6 +472,7 @@ public sealed class CollaborationService
                 }
                 var target = UniquePath(Path.Combine(IncomingDirectory, name));
                 await File.WriteAllBytesAsync(target, request.Body);
+                FileReceived?.Invoke(Path.GetFileName(target), request.Body.LongLength);
                 await WriteJsonAsync(stream, 200, new { ok = true, name = Path.GetFileName(target) });
                 return;
             }

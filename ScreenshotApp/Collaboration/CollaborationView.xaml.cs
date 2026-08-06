@@ -20,10 +20,17 @@ public partial class CollaborationView : UserControl
     public CollaborationView()
     {
         InitializeComponent();
+        IncomingPathText.Text = CollaborationService.Instance.IncomingDirectory;
+        OutgoingPathText.Text = CollaborationService.Instance.OutgoingDirectory;
         _statusTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
-        _statusTimer.Tick += (_, _) => RefreshStatus();
+        _statusTimer.Tick += (_, _) =>
+        {
+            RefreshStatus();
+            RefreshFiles();
+        };
         _statusTimer.Start();
         RefreshStatus();
+        RefreshFiles();
         IsVisibleChanged += (_, _) =>
         {
             if (IsVisible)
@@ -87,6 +94,23 @@ public partial class CollaborationView : UserControl
         }
         CollaborationService.Instance.ClipboardBridgeEnabled = ClipboardBridgeCheckBox.IsChecked == true;
         RefreshStatus();
+    }
+
+    private void OpenIncoming_Click(object sender, RoutedEventArgs e) => OpenDirectory(CollaborationService.Instance.IncomingDirectory);
+
+    private void OpenOutgoing_Click(object sender, RoutedEventArgs e) => OpenDirectory(CollaborationService.Instance.OutgoingDirectory);
+
+    private static void OpenDirectory(string path)
+    {
+        try
+        {
+            Directory.CreateDirectory(path);
+            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{path}\"") { UseShellExecute = true });
+        }
+        catch
+        {
+            // 打开失败时保持现状。
+        }
     }
 
     private void AllowFirewall_Click(object sender, RoutedEventArgs e)
@@ -196,9 +220,6 @@ public partial class CollaborationView : UserControl
             SessionText.Text = "等待配对";
             SessionText.Foreground = new SolidColorBrush(Color.FromRgb(123, 147, 168));
             ClipboardStateText.Text = "等待服务启动";
-            RecentSyncImage.Visibility = Visibility.Collapsed;
-            RecentSyncTimeText.Text = string.Empty;
-            SyncCountText.Text = string.Empty;
             return;
         }
 
@@ -219,39 +240,78 @@ public partial class CollaborationView : UserControl
         {
             ClipboardStateText.Text = ClipboardBridgeCheckBox.IsChecked == true
                 ? $"桥接运行中 · 已同步 {service.ClipboardSeq} 条"
-                : "电脑→手机同步已关闭，手机→电脑仍可用";
-            SyncCountText.Text = $"累计同步 {service.ClipboardSeq} 条";
-            RecentSyncImage.Visibility = Visibility.Collapsed;
-            RecentSyncTimeText.Text = string.Empty;
+                : "电脑→手机同步已关闭";
             return;
         }
 
-        RecentSyncTimeText.Text = $"第 {entry.Seq} 条 · {entry.CreatedAt:HH:mm:ss}";
-        SyncCountText.Text = $"累计同步 {service.ClipboardSeq} 条";
-        if (entry.Kind == "image" && entry.ImagePngBase64.Length > 0)
+        var summary = entry.Kind == "image" ? "图片" : (entry.Text.Length > 40 ? entry.Text.Substring(0, 40) + "…" : entry.Text);
+        ClipboardStateText.Text = $"最近：{summary} · 共 {service.ClipboardSeq} 条";
+    }
+
+    /// <summary>展示两个收发目录最近的文件列表。</summary>
+    private void RefreshFiles()
+    {
+        FillFileList(IncomingFilesList, CollaborationService.Instance.IncomingDirectory);
+        FillFileList(OutgoingFilesList, CollaborationService.Instance.OutgoingDirectory);
+    }
+
+    private static void FillFileList(StackPanel panel, string directory)
+    {
+        panel.Children.Clear();
+        try
         {
-            try
+            if (!Directory.Exists(directory))
             {
-                using var stream = new MemoryStream(Convert.FromBase64String(entry.ImagePngBase64));
-                var image = new BitmapImage();
-                image.BeginInit();
-                image.CacheOption = BitmapCacheOption.OnLoad;
-                image.StreamSource = stream;
-                image.EndInit();
-                image.Freeze();
-                RecentSyncImage.Source = image;
-                RecentSyncImage.Visibility = Visibility.Visible;
-                ClipboardStateText.Text = "最近同步：图片";
                 return;
             }
-            catch
+            var files = Directory.EnumerateFiles(directory)
+                .Select(file => new FileInfo(file))
+                .OrderByDescending(info => info.LastWriteTime)
+                .Take(10);
+            foreach (var info in files)
             {
-                // 图片解码失败时按文本方式处理。
+                var name = new TextBlock { Text = info.Name, FontSize = 12, FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(Color.FromRgb(64, 95, 124)), TextTrimming = TextTrimming.CharacterEllipsis };
+                var detail = new TextBlock
+                {
+                    Text = $"{FormatSize(info.Length)} · {info.LastWriteTime:MM-dd HH:mm}",
+                    FontSize = 10,
+                    Foreground = new SolidColorBrush(Color.FromRgb(123, 147, 168))
+                };
+                var grid = new Grid();
+                grid.RowDefinitions.Add(new RowDefinition());
+                grid.RowDefinitions.Add(new RowDefinition());
+                Grid.SetRow(detail, 1);
+                grid.Children.Add(name);
+                grid.Children.Add(detail);
+                panel.Children.Add(new Border
+                {
+                    Margin = new Thickness(0, 0, 0, 6),
+                    Padding = new Thickness(10, 7, 10, 7),
+                    Background = new SolidColorBrush(Color.FromArgb(239, 239, 245, 251)),
+                    BorderBrush = new SolidColorBrush(Color.FromRgb(211, 228, 241)),
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(9),
+                    Child = grid
+                });
             }
         }
-        RecentSyncImage.Visibility = Visibility.Collapsed;
-        var text = entry.Text;
-        ClipboardStateText.Text = text.Length > 120 ? text.Substring(0, 120) + "…" : text;
+        catch
+        {
+            // 目录读取失败时保持列表为空。
+        }
+    }
+
+    private static string FormatSize(long bytes)
+    {
+        if (bytes >= 1024L * 1024 * 1024)
+        {
+            return $"{bytes / 1024.0 / 1024 / 1024:0.0} GB";
+        }
+        if (bytes >= 1024L * 1024)
+        {
+            return $"{bytes / 1024.0 / 1024:0.0} MB";
+        }
+        return $"{bytes / 1024.0:0.0} KB";
     }
 
     private void RefreshQrCode(string content)

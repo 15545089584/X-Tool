@@ -23,6 +23,7 @@ object ClipboardBridge {
         var lastText: String = ""
         var lastImage: Bitmap? = null
         var status: String = ""
+        var connected: Boolean = false
         private val listeners = mutableListOf<() -> Unit>()
         private val handler = Handler(Looper.getMainLooper())
 

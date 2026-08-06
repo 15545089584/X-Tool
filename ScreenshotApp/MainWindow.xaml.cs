@@ -74,6 +74,13 @@ public partial class MainWindow : Window
         _historyStore = new ScreenshotHistoryStore(_preferences);
         CollaborationService.Instance.IncomingDirectory = _preferences.CollaborationIncomingDirectory;
         CollaborationService.Instance.OutgoingDirectory = _preferences.CollaborationOutgoingDirectory;
+        CollaborationService.Instance.FileReceived += (name, size) =>
+        {
+            if (Application.Current is App app)
+            {
+                app.ShowTrayBalloon("收到手机文件", $"{name}（{FormatCollaborationSize(size)}）已存入接收目录");
+            }
+        };
         QrCodeConverterViewHost.HistoryStore = _historyStore;
         ClipboardService.TextRecordRequested += async content =>
         {
@@ -819,6 +826,19 @@ public partial class MainWindow : Window
             LogClipboardCapture($"缓存插入异常：{exception.GetBaseException().Message}");
             // 条目构造失败时由随后的全量刷新兜底。
         }
+    }
+
+    private static string FormatCollaborationSize(long bytes)
+    {
+        if (bytes >= 1024L * 1024 * 1024)
+        {
+            return $"{bytes / 1024.0 / 1024 / 1024:0.0} GB";
+        }
+        if (bytes >= 1024L * 1024)
+        {
+            return $"{bytes / 1024.0 / 1024:0.0} MB";
+        }
+        return $"{bytes / 1024.0:0.0} KB";
     }
 
 #if SCROLL_CAPTURE_TEST
