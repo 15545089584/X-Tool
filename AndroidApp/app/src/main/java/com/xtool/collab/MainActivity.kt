@@ -286,6 +286,10 @@ private fun HomeScreen(
             if (event == Lifecycle.Event.ON_RESUME) {
                 accessibilityOn = isAccessibilityEnabled(context)
                 batteryIgnored = isBatteryOptimizationIgnored(context)
+                // 兜底：系统限制后台读剪贴板时，回到前台立即补推后台期间复制的内容。
+                if (token.isNotBlank()) {
+                    ClipboardBridge.pushFromClipboard(context, host, token)
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
