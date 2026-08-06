@@ -20,8 +20,6 @@ public partial class CollaborationView : UserControl
     public CollaborationView()
     {
         InitializeComponent();
-        IncomingPathText.Text = CollaborationService.Instance.IncomingDirectory;
-        OutgoingPathText.Text = CollaborationService.Instance.OutgoingDirectory;
         _statusTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
         _statusTimer.Tick += (_, _) => RefreshStatus();
         _statusTimer.Start();
@@ -119,20 +117,12 @@ public partial class CollaborationView : UserControl
         }
     }
 
-    private void OpenIncoming_Click(object sender, RoutedEventArgs e) => OpenDirectory(CollaborationService.Instance.IncomingDirectory);
-
-    private void OpenOutgoing_Click(object sender, RoutedEventArgs e) => OpenDirectory(CollaborationService.Instance.OutgoingDirectory);
-
-    private static void OpenDirectory(string path)
+    /// <summary>跳转到设置页的协作中心区块，收发目录在那里统一调整。</summary>
+    private void OpenSettings_Click(object sender, RoutedEventArgs e)
     {
-        try
+        if (Window.GetWindow(this) is MainWindow mainWindow)
         {
-            Directory.CreateDirectory(path);
-            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{path}\"") { UseShellExecute = true });
-        }
-        catch
-        {
-            // 打开失败时保持现状。
+            mainWindow.OpenCollaborationSettings();
         }
     }
 

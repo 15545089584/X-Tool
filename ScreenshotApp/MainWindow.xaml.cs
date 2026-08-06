@@ -307,6 +307,14 @@ public partial class MainWindow : Window
         await FileWorkbenchView.OpenFolderFromStorageAsync(e.FolderPath, e.SearchKeyword, e.KnownFilePath);
     }
 
+    /// <summary>协作中心请求打开设置页的收发目录区块。</summary>
+    internal void OpenCollaborationSettings()
+    {
+        CollaborationNav.IsChecked = true;
+        NavigateToPage("Settings");
+        CollaborationSettingsExpander.IsExpanded = true;
+    }
+
     private async void CaptureAction_Click(object sender, RoutedEventArgs e)
     {
         var action = (sender as FrameworkElement)?.Tag?.ToString() ?? "截图";
