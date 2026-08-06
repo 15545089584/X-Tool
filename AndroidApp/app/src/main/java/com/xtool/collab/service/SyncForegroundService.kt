@@ -76,7 +76,7 @@ class SyncForegroundService : Service() {
                     }
                     lastSeqValue = current
                 }
-                delay(3000)
+                delay(1000)
             }
         }
         return START_STICKY

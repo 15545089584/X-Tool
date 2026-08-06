@@ -41,9 +41,6 @@ public sealed class CollaborationService
 
     public bool IsRunning { get; private set; }
 
-    /// <summary>手机内容写入电脑剪贴板成功后触发，参数为 (kind, 摘要)。</summary>
-    public event Action<string, string>? MobileClipboardReceived;
-
     public int Port { get; private set; } = DefaultPort;
 
     public string Pin => _pin ?? string.Empty;
@@ -525,8 +522,6 @@ public sealed class CollaborationService
                 if (text != null)
                 {
                     ClipboardService.SetText(text, recordToHistory: true);
-                    var summary = text.Length > 60 ? text.Substring(0, 60) + "…" : text;
-                    MobileClipboardReceived?.Invoke("text", summary);
                 }
                 else if (imageBytes is { Length: > 0 })
                 {
@@ -538,7 +533,6 @@ public sealed class CollaborationService
                     image.EndInit();
                     image.Freeze();
                     ClipboardService.SetImage(image, recordToHistory: true);
-                    MobileClipboardReceived?.Invoke("image", "图片");
                 }
             }
             catch
