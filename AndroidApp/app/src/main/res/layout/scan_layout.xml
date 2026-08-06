@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#111827">
+
+    <com.journeyapps.barcodescanner.DecoratedBarcodeView
+        android:id="@+id/zxing_barcode_scanner"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        app:zxing_framing_rect_width="260dp"
+        app:zxing_framing_rect_height="260dp"
+        app:zxing_viewfinder_laser="#4D7CFE"
+        app:zxing_viewfinder_mask="#66000000"
+        app:zxing_viewfinder_laser_visibility="true" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal|top"
+        android:layout_marginTop="64dp"
+        android:text="将二维码放入框内即可自动扫描"
+        android:textColor="#DCEBFF"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/close_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_margin="18dp"
+        android:padding="8dp"
+        android:text="×"
+        android:textColor="#FFFFFF"
+        android:textSize="30sp" />
+</FrameLayout>

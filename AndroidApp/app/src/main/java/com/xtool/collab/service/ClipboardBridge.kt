@@ -106,11 +106,12 @@ object ClipboardBridge {
                 } else if (entry.kind == "image" && entry.imageBase64.isNotEmpty()) {
                     val bitmap = decodeImage(entry.imageBase64)
                     if (bitmap != null) {
-                        writeImageToClipboard(context, bitmap)
+                        // 图片不自动写入剪贴板：电脑复制图片常为电脑本地用途，
+                        // 改为在 App 内展示，由用户点击“复制到剪贴板”或“保存到相册”。
                         SyncState.update {
                             lastImage = bitmap
                             lastText = ""
-                            status = "已同步电脑图片到手机"
+                            status = "收到电脑图片：可复制到剪贴板或保存到相册"
                         }
                     }
                 }

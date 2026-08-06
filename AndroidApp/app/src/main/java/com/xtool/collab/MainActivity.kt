@@ -1,12 +1,16 @@
 package com.xtool.collab
 
 import android.Manifest
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.MediaStore
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -51,6 +55,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -63,6 +68,8 @@ import com.xtool.collab.service.ClipboardAccessibilityService
 import com.xtool.collab.service.ClipboardBridge
 import com.xtool.collab.service.SyncForegroundService
 import com.xtool.collab.ui.XToolCollabTheme
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -269,7 +276,21 @@ private fun HomeScreen(
     var receivedText by remember { mutableStateOf(ClipboardBridge.SyncState.lastText) }
     var receivedImage by remember { mutableStateOf(ClipboardBridge.SyncState.lastImage) }
     var syncStatus by remember { mutableStateOf(ClipboardBridge.SyncState.status) }
-    val accessibilityOn = remember { isAccessibilityEnabled(context) }
+    var accessibilityOn by remember { mutableStateOf(isAccessibilityEnabled(context)) }
+    var batteryIgnored by remember { mutableStateOf(isBatteryOptimizationIgnored(context)) }
+
+    // 从系统设置返回后刷新无障碍与电池优化状态，避免提示残留。
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                accessibilityOn = isAccessibilityEnabled(context)
+                batteryIgnored = isBatteryOptimizationIgnored(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     // 订阅电脑 → 手机同步状态，用于界面展示。
     DisposableEffect(Unit) {
@@ -364,6 +385,51 @@ private fun HomeScreen(
                     }
                 }
 
+                if (!batteryIgnored) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF6E5))
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                "建议允许后台运行：系统省电策略可能冻结同步服务，导致后台同步中断。",
+                                fontSize = 12.sp,
+                                color = Color(0xFF8A5B12)
+                            )
+                            Row(modifier = Modifier.padding(top = 8.dp)) {
+                                OutlinedButton(
+                                    onClick = {
+                                        runCatching {
+                                            context.startActivity(
+                                                Intent(
+                                                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                                    Uri.parse("package:${context.packageName}")
+                                                )
+                                            )
+                                        }
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                ) { Text("允许后台运行", fontSize = 12.sp) }
+                                Spacer(Modifier.width(8.dp))
+                                OutlinedButton(
+                                    onClick = {
+                                        runCatching {
+                                            context.startActivity(
+                                                Intent(
+                                                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                                    Uri.parse("package:${context.packageName}")
+                                                )
+                                            )
+                                        }
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                ) { Text("应用信息", fontSize = 12.sp) }
+                            }
+                        }
+                    }
+                }
+
                 Spacer(Modifier.height(14.dp))
                 Text("最近收到", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF7B93A8))
                 if (receivedImage != null) {
@@ -376,6 +442,23 @@ private fun HomeScreen(
                             .background(Color(0xFFEFF5FB), RoundedCornerShape(10.dp)),
                         contentScale = ContentScale.Fit
                     )
+                    Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                ClipboardBridge.writeImageToClipboard(context, receivedImage!!)
+                                localStatus = "图片已复制到手机剪贴板"
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) { Text("复制到剪贴板", fontSize = 12.sp) }
+                        Spacer(Modifier.width(8.dp))
+                        OutlinedButton(
+                            onClick = {
+                                val ok = saveImageToGallery(context, receivedImage!!)
+                                localStatus = if (ok) "已保存到相册（Pictures/XTool）" else "保存失败：可能需要存储权限"
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) { Text("保存到相册", fontSize = 12.sp) }
+                    }
                 } else {
                     Text(
                         receivedText.ifEmpty { "暂无内容，电脑端复制的内容会显示在这里" },
@@ -438,4 +521,28 @@ private fun isAccessibilityEnabled(context: Context): Boolean {
     val enabled = Settings.Secure.getString(context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
         ?: return false
     return enabled.split(':').any { it.equals(expected, ignoreCase = true) }
+}
+
+private fun isBatteryOptimizationIgnored(context: Context): Boolean {
+    val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+    return powerManager.isIgnoringBatteryOptimizations(context.packageName)
+}
+
+private fun saveImageToGallery(context: Context, bitmap: Bitmap): Boolean {
+    return try {
+        val values = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, "xtool_${System.currentTimeMillis()}.png")
+            put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+            if (Build.VERSION.SDK_INT >= 29) {
+                put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/XTool")
+            }
+        }
+        val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: return false
+        context.contentResolver.openOutputStream(uri)?.use { out ->
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+        } ?: return false
+        true
+    } catch (_: Exception) {
+        false
+    }
 }
