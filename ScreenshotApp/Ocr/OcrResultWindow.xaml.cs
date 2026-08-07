@@ -27,6 +27,9 @@ public partial class OcrResultWindow : Window
         };
     }
 
+    /// <summary>复制成功后为 true，截图窗口据此自动退出截图模式。</summary>
+    internal bool ExitCaptureRequested { get; private set; }
+
     private void Header_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (e.LeftButton == MouseButtonState.Pressed)
@@ -46,7 +49,8 @@ public partial class OcrResultWindow : Window
         try
         {
             ClipboardService.SetText(ResultTextBox.Text);
-            CopyStatusText.Text = "文字已复制到剪贴板";
+            ExitCaptureRequested = true;
+            Close();
         }
         catch
         {

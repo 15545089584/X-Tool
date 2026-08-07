@@ -111,10 +111,14 @@ public sealed class ScreenRecordingService
                 audioCancellation.Dispose();
             }
 
-            lock (writerGate)
+            // SinkWriter 收尾会刷新文件头并同步写入，放在后台线程避免停止录像时卡住界面。
+            await Task.Run(() =>
             {
-                writer.Finalize();
-            }
+                lock (writerGate)
+                {
+                    writer.Finalize();
+                }
+            });
 
             return new ScreenRecordingResult(
                 filePath,

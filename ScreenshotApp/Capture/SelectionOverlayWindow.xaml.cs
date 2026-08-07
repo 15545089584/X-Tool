@@ -389,6 +389,10 @@ public partial class SelectionOverlayWindow : Window
                 _selection.Height);
             var resultWindow = new OcrResultWindow(result, selectionScreenBounds) { Owner = this };
             resultWindow.ShowDialog();
+            if (resultWindow.ExitCaptureRequested)
+            {
+                Close();
+            }
         }
         catch (Exception exception)
         {
@@ -499,12 +503,17 @@ public partial class SelectionOverlayWindow : Window
             var engine = TranslationEngineProvider.Default;
             if (!engine.IsReady)
             {
-                new TranslationResultWindow(
+                var translationWindow = new TranslationResultWindow(
                     sourceText,
                     null,
                     engine.UnavailableReason,
                     null,
-                    selectionScreenBounds) { Owner = this }.ShowDialog();
+                    selectionScreenBounds) { Owner = this };
+                translationWindow.ShowDialog();
+                if (translationWindow.ExitCaptureRequested)
+                {
+                    Close();
+                }
                 return;
             }
 
@@ -518,14 +527,19 @@ public partial class SelectionOverlayWindow : Window
                 HistoryTextCreated?.Invoke(this, new HistoryTextContent(HistoryEntryKind.Translation, historyContent));
             }
 
-            new TranslationResultWindow(
+            var translationResultWindow = new TranslationResultWindow(
                 translation.SourceText,
                 translation.TranslatedText,
                 null,
                 editedSource => engine.TranslateAsync(
                     new TranslationRequest(TranslationTextPreprocessor.Normalize(editedSource)),
                     CancellationToken.None),
-                selectionScreenBounds) { Owner = this }.ShowDialog();
+                selectionScreenBounds) { Owner = this };
+            translationResultWindow.ShowDialog();
+            if (translationResultWindow.ExitCaptureRequested)
+            {
+                Close();
+            }
         }
         catch (Exception exception)
         {
