@@ -530,11 +530,16 @@ public partial class MainWindow : Window
                 overlay.IsScreenRecordingRequested &&
                 overlay.SelectedScreenBounds is Int32Rect recordingRegion)
             {
-                await CaptureScreenRecordingAsync(
+                var synthesisStartedInBackground = await CaptureScreenRecordingAsync(
                     recordingRegion,
                     overlay.RecordingMode,
                     overlay.RecordSystemAudio,
                     overlay.RecordMicrophone);
+                if (synthesisStartedInBackground)
+                {
+                    // GIF 已经完成帧采集，主窗口继续留在托盘，避免后台合成期间被关闭。
+                    restoreWindowAfterCapture = false;
+                }
                 return;
             }
 
@@ -676,7 +681,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private async Task CaptureScreenRecordingAsync(
+    private async Task<bool> CaptureScreenRecordingAsync(
         Int32Rect screenRegion,
         ScreenRecordingMode recordingMode,
         bool recordSystemAudio,
@@ -684,6 +689,7 @@ public partial class MainWindow : Window
     {
         var regionWindow = new ScreenRecordingRegionWindow(screenRegion);
         regionWindow.Show();
+        GifRecordingCapture? gifCapture = null;
         try
         {
             await ShowRecordingCountdownAsync(screenRegion);
@@ -691,22 +697,25 @@ public partial class MainWindow : Window
             controlWindow.Show();
             try
             {
-                var result = await _screenRecordingService.RecordAsync(
-                    new ScreenRecordingOptions(
-                        screenRegion,
-                        recordingMode == ScreenRecordingMode.Mp4 && recordSystemAudio,
-                        recordingMode == ScreenRecordingMode.Mp4 && recordMicrophone,
-                        recordingMode == ScreenRecordingMode.Gif ? 12 : 15,
-                        Mode: recordingMode),
-                    () => controlWindow.IsStopRequested || NativeMethods.IsEscapePressed(),
-                    controlWindow.SetElapsed,
-                    statusChanged: recordingMode == ScreenRecordingMode.Gif ? controlWindow.SetStatus : null);
-                if (result.Mode == ScreenRecordingMode.Gif)
+                var options = new ScreenRecordingOptions(
+                    screenRegion,
+                    recordingMode == ScreenRecordingMode.Mp4 && recordSystemAudio,
+                    recordingMode == ScreenRecordingMode.Mp4 && recordMicrophone,
+                    recordingMode == ScreenRecordingMode.Gif ? 12 : 15,
+                    Mode: recordingMode);
+                if (recordingMode == ScreenRecordingMode.Gif)
                 {
-                    ShowToast($"GIF 动图已保存 · {result.FrameCount} 帧");
+                    gifCapture = await _screenRecordingService.CaptureGifAsync(
+                        options,
+                        () => controlWindow.IsStopRequested || NativeMethods.IsEscapePressed(),
+                        controlWindow.SetElapsed);
                 }
                 else
                 {
+                    var result = await _screenRecordingService.RecordAsync(
+                        options,
+                        () => controlWindow.IsStopRequested || NativeMethods.IsEscapePressed(),
+                        controlWindow.SetElapsed);
                     var audioDescription = result.IncludesSystemAudio && result.IncludesMicrophone
                         ? "电脑声音 + 麦克风"
                         : result.IncludesSystemAudio
@@ -722,11 +731,72 @@ public partial class MainWindow : Window
             {
                 controlWindow.Close();
             }
+
+            if (gifCapture is not null)
+            {
+                StartGifSynthesisInBackground(gifCapture);
+                return true;
+            }
         }
         finally
         {
             regionWindow.Close();
         }
+
+        return false;
+    }
+
+    private void StartGifSynthesisInBackground(GifRecordingCapture capture)
+    {
+        ShowGifSynthesisNotification("GIF 正在合成", "录制已结束，正在后台合成 GIF。", null);
+        _ = Task.Run(async () =>
+        {
+            var lastNotificationAt = DateTime.UtcNow.AddSeconds(-2);
+            var lastPercent = -1;
+            try
+            {
+                var result = await _screenRecordingService.SynthesizeGifAsync(
+                    capture,
+                    percent =>
+                    {
+                        var roundedPercent = Math.Clamp((int)Math.Floor(percent), 0, 99);
+                        var now = DateTime.UtcNow;
+                        if (roundedPercent == lastPercent ||
+                            now - lastNotificationAt < TimeSpan.FromMilliseconds(700))
+                        {
+                            return;
+                        }
+
+                        lastPercent = roundedPercent;
+                        lastNotificationAt = now;
+                        ShowGifSynthesisNotification(
+                            "GIF 正在合成",
+                            $"合成进度：{roundedPercent}%",
+                            null);
+                    });
+
+                ShowGifSynthesisNotification(
+                    "GIF 合成完成",
+                    $"{Path.GetFileName(result.FilePath)} 已生成，点击查看成品。",
+                    () => Dispatcher.BeginInvoke(new Action(() => OpenFilePath(result.FilePath))));
+                _ = Dispatcher.BeginInvoke(new Action(() => _ = RefreshHistoryAsync()));
+            }
+            catch (Exception exception)
+            {
+                ShowGifSynthesisNotification("GIF 合成失败", exception.Message, null);
+            }
+        });
+    }
+
+    private void ShowGifSynthesisNotification(string title, string text, Action? onClick)
+    {
+        _ = Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (Application.Current is App app)
+            {
+                app.ShowTrayBalloon(title, text, onClick);
+            }
+        }));
     }
 
     private static async Task ShowRecordingCountdownAsync(Int32Rect screenRegion)
@@ -1171,6 +1241,18 @@ public partial class MainWindow : Window
             return;
         }
 
+        OpenFilePath(filePath);
+    }
+
+    private void OpenFilePath(string filePath)
+    {
+        if (!File.Exists(filePath))
+        {
+            ShowToast("GIF 文件已不存在，请刷新历史记录");
+            _ = RefreshHistoryAsync();
+            return;
+        }
+
         try
         {
             Process.Start(new ProcessStartInfo
@@ -1181,7 +1263,7 @@ public partial class MainWindow : Window
         }
         catch (Exception exception)
         {
-            ShowToast($"无法打开截图：{exception.Message}");
+            ShowToast($"无法打开文件：{exception.Message}");
         }
     }
 

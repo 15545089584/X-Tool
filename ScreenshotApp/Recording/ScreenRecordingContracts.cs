@@ -25,3 +25,15 @@ public sealed record ScreenRecordingResult(
     bool IncludesSystemAudio,
     bool IncludesMicrophone,
     ScreenRecordingMode Mode);
+
+/// <summary>GIF 采集完成后交给后台编码器的原始帧任务。</summary>
+public sealed record GifRecordingCapture(
+    string RawFramePath,
+    string FilePath,
+    string? CoverImagePath,
+    int Width,
+    int Height,
+    int FrameRate,
+    int MaxWidth,
+    TimeSpan Duration,
+    int FrameCount);

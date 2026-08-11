@@ -164,6 +164,20 @@ public sealed class ScreenRecordingService
         CancellationToken cancellationToken,
         Action<string>? statusChanged)
     {
+        var capture = await CaptureGifAsync(options, shouldStop, progressChanged, cancellationToken);
+        return await SynthesizeGifAsync(capture, statusChanged: statusChanged, cancellationToken: cancellationToken);
+    }
+
+    /// <summary>
+    /// 只负责采集 GIF 原始帧并在停止后关闭临时文件；编码留给后台任务，
+    /// 这样停止录制可以立即释放区域控制条，不把 FFmpeg 收尾占在录制界面上。
+    /// </summary>
+    public async Task<GifRecordingCapture> CaptureGifAsync(
+        ScreenRecordingOptions options,
+        Func<bool> shouldStop,
+        Action<TimeSpan>? progressChanged,
+        CancellationToken cancellationToken = default)
+    {
         if (_ffmpegPath is null)
         {
             throw new InvalidOperationException("GIF 录制需要随附的 FFmpeg 引擎，请修复或重新安装 X-Tool。");
@@ -182,25 +196,25 @@ public sealed class ScreenRecordingService
         var recordingRegion = MakeEven(options.ScreenRegion);
         Directory.CreateDirectory(StorageDirectory);
         var filePath = Path.Combine(StorageDirectory, $"截影_GIF_{DateTime.Now:yyyy-MM-dd_HH-mm-ss-fff}.gif");
-        var firstFrame = EnsureBgra32(await CaptureRegionAsync(recordingRegion, cancellationToken));
+        var rawFramePath = Path.Combine(Path.GetTempPath(), $"XTool-GIF-{Guid.NewGuid():N}.rawvideo");
+        var firstFrame = PrepareGifFrame(
+            EnsureBgra32(await CaptureRegionAsync(recordingRegion, cancellationToken)),
+            maxWidth);
         var coverImagePath = await TrySaveCoverAsync(firstFrame, filePath);
         var stopwatch = Stopwatch.StartNew();
         var frameCount = 0;
-        Process? encoder = null;
-        var completed = false;
 
         try
         {
-            encoder = StartGifEncoder(
-                _ffmpegPath,
-                filePath,
-                firstFrame.PixelWidth,
-                firstFrame.PixelHeight,
-                frameRate,
-                maxWidth);
-            var errorTask = encoder.StandardError.ReadToEndAsync();
+            await using var rawStream = new FileStream(
+                rawFramePath,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.Read,
+                1024 * 1024,
+                FileOptions.Asynchronous | FileOptions.SequentialScan);
             var pixels = new byte[firstFrame.PixelWidth * firstFrame.PixelHeight * 4];
-            await WriteGifFrameAsync(encoder, firstFrame, pixels, cancellationToken);
+            await WriteRawFrameAsync(rawStream, firstFrame, pixels, cancellationToken);
             frameCount = 1;
             progressChanged?.Invoke(TimeSpan.Zero);
 
@@ -220,8 +234,10 @@ public sealed class ScreenRecordingService
                     break;
                 }
 
-                var bitmap = EnsureBgra32(await CaptureRegionAsync(recordingRegion, cancellationToken));
-                await WriteGifFrameAsync(encoder, bitmap, pixels, cancellationToken);
+                var bitmap = PrepareGifFrame(
+                    EnsureBgra32(await CaptureRegionAsync(recordingRegion, cancellationToken)),
+                    maxWidth);
+                await WriteRawFrameAsync(rawStream, bitmap, pixels, cancellationToken);
                 frameCount++;
                 progressChanged?.Invoke(stopwatch.Elapsed);
                 nextFrameAt += TimeSpan.FromSeconds(1d / frameRate);
@@ -234,51 +250,114 @@ public sealed class ScreenRecordingService
                 progressChanged?.Invoke(maxDuration);
             }
 
+            await rawStream.FlushAsync(cancellationToken);
+            return new GifRecordingCapture(
+                rawFramePath,
+                filePath,
+                coverImagePath,
+                firstFrame.PixelWidth,
+                firstFrame.PixelHeight,
+                frameRate,
+                maxWidth,
+                stopwatch.Elapsed,
+                frameCount);
+        }
+        catch
+        {
+            TryDeleteFile(rawFramePath);
+            TryDeleteFile(filePath);
+            TryDeleteFile(coverImagePath);
+            throw;
+        }
+    }
+
+    /// <summary>在后台将已采集的 GIF 原始帧合成为最终文件，并报告 FFmpeg 进度。</summary>
+    public async Task<ScreenRecordingResult> SynthesizeGifAsync(
+        GifRecordingCapture capture,
+        Action<double>? progressChanged = null,
+        Action<string>? statusChanged = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (_ffmpegPath is null)
+        {
+            TryDeleteFile(capture.RawFramePath);
+            TryDeleteFile(capture.FilePath);
+            TryDeleteFile(capture.CoverImagePath);
+            throw new InvalidOperationException("GIF 录制需要随附的 FFmpeg 引擎，请修复或重新安装 X-Tool。");
+        }
+
+        Process? encoder = null;
+        Task progressTask = Task.CompletedTask;
+        var completed = false;
+        try
+        {
             statusChanged?.Invoke("正在合成 GIF…");
-            // 直接关闭二进制管道，避免 StreamWriter 在关闭时写入 UTF-8 BOM，
-            // 否则 GIF 的 rawvideo 输入末尾会多出 3 个字节并触发残帧警告。
-            encoder.StandardInput.BaseStream.Close();
-            using var finalizeCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            encoder = StartGifEncoder(
+                _ffmpegPath,
+                capture.RawFramePath,
+                capture.FilePath,
+                capture.Width,
+                capture.Height,
+                capture.FrameRate,
+                capture.MaxWidth);
+            var errorTask = encoder.StandardError.ReadToEndAsync();
+            progressTask = ReadGifProgressAsync(encoder.StandardOutput, capture.Duration, progressChanged, cancellationToken);
+            using var finalizeCancellation = new CancellationTokenSource(
+                TimeSpan.FromSeconds(Math.Max(30, capture.Duration.TotalSeconds * 6 + 20)));
             await encoder.WaitForExitAsync(finalizeCancellation.Token);
+            await progressTask;
             var error = await errorTask;
             if (encoder.ExitCode != 0)
             {
                 throw new InvalidOperationException($"GIF 编码失败：{SummarizeProcessError(error)}");
             }
 
+            progressChanged?.Invoke(100);
             completed = true;
             return new ScreenRecordingResult(
-                filePath,
-                coverImagePath,
-                stopwatch.Elapsed,
-                frameCount,
+                capture.FilePath,
+                capture.CoverImagePath,
+                capture.Duration,
+                capture.FrameCount,
                 false,
                 false,
                 ScreenRecordingMode.Gif);
         }
-        catch (OperationCanceledException)
-        {
-            TryTerminateProcess(encoder);
-            throw;
-        }
         catch
         {
             TryTerminateProcess(encoder);
+            try
+            {
+                await progressTask;
+            }
+            catch
+            {
+                // 编码取消或进程失败时忽略进度读取任务的连带异常。
+            }
+
             throw;
         }
         finally
         {
+            TryDeleteFile(capture.RawFramePath);
             if (!completed)
             {
-                TryDeleteFile(filePath);
-                TryDeleteFile(coverImagePath);
+                TryDeleteFile(capture.FilePath);
+                TryDeleteFile(capture.CoverImagePath);
             }
 
             encoder?.Dispose();
         }
     }
 
-    private static Process StartGifEncoder(string? ffmpegPath, string filePath, int width, int height, int frameRate, int maxWidth)
+    private static Process StartGifEncoder(
+        string? ffmpegPath,
+        string rawFramePath,
+        string filePath,
+        int width,
+        int height,
+        int frameRate,
+        int maxWidth)
     {
         var scaledWidth = Math.Max(2, Math.Min(width, maxWidth) & ~1);
         // 逐帧生成调色板并立即消费，避免 stats_mode=diff 等待整段输入后再合成，
@@ -289,16 +368,17 @@ public sealed class ScreenRecordingService
             FileName = ffmpegPath ?? throw new InvalidOperationException("找不到 FFmpeg 引擎。"),
             UseShellExecute = false,
             CreateNoWindow = true,
-            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
             RedirectStandardError = true,
-            StandardInputEncoding = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
             StandardErrorEncoding = System.Text.Encoding.UTF8
         };
         foreach (var argument in new[]
         {
             "-y", "-hide_banner", "-loglevel", "error",
             "-f", "rawvideo", "-pix_fmt", "bgra", "-s:v", $"{width}x{height}",
-            "-r", frameRate.ToString(CultureInfo.InvariantCulture), "-i", "pipe:0",
+            "-r", frameRate.ToString(CultureInfo.InvariantCulture), "-i", rawFramePath,
+            "-progress", "pipe:1", "-nostats",
             "-filter_complex", filter, "-loop", "-1", "-f", "gif", filePath
         })
         {
@@ -308,11 +388,39 @@ public sealed class ScreenRecordingService
         return Process.Start(startInfo) ?? throw new InvalidOperationException("无法启动 GIF 编码进程。");
     }
 
-    private static async Task WriteGifFrameAsync(Process encoder, BitmapSource bitmap, byte[] pixels, CancellationToken cancellationToken)
+    private static async Task WriteRawFrameAsync(Stream output, BitmapSource bitmap, byte[] pixels, CancellationToken cancellationToken)
     {
         var stride = bitmap.PixelWidth * 4;
         bitmap.CopyPixels(pixels, stride, 0);
-        await encoder.StandardInput.BaseStream.WriteAsync(pixels.AsMemory(0, stride * bitmap.PixelHeight), cancellationToken);
+        await output.WriteAsync(pixels.AsMemory(0, stride * bitmap.PixelHeight), cancellationToken);
+    }
+
+    private static async Task ReadGifProgressAsync(
+        StreamReader output,
+        TimeSpan duration,
+        Action<double>? progressChanged,
+        CancellationToken cancellationToken)
+    {
+        while (!output.EndOfStream)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var line = await output.ReadLineAsync();
+            if (line is null)
+            {
+                break;
+            }
+
+            if (!line.StartsWith("out_time_ms=", StringComparison.Ordinal) ||
+                !long.TryParse(line[12..], NumberStyles.Integer, CultureInfo.InvariantCulture, out var microseconds))
+            {
+                continue;
+            }
+
+            var percent = duration.TotalMilliseconds <= 0
+                ? 0
+                : Math.Clamp(microseconds / 1000d / duration.TotalMilliseconds * 100d, 0, 99.5);
+            progressChanged?.Invoke(percent);
+        }
     }
 
     private static BitmapSource EnsureBgra32(BitmapSource bitmap)
@@ -325,6 +433,26 @@ public sealed class ScreenRecordingService
         var converted = new FormatConvertedBitmap(bitmap, PixelFormats.Bgra32, null, 0);
         converted.Freeze();
         return converted;
+    }
+
+    private static BitmapSource PrepareGifFrame(BitmapSource bitmap, int maxWidth)
+    {
+        var targetWidth = Math.Max(2, Math.Min(bitmap.PixelWidth, maxWidth) & ~1);
+        if (targetWidth >= bitmap.PixelWidth)
+        {
+            return bitmap;
+        }
+
+        var targetHeight = Math.Max(
+            2,
+            (int)Math.Round(bitmap.PixelHeight * targetWidth / (double)bitmap.PixelWidth) & ~1);
+        var transformed = new TransformedBitmap(
+            bitmap,
+            new ScaleTransform(
+                targetWidth / (double)bitmap.PixelWidth,
+                targetHeight / (double)bitmap.PixelHeight));
+        transformed.Freeze();
+        return EnsureBgra32(transformed);
     }
 
     private static string SummarizeProcessError(string error)
