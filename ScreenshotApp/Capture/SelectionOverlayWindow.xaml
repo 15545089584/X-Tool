@@ -502,41 +502,71 @@
             <Border.Effect>
                 <DropShadowEffect Color="#263B56" BlurRadius="18" ShadowDepth="4" Opacity="0.3" />
             </Border.Effect>
-            <StackPanel Orientation="Horizontal">
-                <Button x:Name="SystemAudioOptionButton"
-                        Style="{StaticResource RecordingOptionButtonStyle}"
-                        Click="SystemAudioOptionButton_Click">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Margin="0,0,5,0" FontFamily="Segoe Fluent Icons" Text="&#xE767;" />
-                        <TextBlock x:Name="SystemAudioOptionText" Text="电脑声音：关" />
-                    </StackPanel>
-                </Button>
-                <Button x:Name="MicrophoneOptionButton"
-                        Style="{StaticResource RecordingOptionButtonStyle}"
-                        Click="MicrophoneOptionButton_Click">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Margin="0,0,5,0" FontFamily="Segoe Fluent Icons" Text="&#xE720;" />
-                        <TextBlock x:Name="MicrophoneOptionText" Text="麦克风：关" />
-                    </StackPanel>
-                </Button>
-                <Border Width="1" Height="20" Margin="3,0,7,0" VerticalAlignment="Center" Background="#CCD5E0" />
-                <Button Width="82" Height="30" Click="StartRecordingButton_Click" Cursor="Hand">
-                    <Button.Template>
-                        <ControlTemplate TargetType="Button">
-                            <Border x:Name="Background" Background="#E94D5D" CornerRadius="6">
-                                <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="White" FontWeight="SemiBold" Text="开始录像" />
-                            </Border>
-                            <ControlTemplate.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="Background" Property="Background" Value="#F15E6B" />
-                                </Trigger>
-                                <Trigger Property="IsPressed" Value="True">
-                                    <Setter TargetName="Background" Property="Background" Value="#CC3D4C" />
-                                </Trigger>
-                            </ControlTemplate.Triggers>
-                        </ControlTemplate>
-                    </Button.Template>
-                </Button>
+            <StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                    <Button x:Name="Mp4RecordingModeButton"
+                            Style="{StaticResource RecordingOptionButtonStyle}"
+                            Click="RecordingModeButton_Click"
+                            Tag="Mp4"
+                            ToolTip="录制带可选声音的 MP4 视频">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Margin="0,0,5,0" FontFamily="Segoe Fluent Icons" Text="&#xE714;" />
+                            <TextBlock Text="普通录像" />
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="GifRecordingModeButton"
+                            Style="{StaticResource RecordingOptionButtonStyle}"
+                            Click="RecordingModeButton_Click"
+                            Tag="Gif"
+                            ToolTip="录制无声音的 GIF 动图，最长 10 秒">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Margin="0,0,5,0" FontFamily="Segoe Fluent Icons" Text="&#xE8A5;" />
+                            <TextBlock Text="录制 GIF" />
+                        </StackPanel>
+                    </Button>
+                    <TextBlock x:Name="RecordingModeHintText"
+                               Margin="5,0,0,0"
+                               VerticalAlignment="Center"
+                               Foreground="#718096"
+                               FontSize="11"
+                               Text="MP4 · 可选声音" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <Button x:Name="SystemAudioOptionButton"
+                            Style="{StaticResource RecordingOptionButtonStyle}"
+                            Click="SystemAudioOptionButton_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Margin="0,0,5,0" FontFamily="Segoe Fluent Icons" Text="&#xE767;" />
+                            <TextBlock x:Name="SystemAudioOptionText" Text="电脑声音：关" />
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="MicrophoneOptionButton"
+                            Style="{StaticResource RecordingOptionButtonStyle}"
+                            Click="MicrophoneOptionButton_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Margin="0,0,5,0" FontFamily="Segoe Fluent Icons" Text="&#xE720;" />
+                            <TextBlock x:Name="MicrophoneOptionText" Text="麦克风：关" />
+                        </StackPanel>
+                    </Button>
+                    <Border Width="1" Height="20" Margin="3,0,7,0" VerticalAlignment="Center" Background="#CCD5E0" />
+                    <Button Width="82" Height="30" Click="StartRecordingButton_Click" Cursor="Hand">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="Background" Background="#E94D5D" CornerRadius="6">
+                                    <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="White" FontWeight="SemiBold" Text="开始录像" />
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Background" Property="Background" Value="#F15E6B" />
+                                    </Trigger>
+                                    <Trigger Property="IsPressed" Value="True">
+                                        <Setter TargetName="Background" Property="Background" Value="#CC3D4C" />
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                </StackPanel>
             </StackPanel>
         </Border>
 

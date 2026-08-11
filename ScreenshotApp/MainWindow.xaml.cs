@@ -532,6 +532,7 @@ public partial class MainWindow : Window
             {
                 await CaptureScreenRecordingAsync(
                     recordingRegion,
+                    overlay.RecordingMode,
                     overlay.RecordSystemAudio,
                     overlay.RecordMicrophone);
                 return;
@@ -675,7 +676,11 @@ public partial class MainWindow : Window
         }
     }
 
-    private async Task CaptureScreenRecordingAsync(Int32Rect screenRegion, bool recordSystemAudio, bool recordMicrophone)
+    private async Task CaptureScreenRecordingAsync(
+        Int32Rect screenRegion,
+        ScreenRecordingMode recordingMode,
+        bool recordSystemAudio,
+        bool recordMicrophone)
     {
         var regionWindow = new ScreenRecordingRegionWindow(screenRegion);
         regionWindow.Show();
@@ -687,17 +692,29 @@ public partial class MainWindow : Window
             try
             {
                 var result = await _screenRecordingService.RecordAsync(
-                    new ScreenRecordingOptions(screenRegion, recordSystemAudio, recordMicrophone),
+                    new ScreenRecordingOptions(
+                        screenRegion,
+                        recordingMode == ScreenRecordingMode.Mp4 && recordSystemAudio,
+                        recordingMode == ScreenRecordingMode.Mp4 && recordMicrophone,
+                        recordingMode == ScreenRecordingMode.Gif ? 12 : 15,
+                        Mode: recordingMode),
                     () => controlWindow.IsStopRequested || NativeMethods.IsEscapePressed(),
                     controlWindow.SetElapsed);
-                var audioDescription = result.IncludesSystemAudio && result.IncludesMicrophone
-                    ? "电脑声音 + 麦克风"
-                    : result.IncludesSystemAudio
-                        ? "电脑声音"
-                        : result.IncludesMicrophone
-                            ? "麦克风"
-                            : "静音";
-                ShowToast($"录像已保存（{audioDescription}）");
+                if (result.Mode == ScreenRecordingMode.Gif)
+                {
+                    ShowToast($"GIF 动图已保存 · {result.FrameCount} 帧");
+                }
+                else
+                {
+                    var audioDescription = result.IncludesSystemAudio && result.IncludesMicrophone
+                        ? "电脑声音 + 麦克风"
+                        : result.IncludesSystemAudio
+                            ? "电脑声音"
+                            : result.IncludesMicrophone
+                                ? "麦克风"
+                                : "静音";
+                    ShowToast($"录像已保存（{audioDescription}）");
+                }
                 await RefreshHistoryAsync();
             }
             finally

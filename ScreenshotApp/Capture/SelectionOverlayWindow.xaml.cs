@@ -10,6 +10,7 @@ using ScreenshotApp.Converters;
 using ScreenshotApp.Ocr;
 using ScreenshotApp.Translation;
 using ScreenshotApp.History;
+using ScreenshotApp.Recording;
 using ScreenshotApp.Sticker;
 using ScreenshotApp.ClipboardUi;
 
@@ -44,6 +45,7 @@ public partial class SelectionOverlayWindow : Window
     private ToolbarPlacement? _toolbarPlacement;
     private bool _recordSystemAudio;
     private bool _recordMicrophone;
+    private ScreenRecordingMode _recordingMode = ScreenRecordingMode.Mp4;
     private bool _isSynchronizingAnnotationThickness;
     private double _surfaceWidth;
     private double _surfaceHeight;
@@ -96,6 +98,8 @@ public partial class SelectionOverlayWindow : Window
     public bool RecordSystemAudio { get; private set; }
 
     public bool RecordMicrophone { get; private set; }
+
+    public ScreenRecordingMode RecordingMode { get; private set; } = ScreenRecordingMode.Mp4;
 
     /// <summary>
     /// OCR、翻译完成后把文本交由主窗口写入统一历史记录。
@@ -269,6 +273,17 @@ public partial class SelectionOverlayWindow : Window
         PositionRecordingOptionsPanel();
     }
 
+    private void RecordingModeButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: string modeText } &&
+            Enum.TryParse<ScreenRecordingMode>(modeText, out var mode))
+        {
+            _recordingMode = mode;
+            UpdateRecordingOptionStates();
+            PositionRecordingOptionsPanel();
+        }
+    }
+
     private void StickerToolButton_Click(object sender, RoutedEventArgs e)
     {
         if (_selection.IsEmpty)
@@ -311,6 +326,7 @@ public partial class SelectionOverlayWindow : Window
 
         RecordSystemAudio = _recordSystemAudio;
         RecordMicrophone = _recordMicrophone;
+        RecordingMode = _recordingMode;
         IsScreenRecordingRequested = true;
         SetActiveAnnotationTool(ScreenshotAnnotationTool.None);
         ConfirmSelection(useForScreenRecording: true);
@@ -320,10 +336,18 @@ public partial class SelectionOverlayWindow : Window
     {
         SystemAudioOptionText.Text = _recordSystemAudio ? "电脑声音：开" : "电脑声音：关";
         MicrophoneOptionText.Text = _recordMicrophone ? "麦克风：开" : "麦克风：关";
-        SystemAudioOptionButton.Background = _recordSystemAudio ? new SolidColorBrush(Color.FromRgb(224, 238, 255)) : new SolidColorBrush(Color.FromRgb(247, 250, 253));
-        SystemAudioOptionButton.BorderBrush = _recordSystemAudio ? new SolidColorBrush(Color.FromRgb(88, 149, 255)) : new SolidColorBrush(Color.FromRgb(215, 225, 236));
-        MicrophoneOptionButton.Background = _recordMicrophone ? new SolidColorBrush(Color.FromRgb(224, 238, 255)) : new SolidColorBrush(Color.FromRgb(247, 250, 253));
-        MicrophoneOptionButton.BorderBrush = _recordMicrophone ? new SolidColorBrush(Color.FromRgb(88, 149, 255)) : new SolidColorBrush(Color.FromRgb(215, 225, 236));
+        var isGif = _recordingMode == ScreenRecordingMode.Gif;
+        SystemAudioOptionButton.IsEnabled = !isGif;
+        MicrophoneOptionButton.IsEnabled = !isGif;
+        SystemAudioOptionButton.Background = _recordSystemAudio && !isGif ? new SolidColorBrush(Color.FromRgb(224, 238, 255)) : new SolidColorBrush(Color.FromRgb(247, 250, 253));
+        SystemAudioOptionButton.BorderBrush = _recordSystemAudio && !isGif ? new SolidColorBrush(Color.FromRgb(88, 149, 255)) : new SolidColorBrush(Color.FromRgb(215, 225, 236));
+        MicrophoneOptionButton.Background = _recordMicrophone && !isGif ? new SolidColorBrush(Color.FromRgb(224, 238, 255)) : new SolidColorBrush(Color.FromRgb(247, 250, 253));
+        MicrophoneOptionButton.BorderBrush = _recordMicrophone && !isGif ? new SolidColorBrush(Color.FromRgb(88, 149, 255)) : new SolidColorBrush(Color.FromRgb(215, 225, 236));
+        Mp4RecordingModeButton.Background = !isGif ? new SolidColorBrush(Color.FromRgb(224, 238, 255)) : new SolidColorBrush(Color.FromRgb(247, 250, 253));
+        Mp4RecordingModeButton.BorderBrush = !isGif ? new SolidColorBrush(Color.FromRgb(88, 149, 255)) : new SolidColorBrush(Color.FromRgb(215, 225, 236));
+        GifRecordingModeButton.Background = isGif ? new SolidColorBrush(Color.FromRgb(224, 238, 255)) : new SolidColorBrush(Color.FromRgb(247, 250, 253));
+        GifRecordingModeButton.BorderBrush = isGif ? new SolidColorBrush(Color.FromRgb(88, 149, 255)) : new SolidColorBrush(Color.FromRgb(215, 225, 236));
+        RecordingModeHintText.Text = isGif ? "GIF · 12 FPS · 最长 10 秒 · 无声音" : "MP4 · 可选声音";
     }
 
     private void PenToolButton_Click(object sender, RoutedEventArgs e)
