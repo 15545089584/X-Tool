@@ -44,6 +44,8 @@ public partial class MainWindow : Window
     private HistoryEntryKind? _historyFilter;
     private HwndSource? _windowSource;
     private bool _hotKeyRegistered;
+    private ScreenshotHotKeySuppressor? _screenshotHotKeySuppressor;
+    private long _screenshotHookTriggeredAt;
     private bool _clipboardHotKeyRegistered;
     private bool _voiceInputHotKeyRegistered;
     private RightAltHotKeyMonitor? _voiceInputHotKeyMonitor;
@@ -360,6 +362,7 @@ public partial class MainWindow : Window
         _windowSource?.AddHook(WindowMessageHook);
 
         _hotKeyRegistered = RegisterStandardShortcut(handle, NativeMethods.HotKeyId, _screenshotShortcut);
+        InstallScreenshotHotKeySuppressor();
         _clipboardHotKeyRegistered = RegisterStandardShortcut(handle, NativeMethods.ClipboardHotKeyId, _clipboardShortcut);
         RegisterVoiceInputHotKey(handle);
         _clipboardListenerRegistered = NativeMethods.AddClipboardFormatListener(handle);
@@ -389,6 +392,8 @@ public partial class MainWindow : Window
         {
             NativeMethods.UnregisterHotKey(_windowSource.Handle, NativeMethods.HotKeyId);
         }
+        _screenshotHotKeySuppressor?.Dispose();
+        _screenshotHotKeySuppressor = null;
         if (_clipboardHotKeyRegistered)
         {
             NativeMethods.UnregisterHotKey(_windowSource.Handle, NativeMethods.ClipboardHotKeyId);
@@ -469,6 +474,12 @@ public partial class MainWindow : Window
 
         if (message == NativeMethods.WmHotKey && wParam.ToInt32() == NativeMethods.HotKeyId)
         {
+            if (ConsumeScreenshotHookTrigger())
+            {
+                handled = true;
+                return IntPtr.Zero;
+            }
+
             handled = true;
             _ = StartRegionCaptureAsync();
         }
@@ -505,6 +516,10 @@ public partial class MainWindow : Window
             await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
             NativeMethods.DwmFlush();
             await Task.Delay(120);
+            // 某些应用会在收到完整快捷键后的下一轮消息循环才创建菜单，
+            // 再清理一次可覆盖这类晚到的瞬态 UI。
+            NativeMethods.DismissForegroundTransientUi(sourceWindow);
+            await Task.Delay(40);
 
             var frame = await _captureBackend.CaptureCurrentMonitorAsync();
             var overlay = new SelectionOverlayWindow(frame);
@@ -592,6 +607,8 @@ public partial class MainWindow : Window
             await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
             NativeMethods.DwmFlush();
             await Task.Delay(240);
+            NativeMethods.DismissForegroundTransientUi(sourceWindow);
+            await Task.Delay(40);
 
             var frame = await _scrollCaptureBackend.CaptureCurrentMonitorAsync();
             var overlay = new SelectionOverlayWindow(frame, SelectionPurpose.ScrollCaptureRegion);
@@ -1286,6 +1303,39 @@ public partial class MainWindow : Window
             hotKeyId,
             shortcut.NativeModifiers,
             shortcut.VirtualKey);
+
+    private void InstallScreenshotHotKeySuppressor()
+    {
+        _screenshotHotKeySuppressor?.Dispose();
+        _screenshotHotKeySuppressor = null;
+        Interlocked.Exchange(ref _screenshotHookTriggeredAt, 0);
+        if (!_hotKeyRegistered || !_screenshotShortcut.IsSupportedGlobalCombination)
+        {
+            return;
+        }
+
+        var suppressor = new ScreenshotHotKeySuppressor(_screenshotShortcut);
+        if (!suppressor.IsInstalled)
+        {
+            suppressor.Dispose();
+            return;
+        }
+
+        suppressor.Pressed += ScreenshotHotKeySuppressor_Pressed;
+        _screenshotHotKeySuppressor = suppressor;
+    }
+
+    private void ScreenshotHotKeySuppressor_Pressed(object? sender, EventArgs e)
+    {
+        Interlocked.Exchange(ref _screenshotHookTriggeredAt, Environment.TickCount64);
+        Dispatcher.BeginInvoke(() => _ = StartRegionCaptureAsync());
+    }
+
+    private bool ConsumeScreenshotHookTrigger()
+    {
+        var triggeredAt = Interlocked.Exchange(ref _screenshotHookTriggeredAt, 0);
+        return triggeredAt > 0 && Environment.TickCount64 - triggeredAt <= 500;
+    }
 
     private void VoiceInputHotKeyMonitor_Pressed(object? sender, VoiceHotKeyPressedEventArgs e)
     {
@@ -2217,6 +2267,8 @@ public partial class MainWindow : Window
 
         if (target == "Screenshot" && _hotKeyRegistered)
         {
+            _screenshotHotKeySuppressor?.Dispose();
+            _screenshotHotKeySuppressor = null;
             NativeMethods.UnregisterHotKey(_windowSource.Handle, NativeMethods.HotKeyId);
             _hotKeyRegistered = false;
         }
@@ -2247,7 +2299,9 @@ public partial class MainWindow : Window
 
         if (target == "Screenshot")
         {
-            return _hotKeyRegistered = RegisterStandardShortcut(_windowSource.Handle, NativeMethods.HotKeyId, _screenshotShortcut);
+            _hotKeyRegistered = RegisterStandardShortcut(_windowSource.Handle, NativeMethods.HotKeyId, _screenshotShortcut);
+            InstallScreenshotHotKeySuppressor();
+            return _hotKeyRegistered;
         }
         if (target == "Clipboard")
         {

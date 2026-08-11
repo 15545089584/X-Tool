@@ -313,9 +313,41 @@ internal static class NativeMethods
             return;
         }
 
+        // 菜单通常由独立的临时窗口接收输入，直接 PostMessage 到宿主窗口
+        // 不一定能关闭它；在隐藏 X-Tool 前向当前前台输入队列发送真实 ESC。
+        _ = SendEscapeKey();
         _ = PostMessage(windowHandle, WmCancelMode, IntPtr.Zero, IntPtr.Zero);
         _ = PostMessage(windowHandle, WmKeyDown, new IntPtr(VirtualKeyEscape), IntPtr.Zero);
         _ = PostMessage(windowHandle, WmKeyUp, new IntPtr(VirtualKeyEscape), IntPtr.Zero);
+    }
+
+    private static bool SendEscapeKey()
+    {
+        var inputs = new[]
+        {
+            new Input
+            {
+                Type = InputKeyboard,
+                Data = new InputUnion
+                {
+                    Keyboard = new KeyboardInput { VirtualKey = (ushort)VirtualKeyEscape }
+                }
+            },
+            new Input
+            {
+                Type = InputKeyboard,
+                Data = new InputUnion
+                {
+                    Keyboard = new KeyboardInput
+                    {
+                        VirtualKey = (ushort)VirtualKeyEscape,
+                        Flags = KeyEventKeyUp
+                    }
+                }
+            }
+        };
+
+        return SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<Input>()) == inputs.Length;
     }
 
     internal static bool ActivateWindowAtPoint(int x, int y)
