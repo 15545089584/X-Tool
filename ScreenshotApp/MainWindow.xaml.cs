@@ -499,10 +499,12 @@ public partial class MainWindow : Window
 
         try
         {
+            var sourceWindow = NativeMethods.GetForegroundWindow();
+            NativeMethods.DismissForegroundTransientUi(sourceWindow);
             Hide();
             await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
             NativeMethods.DwmFlush();
-            await Task.Delay(90);
+            await Task.Delay(120);
 
             var frame = await _captureBackend.CaptureCurrentMonitorAsync();
             var overlay = new SelectionOverlayWindow(frame);
@@ -584,10 +586,12 @@ public partial class MainWindow : Window
 
         try
         {
+            var sourceWindow = NativeMethods.GetForegroundWindow();
+            NativeMethods.DismissForegroundTransientUi(sourceWindow);
             Hide();
             await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
             NativeMethods.DwmFlush();
-            await Task.Delay(220);
+            await Task.Delay(240);
 
             var frame = await _scrollCaptureBackend.CaptureCurrentMonitorAsync();
             var overlay = new SelectionOverlayWindow(frame, SelectionPurpose.ScrollCaptureRegion);

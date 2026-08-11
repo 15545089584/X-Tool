@@ -10,6 +10,9 @@ internal static class NativeMethods
     internal const int ShortcutProbeHotKeyId = 0x4A5C;
     internal const int WmHotKey = 0x0312;
     internal const int WmClipboardUpdate = 0x031D;
+    private const uint WmCancelMode = 0x001F;
+    private const uint WmKeyDown = 0x0100;
+    private const uint WmKeyUp = 0x0101;
     internal const uint ModControl = 0x0002;
     internal const uint ModShift = 0x0004;
     internal const uint ModAlt = 0x0001;
@@ -141,6 +144,14 @@ internal static class NativeMethods
 
     [DllImport("user32.dll")]
     internal static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool PostMessage(
+        IntPtr windowHandle,
+        uint message,
+        IntPtr wParam,
+        IntPtr lParam);
 
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr windowHandle, out uint processId);
@@ -287,6 +298,24 @@ internal static class NativeMethods
     internal static bool IsEscapePressed()
     {
         return (GetAsyncKeyState(VirtualKeyEscape) & 0x8000) != 0;
+    }
+
+    /// <summary>
+    /// 关闭截图触发瞬间前台程序可能仍在显示的右键菜单、编辑菜单和下拉弹层。
+    /// 全局热键消息到达时，目标程序有时已经创建菜单但尚未完成收起，直接抓屏
+    /// 会把这层瞬态 UI 一并写入截图。消息发往触发前记录的前台窗口，不改变
+    /// X-Tool 选择层的输入状态。
+    /// </summary>
+    internal static void DismissForegroundTransientUi(IntPtr windowHandle)
+    {
+        if (windowHandle == IntPtr.Zero || !IsWindow(windowHandle))
+        {
+            return;
+        }
+
+        _ = PostMessage(windowHandle, WmCancelMode, IntPtr.Zero, IntPtr.Zero);
+        _ = PostMessage(windowHandle, WmKeyDown, new IntPtr(VirtualKeyEscape), IntPtr.Zero);
+        _ = PostMessage(windowHandle, WmKeyUp, new IntPtr(VirtualKeyEscape), IntPtr.Zero);
     }
 
     internal static bool ActivateWindowAtPoint(int x, int y)
