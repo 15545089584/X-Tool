@@ -48,10 +48,13 @@ public partial class SystemToolsView : UserControl
     private string _portSortKey = "Port";
     private bool _portHeaderSortActive;
     private readonly DispatcherTimer _portAutoRefreshTimer;
+    private readonly DispatcherTimer _diskHistoryAutoCaptureTimer;
     private bool _isRefreshingPorts;
     private bool _isRefreshingRelationships;
     private bool _isRefreshingDeviceInfo;
     private bool _isRefreshingStorage;
+    private bool _isCapturingDiskHistory;
+    private bool _isStorageSectionActive;
     private bool _processesAscending = true;
     private bool _servicesAscending = true;
     private string _processSortKey = "Name";
@@ -87,6 +90,8 @@ public partial class SystemToolsView : UserControl
         PathEntriesListBox.PreviewMouseLeftButtonDown += PathEntriesListBox_PreviewMouseLeftButtonDown;
         _portAutoRefreshTimer = new DispatcherTimer();
         _portAutoRefreshTimer.Tick += AutoRefreshPorts_Tick;
+        _diskHistoryAutoCaptureTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(15) };
+        _diskHistoryAutoCaptureTimer.Tick += DiskHistoryAutoCaptureTimer_Tick;
         EnvironmentScopeComboBox.SelectedIndex = 0;
         AutoRefreshIntervalComboBox.SelectedIndex = 1;
         UpdatePortAutoRefreshInterval();
@@ -104,6 +109,7 @@ public partial class SystemToolsView : UserControl
             ConfigureProcessColumns();
             if (EnvironmentOnly)
             {
+                StartDiskHistoryAutoCapture();
                 await RefreshDeviceInfoAsync();
                 RefreshEnvironment();
             }
@@ -112,6 +118,7 @@ public partial class SystemToolsView : UserControl
         Unloaded += (_, _) =>
         {
             _portAutoRefreshTimer.Stop();
+            _diskHistoryAutoCaptureTimer.Stop();
             StorageAnalysisView.CancelActiveScan();
             CancelActiveDiagnostics();
         };
@@ -236,6 +243,49 @@ public partial class SystemToolsView : UserControl
         }
     }
 
+    /// <summary>系统工具打开期间低频补采每日快照；同一天重复执行不会产生重复记录。</summary>
+    private void StartDiskHistoryAutoCapture()
+    {
+        if (!EnvironmentOnly)
+        {
+            return;
+        }
+
+        _diskHistoryAutoCaptureTimer.Start();
+        _ = CaptureTodayDiskHistoryAsync();
+    }
+
+    private async void DiskHistoryAutoCaptureTimer_Tick(object? sender, EventArgs e)
+    {
+        await CaptureTodayDiskHistoryAsync();
+    }
+
+    private async Task CaptureTodayDiskHistoryAsync()
+    {
+        if (_isCapturingDiskHistory)
+        {
+            return;
+        }
+
+        _isCapturingDiskHistory = true;
+        try
+        {
+            await DiskHistoryStore.EnsureTodaySnapshotAsync();
+            if (IsLoaded && _isStorageSectionActive && !_isRefreshingStorage)
+            {
+                await LoadDiskHistoryAsync();
+            }
+        }
+        catch
+        {
+            // 后台补采失败不打断系统工具；用户仍可通过“立即快照”查看明确错误。
+        }
+        finally
+        {
+            _isCapturingDiskHistory = false;
+        }
+    }
+
     /// <summary>补采今日快照并刷新用量历史图表。</summary>
     private async Task LoadDiskHistoryAsync()
     {
@@ -353,7 +403,7 @@ public partial class SystemToolsView : UserControl
             await DiskHistoryStore.ClearAsync();
             _diskHistoryPoints = Array.Empty<DiskHistoryPoint>();
             DrawDiskHistoryChart();
-            DiskHistorySummaryText.Text = "用量历史已清空，明天会自动重新开始记录。";
+            DiskHistorySummaryText.Text = "用量历史已清空，程序运行期间会自动重新开始记录。";
         }
         catch (Exception exception)
         {
@@ -378,14 +428,14 @@ public partial class SystemToolsView : UserControl
     {
         if (_diskHistoryPoints.Count == 0)
         {
-            return "暂无记录，点击“立即快照”或明天打开页面后自动开始记录。";
+            return "暂无记录，点击“立即快照”可立即建立今日记录；X-Tool 运行期间会每天自动补采。";
         }
 
         var latest = _diskHistoryPoints[^1];
         var first = _diskHistoryPoints[0];
         var usedDelta = latest.UsedBytes - first.UsedBytes;
         var sign = usedDelta >= 0 ? "增加" : "减少";
-        return $"{_diskHistoryDays} 天内有 {_diskHistoryPoints.Count} 条记录 · 当前已用 {FormatCapacity(latest.UsedBytes)} / 总 {FormatCapacity(latest.TotalBytes)} · 区间内{sign} {FormatCapacity(Math.Abs(usedDelta))}";
+        return $"{_diskHistoryDays} 天内有 {_diskHistoryPoints.Count} 条记录 · 当前已用 {FormatCapacity(latest.UsedBytes)} / 总 {FormatCapacity(latest.TotalBytes)} · 区间内{sign} {FormatCapacity(Math.Abs(usedDelta))} · 程序未运行日期无法补采";
     }
 
     private static string FormatCapacity(long bytes)
@@ -597,6 +647,7 @@ public partial class SystemToolsView : UserControl
     private void TabButton_Click(object sender, RoutedEventArgs e)
     {
         var section = (sender as FrameworkElement)?.Tag?.ToString() ?? "Ports";
+        _isStorageSectionActive = section == "Storage";
         if (section != "Storage")
         {
             StorageAnalysisView.CancelActiveScan();

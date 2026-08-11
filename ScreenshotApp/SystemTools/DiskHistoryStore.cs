@@ -56,9 +56,10 @@ public static class DiskHistoryStore
         }
     }
 
-    /// <summary>读取指定卷最近 N 天的快照，按时间升序；无记录时返回空列表。</summary>
+    /// <summary>读取指定卷最近 N 天的快照，按本地日期升序；无记录时返回空列表。</summary>
     public static async Task<IReadOnlyList<DiskHistoryPoint>> LoadHistoryAsync(string volumeId, int days)
     {
+        days = Math.Clamp(days, 1, RetentionDays);
         await Gate.WaitAsync();
         try
         {
@@ -67,9 +68,12 @@ public static class DiskHistoryStore
                 using var connection = OpenConnection();
                 using var command = connection.CreateCommand();
                 command.CommandText = @"SELECT captured_at, total_bytes, available_bytes FROM disk_snapshots
-                    WHERE volume_id = $id AND captured_at >= $since ORDER BY captured_at;";
+                    WHERE volume_id = $id AND snapshot_date >= $since_date AND snapshot_date <= $today
+                    ORDER BY snapshot_date, captured_at;";
                 command.Parameters.AddWithValue("$id", volumeId);
-                command.Parameters.AddWithValue("$since", DateTime.Today.AddDays(-(days - 1)).ToString("O"));
+                var today = DateTime.Today;
+                command.Parameters.AddWithValue("$since_date", today.AddDays(-(days - 1)).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+                command.Parameters.AddWithValue("$today", today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
                 var points = new List<DiskHistoryPoint>();
                 using var reader = command.ExecuteReader();
                 while (reader.Read())
