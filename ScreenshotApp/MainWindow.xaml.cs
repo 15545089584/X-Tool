@@ -751,6 +751,7 @@ public partial class MainWindow : Window
 
     private void StartGifSynthesisInBackground(GifRecordingCapture capture)
     {
+        ShowGifSynthesisNotification("GIF 开始合成", "录制已完成，正在后台合成 GIF。", null);
         _ = Task.Run(async () =>
         {
             try
