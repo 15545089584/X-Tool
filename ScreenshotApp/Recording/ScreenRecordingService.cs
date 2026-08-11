@@ -45,10 +45,11 @@ public sealed class ScreenRecordingService
         ScreenRecordingOptions options,
         Func<bool> shouldStop,
         Action<TimeSpan>? progressChanged,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Action<string>? statusChanged = null)
     {
         return options.Mode == ScreenRecordingMode.Gif
-            ? await RecordGifAsync(options, shouldStop, progressChanged, cancellationToken)
+            ? await RecordGifAsync(options, shouldStop, progressChanged, cancellationToken, statusChanged)
             : await RecordMp4Async(options, shouldStop, progressChanged, cancellationToken);
     }
 
@@ -160,7 +161,8 @@ public sealed class ScreenRecordingService
         ScreenRecordingOptions options,
         Func<bool> shouldStop,
         Action<TimeSpan>? progressChanged,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action<string>? statusChanged)
     {
         if (_ffmpegPath is null)
         {
@@ -225,6 +227,14 @@ public sealed class ScreenRecordingService
                 nextFrameAt += TimeSpan.FromSeconds(1d / frameRate);
             }
 
+            if (stopwatch.Elapsed >= maxDuration)
+            {
+                // 最后一帧可能刚好落在 9 秒刻度，收尾前把控制条补到真实上限，
+                // 避免用户误以为 GIF 只能录制 9 秒。
+                progressChanged?.Invoke(maxDuration);
+            }
+
+            statusChanged?.Invoke("正在合成 GIF…");
             // 直接关闭二进制管道，避免 StreamWriter 在关闭时写入 UTF-8 BOM，
             // 否则 GIF 的 rawvideo 输入末尾会多出 3 个字节并触发残帧警告。
             encoder.StandardInput.BaseStream.Close();
@@ -271,7 +281,9 @@ public sealed class ScreenRecordingService
     private static Process StartGifEncoder(string? ffmpegPath, string filePath, int width, int height, int frameRate, int maxWidth)
     {
         var scaledWidth = Math.Max(2, Math.Min(width, maxWidth) & ~1);
-        var filter = $"scale={scaledWidth}:-2:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=256:stats_mode=diff[p];[s1][p]paletteuse=dither=sierra2_4a";
+        // 逐帧生成调色板并立即消费，避免 stats_mode=diff 等待整段输入后再合成，
+        // 让停止 GIF 时的 FFmpeg 收尾保持在可接受范围内。
+        var filter = $"scale={scaledWidth}:-2:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=256:stats_mode=single[p];[s1][p]paletteuse=new=1:dither=sierra2_4a";
         var startInfo = new ProcessStartInfo
         {
             FileName = ffmpegPath ?? throw new InvalidOperationException("找不到 FFmpeg 引擎。"),

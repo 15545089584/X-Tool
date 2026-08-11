@@ -699,7 +699,8 @@ public partial class MainWindow : Window
                         recordingMode == ScreenRecordingMode.Gif ? 12 : 15,
                         Mode: recordingMode),
                     () => controlWindow.IsStopRequested || NativeMethods.IsEscapePressed(),
-                    controlWindow.SetElapsed);
+                    controlWindow.SetElapsed,
+                    statusChanged: recordingMode == ScreenRecordingMode.Gif ? controlWindow.SetStatus : null);
                 if (result.Mode == ScreenRecordingMode.Gif)
                 {
                     ShowToast($"GIF 动图已保存 · {result.FrameCount} 帧");

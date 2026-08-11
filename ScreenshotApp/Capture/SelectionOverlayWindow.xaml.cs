@@ -52,6 +52,7 @@ public partial class SelectionOverlayWindow : Window
     private Size? _actionToolbarSize;
     private Size? _penOptionsPanelSize;
     private Size? _shapeOptionsPanelSize;
+    private Size? _recordingOptionsPanelSize;
 
     private const double MinimumSelectionSize = 16;
     private const double ResizeHandleSize = 14;
@@ -1425,14 +1426,13 @@ public partial class SelectionOverlayWindow : Window
 
     private void PositionRecordingOptionsPanel()
     {
-        RecordingOptionsPanel.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        ActionToolbar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-
-        var panelWidth = RecordingOptionsPanel.DesiredSize.Width;
-        var panelHeight = RecordingOptionsPanel.DesiredSize.Height;
+        var panelSize = GetStableRecordingOptionsPanelSize();
+        var toolbarSize = GetStableToolbarSize();
+        var panelWidth = panelSize.Width;
+        var panelHeight = panelSize.Height;
         var surfaceSize = GetStableSurfaceSize();
         var toolbarTop = ActionToolbar.Margin.Top;
-        var toolbarHeight = ActionToolbar.DesiredSize.Height;
+        var toolbarHeight = toolbarSize.Height;
         var x = Math.Clamp(ActionToolbar.Margin.Left, 8, Math.Max(8, surfaceSize.Width - panelWidth - 8));
         var belowY = toolbarTop + toolbarHeight + 8;
         var aboveY = toolbarTop - panelHeight - 8;
@@ -1446,6 +1446,30 @@ public partial class SelectionOverlayWindow : Window
         }
 
         RecordingOptionsPanel.Margin = new Thickness(x, y, 0, 0);
+    }
+
+    private Size GetStableRecordingOptionsPanelSize()
+    {
+        if (_recordingOptionsPanelSize is { Width: > 1, Height: > 1 } cached)
+        {
+            return cached;
+        }
+
+        var content = RecordingOptionsPanel.Child as FrameworkElement;
+        if (content is null)
+        {
+            RecordingOptionsPanel.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            _recordingOptionsPanelSize = RecordingOptionsPanel.DesiredSize;
+            return RecordingOptionsPanel.DesiredSize;
+        }
+
+        // 只测量面板自己的内容，避免切换 GIF 模式时把覆盖层的瞬时布局约束写回 DesiredSize。
+        content.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var measured = new Size(
+            content.DesiredSize.Width + RecordingOptionsPanel.Padding.Left + RecordingOptionsPanel.Padding.Right + RecordingOptionsPanel.BorderThickness.Left + RecordingOptionsPanel.BorderThickness.Right,
+            content.DesiredSize.Height + RecordingOptionsPanel.Padding.Top + RecordingOptionsPanel.Padding.Bottom + RecordingOptionsPanel.BorderThickness.Top + RecordingOptionsPanel.BorderThickness.Bottom);
+        _recordingOptionsPanelSize = new Size(Math.Max(1, measured.Width), Math.Max(1, measured.Height));
+        return _recordingOptionsPanelSize.Value;
     }
 
     private Point ClampToSurface(Point point)

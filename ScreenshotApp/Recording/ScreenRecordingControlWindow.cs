@@ -79,6 +79,8 @@ internal sealed class ScreenRecordingControlWindow : Window
 
     internal void SetElapsed(TimeSpan elapsed) => _elapsedText.Text = $"正在录像 {elapsed:mm\\:ss}";
 
+    internal void SetStatus(string status) => _elapsedText.Text = status;
+
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
         var handle = new WindowInteropHelper(this).Handle;
