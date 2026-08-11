@@ -58,6 +58,7 @@ public partial class SelectionOverlayWindow : Window
         InitializeComponent();
         ScreenshotImage.Source = frame.Bitmap;
         UpdateAnnotationToolStates();
+        UpdateShapeOptionStates();
         UpdateColorStates();
         UpdateThicknessStates();
 
@@ -326,6 +327,10 @@ public partial class SelectionOverlayWindow : Window
 
     private void ShapeToolButton_Click(object sender, RoutedEventArgs e)
     {
+        // 点击主按钮即进入形状标注，并把矩形作为每次打开菜单时的默认形状。
+        _selectedShape = AnnotationShape.Rectangle;
+        SetActiveAnnotationTool(ScreenshotAnnotationTool.Shape);
+        UpdateShapeOptionStates();
         PenOptionsPanel.Visibility = Visibility.Collapsed;
         ToggleToolPanel(ShapeOptionsPanel, ShapeToolButton);
     }
@@ -348,6 +353,7 @@ public partial class SelectionOverlayWindow : Window
 
         _selectedShape = shape;
         SetActiveAnnotationTool(ScreenshotAnnotationTool.Shape);
+        UpdateShapeOptionStates();
     }
 
     private async void OcrToolButton_Click(object sender, RoutedEventArgs e)
@@ -655,9 +661,13 @@ public partial class SelectionOverlayWindow : Window
     {
         Shape shape = _selectedShape switch
         {
+            AnnotationShape.RoundedRectangle => new Rectangle { RadiusX = 12, RadiusY = 12 },
             AnnotationShape.Ellipse => new Ellipse(),
             AnnotationShape.Diamond => new Polygon(),
             AnnotationShape.Triangle => new Polygon(),
+            AnnotationShape.Pentagon => new Polygon(),
+            AnnotationShape.Hexagon => new Polygon(),
+            AnnotationShape.Star => new Polygon(),
             _ => new Rectangle { RadiusX = 2, RadiusY = 2 }
         };
         shape.Stroke = stroke;
@@ -671,21 +681,23 @@ public partial class SelectionOverlayWindow : Window
     {
         shape.Width = bounds.Width;
         shape.Height = bounds.Height;
+        if (shape is Rectangle rectangle && _selectedShape == AnnotationShape.RoundedRectangle)
+        {
+            var radius = Math.Max(4, Math.Min(bounds.Width, bounds.Height) * 0.18);
+            rectangle.RadiusX = radius;
+            rectangle.RadiusY = radius;
+            return;
+        }
+
         if (shape is not Polygon polygon)
         {
             return;
         }
 
-        polygon.Points = _selectedShape == AnnotationShape.Diamond
-            ? new PointCollection
-            {
-                new Point(bounds.Width / 2, 0), new Point(bounds.Width, bounds.Height / 2),
-                new Point(bounds.Width / 2, bounds.Height), new Point(0, bounds.Height / 2)
-            }
-            : new PointCollection
-            {
-                new Point(bounds.Width / 2, 0), new Point(bounds.Width, bounds.Height), new Point(0, bounds.Height)
-            };
+        polygon.Points = new PointCollection(
+            AnnotationShapeGeometry.GetPolygonPoints(
+                _selectedShape,
+                new Rect(0, 0, bounds.Width, bounds.Height)));
     }
 
     private void UpdateWorkingLine(Point surfacePoint)
@@ -1376,6 +1388,36 @@ public partial class SelectionOverlayWindow : Window
         SetButtonSelected(PenToolButton, _activeAnnotationTool == ScreenshotAnnotationTool.Pen);
         SetButtonSelected(ShapeToolButton, _activeAnnotationTool == ScreenshotAnnotationTool.Shape);
         SetButtonSelected(ColorPickerToolButton, _activeAnnotationTool == ScreenshotAnnotationTool.ColorPicker);
+    }
+
+    private void UpdateShapeOptionStates()
+    {
+        foreach (var button in FindVisualChildren<Button>(ShapeOptionsPanel))
+        {
+            if (button.Tag is string shapeText &&
+                Enum.TryParse<AnnotationShape>(shapeText, out var shape))
+            {
+                SetButtonSelected(button, shape == _selectedShape);
+            }
+        }
+    }
+
+    private static IEnumerable<T> FindVisualChildren<T>(DependencyObject root)
+        where T : DependencyObject
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
+        {
+            var child = VisualTreeHelper.GetChild(root, index);
+            if (child is T match)
+            {
+                yield return match;
+            }
+
+            foreach (var descendant in FindVisualChildren<T>(child))
+            {
+                yield return descendant;
+            }
+        }
     }
 
     private ScreenColorSampler.ColorSample UpdateColorPicker(Point surfacePoint)
