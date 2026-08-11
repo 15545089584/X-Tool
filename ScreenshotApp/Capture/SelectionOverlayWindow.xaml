@@ -360,7 +360,7 @@
                         Click="RecordingToolButton_Click"
                         ToolTip="录制当前框选区域">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Margin="0,0,5,0" VerticalAlignment="Center" FontSize="16" Foreground="#E04C5B" Text="●" />
+                        <TextBlock Margin="0,0,5,0" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#E04C5B" Text="&#xE714;" />
                         <TextBlock VerticalAlignment="Center" Text="录像" />
                     </StackPanel>
                 </Button>

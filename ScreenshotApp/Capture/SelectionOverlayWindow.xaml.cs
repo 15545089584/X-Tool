@@ -1301,8 +1301,9 @@ public partial class SelectionOverlayWindow : Window
             return;
         }
 
+        // 工具栏优先贴着选区下边界居中，空间不足时仍由边界约束保持在屏幕内。
         var x = Math.Clamp(
-            _selection.Right - toolbarWidth,
+            _selection.Left + (_selection.Width - toolbarWidth) / 2,
             ToolbarScreenMargin,
             Math.Max(ToolbarScreenMargin, surfaceSize.Width - toolbarWidth - ToolbarScreenMargin));
         var surfaceHeight = surfaceSize.Height;
