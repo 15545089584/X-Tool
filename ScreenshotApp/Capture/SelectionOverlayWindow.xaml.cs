@@ -47,6 +47,9 @@ public partial class SelectionOverlayWindow : Window
     private bool _isSynchronizingAnnotationThickness;
     private double _surfaceWidth;
     private double _surfaceHeight;
+    private Size? _actionToolbarSize;
+    private Size? _penOptionsPanelSize;
+    private Size? _shapeOptionsPanelSize;
 
     private const double MinimumSelectionSize = 16;
     private const double ResizeHandleSize = 14;
@@ -649,7 +652,12 @@ public partial class SelectionOverlayWindow : Window
 
     private void PositionToolPanel(Border panel, FrameworkElement anchor)
     {
-        panel.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var surfaceSize = GetStableSurfaceSize();
+        // 面板是覆盖层 Grid 的子项。反复在 Visibility 切换后重新测量它，
+        // WPF 可能会把当前布局约束写回 DesiredSize，第二次打开便会错误地
+        // 变成接近整个覆盖层的尺寸。第一次显示时缓存自然尺寸，后续只使用
+        // 这个稳定值进行定位，避免菜单在正确位置和左上方之间循环跳动。
+        var panelSize = GetStableToolPanelSize(panel);
         // 工具栏和面板是同一个 Grid 的兄弟节点。直接跨过 Grid 做坐标变换时，
         // 面板刚从 Collapsed 切换为 Visible 的布局帧可能仍未提交，纵坐标会短暂变成 0，
         // 于是菜单被夹到左上角。工具栏位置由我们自己用 Margin 固定，锚点只需在工具栏
@@ -658,9 +666,8 @@ public partial class SelectionOverlayWindow : Window
         var point = new Point(
             ActionToolbar.Margin.Left + anchorInToolbar.X,
             ActionToolbar.Margin.Top + anchorInToolbar.Y);
-        var panelWidth = panel.DesiredSize.Width;
-        var panelHeight = panel.DesiredSize.Height;
-        var surfaceSize = GetStableSurfaceSize();
+        var panelWidth = panelSize.Width;
+        var panelHeight = panelSize.Height;
         var x = Math.Clamp(
             point.X,
             ToolbarScreenMargin,
@@ -677,6 +684,46 @@ public partial class SelectionOverlayWindow : Window
                 : Math.Clamp(belowY, ToolbarScreenMargin, maximumY);
 
         panel.Margin = new Thickness(x, y, 0, 0);
+    }
+
+    private Size GetStableToolPanelSize(Border panel)
+    {
+        var cached = panel == PenOptionsPanel
+            ? _penOptionsPanelSize
+            : _shapeOptionsPanelSize;
+        if (cached is { Width: > 1, Height: > 1 })
+        {
+            return cached.Value;
+        }
+
+        Size measured;
+        if (panel.Child is FrameworkElement content)
+        {
+            // 只测量固定宽度的内容，不让父级覆盖层的瞬时约束参与计算。
+            content.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            measured = new Size(
+                content.DesiredSize.Width + panel.Padding.Left + panel.Padding.Right + panel.BorderThickness.Left + panel.BorderThickness.Right,
+                content.DesiredSize.Height + panel.Padding.Top + panel.Padding.Bottom + panel.BorderThickness.Top + panel.BorderThickness.Bottom);
+        }
+        else
+        {
+            panel.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            measured = panel.DesiredSize;
+        }
+
+        measured = new Size(
+            Math.Max(1, measured.Width),
+            Math.Max(1, measured.Height));
+        if (panel == PenOptionsPanel)
+        {
+            _penOptionsPanelSize = measured;
+        }
+        else
+        {
+            _shapeOptionsPanelSize = measured;
+        }
+
+        return measured;
     }
 
     private void HideToolPanels()
@@ -1245,9 +1292,9 @@ public partial class SelectionOverlayWindow : Window
 
     private void PositionToolbar()
     {
-        ActionToolbar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        var toolbarWidth = ActionToolbar.DesiredSize.Width;
-        var toolbarHeight = ActionToolbar.DesiredSize.Height;
+        var toolbarSize = GetStableToolbarSize();
+        var toolbarWidth = toolbarSize.Width;
+        var toolbarHeight = toolbarSize.Height;
         var surfaceSize = GetStableSurfaceSize();
         if (surfaceSize.Width <= 0 || surfaceSize.Height <= 0 || toolbarWidth <= 1 || toolbarHeight <= 1)
         {
@@ -1329,6 +1376,26 @@ public partial class SelectionOverlayWindow : Window
         {
             PositionToolPanel(ShapeOptionsPanel, ShapeToolButton);
         }
+    }
+
+    private Size GetStableToolbarSize()
+    {
+        if (_actionToolbarSize is { Width: > 1, Height: > 1 } cached)
+        {
+            return cached;
+        }
+
+        ActionToolbar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var measured = ActionToolbar.DesiredSize;
+        if (measured.Width <= 1 || measured.Height <= 1 ||
+            double.IsNaN(measured.Width) || double.IsNaN(measured.Height) ||
+            double.IsInfinity(measured.Width) || double.IsInfinity(measured.Height))
+        {
+            return measured;
+        }
+
+        _actionToolbarSize = measured;
+        return measured;
     }
 
     private void PositionRecordingOptionsPanel()
