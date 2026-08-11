@@ -41,7 +41,7 @@ public partial class SelectionOverlayWindow : Window
     private ResizeHandle? _activeResizeHandle;
     private Rect _resizeStartSelection;
     private Point _resizeStartPoint;
-    private bool? _toolbarBelowSelection;
+    private ToolbarPlacement? _toolbarPlacement;
     private bool _recordSystemAudio;
     private bool _recordMicrophone;
     private bool _isSynchronizingAnnotationThickness;
@@ -147,7 +147,7 @@ public partial class SelectionOverlayWindow : Window
         _dragStart = position;
         _selection = new Rect(position, position);
         _isDragging = true;
-        _toolbarBelowSelection = null;
+        _toolbarPlacement = null;
         ResetAnnotations();
         ActionToolbar.Visibility = Visibility.Collapsed;
         RecordingOptionsPanel.Visibility = Visibility.Collapsed;
@@ -650,7 +650,14 @@ public partial class SelectionOverlayWindow : Window
     private void PositionToolPanel(Border panel, FrameworkElement anchor)
     {
         panel.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        var point = anchor.TransformToAncestor(CaptureSurface).Transform(new Point(0, 0));
+        // 工具栏和面板是同一个 Grid 的兄弟节点。直接跨过 Grid 做坐标变换时，
+        // 面板刚从 Collapsed 切换为 Visible 的布局帧可能仍未提交，纵坐标会短暂变成 0，
+        // 于是菜单被夹到左上角。工具栏位置由我们自己用 Margin 固定，锚点只需在工具栏
+        // 内部转换，再叠加工具栏的稳定边距即可避免依赖未提交的父级布局。
+        var anchorInToolbar = anchor.TransformToAncestor(ActionToolbar).Transform(new Point(0, 0));
+        var point = new Point(
+            ActionToolbar.Margin.Left + anchorInToolbar.X,
+            ActionToolbar.Margin.Top + anchorInToolbar.Y);
         var panelWidth = panel.DesiredSize.Width;
         var panelHeight = panel.DesiredSize.Height;
         var surfaceSize = GetStableSurfaceSize();
@@ -1126,7 +1133,7 @@ public partial class SelectionOverlayWindow : Window
             RecordingOptionsPanel.Visibility = Visibility.Collapsed;
             HideToolPanels();
             AnnotationCanvas.Visibility = Visibility.Collapsed;
-            _toolbarBelowSelection = null;
+            _toolbarPlacement = null;
             return;
         }
 
@@ -1253,33 +1260,61 @@ public partial class SelectionOverlayWindow : Window
             Math.Max(ToolbarScreenMargin, surfaceSize.Width - toolbarWidth - ToolbarScreenMargin));
         var surfaceHeight = surfaceSize.Height;
 
-        // 优先跟随选区下边界。只有屏幕底部放不下时，才把工具栏放到下边界上方，
-        // 这样拖动上边缘不会影响工具栏，拖动下边缘时也不会在上下两侧反复跳动。
+        // 优先跟随选区下边界。下方放不下时放到选区上边界之外；
+        // 选区同时触及上下边界、两侧都没有完整空间时，固定在屏幕下边界上方。
         var belowY = _selection.Bottom + ToolbarSelectionGap;
+        var aboveY = _selection.Top - toolbarHeight - ToolbarSelectionGap;
         var canPlaceBelow = belowY + toolbarHeight <= surfaceHeight - ToolbarScreenMargin;
-        if (!_toolbarBelowSelection.HasValue)
+        var canPlaceAbove = aboveY >= ToolbarScreenMargin;
+        var belowWithHysteresis = belowY + toolbarHeight <=
+                                  surfaceHeight - ToolbarScreenMargin - ToolbarPlacementHysteresis;
+
+        if (!_toolbarPlacement.HasValue)
         {
-            _toolbarBelowSelection = canPlaceBelow;
+            _toolbarPlacement = canPlaceBelow
+                ? ToolbarPlacement.BelowSelection
+                : canPlaceAbove
+                    ? ToolbarPlacement.AboveSelection
+                    : ToolbarPlacement.ScreenBottomFallback;
         }
-        else if (_toolbarBelowSelection.Value && !canPlaceBelow)
+        else if (_toolbarPlacement == ToolbarPlacement.BelowSelection && !canPlaceBelow)
         {
-            _toolbarBelowSelection = false;
+            _toolbarPlacement = canPlaceAbove
+                ? ToolbarPlacement.AboveSelection
+                : ToolbarPlacement.ScreenBottomFallback;
         }
-        else if (!_toolbarBelowSelection.Value &&
-                 belowY + toolbarHeight <= surfaceHeight - ToolbarScreenMargin - ToolbarPlacementHysteresis)
+        else if (_toolbarPlacement == ToolbarPlacement.AboveSelection)
         {
-            _toolbarBelowSelection = true;
+            if (belowWithHysteresis)
+            {
+                _toolbarPlacement = ToolbarPlacement.BelowSelection;
+            }
+            else if (!canPlaceAbove && !canPlaceBelow)
+            {
+                _toolbarPlacement = ToolbarPlacement.ScreenBottomFallback;
+            }
+        }
+        else if (_toolbarPlacement == ToolbarPlacement.ScreenBottomFallback)
+        {
+            if (belowWithHysteresis)
+            {
+                _toolbarPlacement = ToolbarPlacement.BelowSelection;
+            }
+            else if (canPlaceAbove)
+            {
+                _toolbarPlacement = ToolbarPlacement.AboveSelection;
+            }
         }
 
         var maximumY = Math.Max(
             ToolbarScreenMargin,
             surfaceHeight - toolbarHeight - ToolbarScreenMargin);
-        var y = _toolbarBelowSelection == true
-            ? Math.Clamp(belowY, ToolbarScreenMargin, maximumY)
-            : Math.Clamp(
-                _selection.Bottom - toolbarHeight - ToolbarSelectionGap,
-                ToolbarScreenMargin,
-                maximumY);
+        var y = _toolbarPlacement switch
+        {
+            ToolbarPlacement.BelowSelection => Math.Clamp(belowY, ToolbarScreenMargin, maximumY),
+            ToolbarPlacement.AboveSelection => Math.Clamp(aboveY, ToolbarScreenMargin, maximumY),
+            _ => maximumY
+        };
 
         ActionToolbar.Margin = new Thickness(x, y, 0, 0);
         if (RecordingOptionsPanel.Visibility == Visibility.Visible)
@@ -1368,6 +1403,13 @@ public partial class SelectionOverlayWindow : Window
         Bottom,
         BottomLeft,
         Left
+    }
+
+    private enum ToolbarPlacement
+    {
+        BelowSelection,
+        AboveSelection,
+        ScreenBottomFallback
     }
 
     private void SetActiveAnnotationTool(ScreenshotAnnotationTool tool)
