@@ -134,9 +134,20 @@ internal static class VerticalBitmapStitcher
         }
 
         var seams = new int[Math.Max(0, orderedFrames.Count - 1)];
+        // 相邻接缝会连续使用同一帧。只保留上一帧和当前帧的像素缓存，
+        // 避免每个接缝都重复把两张完整截图复制成 BGRA 数组。
+        var upperPixels = CopyBgraPixels(orderedFrames[0].Bitmap);
         for (var index = 0; index < seams.Length; index++)
         {
-            seams[index] = FindBestSeam(orderedFrames[index], orderedFrames[index + 1], top, bottom);
+            var lowerPixels = CopyBgraPixels(orderedFrames[index + 1].Bitmap);
+            seams[index] = FindBestSeam(
+                orderedFrames[index],
+                orderedFrames[index + 1],
+                upperPixels,
+                lowerPixels,
+                top,
+                bottom);
+            upperPixels = lowerPixels;
         }
 
         for (var index = 0; index < orderedFrames.Count; index++)
@@ -177,6 +188,8 @@ internal static class VerticalBitmapStitcher
     private static int FindBestSeam(
         PositionedFrame upper,
         PositionedFrame lower,
+        byte[] upperPixels,
+        byte[] lowerPixels,
         int fixedTop,
         int fixedBottom)
     {
@@ -200,8 +213,6 @@ internal static class VerticalBitmapStitcher
             return overlapStart + overlapHeight / 2;
         }
 
-        var upperPixels = CopyBgraPixels(upper.Bitmap);
-        var lowerPixels = CopyBgraPixels(lower.Bitmap);
         var width = upper.Bitmap.PixelWidth;
         var stride = width * 4;
         var xStart = Math.Max(2, width / 32);

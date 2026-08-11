@@ -252,9 +252,13 @@ public sealed class ScrollCaptureService
                     capturedDetail);
             }
 
-            var stitched = VerticalBitmapStitcher.StitchPositioned(
-                contentFrames,
-                fixedRegionEstimator.Current);
+            // 接缝搜索和最终像素写入可能涉及数十张高分辨率截图，
+            // 放到后台线程避免完成长截图时阻塞主界面和剪贴板响应。
+            var stitched = await Task.Run(
+                () => VerticalBitmapStitcher.StitchPositioned(
+                    contentFrames,
+                    fixedRegionEstimator.Current),
+                cancellationToken);
             return new ScrollCaptureResult(stitched, contentFrames.Count, stopReason);
         }
         finally

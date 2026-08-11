@@ -639,8 +639,11 @@ public partial class MainWindow : Window
         _ = DriveScrollCaptureTestInputAsync();
 #endif
         var result = await _scrollCaptureService.CaptureInteractiveAsync(screenRegion);
+        // 保存历史与写入系统剪贴板互不依赖，先并行启动磁盘编码，
+        // 避免用户必须等待“保存 PNG + 刷新历史”后才能完成复制。
+        var saveTask = TrySaveCaptureAsync(result.Bitmap, true);
         await SetClipboardImageWithRetryAsync(result.Bitmap);
-        var savedPath = await TrySaveCaptureAsync(result.Bitmap, true);
+        var savedPath = await saveTask;
         if (savedPath is not null)
         {
             ShowToast($"长截图已保存 · {result.FrameCount} 帧 · {result.StopReason}");
@@ -880,7 +883,9 @@ public partial class MainWindow : Window
         try
         {
             var savedPath = await _historyStore.SaveAsync(bitmap, isLongCapture);
-            await RefreshHistoryAsync();
+            // 新文件已经落盘即可结束保存阶段；历史扫描在后台刷新，
+            // 不再把遍历目录和解码缩略图时间叠加到复制完成路径。
+            _ = RefreshHistoryAsync();
             return savedPath;
         }
         catch
