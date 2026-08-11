@@ -29,6 +29,7 @@ public sealed record ScreenRecordingResult(
 /// <summary>GIF 采集完成后交给后台编码器的原始帧任务。</summary>
 public sealed record GifRecordingCapture(
     string RawFramePath,
+    Task RawFrameReady,
     string FilePath,
     string? CoverImagePath,
     int Width,

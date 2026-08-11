@@ -204,9 +204,10 @@ public sealed class ScreenRecordingService
         var stopwatch = Stopwatch.StartNew();
         var frameCount = 0;
 
+        FileStream? rawStream = null;
         try
         {
-            await using var rawStream = new FileStream(
+            rawStream = new FileStream(
                 rawFramePath,
                 FileMode.CreateNew,
                 FileAccess.Write,
@@ -250,9 +251,11 @@ public sealed class ScreenRecordingService
                 progressChanged?.Invoke(maxDuration);
             }
 
-            await rawStream.FlushAsync(cancellationToken);
+            var rawFrameReady = CompleteRawFrameAsync(rawStream);
+            rawStream = null;
             return new GifRecordingCapture(
                 rawFramePath,
+                rawFrameReady,
                 filePath,
                 coverImagePath,
                 firstFrame.PixelWidth,
@@ -264,6 +267,11 @@ public sealed class ScreenRecordingService
         }
         catch
         {
+            if (rawStream is not null)
+            {
+                await rawStream.DisposeAsync();
+            }
+
             TryDeleteFile(rawFramePath);
             TryDeleteFile(filePath);
             TryDeleteFile(coverImagePath);
@@ -291,6 +299,7 @@ public sealed class ScreenRecordingService
         var completed = false;
         try
         {
+            await capture.RawFrameReady;
             statusChanged?.Invoke("正在合成 GIF…");
             encoder = StartGifEncoder(
                 _ffmpegPath,
@@ -393,6 +402,20 @@ public sealed class ScreenRecordingService
         var stride = bitmap.PixelWidth * 4;
         bitmap.CopyPixels(pixels, stride, 0);
         await output.WriteAsync(pixels.AsMemory(0, stride * bitmap.PixelHeight), cancellationToken);
+    }
+
+    private static async Task CompleteRawFrameAsync(FileStream rawStream)
+    {
+        try
+        {
+            await rawStream.FlushAsync().ConfigureAwait(false);
+            await rawStream.DisposeAsync().ConfigureAwait(false);
+        }
+        catch
+        {
+            rawStream.Dispose();
+            throw;
+        }
     }
 
     private static async Task ReadGifProgressAsync(

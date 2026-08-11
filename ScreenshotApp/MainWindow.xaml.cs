@@ -725,7 +725,10 @@ public partial class MainWindow : Window
                                 : "静音";
                     ShowToast($"录像已保存（{audioDescription}）");
                 }
-                await RefreshHistoryAsync();
+                if (gifCapture is null)
+                {
+                    await RefreshHistoryAsync();
+                }
             }
             finally
             {
@@ -751,30 +754,22 @@ public partial class MainWindow : Window
         ShowGifSynthesisNotification("GIF 正在合成", "录制已结束，正在后台合成 GIF。", null);
         _ = Task.Run(async () =>
         {
-            var lastNotificationAt = DateTime.UtcNow.AddSeconds(-2);
-            var lastPercent = -1;
+            var notificationCancellation = new CancellationTokenSource();
+            var latestPercent = 0;
+            var notificationTask = EmitGifProgressNotificationsAsync(
+                notificationCancellation.Token,
+                () => Volatile.Read(ref latestPercent));
             try
             {
                 var result = await _screenRecordingService.SynthesizeGifAsync(
                     capture,
                     percent =>
                     {
-                        var roundedPercent = Math.Clamp((int)Math.Floor(percent), 0, 99);
-                        var now = DateTime.UtcNow;
-                        if (roundedPercent == lastPercent ||
-                            now - lastNotificationAt < TimeSpan.FromMilliseconds(700))
-                        {
-                            return;
-                        }
-
-                        lastPercent = roundedPercent;
-                        lastNotificationAt = now;
-                        ShowGifSynthesisNotification(
-                            "GIF 正在合成",
-                            $"合成进度：{roundedPercent}%",
-                            null);
+                        Volatile.Write(ref latestPercent, Math.Clamp((int)Math.Floor(percent), 0, 99));
                     });
 
+                notificationCancellation.Cancel();
+                await notificationTask;
                 ShowGifSynthesisNotification(
                     "GIF 合成完成",
                     $"{Path.GetFileName(result.FilePath)} 已生成，点击查看成品。",
@@ -783,9 +778,43 @@ public partial class MainWindow : Window
             }
             catch (Exception exception)
             {
+                notificationCancellation.Cancel();
+                try
+                {
+                    await notificationTask;
+                }
+                catch (OperationCanceledException)
+                {
+                    // 合成失败时结束进度通知循环。
+                }
                 ShowGifSynthesisNotification("GIF 合成失败", exception.Message, null);
             }
+            finally
+            {
+                notificationCancellation.Dispose();
+            }
         });
+    }
+
+    private async Task EmitGifProgressNotificationsAsync(
+        CancellationToken cancellationToken,
+        Func<int> readPercent)
+    {
+        try
+        {
+            while (true)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+                ShowGifSynthesisNotification(
+                    "GIF 正在合成",
+                    $"合成进度：{readPercent()}%",
+                    null);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 合成结束后正常停止进度通知循环。
+        }
     }
 
     private void ShowGifSynthesisNotification(string title, string text, Action? onClick)
