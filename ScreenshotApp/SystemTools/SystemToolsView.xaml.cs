@@ -455,16 +455,16 @@ public partial class SystemToolsView : UserControl
         }
     }
 
-    /// <summary>在画布上自绘容量趋势：已用面积、已用折线、总容量参考线与日期刻度。</summary>
+    /// <summary>在画布上绘制局部缩放的容量趋势，让小幅变化也能清晰呈现。</summary>
     private void DrawDiskHistoryChart()
     {
         DiskHistoryCanvas.Children.Clear();
         var width = Math.Max(DiskHistoryCanvas.ActualWidth, 320);
-        const double height = 190;
-        var left = 8.0;
-        var right = width - 58;
-        var top = 10.0;
-        var bottom = height - 24;
+        var height = Math.Max(DiskHistoryCanvas.ActualHeight, 300);
+        var left = 16.0;
+        var right = width - 76;
+        var top = 32.0;
+        var bottom = height - 34;
         var plotWidth = right - left;
         var plotHeight = bottom - top;
 
@@ -478,83 +478,158 @@ public partial class SystemToolsView : UserControl
                 Foreground = new SolidColorBrush(Color.FromRgb(138, 154, 172))
             };
             Canvas.SetLeft(empty, width / 2 - 40);
-            Canvas.SetTop(empty, height / 2 - 10);
+            Canvas.SetTop(empty, height / 2 - 6);
             DiskHistoryCanvas.Children.Add(empty);
             return;
         }
 
         var maxTotal = points.Max(point => point.TotalBytes);
-        var yTop = Math.Max(maxTotal, 1L);
-
-        // 网格线（0 / 50% / 100%）。
-        for (var i = 0; i <= 2; i++)
+        var minUsed = points.Min(point => (double)point.UsedBytes);
+        var maxUsed = points.Max(point => (double)point.UsedBytes);
+        var valueRange = Math.Max(maxUsed - minUsed, 1d);
+        var padding = Math.Max(1024d * 1024 * 1024, valueRange * 0.22);
+        var axisMin = Math.Max(0d, minUsed - padding);
+        var axisMax = Math.Min(Math.Max((double)maxTotal, axisMin + 1d), maxUsed + padding);
+        if (axisMax - axisMin < 1024d * 1024 * 1024)
         {
-            var y = top + plotHeight * i / 2.0;
+            axisMax = Math.Min(Math.Max((double)maxTotal, axisMin + 1024d * 1024 * 1024), axisMin + 4d * 1024 * 1024 * 1024);
+        }
+
+        if (axisMax <= axisMin)
+        {
+            axisMax = axisMin + 1d;
+        }
+
+        var axisRange = axisMax - axisMin;
+
+        AddAxisLabel(left, 8, "已用容量趋势 · 局部缩放");
+        AddAxisLabel(Math.Max(left + 150, right - 128), 8, $"总容量 {FormatCapacity(maxTotal)}");
+
+        // 先绘制柔和的渐变面积，再叠加网格与折线，形成轻量毛玻璃层次。
+        var areaPolygon = new PointCollection { new Point(left, bottom) };
+        var scaleX = plotWidth / Math.Max(points.Count - 1, 1);
+        var usedPolyline = new PointCollection();
+        for (var i = 0; i < points.Count; i++)
+        {
+            var x = left + scaleX * i;
+            var y = bottom - plotHeight * ((points[i].UsedBytes - axisMin) / axisRange);
+            usedPolyline.Add(new Point(x, y));
+            areaPolygon.Add(new Point(x, y));
+        }
+        areaPolygon.Add(new Point(right, bottom));
+        DiskHistoryCanvas.Children.Add(new WpfShapes.Polygon
+        {
+            Points = areaPolygon,
+            Fill = new LinearGradientBrush(
+                Color.FromArgb(92, 77, 124, 254),
+                Color.FromArgb(8, 77, 124, 254),
+                new Point(0, 0),
+                new Point(0, 1))
+            {
+                MappingMode = BrushMappingMode.RelativeToBoundingBox
+            }
+        });
+
+        // 局部区间的四级网格，使小幅容量变化仍然易读。
+        for (var i = 0; i <= 3; i++)
+        {
+            var y = top + plotHeight * i / 3.0;
             DiskHistoryCanvas.Children.Add(new WpfShapes.Line
             {
                 X1 = left,
                 X2 = right,
                 Y1 = y,
                 Y2 = y,
-                Stroke = new SolidColorBrush(Color.FromArgb(50, 112, 146, 178)),
+                Stroke = new SolidColorBrush(Color.FromArgb(42, 112, 146, 178)),
                 StrokeThickness = 1
+            });
+            AddAxisLabel(right + 8, y - 7, FormatCapacity((long)Math.Max(0, axisMax - axisRange * i / 3.0)));
+        }
+
+        // 总容量在当前缩放区间内时，显示为浅绿色参考虚线；否则通过顶部标签保留上下文。
+        if (maxTotal >= axisMin && maxTotal <= axisMax)
+        {
+            var totalY = bottom - plotHeight * ((maxTotal - axisMin) / axisRange);
+            DiskHistoryCanvas.Children.Add(new WpfShapes.Line
+            {
+                X1 = left,
+                X2 = right,
+                Y1 = totalY,
+                Y2 = totalY,
+                Stroke = new SolidColorBrush(Color.FromArgb(150, 22, 185, 155)),
+                StrokeThickness = 1.2,
+                StrokeDashArray = new DoubleCollection { 5, 4 }
             });
         }
 
-        // 总容量参考虚线。
-        DiskHistoryCanvas.Children.Add(new WpfShapes.Line
+        // 柔和的外发光叠加在主线下方，避免传统图表的生硬单线效果。
+        DiskHistoryCanvas.Children.Add(new WpfShapes.Polyline
         {
-            X1 = left,
-            X2 = right,
-            Y1 = top,
-            Y2 = top,
-            Stroke = new SolidColorBrush(Color.FromRgb(22, 185, 155)),
-            StrokeThickness = 1.2,
-            StrokeDashArray = new DoubleCollection { 5, 4 }
-        });
-
-        // 右轴容量刻度。
-        AddAxisLabel(width - 54, top - 7, FormatCapacity(maxTotal));
-        AddAxisLabel(width - 54, top + plotHeight / 2 - 7, FormatCapacity(maxTotal / 2));
-        AddAxisLabel(width - 54, bottom - 7, "0");
-
-        var scaleX = plotWidth / Math.Max(points.Count - 1, 1);
-        var usedPolyline = new PointCollection();
-        var areaPolygon = new PointCollection { new Point(left, bottom) };
-        for (var i = 0; i < points.Count; i++)
-        {
-            var x = left + scaleX * i;
-            var y = bottom - plotHeight * points[i].UsedBytes / yTop;
-            usedPolyline.Add(new Point(x, y));
-            areaPolygon.Add(new Point(x, y));
-        }
-        areaPolygon.Add(new Point(right, bottom));
-
-        DiskHistoryCanvas.Children.Add(new WpfShapes.Polygon
-        {
-            Points = areaPolygon,
-            Fill = new SolidColorBrush(Color.FromArgb(42, 77, 124, 254))
+            Points = usedPolyline,
+            Stroke = new SolidColorBrush(Color.FromArgb(28, 77, 124, 254)),
+            StrokeThickness = 9,
+            StrokeLineJoin = PenLineJoin.Round,
+            StrokeStartLineCap = PenLineCap.Round,
+            StrokeEndLineCap = PenLineCap.Round
         });
         DiskHistoryCanvas.Children.Add(new WpfShapes.Polyline
         {
             Points = usedPolyline,
             Stroke = new SolidColorBrush(Color.FromRgb(77, 124, 254)),
-            StrokeThickness = 2,
-            StrokeLineJoin = PenLineJoin.Round
+            StrokeThickness = 3,
+            StrokeLineJoin = PenLineJoin.Round,
+            StrokeStartLineCap = PenLineCap.Round,
+            StrokeEndLineCap = PenLineCap.Round
         });
 
-        if (points.Count == 1)
+        // 记录点较多时适当抽样，保持曲线清爽；最新点始终保留。
+        var nodeStride = Math.Max(1, (int)Math.Ceiling(points.Count / 24d));
+        for (var i = 0; i < points.Count; i += nodeStride)
         {
+            var point = usedPolyline[i];
             DiskHistoryCanvas.Children.Add(new WpfShapes.Ellipse
             {
-                Width = 7,
-                Height = 7,
-                Fill = new SolidColorBrush(Color.FromRgb(77, 124, 254)),
-                Stroke = new SolidColorBrush(Colors.White),
-                StrokeThickness = 1.5
+                Width = 14,
+                Height = 14,
+                Fill = new SolidColorBrush(Color.FromArgb(56, 77, 124, 254)),
+                Stroke = Brushes.Transparent
             });
-            Canvas.SetLeft(DiskHistoryCanvas.Children[^1], usedPolyline[0].X - 3.5);
-            Canvas.SetTop(DiskHistoryCanvas.Children[^1], usedPolyline[0].Y - 3.5);
+            Canvas.SetLeft(DiskHistoryCanvas.Children[^1], point.X - 7);
+            Canvas.SetTop(DiskHistoryCanvas.Children[^1], point.Y - 7);
+            DiskHistoryCanvas.Children.Add(new WpfShapes.Ellipse
+            {
+                Width = 6,
+                Height = 6,
+                Fill = new SolidColorBrush(Color.FromRgb(77, 124, 254)),
+                Stroke = Brushes.White,
+                StrokeThickness = 1.2
+            });
+            Canvas.SetLeft(DiskHistoryCanvas.Children[^1], point.X - 3);
+            Canvas.SetTop(DiskHistoryCanvas.Children[^1], point.Y - 3);
+        }
+
+        if (points.Count > 1 && (points.Count - 1) % nodeStride != 0)
+        {
+            var point = usedPolyline[^1];
+            DiskHistoryCanvas.Children.Add(new WpfShapes.Ellipse
+            {
+                Width = 14,
+                Height = 14,
+                Fill = new SolidColorBrush(Color.FromArgb(56, 77, 124, 254)),
+                Stroke = Brushes.Transparent
+            });
+            Canvas.SetLeft(DiskHistoryCanvas.Children[^1], point.X - 7);
+            Canvas.SetTop(DiskHistoryCanvas.Children[^1], point.Y - 7);
+            DiskHistoryCanvas.Children.Add(new WpfShapes.Ellipse
+            {
+                Width = 6,
+                Height = 6,
+                Fill = new SolidColorBrush(Color.FromRgb(77, 124, 254)),
+                Stroke = Brushes.White,
+                StrokeThickness = 1.2
+            });
+            Canvas.SetLeft(DiskHistoryCanvas.Children[^1], point.X - 3);
+            Canvas.SetTop(DiskHistoryCanvas.Children[^1], point.Y - 3);
         }
 
         // X 轴日期标签（首 / 中 / 尾）。
