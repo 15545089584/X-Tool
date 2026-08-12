@@ -186,6 +186,52 @@ internal sealed class NetworkEtwTrafficClient : IDisposable
         return new NetworkFlowMeasurement(sentRate + receivedRate, sentTotal + receivedTotal, sentRate, receivedRate);
     }
 
+    /// <summary>
+    /// 返回当前 ETW 会话按进程聚合的流量快照。只读取字节计数，不保存数据包正文。
+    /// </summary>
+    public IReadOnlyList<NetworkTrafficProcessMeasurement> GetProcessMeasurements()
+    {
+        var groups = _flows.ToArray()
+            .GroupBy(pair => new ProcessIdentity(pair.Key.ProcessId, pair.Key.ProcessStartTicks));
+        var result = new List<NetworkTrafficProcessMeasurement>();
+        foreach (var group in groups)
+        {
+            var sent = 0L;
+            var received = 0L;
+            var sentRate = 0L;
+            var receivedRate = 0L;
+            var flows = new List<NetworkTrafficFlowMeasurement>();
+            foreach (var pair in group)
+            {
+                var flow = pair.Value;
+                var flowSent = Interlocked.Read(ref flow.SentBytes);
+                var flowReceived = Interlocked.Read(ref flow.ReceivedBytes);
+                var flowSentRate = Interlocked.Exchange(ref flow.LastSentBytes, 0);
+                var flowReceivedRate = Interlocked.Exchange(ref flow.LastReceivedBytes, 0);
+                sent += flowSent;
+                received += flowReceived;
+                sentRate += flowSentRate;
+                receivedRate += flowReceivedRate;
+                flows.Add(new NetworkTrafficFlowMeasurement(pair.Key.Protocol, pair.Key.LocalEndpoint,
+                    pair.Key.RemoteEndpoint, flowSent, flowReceived, flowSentRate, flowReceivedRate));
+            }
+
+            var processName = $"PID {group.Key.ProcessId}";
+            var processPath = string.Empty;
+            try
+            {
+                using var process = Process.GetProcessById(group.Key.ProcessId);
+                processName = process.ProcessName;
+                processPath = process.MainModule?.FileName ?? string.Empty;
+            }
+            catch { }
+
+            result.Add(new NetworkTrafficProcessMeasurement(group.Key.ProcessId, group.Key.ProcessStartTicks,
+                processName, processPath, sent, received, sentRate * 8d, receivedRate * 8d, flows));
+        }
+        return result;
+    }
+
     public void Dispose()
     {
         _cancellation?.Cancel();
@@ -198,9 +244,37 @@ internal sealed class NetworkEtwTrafficClient : IDisposable
     private static string Normalize(string value) => value.Trim().ToLowerInvariant();
     private static bool IsWildcardRemote(string value) => value is "0.0.0.0:0" or "[::]:0" or "*:*" or "*:*";
     private readonly record struct FlowKey(int ProcessId, long ProcessStartTicks, string Protocol, string LocalEndpoint, string RemoteEndpoint);
+    private readonly record struct ProcessIdentity(int ProcessId, long ProcessStartTicks);
     private sealed class FlowTotal { public long SentBytes; public long ReceivedBytes; public long LastSentBytes; public long LastReceivedBytes; public DateTimeOffset LastSampleAt; }
 }
 
 internal sealed record NetworkFlowSample(int ProcessId, long ProcessStartTicks, string Protocol, string LocalEndpoint,
     string RemoteEndpoint, long SentBytes, long ReceivedBytes, DateTimeOffset CapturedAt);
 internal readonly record struct NetworkFlowMeasurement(double BitsPerSecond, double TotalBytes, double UploadBitsPerSecond, double DownloadBitsPerSecond);
+
+internal sealed record NetworkTrafficProcessMeasurement(
+    int ProcessId,
+    long ProcessStartTicks,
+    string ProcessName,
+    string ProcessPath,
+    long SentBytes,
+    long ReceivedBytes,
+    double UploadBitsPerSecond,
+    double DownloadBitsPerSecond,
+    IReadOnlyList<NetworkTrafficFlowMeasurement> Flows)
+{
+    public long TotalBytes => SentBytes + ReceivedBytes;
+    public double TotalBitsPerSecond => UploadBitsPerSecond + DownloadBitsPerSecond;
+}
+
+internal sealed record NetworkTrafficFlowMeasurement(
+    string Protocol,
+    string LocalEndpoint,
+    string RemoteEndpoint,
+    long SentBytes,
+    long ReceivedBytes,
+    long SentBytesPerSecond,
+    long ReceivedBytesPerSecond)
+{
+    public long TotalBytes => SentBytes + ReceivedBytes;
+}

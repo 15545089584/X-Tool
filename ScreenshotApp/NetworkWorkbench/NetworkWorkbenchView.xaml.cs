@@ -4,6 +4,7 @@ using System.IO;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -26,6 +27,8 @@ public partial class NetworkWorkbenchView : UserControl
     private readonly List<double> _historicalUpload = new();
     private readonly NetworkHistoryStore _historyStore;
     private readonly NetworkMonitorCoordinator _monitorCoordinator;
+    private readonly NetworkEtwTrafficClient _trafficClient = new();
+    private readonly ObservableCollection<NetworkTrafficProcessRow> _trafficProcesses = new();
     private NetworkOverviewSnapshot? _previousOverview;
     private ProxySettingsSnapshot _proxySnapshot = new(false, string.Empty, string.Empty, string.Empty, true);
     private CancellationTokenSource? _deepNetworkCancellation;
@@ -47,6 +50,9 @@ public partial class NetworkWorkbenchView : UserControl
     private DateTime _lastDeepNetworkRefreshAt = DateTime.MinValue;
     private bool _updatingWifiEnvironment;
     private string _activeWifiBand = "2.4";
+    private string _trafficStatsMode = "Global";
+    private int _trafficStatsRefreshBusy;
+    private int _trafficStatsRefreshTick;
 
     public NetworkWorkbenchView()
     {
@@ -58,6 +64,7 @@ public partial class NetworkWorkbenchView : UserControl
         NetworkEventsListBox.ItemsSource = _timelineEvents;
         WifiNetworksListBox.ItemsSource = _wifiNetworks;
         WifiPropertiesListBox.ItemsSource = _wifiProperties;
+        TrafficProcessesListBox.ItemsSource = _trafficProcesses;
         _monitorCoordinator.SampleAvailable += MonitorCoordinator_SampleAvailable;
         _monitorCoordinator.TimelineEventAvailable += MonitorCoordinator_TimelineEventAvailable;
         _monitorCoordinator.MonitorFailed += MonitorCoordinator_MonitorFailed;
@@ -65,6 +72,7 @@ public partial class NetworkWorkbenchView : UserControl
         WifiChannelDistributionCanvas.SizeChanged += (_, _) => UpdateWifiChannelDistribution();
         Loaded += NetworkWorkbenchView_Loaded;
         Unloaded += NetworkWorkbenchView_Unloaded;
+        Application.Current.Exit += (_, _) => _trafficClient.Dispose();
         SelectTab("Overview");
     }
 
@@ -111,6 +119,7 @@ public partial class NetworkWorkbenchView : UserControl
         if ((tab == "Wifi" || tab == "NetworkInterfaces") && DateTime.UtcNow - _lastDeepNetworkRefreshAt > TimeSpan.FromSeconds(5)) await RefreshDeepNetworkAsync();
         if (tab == "Proxy") await LoadProxyAsync(updateSnapshot: false);
         if (tab == "Profiles") ReloadProfiles();
+        if (tab == "TrafficStats") await RefreshTrafficStatsAsync();
     }
 
     private void SelectTab(string tab)
@@ -121,8 +130,9 @@ public partial class NetworkWorkbenchView : UserControl
         ProxyPanel.Visibility = tab == "Proxy" ? Visibility.Visible : Visibility.Collapsed;
         WifiScrollViewer.Visibility = tab == "Wifi" ? Visibility.Visible : Visibility.Collapsed;
         ProfilesPanel.Visibility = tab == "Profiles" ? Visibility.Visible : Visibility.Collapsed;
+        TrafficStatsScrollViewer.Visibility = tab == "TrafficStats" ? Visibility.Visible : Visibility.Collapsed;
 
-        foreach (var button in new[] { OverviewTabButton, NetworkInterfacesTabButton, ProxyTabButton, WifiTabButton, ProfilesTabButton })
+        foreach (var button in new[] { OverviewTabButton, NetworkInterfacesTabButton, ProxyTabButton, WifiTabButton, ProfilesTabButton, TrafficStatsTabButton })
         {
             var active = string.Equals(button.Tag?.ToString(), tab, StringComparison.Ordinal);
             button.Background = BrushFrom(active ? "#4D7CFE" : "#86FFFFFF");
@@ -181,6 +191,8 @@ public partial class NetworkWorkbenchView : UserControl
             OverviewGatewayText.Text = $"网关 {snapshot.Gateway}";
             OverviewDownloadText.Text = FormatByteRate(download);
             OverviewUploadText.Text = FormatByteRate(upload);
+            TrafficStatsDownloadText.Text = FormatByteRate(download);
+            TrafficStatsUploadText.Text = FormatByteRate(upload);
             OverviewLinkSpeedText.Text = FormatBitRate(snapshot.LinkSpeedBitsPerSecond);
             OverviewDetailGatewayText.Text = snapshot.Gateway;
             OverviewDnsText.Text = snapshot.DnsServers;
@@ -213,6 +225,7 @@ public partial class NetworkWorkbenchView : UserControl
             AddHistory(_downloadHistory, download);
             AddHistory(_uploadHistory, upload);
             if (_trafficRange == "Realtime" && _activeTab == "Overview") UpdateTrafficChart();
+            if (_activeTab == "TrafficStats" && ++_trafficStatsRefreshTick % 3 == 0) _ = RefreshTrafficStatsAsync();
             _previousOverview = snapshot;
         }
         catch (Exception exception)
@@ -615,6 +628,155 @@ public partial class NetworkWorkbenchView : UserControl
         {
             MessageBox.Show(Window.GetWindow(this), $"读取异常记录失败：{exception.Message}", "异常记录", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
+    }
+
+    private async Task RefreshTrafficStatsAsync()
+    {
+        if (!IsVisible || Interlocked.Exchange(ref _trafficStatsRefreshBusy, 1) != 0) return;
+        try
+        {
+            TrafficStatsMonitorStatusText.Text = _trafficClient.IsRunning
+                ? "ETW 应用级监控中"
+                : _trafficClient.StatusText;
+            TrafficEnableExactButton.IsEnabled = !_trafficClient.IsRunning;
+            if (!_trafficClient.IsRunning)
+            {
+                _trafficProcesses.Clear();
+                TrafficStatsProcessTotalText.Text = "—";
+                TrafficStatsProxyTotalText.Text = "—";
+                TrafficStatsProxyHintText.Text = "启用应用级监控后可统计";
+                TrafficStatsProxySummaryText.Text = "代理判定：尚未启用应用级监控";
+                TrafficStatsDetailText.Text = "全局实时数据仍来自网卡计数器；点击“启用应用级监控”后，才会显示按进程的收发字节。";
+                TrafficStatsEmptyText.Visibility = Visibility.Visible;
+                return;
+            }
+
+            var proxySnapshot = _proxySnapshot;
+            var measurements = await Task.Run(() => _trafficClient.GetProcessMeasurements());
+            var rows = await Task.Run(() => BuildTrafficProcessRows(measurements, proxySnapshot));
+            _trafficProcesses.Clear();
+            foreach (var row in rows) _trafficProcesses.Add(row);
+            var processTotal = measurements.Sum(item => item.TotalBytes);
+            var proxyTotal = rows.Where(item => item.ProxyRole == ProxyTrafficRole.Exit).Sum(item => item.TotalBytes);
+            var proxyRows = rows.Count(item => item.ProxyRole != ProxyTrafficRole.None);
+            TrafficStatsProcessTotalText.Text = FormatBytes(processTotal);
+            TrafficStatsProxyTotalText.Text = FormatBytes(proxyTotal);
+            TrafficStatsProxyHintText.Text = proxyRows == 0 ? "未识别代理出口" : $"识别 {proxyRows} 个代理相关进程";
+            TrafficStatsProxySummaryText.Text = proxyRows == 0
+                ? "代理判定：未发现本地代理出口"
+                : $"代理判定：{proxyRows} 个进程 · 仅出口流量计入代理总量";
+            TrafficStatsDetailText.Text = "代理出口按对外连接统计；127.0.0.1 / ::1 回环流量只用于识别代理接入，不与出口流量重复相加。";
+            TrafficStatsRowsSummaryText.Text = $"{rows.Count} 项 · {_trafficStatsMode switch { "Proxy" => "代理相关", _ => "全部进程" }}";
+            TrafficStatsEmptyText.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+        catch (Exception exception)
+        {
+            TrafficStatsMonitorStatusText.Text = $"读取失败：{exception.Message}";
+            TrafficStatsEmptyText.Visibility = Visibility.Visible;
+        }
+        finally
+        {
+            Volatile.Write(ref _trafficStatsRefreshBusy, 0);
+        }
+    }
+
+    private IReadOnlyList<NetworkTrafficProcessRow> BuildTrafficProcessRows(
+        IReadOnlyList<NetworkTrafficProcessMeasurement> measurements,
+        ProxySettingsSnapshot proxySnapshot)
+    {
+        var configuredPorts = ParseProxyPorts(proxySnapshot.Server);
+        var rows = new List<NetworkTrafficProcessRow>();
+        foreach (var measurement in measurements)
+        {
+            var loopbackFlows = measurement.Flows.Where(flow => IsLoopbackEndpoint(flow.LocalEndpoint) || IsLoopbackEndpoint(flow.RemoteEndpoint)).ToArray();
+            var externalFlows = measurement.Flows.Where(flow => !IsLoopbackEndpoint(flow.RemoteEndpoint)).ToArray();
+            var hasConfiguredProxyPort = configuredPorts.Count > 0 && measurement.Flows.Any(flow =>
+                configuredPorts.Contains(ParseEndpointPort(flow.LocalEndpoint)) || configuredPorts.Contains(ParseEndpointPort(flow.RemoteEndpoint)));
+            var looksLikeProxyCore = externalFlows.Length > 0 && LooksLikeProxyProcess(measurement.ProcessName, measurement.ProcessPath) &&
+                (loopbackFlows.Length > 0 || hasConfiguredProxyPort);
+            var looksLikeProxyIngress = !looksLikeProxyCore && loopbackFlows.Any(flow =>
+                IsLoopbackEndpoint(flow.LocalEndpoint) || IsLoopbackEndpoint(flow.RemoteEndpoint));
+            var role = looksLikeProxyCore ? ProxyTrafficRole.Exit : looksLikeProxyIngress ? ProxyTrafficRole.Ingress : ProxyTrafficRole.None;
+            if (_trafficStatsMode == "Proxy" && role == ProxyTrafficRole.None) continue;
+            var total = measurement.TotalBytes;
+            var externalSent = externalFlows.Sum(flow => flow.SentBytes);
+            var externalReceived = externalFlows.Sum(flow => flow.ReceivedBytes);
+            var displaySent = _trafficStatsMode == "Proxy" && role == ProxyTrafficRole.Exit ? externalSent : measurement.SentBytes;
+            var displayReceived = _trafficStatsMode == "Proxy" && role == ProxyTrafficRole.Exit ? externalReceived : measurement.ReceivedBytes;
+            rows.Add(new NetworkTrafficProcessRow(measurement, role, displaySent, displayReceived,
+                _trafficStatsMode == "Proxy" && role == ProxyTrafficRole.Exit ? externalSent + externalReceived : total));
+        }
+        return rows.OrderByDescending(item => item.TotalBytes).ToArray();
+    }
+
+    private void TrafficStatsMode_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string mode }) return;
+        _trafficStatsMode = mode;
+        var global = mode == "Global";
+        TrafficGlobalModeButton.Background = BrushFrom(global ? "#4D7CFE" : "#70FFFFFF");
+        TrafficGlobalModeButton.Foreground = BrushFrom(global ? "#FFFFFF" : "#41607D");
+        TrafficProxyModeButton.Background = BrushFrom(global ? "#70FFFFFF" : "#4D7CFE");
+        TrafficProxyModeButton.Foreground = BrushFrom(global ? "#41607D" : "#FFFFFF");
+        _ = RefreshTrafficStatsAsync();
+    }
+
+    private async void TrafficEnableExact_Click(object sender, RoutedEventArgs e)
+    {
+        TrafficEnableExactButton.IsEnabled = false;
+        TrafficStatsMonitorStatusText.Text = "正在请求管理员授权…";
+        var result = await _trafficClient.StartAsync();
+        TrafficStatsMonitorStatusText.Text = result.Message;
+        if (!result.Success) TrafficEnableExactButton.IsEnabled = true;
+        await RefreshTrafficStatsAsync();
+    }
+
+    private async void TrafficStatsRefresh_Click(object sender, RoutedEventArgs e) => await RefreshTrafficStatsAsync();
+
+    private void TrafficStatsExport_Click(object sender, RoutedEventArgs e)
+    {
+        if (_trafficProcesses.Count == 0)
+        {
+            MessageBox.Show("当前没有可导出的应用级流量数据，请先启用应用级监控。", "导出流量", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        var dialog = new Microsoft.Win32.SaveFileDialog { Filter = "CSV 文件|*.csv", FileName = $"XTool_应用流量_{DateTime.Now:yyyyMMdd_HHmm}.csv" };
+        if (dialog.ShowDialog() != true) return;
+        var lines = new List<string> { "进程,PID,路径,角色,下载字节,上传字节,总量,实时速率" };
+        lines.AddRange(_trafficProcesses.Select(item => string.Join(",", new[]
+        {
+            EscapeCsv(item.ProcessName), item.ProcessId.ToString(), EscapeCsv(item.ProcessPath), EscapeCsv(item.ProxyBadge),
+            item.DownloadedBytes.ToString(), item.UploadedBytes.ToString(), item.TotalBytes.ToString(), EscapeCsv(item.RateText)
+        })));
+        File.WriteAllLines(dialog.FileName, lines, new UTF8Encoding(true));
+        MessageBox.Show("应用流量已导出。", "导出流量", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    private static HashSet<int> ParseProxyPorts(string value)
+    {
+        var ports = new HashSet<int>();
+        foreach (Match match in Regex.Matches(value ?? string.Empty, @"(?<!\d)(\d{2,5})(?!\d)"))
+            if (int.TryParse(match.Groups[1].Value, out var port) && port is > 0 and <= 65535) ports.Add(port);
+        return ports;
+    }
+
+    private static int ParseEndpointPort(string endpoint)
+    {
+        var separator = endpoint.LastIndexOf(':');
+        return separator >= 0 && int.TryParse(endpoint[(separator + 1)..], out var port) ? port : 0;
+    }
+
+    private static bool IsLoopbackEndpoint(string endpoint)
+    {
+        var normalized = endpoint.Trim().ToLowerInvariant();
+        return normalized.StartsWith("127.", StringComparison.Ordinal) || normalized.StartsWith("[::1]", StringComparison.Ordinal) || normalized.StartsWith("::1:", StringComparison.Ordinal);
+    }
+
+    private static bool LooksLikeProxyProcess(string name, string path)
+    {
+        var value = $"{name} {path}";
+        return new[] { "proxy", "clash", "mihomo", "xray", "sing-box", "v2ray", "sakura", "vortex", "tun" }
+            .Any(token => value.Contains(token, StringComparison.OrdinalIgnoreCase));
     }
 
     private void OpenConnectionDiagnostics_Click(object sender, RoutedEventArgs e)
@@ -1846,6 +2008,44 @@ public partial class NetworkWorkbenchView : UserControl
     }
 
     private static Brush BrushFrom(string value) => (Brush)new BrushConverter().ConvertFromString(value)!;
+
+    private enum ProxyTrafficRole
+    {
+        None,
+        Ingress,
+        Exit
+    }
+
+    private sealed record NetworkTrafficProcessRow(
+        NetworkTrafficProcessMeasurement Measurement,
+        ProxyTrafficRole ProxyRole,
+        long DisplaySentBytes,
+        long DisplayReceivedBytes,
+        long DisplayTotalBytes)
+    {
+        public int ProcessId => Measurement.ProcessId;
+        public string ProcessName => Measurement.ProcessName;
+        public string ProcessPath => Measurement.ProcessPath;
+        public long DownloadedBytes => DisplayReceivedBytes;
+        public long UploadedBytes => DisplaySentBytes;
+        public long TotalBytes => DisplayTotalBytes;
+        public string DownloadText => FormatBytes(DownloadedBytes);
+        public string UploadText => FormatBytes(UploadedBytes);
+        public string TotalText => FormatBytes(DisplayTotalBytes);
+        public string RateText => FormatBitRate((long)Math.Max(0, Measurement.TotalBitsPerSecond));
+        public string DetailText => string.IsNullOrWhiteSpace(ProcessPath)
+            ? $"PID {ProcessId} · 路径不可读"
+            : $"PID {ProcessId} · {ProcessPath}";
+        public string ProxyBadge => ProxyRole switch
+        {
+            ProxyTrafficRole.Exit => "代理出口",
+            ProxyTrafficRole.Ingress => "代理接入",
+            _ => string.Empty
+        };
+        public Visibility ProxyBadgeVisibility => ProxyRole == ProxyTrafficRole.None ? Visibility.Collapsed : Visibility.Visible;
+        public Brush BadgeBackground => ProxyRole == ProxyTrafficRole.Exit ? BrushFrom("#E9E1FFFF") : BrushFrom("#E7F5EEFF");
+        public Brush BadgeForeground => ProxyRole == ProxyTrafficRole.Exit ? BrushFrom("#7651B5") : BrushFrom("#3B8A60");
+    }
 
     private static string FormatByteRate(double bytes)
     {
