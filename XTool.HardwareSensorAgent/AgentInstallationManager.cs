@@ -419,10 +419,15 @@ internal static class AgentInstallationManager
 
     private static void EnsureNoReparsePoints(string path, string stopAt)
     {
-        string current = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar);
-        string boundary = Path.GetFullPath(stopAt).TrimEnd(Path.DirectorySeparatorChar);
-        if (!current.Equals(boundary, StringComparison.OrdinalIgnoreCase)
-            && !current.StartsWith(boundary + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        string current = Path.GetFullPath(path);
+        string boundary = Path.GetFullPath(stopAt);
+        string currentComparison = NormalizePathForComparison(current);
+        string boundaryComparison = NormalizePathForComparison(boundary);
+        string boundaryPrefix = boundaryComparison.EndsWith(Path.DirectorySeparatorChar)
+            ? boundaryComparison
+            : boundaryComparison + Path.DirectorySeparatorChar;
+        if (!currentComparison.Equals(boundaryComparison, StringComparison.OrdinalIgnoreCase)
+            && !currentComparison.StartsWith(boundaryPrefix, StringComparison.OrdinalIgnoreCase))
         {
             throw new UnauthorizedAccessException("路径不在允许的目录边界内。");
         }
@@ -435,7 +440,7 @@ internal static class AgentInstallationManager
                 throw new UnauthorizedAccessException($"路径中不允许存在重解析点：{current}");
             }
 
-            if (string.Equals(current, boundary, StringComparison.OrdinalIgnoreCase))
+            if (NormalizePathForComparison(current).Equals(boundaryComparison, StringComparison.OrdinalIgnoreCase))
             {
                 return;
             }
@@ -443,6 +448,18 @@ internal static class AgentInstallationManager
             current = Directory.GetParent(current)?.FullName
                 ?? throw new UnauthorizedAccessException("路径不在允许的目录边界内。");
         }
+    }
+
+    private static string NormalizePathForComparison(string path)
+    {
+        string full = Path.GetFullPath(path);
+        string root = Path.GetPathRoot(full) ?? string.Empty;
+        if (full.Equals(root, StringComparison.OrdinalIgnoreCase))
+        {
+            return root;
+        }
+
+        return full.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
     }
 
     private static void ReleaseComObject(object? value)
