@@ -67,6 +67,7 @@ public partial class SystemToolsView : UserControl
     private IReadOnlyList<DiskFileChange> _diskHistoryHoverChanges = Array.Empty<DiskFileChange>();
     private Border? _diskHistoryHoverCard;
     private TextBlock? _diskHistoryHoverText;
+    private WpfShapes.Rectangle? _diskHistoryHoverRegion;
     private WpfShapes.Line? _diskHistoryHoverGuide;
     private WpfShapes.Line? _diskHistoryHoverHorizontalGuide;
     private bool _processesAscending = true;
@@ -507,6 +508,7 @@ public partial class SystemToolsView : UserControl
             _diskHistoryHoverChanges = Array.Empty<DiskFileChange>();
         }
 
+        UpdateDiskHistoryHoverRegion(segment);
         EnsureDiskHistoryHoverCard();
         PositionDiskHistoryHoverCard(position);
         UpdateDiskHistoryHoverText(segment, hoveredBytes, segmentChanged ? "正在读取区间内的文件变化…" : null);
@@ -689,6 +691,28 @@ public partial class SystemToolsView : UserControl
         {
             _diskHistoryHoverHorizontalGuide.Visibility = Visibility.Collapsed;
         }
+        if (_diskHistoryHoverRegion is not null)
+        {
+            _diskHistoryHoverRegion.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    /// <summary>高亮当前鼠标所在的相邻快照区间，视觉上保持与整张趋势图连贯。</summary>
+    private void UpdateDiskHistoryHoverRegion(int segment)
+    {
+        if (_diskHistoryHoverRegion is null || _diskHistoryChartPoints.Count < 2)
+        {
+            return;
+        }
+
+        var safeSegment = Math.Clamp(segment, 0, _diskHistoryChartPoints.Count - 2);
+        var startX = _diskHistoryChartPoints[safeSegment].X;
+        var endX = _diskHistoryChartPoints[safeSegment + 1].X;
+        Canvas.SetLeft(_diskHistoryHoverRegion, startX);
+        Canvas.SetTop(_diskHistoryHoverRegion, _diskHistoryChartTop);
+        _diskHistoryHoverRegion.Width = Math.Max(1, endX - startX);
+        _diskHistoryHoverRegion.Height = Math.Max(1, _diskHistoryChartBottom - _diskHistoryChartTop);
+        _diskHistoryHoverRegion.Visibility = Visibility.Visible;
     }
 
     /// <summary>在画布上绘制局部缩放的容量趋势，让小幅变化也能清晰呈现。</summary>
@@ -698,6 +722,7 @@ public partial class SystemToolsView : UserControl
         DiskHistoryCanvas.Children.Clear();
         _diskHistoryHoverCard = null;
         _diskHistoryHoverText = null;
+        _diskHistoryHoverRegion = null;
         _diskHistoryHoverGuide = null;
         _diskHistoryHoverHorizontalGuide = null;
         var width = Math.Max(DiskHistoryCanvas.ActualWidth, 320);
@@ -778,6 +803,17 @@ public partial class SystemToolsView : UserControl
                 MappingMode = BrushMappingMode.RelativeToBoundingBox
             }
         });
+        _diskHistoryHoverRegion = new WpfShapes.Rectangle
+        {
+            RadiusX = 8,
+            RadiusY = 8,
+            Fill = new SolidColorBrush(Color.FromArgb(54, 102, 170, 255)),
+            Stroke = new SolidColorBrush(Color.FromArgb(145, 102, 158, 245)),
+            StrokeThickness = 1,
+            IsHitTestVisible = false,
+            Visibility = Visibility.Collapsed
+        };
+        DiskHistoryCanvas.Children.Add(_diskHistoryHoverRegion);
 
         // 局部区间的四级网格，使小幅容量变化仍然易读。
         for (var i = 0; i <= 3; i++)
