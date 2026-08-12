@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net6.0-windows</TargetFramework>
+    <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -15,8 +15,6 @@
     <ApplicationIcon>Assets\XTool.ico</ApplicationIcon>
     <!-- WPF 仍通过 manifest 配置 PerMonitorV2；WinForms 只承载托盘图标。 -->
     <NoWarn>$(NoWarn);WFAC010</NoWarn>
-    <!-- 主程序仍锁定 net6；安装 net8 SDK 后避免构建工具重复输出已知生命周期提示。 -->
-    <CheckEolTargetFramework>false</CheckEolTargetFramework>
     <DefaultItemExcludes>$(DefaultItemExcludes);obj-scroll-test\**;bin-scroll-test\**</DefaultItemExcludes>
   </PropertyGroup>
 
@@ -40,7 +38,9 @@
     <!-- 图片与已有 PDF 的本地生成、合并采用 MIT 许可的 PDFsharp。 -->
     <PackageReference Include="PDFsharp" Version="6.2.4" />
     <!-- 网络工作台历史监测数据；所有数据库 I/O 均在专用后台线程执行。 -->
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.8" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.29" />
+    <!-- 显式使用 SQLitePCLRaw 3.x，发布 SQLite 3.50.4，避开旧 2.x 原生包的高危漏洞链。 -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
     <!-- Windows ETW 网络事件解析，用于管理员授权后的逐进程精确流量采集。 -->
     <PackageReference Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="3.1.21" />
     <!-- 系统概览读取只读 WMI/SMBIOS 公开信息，不用于任何系统写操作。 -->

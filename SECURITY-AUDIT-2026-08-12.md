@@ -32,8 +32,8 @@
 
 ## 仍需单独立项
 
-1. **高优先级依赖升级**：当前 `Microsoft.Data.Sqlite 8.0.8` 传递包含 `SQLitePCLRaw.lib.e_sqlite3 2.1.6`，依赖扫描报告高危公告 `GHSA-2m69-gcr7-jv3q`。当前公告未给出该原生包的已修补版本，本轮未修改受保护的项目文件，也不以盲目升版代替验证。应在上游提供安全版本后升级并执行数据库迁移、并发读写与历史查询回归。
-2. **运行时迁移**：正式项目仍为已停止安全维护的 `.NET 6`。建议独立迁移到 `.NET 8 LTS`，覆盖 WPF、OCR、语音、FFmpeg、ETW 辅助、SQLite 和发布体积回归。
+1. **已解决：SQLite 高危依赖**：2026-08-13 更新为 `Microsoft.Data.Sqlite 8.0.29 + SQLitePCLRaw.bundle_e_sqlite3 3.0.3`，发布物实际使用 `SourceGear.sqlite3 3.50.4.5`（SQLite 3.50.4），不再解析 `SQLitePCLRaw.lib.e_sqlite3 2.1.6`。NuGet 漏洞扫描零命中，临时数据库读写、两份既有历史库 `PRAGMA quick_check`、磁盘历史和网络历史查询均通过。
+2. **已解决：运行时迁移**：正式项目与回归项目已升级到 `.NET 8` / `net8.0-windows`，WPF、OCR、语音、翻译、长截图、文件规划、ETW 依赖和 SQLite 全量回归通过。项目仍为框架依赖发布，目标电脑需安装 .NET 8 Desktop Runtime x64。
 3. **管理员 IPC 重构**：系统工具的临时 JSON 请求文件仍适合改为具备 ACL、随机命名、签名/nonce 和严格响应校验的命名管道协议。该修复会涉及当前受保护的 `App.xaml.cs`，本轮未越界修改。
 4. **长期资源治理**：ETW 归档已从逐连接降到逐进程实例，但极长会话中的进程缓存仍不是严格硬上限；磁盘文件监测在首次开启后也缺少显式的设置开关和完整停止/释放路径。
 5. **其他性能项**：图片转换滑块仍适合增加防抖与后台预览；二维码批量输入、Docker CLI 压缩包解压、日志/历史文件仍应增加统一容量预算和更细的失败反馈。
@@ -42,7 +42,9 @@
 
 - `dotnet build .\ScreenshotApp\ScreenshotApp.csproj -c Release`：通过，0 警告、0 错误。
 - `ScreenshotApp.RegressionTests` Release：通过；覆盖长截图、固定栏、标注、取色、OCR、语音模型、翻译模型、文件工作台规划、编码转换与单实例协调。
-- `dotnet list .\ScreenshotApp\ScreenshotApp.csproj package --vulnerable --include-transitive`：仍报告上述 SQLite 高危传递依赖，已记录为阻断发布前的独立升级项。
+- `dotnet list .\ScreenshotApp\ScreenshotApp.csproj package --vulnerable --include-transitive`：升级后零命中。
+- `dotnet run --project .\ScreenshotApp.RegressionTests\ScreenshotApp.RegressionTests.csproj -c Release -- --sqlite-smoke`：SQLite 3.50.4，临时库读写、两份既有历史库完整性和真实历史查询通过。
+- `.NET 8` 全量回归：退出码 0，覆盖长截图、OCR、语音、翻译、文件规划、编码转换和单实例协调。
 
 ## 人工验证重点
 

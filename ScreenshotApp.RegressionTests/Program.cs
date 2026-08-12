@@ -13,12 +13,103 @@ using ScreenshotApp.Ocr;
 using ScreenshotApp.Translation;
 using ScreenshotApp.Converters;
 using ScreenshotApp.StorageAnalysis;
+using ScreenshotApp.NetworkWorkbench;
+using ScreenshotApp.SystemTools;
+using Microsoft.Data.Sqlite;
 
 const int Width = 720;
 const int FrameHeight = 520;
 const int ContentHeight = 4200;
 
 var failures = new List<string>();
+
+if (args.Length >= 1 && args[0] == "--sqlite-smoke")
+{
+    var tempDatabase = Path.Combine(Path.GetTempPath(), "XTool-Sqlite-" + Guid.NewGuid().ToString("N") + ".db");
+    try
+    {
+        string sqliteVersion;
+        using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = tempDatabase }.ToString()))
+        {
+            connection.Open();
+            using (var versionCommand = connection.CreateCommand())
+            {
+                versionCommand.CommandText = "SELECT sqlite_version();";
+                sqliteVersion = versionCommand.ExecuteScalar()?.ToString() ?? string.Empty;
+            }
+
+            using var transaction = connection.BeginTransaction();
+            using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = @"CREATE TABLE migration_probe (
+                    id INTEGER PRIMARY KEY,
+                    value TEXT NOT NULL);
+                INSERT INTO migration_probe (value) VALUES ($value);";
+            command.Parameters.AddWithValue("$value", "X-Tool · 中文 SQLite 回归");
+            command.ExecuteNonQuery();
+            transaction.Commit();
+        }
+
+        using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+               {
+                   DataSource = tempDatabase,
+                   Mode = SqliteOpenMode.ReadOnly
+               }.ToString()))
+        {
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT value FROM migration_probe WHERE id = 1;";
+            if (!string.Equals(command.ExecuteScalar()?.ToString(), "X-Tool · 中文 SQLite 回归", StringComparison.Ordinal))
+            {
+                Console.WriteLine("SQLite 回归 | 失败 | 临时数据库读写结果不一致");
+                return 5;
+            }
+        }
+
+        var existingDatabases = new[]
+        {
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "X-Tool", "System", "disk-history.db"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "X-Tool", "Network", "network-history.db")
+        };
+        var checkedDatabases = 0;
+        foreach (var databasePath in existingDatabases.Where(File.Exists))
+        {
+            using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+            {
+                DataSource = databasePath,
+                Mode = SqliteOpenMode.ReadOnly,
+                Cache = SqliteCacheMode.Private
+            }.ToString());
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = "PRAGMA quick_check;";
+            var result = command.ExecuteScalar()?.ToString();
+            if (!string.Equals(result, "ok", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.WriteLine($"SQLite 回归 | 失败 | {databasePath} | quick_check={result}");
+                return 6;
+            }
+            checkedDatabases++;
+        }
+
+        await DiskHistoryStore.EnsureTodaySnapshotAsync();
+        var diskHistory = await DiskHistoryStore.LoadHistoryAsync("C:", 7);
+        await using var networkHistoryStore = new NetworkHistoryStore();
+        var retentionDays = await networkHistoryStore.GetRetentionDaysAsync();
+        var networkEvents = await networkHistoryStore.GetEventsAsync(1);
+
+        var secureVersion = Version.TryParse(sqliteVersion, out var parsedVersion)
+                            && parsedVersion >= new Version(3, 50, 2);
+        Console.WriteLine($"SQLite 回归 | {(secureVersion ? "通过" : "失败")} | SQLite {sqliteVersion} | " +
+                          $"临时库读写通过 | 既有数据库检查 {checkedDatabases} | " +
+                          $"磁盘历史 {diskHistory.Count} | 网络保留 {retentionDays} 天 | 网络事件样本 {networkEvents.Count}");
+        return secureVersion ? 0 : 7;
+    }
+    finally
+    {
+        try { File.Delete(tempDatabase); } catch { }
+    }
+}
 
 if (args.Length >= 1 && args[0] == "--storage-analysis")
 {
