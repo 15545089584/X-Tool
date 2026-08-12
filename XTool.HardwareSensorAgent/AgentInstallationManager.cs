@@ -92,6 +92,10 @@ internal static class AgentInstallationManager
         catch
         {
             // 注册失败时保留旧任务定义，并尽力恢复同版本旧目录，避免任务指向缺失文件。
+            if (taskRegistrationAttempted)
+            {
+                DeleteTask(taskPath, ignoreMissing: true);
+            }
             if (stagingPromoted && !taskRegistrationAttempted && Directory.Exists(target))
             {
                 TryDeleteOwnedDirectory(target);
@@ -104,6 +108,7 @@ internal static class AgentInstallationManager
                     TryDeleteOwnedDirectory(target);
                 }
                 Directory.Move(backup, target);
+                RegisterTask(Path.Combine(target, "XTool.HardwareSensorAgent.exe"), requestingUserSid);
             }
 
             throw;
@@ -250,6 +255,11 @@ internal static class AgentInstallationManager
     private static string ValidateSourceDirectory(string path)
     {
         string source = Path.GetFullPath(path);
+        string expected = Path.GetFullPath(AppContext.BaseDirectory);
+        if (!string.Equals(source.TrimEnd(Path.DirectorySeparatorChar), expected.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
+        {
+            throw new UnauthorizedAccessException("传感器代理安装源必须是当前已授权的发布目录。");
+        }
         if (!Directory.Exists(source))
         {
             throw new DirectoryNotFoundException("传感器代理安装源目录不存在。");

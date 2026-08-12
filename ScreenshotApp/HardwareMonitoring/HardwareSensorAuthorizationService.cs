@@ -27,6 +27,7 @@ public static class HardwareSensorAuthorizationService
 {
     private const string AgentExecutableName = "XTool.HardwareSensorAgent.exe";
     private const string ManifestFileName = "bundle-manifest-v2.json";
+    private const string LastInstallerResultFileName = "last-installer-result.json";
     private static readonly string[] BundleFileNames =
     [
         AgentExecutableName,
@@ -60,6 +61,12 @@ public static class HardwareSensorAuthorizationService
         "HardwareSensors",
         ManifestFileName);
 
+    public static string LastInstallerResultPath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "X-Tool",
+        "HardwareSensors",
+        LastInstallerResultFileName);
+
     public static string InstalledRoot => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
         "X-Tool",
@@ -78,7 +85,7 @@ public static class HardwareSensorAuthorizationService
             if (taskXml is null)
             {
                 return Directory.Exists(InstalledRoot)
-                    ? new(HardwareSensorAuthorizationState.RepairRequired, "检测到代理文件残留，需要重新授权修复")
+                    ? new(HardwareSensorAuthorizationState.NotAuthorized, "当前用户尚未授权硬件实时监控；受保护代理组件已保留")
                     : new(HardwareSensorAuthorizationState.NotAuthorized, "尚未授权硬件实时监控");
             }
 
@@ -115,6 +122,7 @@ public static class HardwareSensorAuthorizationService
         try
         {
             await EnsureBundleManifestAsync(cancellationToken).ConfigureAwait(false);
+            TryDeleteInstallerResult();
             string installer = Path.Combine(BundleDirectory, AgentExecutableName);
             var exitCode = await RunElevatedAsync(
                 installer,
@@ -131,7 +139,9 @@ public static class HardwareSensorAuthorizationService
             }
             if (exitCode != 0)
             {
-                return new(false, false, "硬件传感器授权失败；未安装不完整的代理任务");
+                string detail = await ReadInstallerResultAsync(cancellationToken).ConfigureAwait(false)
+                    ?? "代理安装器未返回具体原因";
+                return new(false, false, $"硬件传感器授权失败：{detail}");
             }
 
             HardwareSensorAuthorizationStatus status = await GetStatusAsync(cancellationToken).ConfigureAwait(false);
@@ -155,6 +165,7 @@ public static class HardwareSensorAuthorizationService
                 return new(false, false, "当前安装包缺少硬件传感器代理，无法安全取消授权");
             }
 
+            TryDeleteInstallerResult();
             var exitCode = await RunElevatedAsync(
                 installer,
                 ["--uninstall", "--requesting-sid", CurrentUserSid],
@@ -163,9 +174,11 @@ public static class HardwareSensorAuthorizationService
             {
                 return new(false, true, "已取消操作，原有硬件监控授权保持不变");
             }
-            return exitCode == 0
-                ? new(true, false, "已取消硬件实时监控授权")
-                : new(false, false, "取消授权失败，请检查任务计划程序是否可用");
+            if (exitCode == 0)
+                return new(true, false, "已取消硬件实时监控授权");
+            string detail = await ReadInstallerResultAsync(cancellationToken).ConfigureAwait(false)
+                ?? "任务计划程序未返回具体原因";
+            return new(false, false, $"取消授权失败：{detail}");
         }
         catch (Exception exception)
         {
@@ -314,7 +327,8 @@ public static class HardwareSensorAuthorizationService
             WorkingDirectory = BundleDirectory,
             WindowStyle = ProcessWindowStyle.Hidden
         };
-        foreach (string argument in arguments) startInfo.ArgumentList.Add(argument);
+        // ShellExecute 下显式组装 Windows 命令行，确保安装目录中的空格不会被拆成多个参数。
+        startInfo.Arguments = string.Join(" ", arguments.Select(QuoteProcessArgument));
         try
         {
             using Process process = Process.Start(startInfo) ?? throw new InvalidOperationException("无法启动管理员授权程序。");
@@ -356,10 +370,41 @@ public static class HardwareSensorAuthorizationService
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
+    private static void TryDeleteInstallerResult()
+    {
+        try { File.Delete(LastInstallerResultPath); } catch { }
+    }
+
+    private static async Task<string?> ReadInstallerResultAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (!File.Exists(LastInstallerResultPath)) return null;
+            await using FileStream stream = File.OpenRead(LastInstallerResultPath);
+            using JsonDocument document = await JsonDocument.ParseAsync(
+                stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+            if (document.RootElement.TryGetProperty("message", out JsonElement message)
+                && message.ValueKind == JsonValueKind.String)
+            {
+                string value = (message.GetString() ?? string.Empty).Replace('\r', ' ').Replace('\n', ' ').Trim();
+                return value.Length <= 220 ? value : value[..220];
+            }
+        }
+        catch { }
+        return null;
+    }
+
     private static string SanitizeVersion(string version)
     {
         string cleaned = new(version.Where(character => char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '_').ToArray());
         return string.IsNullOrWhiteSpace(cleaned) ? "0.0.0.0" : cleaned;
+    }
+
+    private static string QuoteProcessArgument(string value)
+    {
+        if (value.Length == 0) return "\"\"";
+        if (!value.Any(char.IsWhiteSpace) && !value.Contains('"')) return value;
+        return "\"" + value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal) + "\"";
     }
 
     private static string GetBundleVersion()

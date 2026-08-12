@@ -101,6 +101,7 @@ public partial class SystemToolsView : UserControl
         EnvironmentListBox.ItemsSource = _environmentVariables;
         PathEntriesListBox.ItemsSource = _pathEntries;
         DriverCategoryItems.ItemsSource = _driverCategories;
+        DriverPageCategoryItems.ItemsSource = _driverCategories;
         StorageVolumesItems.ItemsSource = _storageVolumes;
         PhysicalStorageItems.ItemsSource = _physicalStorage;
         DiagnosticResultsListBox.ItemsSource = _diagnosticGroups;
@@ -1114,6 +1115,7 @@ public partial class SystemToolsView : UserControl
         ServicesPanel.Visibility = section == "Services" ? Visibility.Visible : Visibility.Collapsed;
         RelationsBubblePanel.Visibility = section == "Relations" ? Visibility.Visible : Visibility.Collapsed;
         OverviewPanel.Visibility = section == "Overview" ? Visibility.Visible : Visibility.Collapsed;
+        DriversPanel.Visibility = section == "Drivers" ? Visibility.Visible : Visibility.Collapsed;
         StoragePanel.Visibility = section == "Storage" ? Visibility.Visible : Visibility.Collapsed;
         EnvironmentPanel.Visibility = section == "Environment" ? Visibility.Visible : Visibility.Collapsed;
         DiagnosticsPanel.Visibility = section == "Diagnostics" ? Visibility.Visible : Visibility.Collapsed;
@@ -1122,6 +1124,7 @@ public partial class SystemToolsView : UserControl
         else if (section == "Services") _ = RefreshServicesAsync();
         else if (section == "Relations") _ = RefreshRelationshipsAsync();
         else if (section == "Overview") _ = RefreshDeviceInfoAsync();
+        else if (section == "Drivers") _ = RefreshDeviceInfoAsync();
         else if (section == "Storage")
         {
             StartDiskHistoryAutoCapture();
@@ -1141,11 +1144,13 @@ public partial class SystemToolsView : UserControl
             RelationsTabButton.Visibility = Visibility.Collapsed;
             OverviewTabButton.Visibility = Visibility.Visible;
             StorageTabButton.Visibility = Visibility.Visible;
+            DriverTabButton.Visibility = Visibility.Visible;
             DiagnosticsTabButton.Visibility = Visibility.Visible;
             Grid.SetColumn(OverviewTabButton, 0);
             Grid.SetColumn(StorageTabButton, 2);
-            Grid.SetColumn(EnvironmentTabButton, 4);
-            Grid.SetColumn(DiagnosticsTabButton, 6);
+            Grid.SetColumn(DriverTabButton, 4);
+            Grid.SetColumn(EnvironmentTabButton, 6);
+            Grid.SetColumn(DiagnosticsTabButton, 8);
             AutoRefreshHostPanel.Visibility = Visibility.Collapsed;
             PortsPanel.Visibility = Visibility.Collapsed;
             ProcessesPanel.Visibility = Visibility.Collapsed;
@@ -1153,6 +1158,7 @@ public partial class SystemToolsView : UserControl
             RelationsBubblePanel.Visibility = Visibility.Collapsed;
             EnvironmentPanel.Visibility = Visibility.Collapsed;
             StoragePanel.Visibility = Visibility.Collapsed;
+            DriversPanel.Visibility = Visibility.Collapsed;
             DiagnosticsPanel.Visibility = Visibility.Collapsed;
             StorageOverviewContentPanel.Visibility = Visibility.Visible;
             StorageAnalysisView.Visibility = Visibility.Collapsed;
@@ -1164,10 +1170,12 @@ public partial class SystemToolsView : UserControl
 
         OverviewTabButton.Visibility = Visibility.Collapsed;
         StorageTabButton.Visibility = Visibility.Collapsed;
+        DriverTabButton.Visibility = Visibility.Collapsed;
         EnvironmentTabButton.Visibility = Visibility.Collapsed;
         DiagnosticsTabButton.Visibility = Visibility.Collapsed;
         OverviewPanel.Visibility = Visibility.Collapsed;
         StoragePanel.Visibility = Visibility.Collapsed;
+        DriversPanel.Visibility = Visibility.Collapsed;
         DiagnosticsPanel.Visibility = Visibility.Collapsed;
         HideStorageAnalysis();
         AutoRefreshHostPanel.Visibility = Visibility.Visible;
@@ -1183,7 +1191,7 @@ public partial class SystemToolsView : UserControl
 
     private void SetActiveTab(string section)
     {
-        foreach (var (button, name) in new[] { (PortsTabButton, "Ports"), (ProcessesTabButton, "Processes"), (ServicesTabButton, "Services"), (RelationsTabButton, "Relations"), (OverviewTabButton, "Overview"), (StorageTabButton, "Storage"), (EnvironmentTabButton, "Environment"), (DiagnosticsTabButton, "Diagnostics") })
+        foreach (var (button, name) in new[] { (PortsTabButton, "Ports"), (ProcessesTabButton, "Processes"), (ServicesTabButton, "Services"), (RelationsTabButton, "Relations"), (OverviewTabButton, "Overview"), (StorageTabButton, "Storage"), (DriverTabButton, "Drivers"), (EnvironmentTabButton, "Environment"), (DiagnosticsTabButton, "Diagnostics") })
         {
             var active = name == section;
             button.Background = new SolidColorBrush(active ? Color.FromRgb(77, 124, 254) : Color.FromArgb(134, 255, 255, 255));
@@ -1497,7 +1505,17 @@ public partial class SystemToolsView : UserControl
     {
         if (IsLoaded) ApplyDriverFilter();
     }
+
+    private void DriverPageFilterTextBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (IsLoaded) ApplyDriverFilter();
+    }
     private void DriverScopeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (IsLoaded) ApplyDriverFilter();
+    }
+
+    private void DriverPageScopeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (IsLoaded) ApplyDriverFilter();
     }
@@ -1880,8 +1898,10 @@ public partial class SystemToolsView : UserControl
     /// <summary>设备页默认突出常用类别，同时保留异常项，避免把大量系统组件淹没在首屏。</summary>
     private void ApplyDriverFilter()
     {
-        var keyword = DriverFilterTextBox?.Text.Trim() ?? string.Empty;
-        var scope = SelectedTag(DriverScopeComboBox);
+        var filterBox = DriversPanel.Visibility == Visibility.Visible ? DriverPageFilterTextBox : DriverFilterTextBox;
+        var scopeBox = DriversPanel.Visibility == Visibility.Visible ? DriverPageScopeComboBox : DriverScopeComboBox;
+        var keyword = filterBox?.Text.Trim() ?? string.Empty;
+        var scope = SelectedTag(scopeBox);
         var drivers = _allDrivers.Where(item => scope switch
             {
                 "Key" => item.IsKeyDevice || item.HasIssue,
@@ -1902,6 +1922,7 @@ public partial class SystemToolsView : UserControl
             ? "未读取到 Windows PnP 驱动信息"
             : $"显示 {categories.Length:N0} 类 / {drivers.Length:N0} 项 · {issueCount:N0} 项需要注意";
         DriverEmptyState.Visibility = drivers.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        DriverPageEmptyState.Visibility = drivers.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void OpenProcessDirectory_Click(object sender, RoutedEventArgs e)

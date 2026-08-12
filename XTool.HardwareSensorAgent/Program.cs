@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO.Pipes;
 using System.Reflection;
+using System.Text;
 using System.Text.Json;
 using ScreenshotApp.HardwareMonitoring;
 
@@ -12,14 +13,20 @@ internal static class Program
     private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan SampleInterval = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan HandshakeTimeout = TimeSpan.FromSeconds(10);
+    private static readonly string InstallerResultPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "X-Tool",
+        "HardwareSensors",
+        "last-installer-result.json");
 
     [STAThread]
     private static async Task<int> Main(string[] args)
     {
+        bool installerMode = args.Length > 0 && (args[0] is "--install" or "--uninstall");
         try
         {
             AgentArguments options = AgentArguments.Parse(args);
-            return options.Mode switch
+            int exitCode = options.Mode switch
             {
                 AgentMode.Install => AgentInstallationManager.Install(
                     options.SourceDirectory!,
@@ -29,27 +36,55 @@ internal static class Program
                 AgentMode.Serve => await ServeAsync(options.UserSid!, options.ProtocolVersion).ConfigureAwait(false),
                 _ => 1
             };
+            if (installerMode)
+            {
+                WriteInstallerResult(exitCode, exitCode == 0 ? "管理员代理任务已更新" : "安装器未能完成操作");
+            }
+            return exitCode;
         }
         catch (OperationCanceledException)
         {
+            if (installerMode) WriteInstallerResult(1, "操作已取消");
             return 0;
         }
-        catch (ArgumentException)
+        catch (ArgumentException exception)
         {
+            if (installerMode) WriteInstallerResult(2, exception.Message);
             return 2;
         }
-        catch (UnauthorizedAccessException)
+        catch (UnauthorizedAccessException exception)
         {
+            if (installerMode) WriteInstallerResult(3, exception.Message);
             return 3;
         }
-        catch (InvalidDataException)
+        catch (InvalidDataException exception)
         {
+            if (installerMode) WriteInstallerResult(4, exception.Message);
             return 4;
+        }
+        catch (Exception exception)
+        {
+            if (installerMode) WriteInstallerResult(1, exception.GetBaseException().Message);
+            return 1;
+        }
+    }
+
+    private static void WriteInstallerResult(int exitCode, string? message)
+    {
+        try
+        {
+            string directory = Path.GetDirectoryName(InstallerResultPath)!;
+            Directory.CreateDirectory(directory);
+            string normalized = (message ?? string.Empty).Replace('\r', ' ').Replace('\n', ' ').Trim();
+            if (normalized.Length > 300) normalized = normalized[..300];
+            string temporary = $"{InstallerResultPath}.{Guid.NewGuid():N}.tmp";
+            string payload = JsonSerializer.Serialize(new { exitCode, message = normalized });
+            File.WriteAllText(temporary, payload, new UTF8Encoding(false));
+            File.Move(temporary, InstallerResultPath, true);
         }
         catch
         {
-            // WinExe 无控制台；安装与卸载结果由启动方根据退出码解释。
-            return 1;
+            // 安装结果只是诊断辅助，不能改变代理进程的退出语义。
         }
     }
 

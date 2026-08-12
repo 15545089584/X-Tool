@@ -35,8 +35,9 @@
             <Button x:Name="ServicesTabButton" Grid.Column="4" Style="{StaticResource SystemTab}" Tag="Services" Click="TabButton_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="服务管理" /></Button>
             <Button x:Name="RelationsTabButton" Grid.Column="6" Style="{StaticResource SystemTab}" Tag="Relations" Click="TabButton_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="关联关系" /></Button>
             <Button x:Name="StorageTabButton" Grid.Column="2" Style="{StaticResource SystemTab}" Tag="Storage" Click="TabButton_Click" Visibility="Collapsed"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="存储" /></Button>
-            <Button x:Name="EnvironmentTabButton" Grid.Column="4" Style="{StaticResource SystemTab}" Tag="Environment" Click="TabButton_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="环境变量" /></Button>
-            <Button x:Name="DiagnosticsTabButton" Grid.Column="6" Style="{StaticResource SystemTab}" Tag="Diagnostics" Click="TabButton_Click" Visibility="Collapsed"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="系统诊断" /></Button>
+            <Button x:Name="DriverTabButton" Grid.Column="4" Style="{StaticResource SystemTab}" Tag="Drivers" Click="TabButton_Click" Visibility="Collapsed"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="驱动" /></Button>
+            <Button x:Name="EnvironmentTabButton" Grid.Column="6" Style="{StaticResource SystemTab}" Tag="Environment" Click="TabButton_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="环境变量" /></Button>
+            <Button x:Name="DiagnosticsTabButton" Grid.Column="8" Style="{StaticResource SystemTab}" Tag="Diagnostics" Click="TabButton_Click" Visibility="Collapsed"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="系统诊断" /></Button>
             <Border x:Name="AutoRefreshHostPanel" Grid.Column="9" HorizontalAlignment="Right" Style="{StaticResource AutoRefreshHost}">
                 <Grid>
                     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="8" /><ColumnDefinition Width="84" /></Grid.ColumnDefinitions>
@@ -74,15 +75,16 @@
                             <Grid>
                                 <StackPanel>
                                     <TextBlock FontSize="18" FontWeight="SemiBold" Foreground="#2E4B67" Text="设备信息" />
-                                    <TextBlock Margin="0,2,0,0" FontSize="10" Foreground="#728BA3" Text="查看当前设备的硬件配置及 Windows 识别到的 PnP 驱动；所有数据均为只读。" />
+                                    <TextBlock Margin="0,2,0,0" FontSize="10" Foreground="#728BA3" Text="查看当前设备的硬件规格与实时传感器；驱动信息已独立迁移到“驱动”页面，所有数据均为只读。" />
                                 </StackPanel>
                                 <Button HorizontalAlignment="Right" Width="110" Height="40" Padding="0" Style="{StaticResource SystemPrimaryButton}" Click="RefreshDeviceInfo_Click"><TextBlock FontWeight="SemiBold" Foreground="White" Text="刷新信息" /></Button>
                             </Grid>
                             <Border Margin="0,10,0,0" Padding="10" Background="#54FFFFFF" BorderBrush="#8ED6E9F8" BorderThickness="1" CornerRadius="13">
                                 <Viewbox Stretch="Uniform" StretchDirection="Both">
-                                    <Grid Width="1400" Height="540">
+                                    <Grid Width="1400" Height="900">
+                                        <Grid.RowDefinitions><RowDefinition Height="470" /><RowDefinition Height="18" /><RowDefinition Height="400" /></Grid.RowDefinitions>
                                         <Grid.ColumnDefinitions><ColumnDefinition Width="790" /><ColumnDefinition Width="18" /><ColumnDefinition Width="592" /></Grid.ColumnDefinitions>
-                                        <ItemsControl x:Name="OverviewInfoItems" Grid.Column="0" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
+                                        <ItemsControl x:Name="OverviewInfoItems" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3" Margin="18,0" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
                                             <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="8" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
@@ -101,7 +103,7 @@
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
-                                        <Border Grid.Column="2" Padding="16" Background="#A8F8FCFF" BorderBrush="#B6D6EAF8" BorderThickness="1" CornerRadius="18">
+                                        <Border Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Padding="22" Background="#A8F8FCFF" BorderBrush="#B6D6EAF8" BorderThickness="1" CornerRadius="22">
                                             <Border.Effect><DropShadowEffect BlurRadius="22" ShadowDepth="4" Direction="270" Opacity="0.12" Color="#456886" /></Border.Effect>
                                             <Grid DataContext="{Binding HardwareMonitor, RelativeSource={RelativeSource AncestorType=systemTools:SystemToolsView}}">
                                                 <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
@@ -182,7 +184,7 @@
                                     </Grid>
                                 </Viewbox>
                             </Border>
-                            <Border Margin="0,14,0,2" Padding="14" Background="#54FFFFFF" BorderBrush="#8ED6E9F8" BorderThickness="1" CornerRadius="13">
+                            <Border x:Name="LegacyDriverPanel" Visibility="Collapsed" Margin="0,14,0,2" Padding="14" Background="#54FFFFFF" BorderBrush="#8ED6E9F8" BorderThickness="1" CornerRadius="13">
                                 <Grid>
                                     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="38" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                                     <Grid>
@@ -268,6 +270,75 @@
                             </Border>
                         </StackPanel>
                     </ScrollViewer>
+                </Border>
+            </Grid>
+            <Grid x:Name="DriversPanel" Visibility="Collapsed">
+                <Border Padding="15" Style="{StaticResource SystemCard}">
+                    <Grid>
+                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                        <Grid>
+                            <StackPanel>
+                                <TextBlock FontSize="18" FontWeight="SemiBold" Foreground="#2E4B67" Text="驱动" />
+                                <TextBlock Margin="0,3,0,0" FontSize="11" Foreground="#728BA3" Text="独立查看 Windows 已识别的 PnP 驱动，设备信息页仅保留硬件规格与实时监控。" />
+                            </StackPanel>
+                            <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" Foreground="#637E9B" Text="{Binding Text, ElementName=DriverSummaryText}" />
+                        </Grid>
+                        <Grid Grid.Row="2">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="148" /><ColumnDefinition Width="10" /><ColumnDefinition Width="*" /><ColumnDefinition Width="12" /><ColumnDefinition Width="114" /></Grid.ColumnDefinitions>
+                            <ComboBox x:Name="DriverPageScopeComboBox" Height="38" Style="{StaticResource SystemComboBox}" SelectionChanged="DriverPageScopeComboBox_SelectionChanged">
+                                <ComboBoxItem Tag="Key" IsSelected="True">关键设备</ComboBoxItem>
+                                <ComboBoxItem Tag="All">全部设备</ComboBoxItem>
+                                <ComboBoxItem Tag="Issues">异常项</ComboBoxItem>
+                            </ComboBox>
+                            <Grid Grid.Column="2">
+                                <TextBox x:Name="DriverPageFilterTextBox" Height="38" Padding="34,0,12,0" VerticalContentAlignment="Center" Style="{StaticResource SystemTextBox}" TextChanged="DriverPageFilterTextBox_TextChanged" ToolTip="按设备、类别、提供商、版本或 INF 文件筛选" />
+                                <TextBlock Margin="11,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center" FontSize="18" Foreground="#7690AA" IsHitTestVisible="False" Text="⌕" />
+                            </Grid>
+                            <Button Grid.Column="4" Height="38" Style="{StaticResource SystemPrimaryButton}" Click="RefreshDeviceInfo_Click"><TextBlock FontWeight="SemiBold" Foreground="White" Text="刷新驱动" /></Button>
+                        </Grid>
+                        <Border Grid.Row="4" Background="#36E8F2FF" BorderBrush="#8ACCE2F5" BorderThickness="1" CornerRadius="11">
+                            <Grid Margin="8">
+                                <ItemsControl x:Name="DriverPageCategoryItems">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Margin="2,0,2,8" Padding="10" Background="#78FFFFFF" BorderBrush="#54D5E8F7" BorderThickness="1" CornerRadius="11">
+                                                <StackPanel>
+                                                    <Grid>
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <Border Width="34" Height="34" Background="Transparent" BorderBrush="#35D4E8F8" BorderThickness="1" CornerRadius="10"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="{Binding Accent}" Text="{Binding Icon}" /></Border>
+                                                            <StackPanel Margin="10,0,0,0" VerticalAlignment="Center"><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#45627E" Text="{Binding Category}" /><TextBlock Margin="0,2,0,0" FontSize="10" Foreground="#7890A6" Text="{Binding SummaryText}" /></StackPanel>
+                                                        </StackPanel>
+                                                        <Border HorizontalAlignment="Right" Padding="8,4" VerticalAlignment="Center" Background="#6FFFFFFF" BorderBrush="{Binding IssueAccent}" BorderThickness="1" CornerRadius="8"><TextBlock FontSize="10" FontWeight="SemiBold" Foreground="{Binding IssueAccent}" Text="{Binding IssueSummary}" /></Border>
+                                                    </Grid>
+                                                    <ItemsControl Margin="0,10,0,0" ItemsSource="{Binding Drivers}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <Border Margin="0,3,0,0" Padding="9,7" Background="#6FFFFFFF" BorderBrush="#42D5E8F7" BorderThickness="1" CornerRadius="8">
+                                                                    <Grid>
+                                                                        <Grid.ColumnDefinitions><ColumnDefinition Width="2.2*" /><ColumnDefinition Width="1.3*" /><ColumnDefinition Width="1*" /><ColumnDefinition Width="112" /><ColumnDefinition Width="100" /></Grid.ColumnDefinitions>
+                                                                        <StackPanel><TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#45627E" Text="{Binding DeviceName}" TextTrimming="CharacterEllipsis" ToolTip="{Binding DeviceName}" /><TextBlock Margin="0,2,0,0" FontSize="10" Foreground="#7890A6" Text="{Binding Signer}" TextTrimming="CharacterEllipsis" /></StackPanel>
+                                                                        <StackPanel Grid.Column="1"><TextBlock FontSize="11" Foreground="#567EA9" Text="{Binding Provider}" TextTrimming="CharacterEllipsis" /><TextBlock Margin="0,2,0,0" FontSize="10" Foreground="#7890A6" Text="{Binding InfText}" TextTrimming="CharacterEllipsis" /></StackPanel>
+                                                                        <TextBlock Grid.Column="2" VerticalAlignment="Center" FontSize="11" Foreground="#567EA9" Text="{Binding Version}" TextTrimming="CharacterEllipsis" />
+                                                                        <TextBlock Grid.Column="3" VerticalAlignment="Center" FontSize="11" Foreground="#617D98" Text="{Binding DriverDateText}" />
+                                                                        <Border Grid.Column="4" Padding="8,5" HorizontalAlignment="Right" VerticalAlignment="Center" Background="#6FFFFFFF" BorderBrush="{Binding StatusAccent}" BorderThickness="1" CornerRadius="9"><TextBlock FontSize="10" FontWeight="SemiBold" Foreground="{Binding StatusAccent}" Text="{Binding StatusText}" /></Border>
+                                                                    </Grid>
+                                                                </Border>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <StackPanel x:Name="DriverPageEmptyState" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed">
+                                    <TextBlock HorizontalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="30" Foreground="#7690AA" Text="&#xE9D2;" />
+                                    <TextBlock Margin="0,8,0,0" HorizontalAlignment="Center" FontSize="13" FontWeight="SemiBold" Foreground="#45627E" Text="没有匹配的驱动信息" />
+                                    <TextBlock Margin="0,4,0,0" HorizontalAlignment="Center" FontSize="11" Foreground="#728195" Text="请调整筛选条件，或点击刷新驱动重新读取。" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </Grid>
                 </Border>
             </Grid>
             <Grid x:Name="StoragePanel" Visibility="Collapsed">
