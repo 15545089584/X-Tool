@@ -248,7 +248,7 @@
                             </Grid>
                             <Border x:Name="DiskHistoryPanel" Padding="14" Background="#54FFFFFF" BorderBrush="#8ED6E9F8" BorderThickness="1" CornerRadius="13">
                                 <Grid>
-                                    <Canvas x:Name="DiskHistoryCanvas" Height="300" ClipToBounds="True" Background="#26FFFFFF" SizeChanged="DiskHistoryCanvas_SizeChanged" />
+                                    <Canvas x:Name="DiskHistoryCanvas" Height="300" ClipToBounds="True" Background="#26FFFFFF" SizeChanged="DiskHistoryCanvas_SizeChanged" MouseMove="DiskHistoryCanvas_MouseMove" MouseLeave="DiskHistoryCanvas_MouseLeave" />
                                 </Grid>
                             </Border>
                             <TextBlock x:Name="DiskHistorySummaryText" Margin="2,8,2,0" FontSize="11" Foreground="#637E9B" TextWrapping="Wrap" Text="X-Tool 运行期间每天自动记录容量快照；程序未运行的日期无法补采。" />

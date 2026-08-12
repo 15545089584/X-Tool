@@ -55,6 +55,20 @@ public partial class SystemToolsView : UserControl
     private bool _isRefreshingStorage;
     private bool _isCapturingDiskHistory;
     private bool _isStorageSectionActive;
+    private int _diskHistoryHoverSegment = -1;
+    private int _diskHistoryHoverVersion;
+    private IReadOnlyList<Point> _diskHistoryChartPoints = Array.Empty<Point>();
+    private double _diskHistoryChartLeft;
+    private double _diskHistoryChartRight;
+    private double _diskHistoryChartTop;
+    private double _diskHistoryChartBottom;
+    private double _diskHistoryChartAxisMin;
+    private double _diskHistoryChartAxisMax;
+    private IReadOnlyList<DiskFileChange> _diskHistoryHoverChanges = Array.Empty<DiskFileChange>();
+    private Border? _diskHistoryHoverCard;
+    private TextBlock? _diskHistoryHoverText;
+    private WpfShapes.Line? _diskHistoryHoverGuide;
+    private WpfShapes.Line? _diskHistoryHoverHorizontalGuide;
     private bool _processesAscending = true;
     private bool _servicesAscending = true;
     private string _processSortKey = "Name";
@@ -252,6 +266,7 @@ public partial class SystemToolsView : UserControl
         }
 
         _diskHistoryAutoCaptureTimer.Start();
+        DiskHistoryStore.StartFileChangeTracking();
         _ = CaptureTodayDiskHistoryAsync();
     }
 
@@ -455,10 +470,236 @@ public partial class SystemToolsView : UserControl
         }
     }
 
+    private async void DiskHistoryCanvas_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (_diskHistoryChartPoints.Count == 0 || _diskHistoryChartRight <= _diskHistoryChartLeft)
+        {
+            HideDiskHistoryHoverCard();
+            return;
+        }
+
+        var position = e.GetPosition(DiskHistoryCanvas);
+        if (position.X < _diskHistoryChartLeft || position.X > _diskHistoryChartRight
+            || position.Y < _diskHistoryChartTop || position.Y > _diskHistoryChartBottom)
+        {
+            HideDiskHistoryHoverCard();
+            return;
+        }
+
+        var segment = _diskHistoryChartPoints.Count == 1
+            ? 0
+            : Math.Clamp(
+                (int)Math.Floor((position.X - _diskHistoryChartLeft)
+                    / ((_diskHistoryChartRight - _diskHistoryChartLeft) / (_diskHistoryChartPoints.Count - 1))),
+                0,
+                _diskHistoryChartPoints.Count - 2);
+        var valueRatio = Math.Clamp(
+            (position.Y - _diskHistoryChartTop) / (_diskHistoryChartBottom - _diskHistoryChartTop),
+            0,
+            1);
+        var hoveredBytes = _diskHistoryChartAxisMax
+            - (_diskHistoryChartAxisMax - _diskHistoryChartAxisMin) * valueRatio;
+        var segmentChanged = _diskHistoryHoverSegment != segment;
+        var version = segmentChanged ? ++_diskHistoryHoverVersion : _diskHistoryHoverVersion;
+        if (segmentChanged)
+        {
+            _diskHistoryHoverSegment = segment;
+            _diskHistoryHoverChanges = Array.Empty<DiskFileChange>();
+        }
+
+        EnsureDiskHistoryHoverCard();
+        PositionDiskHistoryHoverCard(position);
+        UpdateDiskHistoryHoverText(segment, hoveredBytes, segmentChanged ? "正在读取区间内的文件变化…" : null);
+
+        if (!segmentChanged || _diskHistoryChartPoints.Count < 2 || _historyVolumeId is null)
+        {
+            return;
+        }
+
+        var start = _diskHistoryPoints[segment].Date;
+        var end = _diskHistoryPoints[segment + 1].Date;
+        var changes = await DiskHistoryStore.LoadFileChangesAsync(_historyVolumeId, start, end);
+        if (version != _diskHistoryHoverVersion || _diskHistoryHoverSegment != segment)
+        {
+            return;
+        }
+
+        _diskHistoryHoverChanges = changes;
+        UpdateDiskHistoryHoverText(segment, hoveredBytes, null);
+    }
+
+    private void DiskHistoryCanvas_MouseLeave(object sender, MouseEventArgs e)
+    {
+        HideDiskHistoryHoverCard();
+    }
+
+    private void EnsureDiskHistoryHoverCard()
+    {
+        if (_diskHistoryHoverCard is not null)
+        {
+            _diskHistoryHoverCard.Visibility = Visibility.Visible;
+            return;
+        }
+
+        _diskHistoryHoverText = new TextBlock
+        {
+            FontSize = 11,
+            Foreground = new SolidColorBrush(Color.FromRgb(46, 75, 103)),
+            TextWrapping = TextWrapping.Wrap,
+            MaxWidth = 300
+        };
+        _diskHistoryHoverCard = new Border
+        {
+            Padding = new Thickness(12, 9, 12, 9),
+            MaxWidth = 326,
+            Background = new SolidColorBrush(Color.FromArgb(242, 249, 253, 255)),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(210, 142, 214, 241)),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(11),
+            Effect = new System.Windows.Media.Effects.DropShadowEffect
+            {
+                BlurRadius = 12,
+                ShadowDepth = 2,
+                Opacity = 0.16,
+                Color = Color.FromRgb(52, 87, 125)
+            },
+            IsHitTestVisible = false,
+            Child = _diskHistoryHoverText
+        };
+        _diskHistoryHoverGuide = new WpfShapes.Line
+        {
+            Y1 = _diskHistoryChartTop,
+            Y2 = _diskHistoryChartBottom,
+            Stroke = new SolidColorBrush(Color.FromArgb(130, 77, 124, 254)),
+            StrokeThickness = 1,
+            StrokeDashArray = new DoubleCollection { 3, 3 },
+            IsHitTestVisible = false
+        };
+        _diskHistoryHoverHorizontalGuide = new WpfShapes.Line
+        {
+            X1 = _diskHistoryChartLeft,
+            X2 = _diskHistoryChartRight,
+            Stroke = new SolidColorBrush(Color.FromArgb(90, 77, 124, 254)),
+            StrokeThickness = 1,
+            StrokeDashArray = new DoubleCollection { 3, 3 },
+            IsHitTestVisible = false
+        };
+        DiskHistoryCanvas.Children.Add(_diskHistoryHoverHorizontalGuide);
+        DiskHistoryCanvas.Children.Add(_diskHistoryHoverGuide);
+        DiskHistoryCanvas.Children.Add(_diskHistoryHoverCard);
+    }
+
+    private void PositionDiskHistoryHoverCard(Point position)
+    {
+        if (_diskHistoryHoverCard is null)
+        {
+            return;
+        }
+
+        _diskHistoryHoverCard.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var cardWidth = _diskHistoryHoverCard.DesiredSize.Width;
+        var cardHeight = _diskHistoryHoverCard.DesiredSize.Height;
+        var left = position.X + 16;
+        var top = position.Y - cardHeight - 14;
+        if (left + cardWidth > DiskHistoryCanvas.ActualWidth - 6)
+        {
+            left = position.X - cardWidth - 16;
+        }
+        if (top < 5)
+        {
+            top = position.Y + 16;
+        }
+        Canvas.SetLeft(_diskHistoryHoverCard, Math.Max(5, left));
+        Canvas.SetTop(_diskHistoryHoverCard, Math.Max(5, top));
+        if (_diskHistoryHoverGuide is not null)
+        {
+            _diskHistoryHoverGuide.X1 = position.X;
+            _diskHistoryHoverGuide.X2 = position.X;
+            _diskHistoryHoverGuide.Y1 = _diskHistoryChartTop;
+            _diskHistoryHoverGuide.Y2 = _diskHistoryChartBottom;
+        }
+        if (_diskHistoryHoverHorizontalGuide is not null)
+        {
+            _diskHistoryHoverHorizontalGuide.X1 = _diskHistoryChartLeft;
+            _diskHistoryHoverHorizontalGuide.X2 = _diskHistoryChartRight;
+            _diskHistoryHoverHorizontalGuide.Y1 = position.Y;
+            _diskHistoryHoverHorizontalGuide.Y2 = position.Y;
+        }
+    }
+
+    private void UpdateDiskHistoryHoverText(int segment, double hoveredBytes, string? loadingText)
+    {
+        if (_diskHistoryHoverText is null || _diskHistoryPoints.Count == 0)
+        {
+            return;
+        }
+
+        var start = _diskHistoryPoints[Math.Min(segment, _diskHistoryPoints.Count - 1)];
+        var end = _diskHistoryPoints[Math.Min(segment + 1, _diskHistoryPoints.Count - 1)];
+        var delta = end.UsedBytes - start.UsedBytes;
+        var sign = delta >= 0 ? "+" : "−";
+        var lines = new List<string>
+        {
+            $"指向约 {FormatCapacityPrecise(Math.Max(0, hoveredBytes))}",
+            _diskHistoryPoints.Count < 2
+                ? $"记录时间 {start.Date:yyyy-MM-dd HH:mm}"
+                : $"区间 {start.Date:MM-dd HH:mm} → {end.Date:MM-dd HH:mm}",
+            _diskHistoryPoints.Count < 2
+                ? $"已用 {FormatCapacity(start.UsedBytes)}"
+                : $"已用 {FormatCapacity(start.UsedBytes)} → {FormatCapacity(end.UsedBytes)}（{sign}{FormatCapacity(Math.Abs(delta))}）"
+        };
+
+        if (loadingText is not null)
+        {
+            lines.Add(loadingText);
+        }
+        else if (_diskHistoryHoverChanges.Count == 0)
+        {
+            lines.Add("该区间暂无已捕获的文件变化");
+            lines.Add("文件明细从新版启动后开始记录");
+        }
+        else
+        {
+            lines.Add($"捕获到 {_diskHistoryHoverChanges.Count} 个文件变化：");
+            foreach (var change in _diskHistoryHoverChanges.Take(6))
+            {
+                var path = change.Path.Length > 58 ? "…" + change.Path[^57..] : change.Path;
+                lines.Add($"{change.ChangeKind} · {path}");
+            }
+        }
+
+        _diskHistoryHoverText.Text = string.Join("\n", lines);
+        _diskHistoryHoverCard?.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+    }
+
+    private void HideDiskHistoryHoverCard()
+    {
+        _diskHistoryHoverVersion++;
+        _diskHistoryHoverSegment = -1;
+        _diskHistoryHoverChanges = Array.Empty<DiskFileChange>();
+        if (_diskHistoryHoverCard is not null)
+        {
+            _diskHistoryHoverCard.Visibility = Visibility.Collapsed;
+        }
+        if (_diskHistoryHoverGuide is not null)
+        {
+            _diskHistoryHoverGuide.Visibility = Visibility.Collapsed;
+        }
+        if (_diskHistoryHoverHorizontalGuide is not null)
+        {
+            _diskHistoryHoverHorizontalGuide.Visibility = Visibility.Collapsed;
+        }
+    }
+
     /// <summary>在画布上绘制局部缩放的容量趋势，让小幅变化也能清晰呈现。</summary>
     private void DrawDiskHistoryChart()
     {
+        HideDiskHistoryHoverCard();
         DiskHistoryCanvas.Children.Clear();
+        _diskHistoryHoverCard = null;
+        _diskHistoryHoverText = null;
+        _diskHistoryHoverGuide = null;
+        _diskHistoryHoverHorizontalGuide = null;
         var width = Math.Max(DiskHistoryCanvas.ActualWidth, 320);
         var height = Math.Max(DiskHistoryCanvas.ActualHeight, 300);
         var left = 16.0;
@@ -471,6 +712,7 @@ public partial class SystemToolsView : UserControl
         var points = _diskHistoryPoints;
         if (points.Count == 0)
         {
+            _diskHistoryChartPoints = Array.Empty<Point>();
             var empty = new TextBlock
             {
                 Text = "暂无用量记录",
@@ -501,6 +743,12 @@ public partial class SystemToolsView : UserControl
         }
 
         var axisRange = axisMax - axisMin;
+        _diskHistoryChartLeft = left;
+        _diskHistoryChartRight = right;
+        _diskHistoryChartTop = top;
+        _diskHistoryChartBottom = bottom;
+        _diskHistoryChartAxisMin = axisMin;
+        _diskHistoryChartAxisMax = axisMax;
 
         AddAxisLabel(left, 8, "已用容量趋势 · 局部缩放");
         AddAxisLabel(Math.Max(left + 150, right - 128), 8, $"总容量 {FormatCapacity(maxTotal)}");
@@ -517,6 +765,7 @@ public partial class SystemToolsView : UserControl
             areaPolygon.Add(new Point(x, y));
         }
         areaPolygon.Add(new Point(right, bottom));
+        _diskHistoryChartPoints = usedPolyline.ToArray();
         DiskHistoryCanvas.Children.Add(new WpfShapes.Polygon
         {
             Points = areaPolygon,
@@ -651,6 +900,17 @@ public partial class SystemToolsView : UserControl
         });
         Canvas.SetLeft(DiskHistoryCanvas.Children[^1], x);
         Canvas.SetTop(DiskHistoryCanvas.Children[^1], y);
+    }
+
+    private static string FormatCapacityPrecise(double bytes)
+    {
+        const double gigabyte = 1024d * 1024 * 1024;
+        if (bytes >= gigabyte)
+        {
+            return $"{bytes / gigabyte:0.00} GB";
+        }
+
+        return $"{bytes / 1024d / 1024:0.00} MB";
     }
 
     /// <summary>按需读取可靠性记录，并用分段事件日志补充诊断细节；全过程只读。</summary>
