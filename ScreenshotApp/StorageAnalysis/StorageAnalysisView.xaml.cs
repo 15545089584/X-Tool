@@ -29,7 +29,7 @@ public partial class StorageAnalysisView : UserControl
         _target = target;
         AnalysisTitleText.Text = $"{target.Title} 空间分析";
         AnalysisVolumeSummaryText.Text = $"{target.RootPath} · {target.CapacityText}";
-        await AnalyzeAsync(target);
+        await AnalyzeAsync(target, forceRefresh: false);
     }
 
     /// <summary>切页或关闭时停止尚未完成的扫描，但保留完成的结果供返回后查看。</summary>
@@ -55,14 +55,14 @@ public partial class StorageAnalysisView : UserControl
         ScanProgressBar.IsIndeterminate = false;
         ScanProgressSummaryText.Text = "扫描已停止；再次选择本地卷可重新分析。";
         ScanCurrentPathText.Text = "不会建立后台索引或保留全量文件清单。";
-        AnalysisStatusText.Text = "不会建立后台索引；扫描时只保留一级目录汇总和 Top 100 大文件。";
+        AnalysisStatusText.Text = "自动使用本机已有 Everything 索引；不可用时回退优化原生扫描。";
         AnalysisStateBadgeText.Text = "等待分析";
         AnalysisStateBadgeText.Foreground = System.Windows.Media.Brushes.SeaGreen;
         RescanButton.IsEnabled = false;
         CancelButton.IsEnabled = false;
     }
 
-    private async Task AnalyzeAsync(StorageAnalysisTarget target)
+    private async Task AnalyzeAsync(StorageAnalysisTarget target, bool forceRefresh)
     {
         _scanCancellation?.Cancel();
         _scanCancellation = new CancellationTokenSource();
@@ -75,7 +75,7 @@ public partial class StorageAnalysisView : UserControl
         ScanProgressBar.IsIndeterminate = true;
         ScanProgressSummaryText.Text = "正在扫描…";
         ScanCurrentPathText.Text = target.RootPath;
-        AnalysisStatusText.Text = "正在读取目录与文件大小；可随时取消，不会建立后台索引。";
+        AnalysisStatusText.Text = "优先使用可用索引；否则执行优化原生扫描，可随时取消。";
         AnalysisStateBadgeText.Text = "分析中";
         AnalysisStateBadgeText.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(77, 124, 254));
         RescanButton.IsEnabled = false;
@@ -85,12 +85,13 @@ public partial class StorageAnalysisView : UserControl
         {
             ScanProgressSummaryText.Text = snapshot.SummaryText;
             ScanCurrentPathText.Text = string.IsNullOrWhiteSpace(snapshot.CurrentPath) ? "正在准备下一项…" : snapshot.CurrentPath;
+            AnalysisStateBadgeText.Text = snapshot.SourceText;
         });
 
         try
         {
             var result = await Task.Run(
-                () => StorageAnalysisService.Analyze(target, StorageAnalysisService.DefaultLargeFileLimit, progress, cancellation.Token),
+                () => StorageAnalysisService.Analyze(target, StorageAnalysisService.DefaultLargeFileLimit, progress, cancellation.Token, forceRefresh),
                 cancellation.Token);
             if (cancellation.IsCancellationRequested || !ReferenceEquals(cancellation, _scanCancellation))
             {
@@ -158,7 +159,7 @@ public partial class StorageAnalysisView : UserControl
     {
         if (!_isScanning && _target is not null)
         {
-            await AnalyzeAsync(_target);
+            await AnalyzeAsync(_target, forceRefresh: true);
         }
     }
 

@@ -12,12 +12,62 @@ using ScreenshotApp.FileWorkbench;
 using ScreenshotApp.Ocr;
 using ScreenshotApp.Translation;
 using ScreenshotApp.Converters;
+using ScreenshotApp.StorageAnalysis;
 
 const int Width = 720;
 const int FrameHeight = 520;
 const int ContentHeight = 4200;
 
 var failures = new List<string>();
+
+if (args.Length >= 1 && args[0] == "--storage-analysis")
+{
+    var root = args.Length >= 2 ? Path.GetPathRoot(args[1]) ?? args[1] : "C:\\";
+    var drive = new DriveInfo(root);
+    var target = new StorageAnalysisTarget(root, drive.VolumeLabel, drive.TotalSize, drive.AvailableFreeSpace);
+    var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+    var result = StorageAnalysisService.Analyze(target, StorageAnalysisService.DefaultLargeFileLimit,
+        progress: null, CancellationToken.None, forceRefresh: true);
+    stopwatch.Stop();
+    var usedBytes = Math.Max(1, drive.TotalSize - drive.AvailableFreeSpace);
+    Console.WriteLine($"存储分析 | 来源 {result.SourceText} | {stopwatch.Elapsed.TotalSeconds:F2} 秒 | " +
+                      $"文件 {result.FilesScanned:N0} | 目录 {result.DirectoriesScanned:N0} | " +
+                      $"逻辑大小 {result.ScannedBytes:N0} | 已用覆盖 {result.ScannedBytes / (double)usedBytes:P1} | " +
+                      $"分组 {result.DirectoryUsages.Count} | 大文件 {result.LargeFiles.Count}");
+    foreach (var usage in result.DirectoryUsages.Take(8))
+        Console.WriteLine($"  {usage.Name} | {usage.SizeText} | 文件 {usage.FilesScanned:N0} | 目录 {usage.DirectoriesScanned:N0}");
+    return result.FilesScanned > 0 && result.DirectoryUsages.Count > 0 && result.LargeFiles.Count > 0 ? 0 : 3;
+}
+
+if (args.Length >= 1 && args[0] == "--storage-analysis-native-smoke")
+{
+    var root = Path.Combine(Path.GetTempPath(), "XTool-StorageAnalysis-" + Guid.NewGuid().ToString("N"));
+    try
+    {
+        Directory.CreateDirectory(Path.Combine(root, "Alpha", "Nested"));
+        Directory.CreateDirectory(Path.Combine(root, "Beta"));
+        File.WriteAllBytes(Path.Combine(root, "Alpha", "large.bin"), new byte[8192]);
+        File.WriteAllBytes(Path.Combine(root, "Alpha", "Nested", "small.bin"), new byte[1024]);
+        File.WriteAllBytes(Path.Combine(root, "Beta", "medium.bin"), new byte[4096]);
+        File.WriteAllBytes(Path.Combine(root, "root.bin"), new byte[512]);
+        var target = new StorageAnalysisTarget(root, "原生扫描回归", 20_000, 6_176);
+        var first = StorageAnalysisService.Analyze(target, 100, null, CancellationToken.None,
+            forceRefresh: true, allowEverything: false);
+        var cached = StorageAnalysisService.Analyze(target, 100, null, CancellationToken.None,
+            forceRefresh: false, allowEverything: false);
+        var alpha = first.DirectoryUsages.Single(item => item.Name == "Alpha");
+        var passed = first.SourceText == "优化原生扫描" && first.FilesScanned == 4 &&
+                     first.ScannedBytes == 13_824 && alpha.LogicalBytes == 9_216 &&
+                     first.LargeFiles.First().Size == 8_192 && cached.IsCached;
+        Console.WriteLine($"原生存储扫描 | {(passed ? "通过" : "失败")} | 文件 {first.FilesScanned} | " +
+                          $"总量 {first.ScannedBytes} | Alpha {alpha.LogicalBytes} | 缓存 {cached.IsCached}");
+        return passed ? 0 : 4;
+    }
+    finally
+    {
+        try { Directory.Delete(root, recursive: true); } catch { }
+    }
+}
 
 if (args.Length == 4 && args[0] == "--pair")
 {

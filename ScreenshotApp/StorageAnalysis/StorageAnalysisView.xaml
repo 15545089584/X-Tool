@@ -75,8 +75,8 @@
                     <Grid.ColumnDefinitions><ColumnDefinition Width="52" /><ColumnDefinition Width="12" /><ColumnDefinition Width="*" /><ColumnDefinition Width="12" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                     <Border Width="48" Height="48" VerticalAlignment="Center" Background="#DDEBFF" BorderBrush="#8AB5D2FF" BorderThickness="1" CornerRadius="15"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="22" Foreground="#4D7CFE" Text="&#xE9F5;" /></Border>
                     <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                        <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#45627E" Text="按需本地扫描" />
-                        <TextBlock x:Name="AnalysisStatusText" Margin="0,3,0,0" FontSize="10" Foreground="#728BA3" Text="不会建立后台索引；扫描时只保留一级目录汇总和 Top 100 大文件。" TextTrimming="CharacterEllipsis" />
+                        <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#45627E" Text="智能空间分析" />
+                        <TextBlock x:Name="AnalysisStatusText" Margin="0,3,0,0" FontSize="10" Foreground="#728BA3" Text="自动使用本机已有索引加速；不可用时回退优化原生扫描。" TextTrimming="CharacterEllipsis" />
                     </StackPanel>
                     <Border Grid.Column="4" Padding="10,5" VerticalAlignment="Center" Background="#E8F8F4" BorderBrush="#89D3C0" BorderThickness="1" CornerRadius="9"><TextBlock x:Name="AnalysisStateBadgeText" FontSize="10" FontWeight="SemiBold" Foreground="#16A582" Text="等待分析" /></Border>
                 </Grid>
