@@ -165,7 +165,8 @@ internal sealed class NetworkHistoryStore : IAsyncDisposable
             command.CommandText = @"
                 SELECT process_key, MAX(process_name), MAX(process_path),
                        SUM(sent_bytes), SUM(received_bytes),
-                       SUM(proxy_exit_sent_bytes), SUM(proxy_exit_received_bytes),
+                       SUM(CASE WHEN proxy_exit_seen = 1 THEN proxy_exit_sent_bytes ELSE 0 END),
+                       SUM(CASE WHEN proxy_exit_seen = 1 THEN proxy_exit_received_bytes ELSE 0 END),
                        MAX(proxy_exit_seen), MAX(proxy_ingress_seen), MAX(last_seen)
                 FROM process_traffic_sessions
                 WHERE last_seen >= $start AND ($excludeSession = '' OR session_id <> $excludeSession)
@@ -183,6 +184,58 @@ internal sealed class NetworkHistoryStore : IAsyncDisposable
                     DateTime.Parse(reader.GetString(9), null, System.Globalization.DateTimeStyles.RoundtripKind)));
             }
             return (IReadOnlyList<NetworkProcessTrafficHistoryTotal>)result;
+        }, cancellationToken);
+    }
+
+    public async ValueTask AddProcessTrafficUsageAsync(
+        DateTime bucketTime,
+        long nonProxyBytes,
+        long proxyBytes,
+        CancellationToken cancellationToken = default)
+    {
+        if (nonProxyBytes <= 0 && proxyBytes <= 0) return;
+        var hour = new DateTime(bucketTime.Year, bucketTime.Month, bucketTime.Day, bucketTime.Hour, 0, 0, DateTimeKind.Local);
+        await EnqueueAsync(connection =>
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                INSERT INTO process_traffic_usage_buckets
+                    (bucket_time, non_proxy_bytes, proxy_bytes)
+                VALUES ($bucket, $nonProxy, $proxy)
+                ON CONFLICT(bucket_time) DO UPDATE SET
+                    non_proxy_bytes = non_proxy_bytes + excluded.non_proxy_bytes,
+                    proxy_bytes = proxy_bytes + excluded.proxy_bytes;";
+            command.Parameters.AddWithValue("$bucket", hour.ToString("O"));
+            command.Parameters.AddWithValue("$nonProxy", Math.Max(0, nonProxyBytes));
+            command.Parameters.AddWithValue("$proxy", Math.Max(0, proxyBytes));
+            command.ExecuteNonQuery();
+        }, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<NetworkProcessTrafficUsageBucket>> GetProcessTrafficUsageAsync(
+        DateTime startTime,
+        CancellationToken cancellationToken = default)
+    {
+        await _initialized.Task.WaitAsync(cancellationToken);
+        return await Task.Run(() =>
+        {
+            var result = new List<NetworkProcessTrafficUsageBucket>();
+            using var connection = OpenConnection();
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                SELECT bucket_time, non_proxy_bytes, proxy_bytes
+                FROM process_traffic_usage_buckets
+                WHERE bucket_time >= $start
+                ORDER BY bucket_time;";
+            command.Parameters.AddWithValue("$start", startTime.ToString("O"));
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                result.Add(new NetworkProcessTrafficUsageBucket(
+                    DateTime.Parse(reader.GetString(0), null, System.Globalization.DateTimeStyles.RoundtripKind),
+                    reader.GetInt64(1), reader.GetInt64(2)));
+            }
+            return (IReadOnlyList<NetworkProcessTrafficUsageBucket>)result;
         }, cancellationToken);
     }
 
@@ -286,7 +339,7 @@ internal sealed class NetworkHistoryStore : IAsyncDisposable
     public Task ClearAsync(CancellationToken cancellationToken = default) => EnqueueAsync(connection =>
     {
         using var command = connection.CreateCommand();
-        command.CommandText = "DELETE FROM traffic_samples; DELETE FROM probe_samples; DELETE FROM network_events; DELETE FROM process_traffic_sessions;";
+        command.CommandText = "DELETE FROM traffic_samples; DELETE FROM probe_samples; DELETE FROM network_events; DELETE FROM process_traffic_sessions; DELETE FROM process_traffic_usage_buckets;";
         command.ExecuteNonQuery();
     }, cancellationToken);
 
@@ -393,6 +446,11 @@ internal sealed class NetworkHistoryStore : IAsyncDisposable
                 last_seen TEXT NOT NULL,
                 PRIMARY KEY (session_id, process_key));
             CREATE INDEX IF NOT EXISTS ix_process_traffic_sessions_time ON process_traffic_sessions(last_seen);
+            CREATE TABLE IF NOT EXISTS process_traffic_usage_buckets (
+                bucket_time TEXT PRIMARY KEY,
+                non_proxy_bytes INTEGER NOT NULL,
+                proxy_bytes INTEGER NOT NULL);
+            CREATE INDEX IF NOT EXISTS ix_process_traffic_usage_time ON process_traffic_usage_buckets(bucket_time);
             CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
             INSERT OR IGNORE INTO settings (key, value) VALUES ('retention_days', '7');";
         command.ExecuteNonQuery();
@@ -406,9 +464,11 @@ internal sealed class NetworkHistoryStore : IAsyncDisposable
     private static void Prune(SqliteConnection connection, int days)
     {
         var threshold = DateTime.Now.AddDays(-days).ToString("O");
+        var usageThreshold = DateTime.Now.AddDays(-Math.Max(days, 30)).ToString("O");
         using var command = connection.CreateCommand();
-        command.CommandText = "DELETE FROM traffic_samples WHERE bucket_time < $threshold; DELETE FROM probe_samples WHERE sample_time < $threshold; DELETE FROM network_events WHERE event_time < $threshold; DELETE FROM process_traffic_sessions WHERE last_seen < $threshold;";
+        command.CommandText = "DELETE FROM traffic_samples WHERE bucket_time < $threshold; DELETE FROM probe_samples WHERE sample_time < $threshold; DELETE FROM network_events WHERE event_time < $threshold; DELETE FROM process_traffic_sessions WHERE last_seen < $threshold; DELETE FROM process_traffic_usage_buckets WHERE bucket_time < $usageThreshold;";
         command.Parameters.AddWithValue("$threshold", threshold);
+        command.Parameters.AddWithValue("$usageThreshold", usageThreshold);
         command.ExecuteNonQuery();
     }
 
@@ -477,6 +537,11 @@ internal sealed record NetworkProcessTrafficHistoryTotal(
 {
     public long TotalBytes => SentBytes + ReceivedBytes;
     public long ProxyExitTotalBytes => ProxyExitSentBytes + ProxyExitReceivedBytes;
+}
+
+internal sealed record NetworkProcessTrafficUsageBucket(DateTime BucketTime, long NonProxyBytes, long ProxyBytes)
+{
+    public long TotalBytes => NonProxyBytes + ProxyBytes;
 }
 
 public sealed record NetworkAlertSettings(double HighUploadMegabytesPerSecond, int HighLatencyMilliseconds,

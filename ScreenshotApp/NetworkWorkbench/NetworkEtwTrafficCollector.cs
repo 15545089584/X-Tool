@@ -122,8 +122,7 @@ internal sealed class NetworkEtwTrafficClient : IDisposable
     public async Task<(bool Success, string Message)> StartAsync()
     {
         if (IsRunning) return (true, "逐连接精确监测正在运行");
-        SessionId = Guid.NewGuid().ToString("N");
-        Volatile.Write(ref _firstSampleRaised, 0);
+        BeginSession();
         var pipeName = $"XTool.NetworkEtw.{Environment.ProcessId}.{Guid.NewGuid():N}";
         return await StartWithPipeAsync(pipeName, launchPersistentTask: false);
     }
@@ -131,7 +130,17 @@ internal sealed class NetworkEtwTrafficClient : IDisposable
     public async Task<(bool Success, string Message)> StartPersistentAsync()
     {
         if (IsRunning) return (true, "独立 ETW 辅助进程正在运行");
+        BeginSession();
         return await StartWithPipeAsync(NetworkEtwAutoStartService.PersistentPipeName, launchPersistentTask: true);
+    }
+
+    private void BeginSession()
+    {
+        _flows.Clear();
+        _processInfoCache.Clear();
+        _lastSampleAt = default;
+        SessionId = Guid.NewGuid().ToString("N");
+        Volatile.Write(ref _firstSampleRaised, 0);
     }
 
     public void Stop()

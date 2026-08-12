@@ -257,8 +257,8 @@
             </Grid>
 
             <ScrollViewer x:Name="TrafficStatsScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Visibility="Collapsed">
-                <Grid x:Name="TrafficStatsPanel" MinHeight="980">
-                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="14" /><RowDefinition Height="Auto" /><RowDefinition Height="14" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                <Grid x:Name="TrafficStatsPanel" MinHeight="1210">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="14" /><RowDefinition Height="Auto" /><RowDefinition Height="14" /><RowDefinition Height="Auto" /><RowDefinition Height="14" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                     <Border Padding="18" Style="{StaticResource NetworkCard}">
                         <Grid>
                             <StackPanel>
@@ -282,7 +282,51 @@
                         <Border Grid.Column="6" Padding="16" Style="{StaticResource NetworkCard}"><StackPanel><TextBlock Style="{StaticResource MetricTitle}" Text="代理出口" /><TextBlock x:Name="TrafficStatsProxyTotalText" Style="{StaticResource MetricValue}" Foreground="#8A63D8" Text="—" /><TextBlock x:Name="TrafficStatsProxyHintText" Margin="0,5,0,0" FontSize="10" Foreground="#7890A6" Text="等待应用级监控" TextTrimming="CharacterEllipsis" /></StackPanel></Border>
                     </Grid>
 
-                    <Border Grid.Row="4" Padding="18" Style="{StaticResource NetworkCard}">
+                    <Border Grid.Row="4" Padding="16" Style="{StaticResource NetworkCard}">
+                        <Grid>
+                            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="180" /><RowDefinition Height="22" /></Grid.RowDefinitions>
+                            <Grid>
+                                <StackPanel>
+                                    <TextBlock FontSize="15" FontWeight="SemiBold" Foreground="#405F7C" Text="流量用量趋势" />
+                                    <TextBlock x:Name="TrafficUsageChartSummaryText" Margin="0,3,0,0" FontSize="10" Foreground="#7890A6" Text="等待应用级流量记录" />
+                                </StackPanel>
+                                <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+                                    <Ellipse Width="8" Height="8" Margin="0,0,5,0" VerticalAlignment="Center" Fill="#4D7CFE" />
+                                    <TextBlock Margin="0,0,14,0" VerticalAlignment="Center" FontSize="10" Foreground="#607D99" Text="非代理用量" />
+                                    <Ellipse Width="8" Height="8" Margin="0,0,5,0" VerticalAlignment="Center" Fill="#8A63D8" />
+                                    <TextBlock VerticalAlignment="Center" FontSize="10" Foreground="#607D99" Text="代理出口用量" />
+                                </StackPanel>
+                            </Grid>
+                            <StackPanel Grid.Row="2" Orientation="Horizontal">
+                                <Button x:Name="TrafficUsage24HourButton" Width="82" Height="28" Style="{StaticResource NetworkPrimaryButton}" Tag="24h" Click="TrafficUsageRange_Click" Content="24 小时" FontSize="10" />
+                                <Button x:Name="TrafficUsage7DayButton" Width="72" Height="28" Margin="8,0,0,0" Style="{StaticResource NetworkButton}" Tag="7d" Click="TrafficUsageRange_Click" Content="7 天" FontSize="10" />
+                                <Button x:Name="TrafficUsage30DayButton" Width="72" Height="28" Margin="8,0,0,0" Style="{StaticResource NetworkButton}" Tag="30d" Click="TrafficUsageRange_Click" Content="30 天" FontSize="10" />
+                            </StackPanel>
+                            <Grid Grid.Row="4">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="54" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <Canvas x:Name="TrafficUsageAxisCanvas" ClipToBounds="False">
+                                    <TextBlock x:Name="TrafficUsageAxisMaxText" Canvas.Right="0" FontSize="9" Foreground="#7890A6" Text="0 B" />
+                                    <TextBlock x:Name="TrafficUsageAxisMidText" Canvas.Right="0" FontSize="9" Foreground="#7890A6" Text="0 B" />
+                                    <TextBlock x:Name="TrafficUsageAxisMinText" Canvas.Right="0" FontSize="9" Foreground="#7890A6" Text="0 B" />
+                                </Canvas>
+                                <Grid Grid.Column="1" Margin="4,0,0,0">
+                                    <Canvas x:Name="TrafficUsageGridCanvas" ClipToBounds="True" IsHitTestVisible="False" />
+                                    <Canvas x:Name="TrafficUsageCanvas" Panel.ZIndex="2" ClipToBounds="True" Background="Transparent" MouseMove="TrafficUsageCanvas_MouseMove" MouseLeave="TrafficUsageCanvas_MouseLeave" />
+                                    <Border x:Name="TrafficUsageTooltip" Panel.ZIndex="4" MaxWidth="210" Padding="10,7" HorizontalAlignment="Left" VerticalAlignment="Top" Background="#F2FFFFFF" BorderBrush="#7AAED3EC" BorderThickness="1" CornerRadius="9" IsHitTestVisible="False" Visibility="Collapsed">
+                                        <TextBlock x:Name="TrafficUsageTooltipText" FontSize="10" Foreground="#405F7C" TextWrapping="Wrap" />
+                                    </Border>
+                                    <TextBlock x:Name="TrafficUsageEmptyText" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="11" Foreground="#7890A6" Text="授权并产生应用级流量后，这里会记录代理与非代理用量" TextAlignment="Center" TextWrapping="Wrap" />
+                                </Grid>
+                            </Grid>
+                            <Grid Grid.Row="5" Margin="58,2,0,0">
+                                <TextBlock x:Name="TrafficUsageAxisStartText" HorizontalAlignment="Left" FontSize="9" Foreground="#7890A6" Text="—" />
+                                <TextBlock x:Name="TrafficUsageAxisCenterText" HorizontalAlignment="Center" FontSize="9" Foreground="#7890A6" Text="—" />
+                                <TextBlock x:Name="TrafficUsageAxisEndText" HorizontalAlignment="Right" FontSize="9" Foreground="#7890A6" Text="—" />
+                            </Grid>
+                        </Grid>
+                    </Border>
+
+                    <Border Grid.Row="6" Padding="18" Style="{StaticResource NetworkCard}">
                         <Grid>
                             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                             <Grid>
