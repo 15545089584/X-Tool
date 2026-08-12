@@ -103,6 +103,89 @@ internal sealed class NetworkHistoryStore : IAsyncDisposable
         });
     }
 
+    public async ValueTask UpsertProcessTrafficAsync(
+        string sessionId,
+        IReadOnlyList<NetworkProcessTrafficHistoryPoint> points,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId) || points.Count == 0) return;
+        await EnqueueAsync(connection =>
+        {
+            using var transaction = connection.BeginTransaction();
+            using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = @"
+                INSERT INTO process_traffic_sessions
+                    (session_id, process_key, process_name, process_path, sent_bytes, received_bytes,
+                     proxy_exit_sent_bytes, proxy_exit_received_bytes, proxy_exit_seen, proxy_ingress_seen, last_seen)
+                VALUES
+                    ($session, $key, $name, $path, $sent, $received, $proxySent, $proxyReceived,
+                     $proxyExitSeen, $proxyIngressSeen, $lastSeen)
+                ON CONFLICT(session_id, process_key) DO UPDATE SET
+                    process_name = excluded.process_name,
+                    process_path = excluded.process_path,
+                    sent_bytes = excluded.sent_bytes,
+                    received_bytes = excluded.received_bytes,
+                    proxy_exit_sent_bytes = excluded.proxy_exit_sent_bytes,
+                    proxy_exit_received_bytes = excluded.proxy_exit_received_bytes,
+                    proxy_exit_seen = excluded.proxy_exit_seen,
+                    proxy_ingress_seen = excluded.proxy_ingress_seen,
+                    last_seen = excluded.last_seen;";
+            foreach (var point in points)
+            {
+                command.Parameters.Clear();
+                command.Parameters.AddWithValue("$session", sessionId);
+                command.Parameters.AddWithValue("$key", point.ProcessKey);
+                command.Parameters.AddWithValue("$name", point.ProcessName);
+                command.Parameters.AddWithValue("$path", point.ProcessPath);
+                command.Parameters.AddWithValue("$sent", point.SentBytes);
+                command.Parameters.AddWithValue("$received", point.ReceivedBytes);
+                command.Parameters.AddWithValue("$proxySent", point.ProxyExitSentBytes);
+                command.Parameters.AddWithValue("$proxyReceived", point.ProxyExitReceivedBytes);
+                command.Parameters.AddWithValue("$proxyExitSeen", point.ProxyRole == "Exit" ? 1 : 0);
+                command.Parameters.AddWithValue("$proxyIngressSeen", point.ProxyRole == "Ingress" ? 1 : 0);
+                command.Parameters.AddWithValue("$lastSeen", point.LastSeen.ToString("O"));
+                command.ExecuteNonQuery();
+            }
+            transaction.Commit();
+        }, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<NetworkProcessTrafficHistoryTotal>> GetProcessTrafficTotalsAsync(
+        TimeSpan range,
+        string excludeSessionId = "",
+        CancellationToken cancellationToken = default)
+    {
+        await _initialized.Task.WaitAsync(cancellationToken);
+        return await Task.Run(() =>
+        {
+            var result = new List<NetworkProcessTrafficHistoryTotal>();
+            using var connection = OpenConnection();
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                SELECT process_key, MAX(process_name), MAX(process_path),
+                       SUM(sent_bytes), SUM(received_bytes),
+                       SUM(proxy_exit_sent_bytes), SUM(proxy_exit_received_bytes),
+                       MAX(proxy_exit_seen), MAX(proxy_ingress_seen), MAX(last_seen)
+                FROM process_traffic_sessions
+                WHERE last_seen >= $start AND ($excludeSession = '' OR session_id <> $excludeSession)
+                GROUP BY process_key
+                ORDER BY SUM(sent_bytes + received_bytes) DESC;";
+            command.Parameters.AddWithValue("$start", DateTime.Now.Subtract(range).ToString("O"));
+            command.Parameters.AddWithValue("$excludeSession", excludeSessionId ?? string.Empty);
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                result.Add(new NetworkProcessTrafficHistoryTotal(
+                    reader.GetString(0), reader.GetString(1), reader.GetString(2),
+                    reader.GetInt64(3), reader.GetInt64(4), reader.GetInt64(5), reader.GetInt64(6),
+                    reader.GetInt32(7) != 0, reader.GetInt32(8) != 0,
+                    DateTime.Parse(reader.GetString(9), null, System.Globalization.DateTimeStyles.RoundtripKind)));
+            }
+            return (IReadOnlyList<NetworkProcessTrafficHistoryTotal>)result;
+        }, cancellationToken);
+    }
+
     public async Task<IReadOnlyList<NetworkTrafficHistoryPoint>> GetTrafficAsync(TimeSpan range, CancellationToken cancellationToken = default)
     {
         await _initialized.Task.WaitAsync(cancellationToken);
@@ -203,7 +286,7 @@ internal sealed class NetworkHistoryStore : IAsyncDisposable
     public Task ClearAsync(CancellationToken cancellationToken = default) => EnqueueAsync(connection =>
     {
         using var command = connection.CreateCommand();
-        command.CommandText = "DELETE FROM traffic_samples; DELETE FROM probe_samples; DELETE FROM network_events;";
+        command.CommandText = "DELETE FROM traffic_samples; DELETE FROM probe_samples; DELETE FROM network_events; DELETE FROM process_traffic_sessions;";
         command.ExecuteNonQuery();
     }, cancellationToken);
 
@@ -296,6 +379,20 @@ internal sealed class NetworkHistoryStore : IAsyncDisposable
                 adapter_id TEXT NOT NULL,
                 adapter_name TEXT NOT NULL);
             CREATE INDEX IF NOT EXISTS ix_network_events_time ON network_events(event_time DESC);
+            CREATE TABLE IF NOT EXISTS process_traffic_sessions (
+                session_id TEXT NOT NULL,
+                process_key TEXT NOT NULL,
+                process_name TEXT NOT NULL,
+                process_path TEXT NOT NULL,
+                sent_bytes INTEGER NOT NULL,
+                received_bytes INTEGER NOT NULL,
+                proxy_exit_sent_bytes INTEGER NOT NULL,
+                proxy_exit_received_bytes INTEGER NOT NULL,
+                proxy_exit_seen INTEGER NOT NULL,
+                proxy_ingress_seen INTEGER NOT NULL,
+                last_seen TEXT NOT NULL,
+                PRIMARY KEY (session_id, process_key));
+            CREATE INDEX IF NOT EXISTS ix_process_traffic_sessions_time ON process_traffic_sessions(last_seen);
             CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
             INSERT OR IGNORE INTO settings (key, value) VALUES ('retention_days', '7');";
         command.ExecuteNonQuery();
@@ -310,7 +407,7 @@ internal sealed class NetworkHistoryStore : IAsyncDisposable
     {
         var threshold = DateTime.Now.AddDays(-days).ToString("O");
         using var command = connection.CreateCommand();
-        command.CommandText = "DELETE FROM traffic_samples WHERE bucket_time < $threshold; DELETE FROM probe_samples WHERE sample_time < $threshold; DELETE FROM network_events WHERE event_time < $threshold;";
+        command.CommandText = "DELETE FROM traffic_samples WHERE bucket_time < $threshold; DELETE FROM probe_samples WHERE sample_time < $threshold; DELETE FROM network_events WHERE event_time < $threshold; DELETE FROM process_traffic_sessions WHERE last_seen < $threshold;";
         command.Parameters.AddWithValue("$threshold", threshold);
         command.ExecuteNonQuery();
     }
@@ -354,6 +451,33 @@ internal sealed record NetworkTimelineEvent(
 
 internal sealed record NetworkProbeHistoryPoint(DateTime Time, string AdapterId, bool GatewaySucceeded, bool DnsSucceeded,
     bool HttpSucceeded, long GatewayLatencyMs, long DnsLatencyMs, long HttpLatencyMs);
+
+internal sealed record NetworkProcessTrafficHistoryPoint(
+    string ProcessKey,
+    string ProcessName,
+    string ProcessPath,
+    long SentBytes,
+    long ReceivedBytes,
+    long ProxyExitSentBytes,
+    long ProxyExitReceivedBytes,
+    string ProxyRole,
+    DateTime LastSeen);
+
+internal sealed record NetworkProcessTrafficHistoryTotal(
+    string ProcessKey,
+    string ProcessName,
+    string ProcessPath,
+    long SentBytes,
+    long ReceivedBytes,
+    long ProxyExitSentBytes,
+    long ProxyExitReceivedBytes,
+    bool ProxyExitSeen,
+    bool ProxyIngressSeen,
+    DateTime LastSeen)
+{
+    public long TotalBytes => SentBytes + ReceivedBytes;
+    public long ProxyExitTotalBytes => ProxyExitSentBytes + ProxyExitReceivedBytes;
+}
 
 public sealed record NetworkAlertSettings(double HighUploadMegabytesPerSecond, int HighLatencyMilliseconds,
     double DailyBudgetGigabytes, int QuietStartHour, int QuietEndHour)

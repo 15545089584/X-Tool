@@ -1,4 +1,5 @@
 using ScreenshotApp.SystemTools;
+using ScreenshotApp.Settings;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Net;
@@ -53,6 +54,12 @@ public partial class NetworkWorkbenchView : UserControl
     private string _trafficStatsMode = "Global";
     private int _trafficStatsRefreshBusy;
     private int _trafficStatsRefreshTick;
+    private DateTime _trafficStatsFastRefreshUntil = DateTime.MinValue;
+    private bool _trafficStatsLoading;
+    private readonly Dictionary<string, NetworkProcessTrafficHistoryTotal> _trafficHistoricalTotals = new(StringComparer.OrdinalIgnoreCase);
+    private string _trafficHistorySessionId = string.Empty;
+    private bool _trafficHistoryLoaded;
+    private int _trafficHistoryRetentionDays = 7;
 
     public NetworkWorkbenchView()
     {
@@ -68,6 +75,7 @@ public partial class NetworkWorkbenchView : UserControl
         _monitorCoordinator.SampleAvailable += MonitorCoordinator_SampleAvailable;
         _monitorCoordinator.TimelineEventAvailable += MonitorCoordinator_TimelineEventAvailable;
         _monitorCoordinator.MonitorFailed += MonitorCoordinator_MonitorFailed;
+        _trafficClient.FirstSampleAvailable += TrafficClient_FirstSampleAvailable;
         TrafficCanvas.SizeChanged += (_, _) => UpdateTrafficChart();
         WifiChannelDistributionCanvas.SizeChanged += (_, _) => UpdateWifiChannelDistribution();
         Loaded += NetworkWorkbenchView_Loaded;
@@ -88,6 +96,27 @@ public partial class NetworkWorkbenchView : UserControl
         await _monitorCoordinator.StopAsync();
         _deepNetworkCancellation?.Cancel();
     }
+
+    public async Task StartPersistentTrafficAsync(bool silent = false)
+    {
+        if (_trafficClient.IsRunning) return;
+        if (!silent) SetTrafficStatsLoading(true, "正在连接独立 ETW 辅助进程…");
+        var result = await _trafficClient.StartPersistentAsync();
+        if (!result.Success)
+        {
+            if (!silent) SetTrafficStatsLoading(false, result.Message);
+            return;
+        }
+
+        _trafficStatsFastRefreshUntil = DateTime.Now.AddSeconds(8);
+        if (IsVisible)
+        {
+            TrafficStatsMonitorStatusText.Text = "独立 ETW 已启动，等待首批网络事件…";
+            await RefreshTrafficStatsAsync();
+        }
+    }
+
+    public void StopTrafficMonitoring() => _trafficClient.Stop();
 
     private async void NetworkWorkbenchView_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
@@ -225,7 +254,9 @@ public partial class NetworkWorkbenchView : UserControl
             AddHistory(_downloadHistory, download);
             AddHistory(_uploadHistory, upload);
             if (_trafficRange == "Realtime" && _activeTab == "Overview") UpdateTrafficChart();
-            if (_activeTab == "TrafficStats" && ++_trafficStatsRefreshTick % 3 == 0) _ = RefreshTrafficStatsAsync();
+            if (_activeTab == "TrafficStats" &&
+                (DateTime.Now < _trafficStatsFastRefreshUntil || ++_trafficStatsRefreshTick % 3 == 0))
+                _ = RefreshTrafficStatsAsync();
             _previousOverview = snapshot;
         }
         catch (Exception exception)
@@ -635,39 +666,65 @@ public partial class NetworkWorkbenchView : UserControl
         if (!IsVisible || Interlocked.Exchange(ref _trafficStatsRefreshBusy, 1) != 0) return;
         try
         {
+            await EnsureTrafficProcessHistoryAsync();
             TrafficStatsMonitorStatusText.Text = _trafficClient.IsRunning
                 ? "ETW 应用级监控中"
                 : _trafficClient.StatusText;
             TrafficEnableExactButton.IsEnabled = !_trafficClient.IsRunning;
             if (!_trafficClient.IsRunning)
             {
-                _trafficProcesses.Clear();
-                TrafficStatsProcessTotalText.Text = "—";
-                TrafficStatsProxyTotalText.Text = "—";
-                TrafficStatsProxyHintText.Text = "启用应用级监控后可统计";
-                TrafficStatsProxySummaryText.Text = "代理判定：尚未启用应用级监控";
-                TrafficStatsDetailText.Text = "全局实时数据仍来自网卡计数器；点击“启用应用级监控”后，才会显示按进程的收发字节。";
-                TrafficStatsEmptyText.Visibility = Visibility.Visible;
+                _trafficStatsLoading = false;
+                TrafficStatsLoadingBar.Visibility = Visibility.Collapsed;
+                var savedRows = BuildTrafficProcessRows(Array.Empty<NetworkTrafficProcessMeasurement>(), _proxySnapshot, out _);
+                ApplyTrafficProcessRows(savedRows);
+                TrafficStatsProcessTotalText.Text = FormatBytes(_trafficHistoricalTotals.Values.Sum(item => item.TotalBytes));
+                TrafficStatsProxyTotalText.Text = FormatBytes(_trafficHistoricalTotals.Values.Sum(item => item.ProxyExitTotalBytes));
+                var savedProxyRows = _trafficHistoricalTotals.Values.Count(item => item.ProxyExitSeen || item.ProxyIngressSeen);
+                TrafficStatsProxyHintText.Text = savedProxyRows == 0 ? "暂无已保存的代理记录" : $"已保存 {savedProxyRows} 个代理相关进程";
+                TrafficStatsProxySummaryText.Text = savedProxyRows == 0
+                    ? "代理判定：暂无已保存的本地代理记录"
+                    : $"代理判定：已保存 {savedProxyRows} 个进程 · 数据保留 {_trafficHistoryRetentionDays} 天";
+                TrafficStatsDetailText.Text = "当前未启用应用级监控；下方显示网络历史库中已保存的进程累计，速率将在授权后恢复实时采集。";
+                TrafficStatsRowsSummaryText.Text = $"{savedRows.Count} 项 · 已保存 {_trafficHistoryRetentionDays} 天";
+                TrafficStatsEmptyText.Text = "尚未保存应用级流量数据\n全局网卡速率仍会正常显示；点击上方按钮并完成 UAC 授权后开始新的实时采集。";
+                TrafficStatsEmptyText.Visibility = savedRows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
                 return;
             }
 
             var proxySnapshot = _proxySnapshot;
             var measurements = await Task.Run(() => _trafficClient.GetProcessMeasurements());
-            var rows = await Task.Run(() => BuildTrafficProcessRows(measurements, proxySnapshot));
-            _trafficProcesses.Clear();
-            foreach (var row in rows) _trafficProcesses.Add(row);
-            var processTotal = measurements.Sum(item => item.TotalBytes);
-            var proxyTotal = rows.Where(item => item.ProxyRole == ProxyTrafficRole.Exit).Sum(item => item.TotalBytes);
+            var rows = await Task.Run(() => BuildTrafficProcessRows(measurements, proxySnapshot, out _).ToArray());
+            var livePoints = BuildTrafficProcessHistoryPoints(measurements, proxySnapshot);
+            ApplyTrafficProcessRows(rows);
+            if (measurements.Count > 0)
+            {
+                _trafficStatsLoading = false;
+                TrafficStatsLoadingBar.Visibility = Visibility.Collapsed;
+                TrafficStatsMonitorStatusText.Text = "ETW 应用级监控中";
+            }
+            else if (_trafficStatsLoading && DateTime.Now >= _trafficStatsFastRefreshUntil)
+            {
+                _trafficStatsLoading = false;
+                TrafficStatsLoadingBar.Visibility = Visibility.Collapsed;
+                TrafficStatsMonitorStatusText.Text = "ETW 已启动，等待应用产生网络流量";
+            }
+            // 首先把内存中的统计显示出来，历史库写入放到后台，不阻塞首屏列表。
+            _ = PersistProcessTrafficAsync(_trafficClient.SessionId, livePoints);
+            var processTotal = measurements.Sum(item => item.TotalBytes) + _trafficHistoricalTotals.Values.Sum(item => item.TotalBytes);
+            var proxyTotal = livePoints.Sum(item => item.ProxyExitSentBytes + item.ProxyExitReceivedBytes) +
+                             _trafficHistoricalTotals.Values.Sum(item => item.ProxyExitTotalBytes);
             var proxyRows = rows.Count(item => item.ProxyRole != ProxyTrafficRole.None);
             TrafficStatsProcessTotalText.Text = FormatBytes(processTotal);
             TrafficStatsProxyTotalText.Text = FormatBytes(proxyTotal);
-            TrafficStatsProxyHintText.Text = proxyRows == 0 ? "未识别代理出口" : $"识别 {proxyRows} 个代理相关进程";
+            var allProxyRows = proxyRows + _trafficHistoricalTotals.Values.Count(item => item.ProxyExitSeen || item.ProxyIngressSeen);
+            TrafficStatsProxyHintText.Text = allProxyRows == 0 ? "未识别代理出口" : $"识别 {allProxyRows} 个代理相关进程";
             TrafficStatsProxySummaryText.Text = proxyRows == 0
                 ? "代理判定：未发现本地代理出口"
-                : $"代理判定：{proxyRows} 个进程 · 仅出口流量计入代理总量";
-            TrafficStatsDetailText.Text = "代理出口按对外连接统计；127.0.0.1 / ::1 回环流量只用于识别代理接入，不与出口流量重复相加。";
-            TrafficStatsRowsSummaryText.Text = $"{rows.Count} 项 · {_trafficStatsMode switch { "Proxy" => "代理相关", _ => "全部进程" }}";
-            TrafficStatsEmptyText.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+                : $"代理判定：{allProxyRows} 个进程 · 仅出口流量计入代理总量";
+            TrafficStatsDetailText.Text = $"代理出口按对外连接统计；127.0.0.1 / ::1 回环流量只用于识别代理接入，不与出口流量重复相加。历史累计保留 {_trafficHistoryRetentionDays} 天。";
+            TrafficStatsRowsSummaryText.Text = $"{rows.Length} 项 · {_trafficStatsMode switch { "Proxy" => "代理相关", _ => "全部进程" }} · 含历史累计";
+            TrafficStatsEmptyText.Text = "暂未采集到应用级流量\n请产生网络活动后稍候刷新；全局网卡速率仍会持续更新。";
+            TrafficStatsEmptyText.Visibility = rows.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         }
         catch (Exception exception)
         {
@@ -680,10 +737,78 @@ public partial class NetworkWorkbenchView : UserControl
         }
     }
 
-    private IReadOnlyList<NetworkTrafficProcessRow> BuildTrafficProcessRows(
+    private async void TrafficClient_FirstSampleAvailable(object? sender, EventArgs e)
+    {
+        await Dispatcher.InvokeAsync(async () =>
+        {
+            if (_activeTab != "TrafficStats") return;
+            TrafficStatsMonitorStatusText.Text = "已收到首批网络事件，正在整理进程明细…";
+            await RefreshTrafficStatsAsync();
+        });
+    }
+
+    private async Task PersistProcessTrafficAsync(string sessionId, IReadOnlyList<NetworkProcessTrafficHistoryPoint> points)
+    {
+        try { await _historyStore.UpsertProcessTrafficAsync(sessionId, points); }
+        catch { /* 历史落盘失败不阻塞当前实时展示。 */ }
+    }
+
+    private void SetTrafficStatsLoading(bool loading, string status)
+    {
+        _trafficStatsLoading = loading;
+        TrafficStatsLoadingBar.Visibility = loading ? Visibility.Visible : Visibility.Collapsed;
+        TrafficStatsMonitorStatusText.Text = status;
+    }
+
+    private async Task EnsureTrafficProcessHistoryAsync()
+    {
+        var sessionId = _trafficClient.IsRunning ? _trafficClient.SessionId : string.Empty;
+        if (_trafficHistoryLoaded && string.Equals(_trafficHistorySessionId, sessionId, StringComparison.Ordinal)) return;
+        _trafficHistoricalTotals.Clear();
+        _trafficHistoryRetentionDays = await _monitorCoordinator.GetRetentionDaysAsync();
+        var totals = await _historyStore.GetProcessTrafficTotalsAsync(TimeSpan.FromDays(_trafficHistoryRetentionDays), sessionId);
+        foreach (var total in totals) _trafficHistoricalTotals[total.ProcessKey] = total;
+        _trafficHistorySessionId = sessionId;
+        _trafficHistoryLoaded = true;
+    }
+
+    private void ApplyTrafficProcessRows(IReadOnlyList<NetworkTrafficProcessRow> rows)
+    {
+        _trafficProcesses.Clear();
+        foreach (var row in rows) _trafficProcesses.Add(row);
+    }
+
+    private IReadOnlyList<NetworkProcessTrafficHistoryPoint> BuildTrafficProcessHistoryPoints(
         IReadOnlyList<NetworkTrafficProcessMeasurement> measurements,
         ProxySettingsSnapshot proxySnapshot)
     {
+        var configuredPorts = ParseProxyPorts(proxySnapshot.Server);
+        var points = new List<NetworkProcessTrafficHistoryPoint>();
+        foreach (var measurement in measurements)
+        {
+            var loopbackFlows = measurement.Flows.Where(flow => IsLoopbackEndpoint(flow.LocalEndpoint) || IsLoopbackEndpoint(flow.RemoteEndpoint)).ToArray();
+            var externalFlows = measurement.Flows.Where(flow => !IsLoopbackEndpoint(flow.RemoteEndpoint)).ToArray();
+            var hasConfiguredProxyPort = configuredPorts.Count > 0 && measurement.Flows.Any(flow =>
+                configuredPorts.Contains(ParseEndpointPort(flow.LocalEndpoint)) || configuredPorts.Contains(ParseEndpointPort(flow.RemoteEndpoint)));
+            var looksLikeProxyCore = externalFlows.Length > 0 && LooksLikeProxyProcess(measurement.ProcessName, measurement.ProcessPath) &&
+                (loopbackFlows.Length > 0 || hasConfiguredProxyPort);
+            var looksLikeProxyIngress = !looksLikeProxyCore && loopbackFlows.Any(flow =>
+                IsLoopbackEndpoint(flow.LocalEndpoint) || IsLoopbackEndpoint(flow.RemoteEndpoint));
+            var role = looksLikeProxyCore ? "Exit" : looksLikeProxyIngress ? "Ingress" : "None";
+            points.Add(new NetworkProcessTrafficHistoryPoint(
+                GetProcessTrafficKey(measurement.ProcessName, measurement.ProcessPath), measurement.ProcessName, measurement.ProcessPath,
+                measurement.SentBytes, measurement.ReceivedBytes,
+                externalFlows.Sum(flow => flow.SentBytes), externalFlows.Sum(flow => flow.ReceivedBytes), role, DateTime.Now));
+        }
+        return points;
+    }
+
+    private IReadOnlyList<NetworkTrafficProcessRow> BuildTrafficProcessRows(
+        IReadOnlyList<NetworkTrafficProcessMeasurement> measurements,
+        ProxySettingsSnapshot proxySnapshot,
+        out IReadOnlyList<NetworkProcessTrafficHistoryPoint> historyPoints)
+    {
+        historyPoints = BuildTrafficProcessHistoryPoints(measurements, proxySnapshot);
         var configuredPorts = ParseProxyPorts(proxySnapshot.Server);
         var rows = new List<NetworkTrafficProcessRow>();
         foreach (var measurement in measurements)
@@ -697,17 +822,44 @@ public partial class NetworkWorkbenchView : UserControl
             var looksLikeProxyIngress = !looksLikeProxyCore && loopbackFlows.Any(flow =>
                 IsLoopbackEndpoint(flow.LocalEndpoint) || IsLoopbackEndpoint(flow.RemoteEndpoint));
             var role = looksLikeProxyCore ? ProxyTrafficRole.Exit : looksLikeProxyIngress ? ProxyTrafficRole.Ingress : ProxyTrafficRole.None;
+            var processKey = GetProcessTrafficKey(measurement.ProcessName, measurement.ProcessPath);
+            _trafficHistoricalTotals.TryGetValue(processKey, out var history);
+            role = ResolveProxyRole(role, history);
             if (_trafficStatsMode == "Proxy" && role == ProxyTrafficRole.None) continue;
-            var total = measurement.TotalBytes;
             var externalSent = externalFlows.Sum(flow => flow.SentBytes);
             var externalReceived = externalFlows.Sum(flow => flow.ReceivedBytes);
-            var displaySent = _trafficStatsMode == "Proxy" && role == ProxyTrafficRole.Exit ? externalSent : measurement.SentBytes;
-            var displayReceived = _trafficStatsMode == "Proxy" && role == ProxyTrafficRole.Exit ? externalReceived : measurement.ReceivedBytes;
+            var isProxyMode = _trafficStatsMode == "Proxy";
+            var displaySent = isProxyMode && role == ProxyTrafficRole.Exit
+                ? externalSent + (history?.ProxyExitSentBytes ?? 0)
+                : measurement.SentBytes + (history?.SentBytes ?? 0);
+            var displayReceived = isProxyMode && role == ProxyTrafficRole.Exit
+                ? externalReceived + (history?.ProxyExitReceivedBytes ?? 0)
+                : measurement.ReceivedBytes + (history?.ReceivedBytes ?? 0);
             rows.Add(new NetworkTrafficProcessRow(measurement, role, displaySent, displayReceived,
-                _trafficStatsMode == "Proxy" && role == ProxyTrafficRole.Exit ? externalSent + externalReceived : total));
+                displaySent + displayReceived));
+        }
+        foreach (var history in _trafficHistoricalTotals.Values)
+        {
+            if (measurements.Any(item => string.Equals(GetProcessTrafficKey(item.ProcessName, item.ProcessPath), history.ProcessKey, StringComparison.OrdinalIgnoreCase))) continue;
+            var role = ResolveProxyRole(ProxyTrafficRole.None, history);
+            if (_trafficStatsMode == "Proxy" && role == ProxyTrafficRole.None) continue;
+            var displaySent = _trafficStatsMode == "Proxy" && role == ProxyTrafficRole.Exit ? history.ProxyExitSentBytes : history.SentBytes;
+            var displayReceived = _trafficStatsMode == "Proxy" && role == ProxyTrafficRole.Exit ? history.ProxyExitReceivedBytes : history.ReceivedBytes;
+            var measurement = new NetworkTrafficProcessMeasurement(0, 0, history.ProcessName, history.ProcessPath,
+                history.SentBytes, history.ReceivedBytes, 0, 0, Array.Empty<NetworkTrafficFlowMeasurement>());
+            rows.Add(new NetworkTrafficProcessRow(measurement, role, displaySent, displayReceived, displaySent + displayReceived, true));
         }
         return rows.OrderByDescending(item => item.TotalBytes).ToArray();
     }
+
+    private static ProxyTrafficRole ResolveProxyRole(ProxyTrafficRole currentRole, NetworkProcessTrafficHistoryTotal? history) =>
+        currentRole == ProxyTrafficRole.Exit || history?.ProxyExitSeen == true ? ProxyTrafficRole.Exit :
+        currentRole == ProxyTrafficRole.Ingress || history?.ProxyIngressSeen == true ? ProxyTrafficRole.Ingress : ProxyTrafficRole.None;
+
+    private static string GetProcessTrafficKey(string processName, string processPath) =>
+        !string.IsNullOrWhiteSpace(processPath)
+            ? System.IO.Path.GetFullPath(processPath).TrimEnd(System.IO.Path.DirectorySeparatorChar).ToLowerInvariant()
+            : $"name:{processName.Trim().ToLowerInvariant()}";
 
     private void TrafficStatsMode_Click(object sender, RoutedEventArgs e)
     {
@@ -724,10 +876,19 @@ public partial class NetworkWorkbenchView : UserControl
     private async void TrafficEnableExact_Click(object sender, RoutedEventArgs e)
     {
         TrafficEnableExactButton.IsEnabled = false;
-        TrafficStatsMonitorStatusText.Text = "正在请求管理员授权…";
+        SetTrafficStatsLoading(true, "正在请求管理员授权…");
         var result = await _trafficClient.StartAsync();
         TrafficStatsMonitorStatusText.Text = result.Message;
-        if (!result.Success) TrafficEnableExactButton.IsEnabled = true;
+        if (!result.Success)
+        {
+            SetTrafficStatsLoading(false, result.Message);
+            TrafficEnableExactButton.IsEnabled = true;
+        }
+        else
+        {
+            _trafficStatsFastRefreshUntil = DateTime.Now.AddSeconds(8);
+            TrafficStatsMonitorStatusText.Text = "ETW 已启动，等待首批网络事件…";
+        }
         await RefreshTrafficStatsAsync();
     }
 
@@ -2021,7 +2182,8 @@ public partial class NetworkWorkbenchView : UserControl
         ProxyTrafficRole ProxyRole,
         long DisplaySentBytes,
         long DisplayReceivedBytes,
-        long DisplayTotalBytes)
+        long DisplayTotalBytes,
+        bool IsHistorical = false)
     {
         public int ProcessId => Measurement.ProcessId;
         public string ProcessName => Measurement.ProcessName;
@@ -2033,13 +2195,15 @@ public partial class NetworkWorkbenchView : UserControl
         public string UploadText => FormatBytes(UploadedBytes);
         public string TotalText => FormatBytes(DisplayTotalBytes);
         public string RateText => FormatBitRate((long)Math.Max(0, Measurement.TotalBitsPerSecond));
-        public string DetailText => string.IsNullOrWhiteSpace(ProcessPath)
-            ? $"PID {ProcessId} · 路径不可读"
-            : $"PID {ProcessId} · {ProcessPath}";
+        public string DetailText => IsHistorical
+            ? "历史库累计 · 当前未运行"
+            : string.IsNullOrWhiteSpace(ProcessPath)
+                ? $"PID {ProcessId} · 路径不可读"
+                : $"PID {ProcessId} · {ProcessPath}";
         public string ProxyBadge => ProxyRole switch
         {
-            ProxyTrafficRole.Exit => "代理出口",
-            ProxyTrafficRole.Ingress => "代理接入",
+            ProxyTrafficRole.Exit => "代理出口 · 对外",
+            ProxyTrafficRole.Ingress => "代理接入 · 本地",
             _ => string.Empty
         };
         public Visibility ProxyBadgeVisibility => ProxyRole == ProxyTrafficRole.None ? Visibility.Collapsed : Visibility.Visible;

@@ -14,7 +14,7 @@
 
 > 本文档以当前代码为准。旧名称“截影 / JieYing”只可能残留在部分内部命名和本机配置目录中，不再代表当前产品定位。
 
-> **当前工作区状态（2026-08-12）**：文件工作台的 Windows Search、完整扫描、重复文件与勾选式永久删除仍处于未提交待确认状态；相关 `FileWorkbench` 文件、`ScreenshotApp.csproj` 和新增搜索/重复文件服务必须继续保留。当前工作区还保留 `Translation\TranslationEngineProvider.cs`、`VoiceInput\VoiceInputService.cs` 的既有未提交改动；保护边界仍包括 `ScreenshotApp\App.xaml.cs`，这些文件下一轮不得顺带暂存、覆盖或提交。`ClipboardDiagnostics/` 仍是禁止修改、删除或提交的本地临时目录；`ScreenshotApp/VoiceInput/Runtime/` 的 GPU 试验材料已经用户确认删除，不再存在。屏幕工具及用量历史改动已创建中文本地提交；最新网络流量统计提交为 `a590d13`。本轮新增网络工作台“流量统计”页面、ETW 按需应用采集、全局/代理模式、代理出口识别和 CSV 导出。另需说明：`System.Data.OleDb` 包引用随体积优化提交 `5fe6188` 一并进入历史，该行本属文件工作台任务，重写历史风险较大故未回退，请知悉。
+> **当前工作区状态（2026-08-12）**：文件工作台的 Windows Search、完整扫描、重复文件与勾选式永久删除仍处于未提交待确认状态；相关 `FileWorkbench` 文件、`ScreenshotApp.csproj` 和新增搜索/重复文件服务必须继续保留。当前工作区还保留 `Translation\TranslationEngineProvider.cs`、`VoiceInput\VoiceInputService.cs` 的既有未提交改动；保护边界仍包括 `ScreenshotApp\App.xaml.cs`，这些文件下一轮不得顺带暂存、覆盖或提交。`ClipboardDiagnostics/` 仍是禁止修改、删除或提交的本地临时目录；`ScreenshotApp/VoiceInput/Runtime/` 的 GPU 试验材料已经用户确认删除，不再存在。屏幕工具及用量历史改动已创建中文本地提交；最新网络流量统计提交为 `a590d13`。本轮新增网络工作台“流量统计”页面、ETW 按需应用采集、全局/代理模式、代理出口识别和 CSV 导出；后续增加了进程累计历史、授权后快速首批刷新，以及设置页一次授权注册独立高权限 ETW 计划任务的自动获取能力。另需说明：`System.Data.OleDb` 包引用随体积优化提交 `5fe6188` 一并进入历史，该行本属文件工作台任务，重写历史风险较大故未回退，请知悉。
 
 ## 一、必须遵守的开发约定
 
@@ -189,7 +189,7 @@ git log -5 --oneline
 - Wi-Fi 已作为独立页面，展示当前摘要、按信号排序的可用 Wi-Fi 列表、所选网络的可读取属性，以及全宽的 2.4 GHz/5 GHz 信道分布图。未连接网络只展示扫描可得的 SSID、BSSID、信号、协议/安全、频段与信道；IP、DNS、网关、链路速率等仅连接后可读取。信道图可切换频段，显示名称、图例和坐标，避免恢复为拥挤的星型图。
 - 网络方案支持代理、DNS、DHCP/静态 IPv4、前缀、MTU 和接口跃点快照；字段可选应用，网卡不匹配时阻止执行，应用后自动探测并可立即回滚。恢复点跨重启保留 24 小时，支持不含凭据的 UTF-8 JSON 导入导出。
 - ETW 依赖 NuGet `Microsoft.Diagnostics.Tracing.TraceEvent` 3.1.21，以兼容当前 .NET 6 目标。完整实现与验收边界见根目录 `NETWORK-WORKBENCH-PHASE3.md`。
-- “流量统计”页面复用网卡实时收发计数和 ETW 辅助采集：全局模式显示主用物理网卡速率，应用模式按进程汇总 TCP/UDP 收发字节并支持 CSV 导出；应用级监控只有用户点击后才通过一次性 UAC 启动管理员 ETW 辅助进程，不读取数据包正文。代理模式不把某个文件名写死为代理，按当前代理端口、回环接入、对外出口连接和进程路径/父客户端进行可解释判定；代理出口总量只计非回环流量，避免把“应用→本地代理”和“代理→远程节点”重复相加。代理识别结果需标注为出口/接入或未识别，不能宣称覆盖 VPN、TUN、应用内置代理等所有场景。
+- “流量统计”页面复用网卡实时收发计数和 ETW 辅助采集：全局模式显示主用物理网卡速率，应用模式按进程汇总 TCP/UDP 收发字节并支持 CSV 导出；普通模式下应用级监控由用户点击后通过一次性 UAC 启动管理员 ETW 辅助进程，不读取数据包正文。设置页另提供“网络流量自动获取”：用户明确授权后用 `schtasks.exe` 注册当前用户最高权限的独立 `XTool.NetworkEtwAgent` 计划任务，主程序仍保持 `asInvoker` 普通权限；之后 X-Tool 启动时通过任务计划拉起 ETW 代理并用固定命名管道连接，取消授权会结束并删除任务。代理任务可先于主程序启动并等待管道，不应把主程序改成长期管理员运行。代理模式不把某个文件名写死为代理，按当前代理端口、回环接入、对外出口连接和进程路径/父客户端进行可解释判定；代理出口总量只计非回环流量，避免把“应用→本地代理”和“代理→远程节点”重复相加。代理识别结果需标注为出口/接入或未识别，不能宣称覆盖 VPN、TUN、应用内置代理等所有场景。
 
 全局快捷键：
 
@@ -452,13 +452,14 @@ git log -5 --oneline
 | 网络状态与方案服务 | `ScreenshotApp\NetworkWorkbench\NetworkWorkbenchService.cs` |
 | 统一监测与历史库 | `ScreenshotApp\NetworkWorkbench\NetworkMonitorCoordinator.cs`、`NetworkHistoryStore.cs` |
 | ETW 精确流量 | `ScreenshotApp\NetworkWorkbench\NetworkEtwTrafficCollector.cs` |
+| ETW 自动授权任务 | `ScreenshotApp\NetworkWorkbench\NetworkEtwAutoStartService.cs`、`ScreenshotApp\Settings\AppPreferences.cs`、`ScreenshotApp\MainWindow.xaml(.cs)` |
 | 网络告警配置 | `ScreenshotApp\NetworkWorkbench\NetworkAlertSettingsWindow.xaml(.cs)` |
 | 网络深度诊断与 Wi-Fi | `ScreenshotApp\NetworkWorkbench\NetworkWorkbenchView.xaml(.cs)`、`NetworkDeepToolsService.cs` |
 | Win32 接口 | `ScreenshotApp\Capture\NativeMethods.cs` |
 
 ## 八、当前已知限制与建议顺序
 
-1. **网络第三阶段人工矩阵**：代码与普通权限 UI 已完成并通过 Release 启动验证；发布前仍应在真实 UAC 环境分别验证代理/DNS/网卡配置、网络方案应用失败后的回滚、局域网扫描取消，以及断网/切网/休眠恢复。新增“流量统计”仍需人工验证：未授权时全局网卡速率正常、授权取消提示正常、ETW 进程排行刷新、代理端口和回环/出口判定、`com.vortex.helper.exe` 等未签名代理核心的路径与安全提示，以及 CSV 导出。顶部旧 ETW 入口仍已移除，不得通过自动化静默接受 UAC 或擅自恢复该入口。
+1. **网络第三阶段人工矩阵**：代码与普通权限 UI 已完成并通过 Release 启动验证；发布前仍应在真实 UAC 环境分别验证代理/DNS/网卡配置、网络方案应用失败后的回滚、局域网扫描取消，以及断网/切网/休眠恢复。新增“流量统计”仍需人工验证：未授权时全局网卡速率正常、授权取消提示正常、ETW 进程排行刷新、代理端口和回环/出口判定、`com.vortex.helper.exe` 等未签名代理核心的路径与安全提示、CSV 导出，以及设置页一次授权后的任务注册、重启自动连接、取消授权和任务残留清理。顶部旧 ETW 入口仍已移除，不得通过自动化静默接受 UAC 或擅自恢复该入口。
 2. **音视频人工回归与视频页统一**：已内置 FFmpeg；发布前用短 MP3/WAV/MP4/MOV 分别验证探测、进度、取消、输出与日志。视频功能逻辑已接通，视觉控件仍可继续向最新音频页统一。
 3. **FFmpeg 源码发布材料**：GitHub Release 必须同步发布与内置二进制一致的源码、构建配置和许可证材料。
 4. **图片预览反馈增强**：预览已实时生成，但尺寸/质量变化不总是肉眼明显；可显示实际输出像素与预计大小。

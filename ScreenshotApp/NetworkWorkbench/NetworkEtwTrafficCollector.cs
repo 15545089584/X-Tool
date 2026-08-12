@@ -20,7 +20,21 @@ internal static class NetworkEtwTrafficHelper
         try
         {
             using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.Out);
-            pipe.Connect(10000);
+            var connected = false;
+            var waitDeadline = DateTime.UtcNow.AddSeconds(60);
+            // 计划任务可能在 X-Tool 主程序之前启动；持续等待主程序创建管道，
+            // 任务被结束或主程序关闭时，管道断开会让辅助进程自然退出。
+            for (var attempt = 0; !connected && DateTime.UtcNow < waitDeadline; attempt++)
+            {
+                try
+                {
+                    pipe.Connect(attempt == 0 ? 10000 : 1000);
+                    connected = true;
+                }
+                catch (TimeoutException) { }
+                catch (IOException) { }
+            }
+            if (!connected) return 3;
             using var writer = new StreamWriter(pipe, new UTF8Encoding(false)) { AutoFlush = true };
             using var session = new TraceEventSession($"XTool.Network.{Environment.ProcessId}");
             session.StopOnDispose = true;
@@ -66,7 +80,7 @@ internal static class NetworkEtwTrafficHelper
                 {
                     session.Source.StopProcessing();
                 }
-            }, null, 1000, 1000);
+            }, null, 250, 1000);
 
             session.Source.Process();
             return 0;
@@ -96,25 +110,77 @@ internal sealed class NetworkEtwTrafficClient : IDisposable
     private CancellationTokenSource? _cancellation;
     private Process? _helperProcess;
     private DateTimeOffset _lastSampleAt;
-    public bool IsRunning => _helperProcess is { HasExited: false } && _cancellation is not null;
+    private int _firstSampleRaised;
+    private bool _persistentTaskConnection;
+    private NamedPipeServerStream? _server;
+    public bool IsRunning => _cancellation is not null &&
+        (_persistentTaskConnection || _helperProcess is { HasExited: false });
     public string StatusText { get; private set; } = "精确监测未启用";
+    public string SessionId { get; private set; } = string.Empty;
+    public event EventHandler? FirstSampleAvailable;
 
     public async Task<(bool Success, string Message)> StartAsync()
     {
         if (IsRunning) return (true, "逐连接精确监测正在运行");
+        SessionId = Guid.NewGuid().ToString("N");
+        Volatile.Write(ref _firstSampleRaised, 0);
         var pipeName = $"XTool.NetworkEtw.{Environment.ProcessId}.{Guid.NewGuid():N}";
+        return await StartWithPipeAsync(pipeName, launchPersistentTask: false);
+    }
+
+    public async Task<(bool Success, string Message)> StartPersistentAsync()
+    {
+        if (IsRunning) return (true, "独立 ETW 辅助进程正在运行");
+        return await StartWithPipeAsync(NetworkEtwAutoStartService.PersistentPipeName, launchPersistentTask: true);
+    }
+
+    public void Stop()
+    {
+        _cancellation?.Cancel();
+        try { if (!_persistentTaskConnection && _helperProcess is { HasExited: false }) _helperProcess.Kill(); } catch { }
+        try { _server?.Dispose(); } catch { }
+        _helperProcess?.Dispose();
+        _cancellation?.Dispose();
+        _cancellation = null;
+        _server = null;
+        _persistentTaskConnection = false;
+        StatusText = "精确监测已停止";
+    }
+
+    private async Task<(bool Success, string Message)> StartWithPipeAsync(string pipeName, bool launchPersistentTask)
+    {
         var server = new NamedPipeServerStream(pipeName, PipeDirection.In, 1, PipeTransmissionMode.Byte,
             PipeOptions.Asynchronous);
+        _server = server;
         try
         {
-            var executable = Environment.ProcessPath ?? throw new InvalidOperationException("无法定位 X-Tool 可执行文件。");
-            _helperProcess = Process.Start(new ProcessStartInfo(executable, $"--network-etw-helper {pipeName}")
+            if (launchPersistentTask)
             {
-                UseShellExecute = true,
-                Verb = "runas",
-                WindowStyle = ProcessWindowStyle.Hidden
-            });
-            if (_helperProcess is null) return (false, "未能启动精确监测辅助进程。");
+                var taskResult = await NetworkEtwAutoStartService.RunTaskAsync();
+                if (!taskResult.Success)
+                {
+                    server.Dispose();
+                    _server = null;
+                    return taskResult;
+                }
+                _persistentTaskConnection = true;
+            }
+            else
+            {
+                var executable = Environment.ProcessPath ?? throw new InvalidOperationException("无法定位 X-Tool 可执行文件。");
+                _helperProcess = Process.Start(new ProcessStartInfo(executable, $"--network-etw-helper {pipeName}")
+                {
+                    UseShellExecute = true,
+                    Verb = "runas",
+                    WindowStyle = ProcessWindowStyle.Hidden
+                });
+                if (_helperProcess is null)
+                {
+                    server.Dispose();
+                    _server = null;
+                    return (false, "未能启动精确监测辅助进程。");
+                }
+            }
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             await server.WaitForConnectionAsync(timeout.Token);
             _cancellation = new CancellationTokenSource();
@@ -125,12 +191,17 @@ internal sealed class NetworkEtwTrafficClient : IDisposable
         catch (System.ComponentModel.Win32Exception exception) when (exception.NativeErrorCode == 1223)
         {
             server.Dispose();
+            _server = null;
+            try { if (!_persistentTaskConnection && _helperProcess is { HasExited: false }) _helperProcess.Kill(); } catch { }
             StatusText = "用户取消管理员授权";
             return (false, StatusText);
         }
         catch (Exception exception)
         {
             server.Dispose();
+            _server = null;
+            try { if (!_persistentTaskConnection && _helperProcess is { HasExited: false }) _helperProcess.Kill(); } catch { }
+            _persistentTaskConnection = false;
             StatusText = $"精确监测启动失败：{exception.Message}";
             return (false, StatusText);
         }
@@ -158,11 +229,23 @@ internal sealed class NetworkEtwTrafficClient : IDisposable
                     Interlocked.Exchange(ref total.LastReceivedBytes, sample.ReceivedBytes);
                     total.LastSampleAt = sample.CapturedAt;
                     _lastSampleAt = sample.CapturedAt;
+                    if (Interlocked.Exchange(ref _firstSampleRaised, 1) == 0) FirstSampleAvailable?.Invoke(this, EventArgs.Empty);
                 }
             }
             catch (OperationCanceledException) { }
             catch (IOException) { }
-            finally { StatusText = "精确监测已停止"; }
+            finally
+            {
+                StatusText = "精确监测已停止";
+                if (ReferenceEquals(_server, server))
+                {
+                    _server = null;
+                    _persistentTaskConnection = false;
+                    var cancellation = _cancellation;
+                    _cancellation = null;
+                    cancellation?.Dispose();
+                }
+            }
         }
     }
 
@@ -216,35 +299,44 @@ internal sealed class NetworkEtwTrafficClient : IDisposable
                     pair.Key.RemoteEndpoint, flowSent, flowReceived, flowSentRate, flowReceivedRate));
             }
 
-            var processName = $"PID {group.Key.ProcessId}";
-            var processPath = string.Empty;
-            try
-            {
-                using var process = Process.GetProcessById(group.Key.ProcessId);
-                processName = process.ProcessName;
-                processPath = process.MainModule?.FileName ?? string.Empty;
-            }
-            catch { }
+            var processInfo = ResolveProcessInfo(group.Key);
 
             result.Add(new NetworkTrafficProcessMeasurement(group.Key.ProcessId, group.Key.ProcessStartTicks,
-                processName, processPath, sent, received, sentRate * 8d, receivedRate * 8d, flows));
+                processInfo.Name, processInfo.Path, sent, received, sentRate * 8d, receivedRate * 8d, flows));
         }
         return result;
     }
 
     public void Dispose()
     {
-        _cancellation?.Cancel();
-        try { if (_helperProcess is { HasExited: false }) _helperProcess.Kill(); } catch { }
-        _helperProcess?.Dispose();
-        _cancellation?.Dispose();
-        _cancellation = null;
+        Stop();
     }
 
     private static string Normalize(string value) => value.Trim().ToLowerInvariant();
+
+    private readonly ConcurrentDictionary<ProcessIdentity, ProcessInfo> _processInfoCache = new();
+
+    private ProcessInfo ResolveProcessInfo(ProcessIdentity identity)
+    {
+        if (_processInfoCache.TryGetValue(identity, out var cached)) return cached;
+        var processName = $"PID {identity.ProcessId}";
+        var processPath = string.Empty;
+        try
+        {
+            using var process = Process.GetProcessById(identity.ProcessId);
+            processName = process.ProcessName;
+            processPath = process.MainModule?.FileName ?? string.Empty;
+        }
+        catch { }
+        var info = new ProcessInfo(processName, processPath);
+        _processInfoCache[identity] = info;
+        return info;
+    }
+
     private static bool IsWildcardRemote(string value) => value is "0.0.0.0:0" or "[::]:0" or "*:*" or "*:*";
     private readonly record struct FlowKey(int ProcessId, long ProcessStartTicks, string Protocol, string LocalEndpoint, string RemoteEndpoint);
     private readonly record struct ProcessIdentity(int ProcessId, long ProcessStartTicks);
+    private readonly record struct ProcessInfo(string Name, string Path);
     private sealed class FlowTotal { public long SentBytes; public long ReceivedBytes; public long LastSentBytes; public long LastReceivedBytes; public DateTimeOffset LastSampleAt; }
 }
 

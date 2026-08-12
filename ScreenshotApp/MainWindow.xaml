@@ -992,6 +992,16 @@
                                         </Grid>
                                         </Border>
                                         <Border Style="{StaticResource SettingCardStyle}">
+                                        <Grid Height="94" Margin="20,0">
+                                            <StackPanel VerticalAlignment="Center">
+                                                <TextBlock FontSize="15" Text="网络流量自动获取" />
+                                                <TextBlock Margin="0,5,0,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="一次授权后注册独立 ETW 辅助任务；主程序仍保持普通权限" TextWrapping="Wrap" />
+                                                <TextBlock x:Name="NetworkEtwAuthorizationStatusText" Margin="0,4,0,0" FontSize="10" Foreground="#5E819F" Text="尚未授权网络流量自动获取" />
+                                            </StackPanel>
+                                            <Button x:Name="NetworkEtwAuthorizationButton" Width="152" Height="32" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource StorageLocationButtonStyle}" Content="授权并自动获取" Click="NetworkEtwAuthorizationButton_Click" />
+                                        </Grid>
+                                        </Border>
+                                        <Border Style="{StaticResource SettingCardStyle}">
                                         <Grid Height="84" Margin="20,0">
                                             <StackPanel VerticalAlignment="Center"><TextBlock FontSize="15" Text="本地语音输入" /><TextBlock Margin="0,5,0,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="默认右 Alt 唤起；使用原始输入的全屏程序建议改用组合键" /><TextBlock x:Name="VoiceInputModelStatusText" Margin="0,4,0,0" FontSize="10" Foreground="#5E819F" /></StackPanel>
                                             <CheckBox x:Name="VoiceInputEnabledCheckBox" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource SettingToggleStyle}" Click="VoiceInputEnabledCheckBox_Click" />

@@ -22,6 +22,7 @@ using ScreenshotApp.Shortcuts;
 using ScreenshotApp.StorageAnalysis;
 using ScreenshotApp.Translation;
 using ScreenshotApp.VoiceInput;
+using ScreenshotApp.NetworkWorkbench;
 
 namespace ScreenshotApp;
 
@@ -225,6 +226,61 @@ public partial class MainWindow : Window
         EnlargeImageConversionHintText(this);
         NormalizeImageConverterLabels(this);
         await RefreshHistoryAsync();
+        await RefreshNetworkEtwAuthorizationStateAsync();
+        if (_preferences.NetworkEtwAutoStart && await Task.Run(NetworkEtwAutoStartService.IsRegistered))
+        {
+            _ = NetworkWorkbenchView.StartPersistentTrafficAsync(silent: true);
+        }
+    }
+
+    private async Task RefreshNetworkEtwAuthorizationStateAsync()
+    {
+        var registered = await Task.Run(NetworkEtwAutoStartService.IsRegistered);
+        _preferences.NetworkEtwAutoStart = registered;
+        if (!registered) _preferences.Save();
+        NetworkEtwAuthorizationButton.Content = registered ? "取消授权" : "授权并自动获取";
+        NetworkEtwAuthorizationStatusText.Text = registered
+            ? "已授权：启动 X-Tool 时自动运行独立 ETW 辅助进程"
+            : "尚未授权网络流量自动获取";
+    }
+
+    private async void NetworkEtwAuthorizationButton_Click(object sender, RoutedEventArgs e)
+    {
+        NetworkEtwAuthorizationButton.IsEnabled = false;
+        try
+        {
+            var registered = await Task.Run(NetworkEtwAutoStartService.IsRegistered);
+            if (registered)
+            {
+                NetworkWorkbenchView.StopTrafficMonitoring();
+                var result = await NetworkEtwAutoStartService.UnregisterAsync();
+                if (result.Success)
+                {
+                    _preferences.NetworkEtwAutoStart = false;
+                    _preferences.Save();
+                    NetworkEtwAuthorizationButton.Content = "授权并自动获取";
+                    NetworkEtwAuthorizationStatusText.Text = "尚未授权网络流量自动获取";
+                }
+                ShowToast(result.Message);
+            }
+            else
+            {
+                var result = await NetworkEtwAutoStartService.RegisterAsync();
+                if (result.Success)
+                {
+                    _preferences.NetworkEtwAutoStart = true;
+                    _preferences.Save();
+                    NetworkEtwAuthorizationButton.Content = "取消授权";
+                    NetworkEtwAuthorizationStatusText.Text = "已授权：启动 X-Tool 时自动运行独立 ETW 辅助进程";
+                    await NetworkWorkbenchView.StartPersistentTrafficAsync();
+                }
+                ShowToast(result.Message);
+            }
+        }
+        finally
+        {
+            NetworkEtwAuthorizationButton.IsEnabled = true;
+        }
     }
 
     private static void EnlargeImageConversionHintText(DependencyObject parent)

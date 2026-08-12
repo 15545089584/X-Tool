@@ -266,6 +266,7 @@
                                 <TextBlock Margin="0,5,0,0" FontSize="11" Foreground="#7890A6" Text="全局流量来自网卡计数器；应用明细使用按需授权的 ETW 进程采集，不读取数据包正文。" TextWrapping="Wrap" />
                             </StackPanel>
                             <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal">
+                                <ProgressBar x:Name="TrafficStatsLoadingBar" Width="82" Height="4" Margin="0,0,8,0" VerticalAlignment="Center" IsIndeterminate="True" Visibility="Collapsed" />
                                 <TextBlock x:Name="TrafficStatsMonitorStatusText" Margin="0,0,12,0" VerticalAlignment="Center" FontSize="10" Foreground="#7890A6" Text="应用级监控未启用" />
                                 <Button x:Name="TrafficEnableExactButton" Width="142" Style="{StaticResource NetworkPrimaryButton}" Content="启用应用级监控" Click="TrafficEnableExact_Click" />
                                 <Button Width="88" Margin="8,0,0,0" Style="{StaticResource NetworkButton}" Content="刷新" Click="TrafficStatsRefresh_Click" />
@@ -277,7 +278,7 @@
                         <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="10" /><ColumnDefinition /><ColumnDefinition Width="10" /><ColumnDefinition /><ColumnDefinition Width="10" /><ColumnDefinition /></Grid.ColumnDefinitions>
                         <Border Padding="16" Style="{StaticResource NetworkCard}"><StackPanel><TextBlock Style="{StaticResource MetricTitle}" Text="当前下行" /><TextBlock x:Name="TrafficStatsDownloadText" Style="{StaticResource MetricValue}" Foreground="#4D7CFE" Text="0 B/s" /><TextBlock Margin="0,5,0,0" FontSize="10" Foreground="#7890A6" Text="主用物理网卡" /></StackPanel></Border>
                         <Border Grid.Column="2" Padding="16" Style="{StaticResource NetworkCard}"><StackPanel><TextBlock Style="{StaticResource MetricTitle}" Text="当前上行" /><TextBlock x:Name="TrafficStatsUploadText" Style="{StaticResource MetricValue}" Foreground="#A55FEF" Text="0 B/s" /><TextBlock Margin="0,5,0,0" FontSize="10" Foreground="#7890A6" Text="主用物理网卡" /></StackPanel></Border>
-                        <Border Grid.Column="4" Padding="16" Style="{StaticResource NetworkCard}"><StackPanel><TextBlock Style="{StaticResource MetricTitle}" Text="应用总量" /><TextBlock x:Name="TrafficStatsProcessTotalText" Style="{StaticResource MetricValue}" Text="—" /><TextBlock Margin="0,5,0,0" FontSize="10" Foreground="#7890A6" Text="ETW 会话累计" /></StackPanel></Border>
+                        <Border Grid.Column="4" Padding="16" Style="{StaticResource NetworkCard}"><StackPanel><TextBlock Style="{StaticResource MetricTitle}" Text="应用总量" /><TextBlock x:Name="TrafficStatsProcessTotalText" Style="{StaticResource MetricValue}" Foreground="#1C9E94" Text="—" /><TextBlock Margin="0,5,0,0" FontSize="10" Foreground="#7890A6" Text="历史库累计（按保留期）" /></StackPanel></Border>
                         <Border Grid.Column="6" Padding="16" Style="{StaticResource NetworkCard}"><StackPanel><TextBlock Style="{StaticResource MetricTitle}" Text="代理出口" /><TextBlock x:Name="TrafficStatsProxyTotalText" Style="{StaticResource MetricValue}" Foreground="#8A63D8" Text="—" /><TextBlock x:Name="TrafficStatsProxyHintText" Margin="0,5,0,0" FontSize="10" Foreground="#7890A6" Text="等待应用级监控" TextTrimming="CharacterEllipsis" /></StackPanel></Border>
                     </Grid>
 
@@ -305,23 +306,23 @@
                                     <ListBox x:Name="TrafficProcessesListBox" Grid.Row="2" Style="{StaticResource NetworkList}">
                                         <ListBox.ItemTemplate>
                                             <DataTemplate>
-                                                <Border Padding="12,10" Background="#58FFFFFF" BorderBrush="#58CFE3F2" BorderThickness="1" CornerRadius="10">
+                                                <Border MinHeight="94" Padding="18,15" Background="#62FFFFFF" BorderBrush="#70CFE3F2" BorderThickness="1" CornerRadius="13">
                                                     <Grid>
-                                                        <Grid.ColumnDefinitions><ColumnDefinition Width="2.1*" /><ColumnDefinition Width="1.15*" /><ColumnDefinition Width="1.15*" /><ColumnDefinition Width="1.05*" /><ColumnDefinition Width="1.05*" /></Grid.ColumnDefinitions>
+                                                        <Grid.ColumnDefinitions><ColumnDefinition Width="2.25*" /><ColumnDefinition Width="1.15*" /><ColumnDefinition Width="1.15*" /><ColumnDefinition Width="1.1*" /><ColumnDefinition Width="1.1*" /></Grid.ColumnDefinitions>
                                                         <StackPanel>
-                                                            <StackPanel Orientation="Horizontal"><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#405F7C" Text="{Binding ProcessName}" TextTrimming="CharacterEllipsis" /><Border Margin="8,0,0,0" Padding="6,2" Background="{Binding BadgeBackground}" CornerRadius="6" Visibility="{Binding ProxyBadgeVisibility}"><TextBlock FontSize="9" Foreground="{Binding BadgeForeground}" Text="{Binding ProxyBadge}" /></Border></StackPanel>
-                                                            <TextBlock Margin="0,4,0,0" FontSize="9" Foreground="#7890A6" Text="{Binding DetailText}" TextTrimming="CharacterEllipsis" ToolTip="{Binding DetailText}" />
+                                                            <StackPanel Orientation="Horizontal"><TextBlock FontSize="15" FontWeight="SemiBold" Foreground="#405F7C" Text="{Binding ProcessName}" TextTrimming="CharacterEllipsis" /><Border Margin="10,0,0,0" Padding="9,4" Background="{Binding BadgeBackground}" BorderBrush="{Binding BadgeForeground}" BorderThickness="1" CornerRadius="8" Visibility="{Binding ProxyBadgeVisibility}"><TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{Binding BadgeForeground}" Text="{Binding ProxyBadge}" /></Border></StackPanel>
+                                                            <TextBlock Margin="0,6,0,0" FontSize="11" Foreground="#7890A6" Text="{Binding DetailText}" TextTrimming="CharacterEllipsis" ToolTip="{Binding DetailText}" />
                                                         </StackPanel>
-                                                        <StackPanel Grid.Column="1"><TextBlock FontSize="9" Foreground="#7890A6" Text="下载" /><TextBlock Margin="0,3,0,0" FontSize="11" FontWeight="SemiBold" Foreground="#4D7CFE" Text="{Binding DownloadText}" /></StackPanel>
-                                                        <StackPanel Grid.Column="2"><TextBlock FontSize="9" Foreground="#7890A6" Text="上传" /><TextBlock Margin="0,3,0,0" FontSize="11" FontWeight="SemiBold" Foreground="#A55FEF" Text="{Binding UploadText}" /></StackPanel>
-                                                        <StackPanel Grid.Column="3"><TextBlock FontSize="9" Foreground="#7890A6" Text="总量" /><TextBlock Margin="0,3,0,0" FontSize="11" FontWeight="SemiBold" Foreground="#45627E" Text="{Binding TotalText}" /></StackPanel>
-                                                        <StackPanel Grid.Column="4"><TextBlock FontSize="9" Foreground="#7890A6" Text="实时" /><TextBlock Margin="0,3,0,0" FontSize="11" FontWeight="SemiBold" Foreground="#53718E" Text="{Binding RateText}" /></StackPanel>
+                                                        <StackPanel Grid.Column="1" VerticalAlignment="Center"><TextBlock FontSize="11" Foreground="#7890A6" Text="下载" /><TextBlock Margin="0,5,0,0" FontSize="14" FontWeight="SemiBold" Foreground="#4D7CFE" Text="{Binding DownloadText}" /></StackPanel>
+                                                        <StackPanel Grid.Column="2" VerticalAlignment="Center"><TextBlock FontSize="11" Foreground="#7890A6" Text="上传" /><TextBlock Margin="0,5,0,0" FontSize="14" FontWeight="SemiBold" Foreground="#A55FEF" Text="{Binding UploadText}" /></StackPanel>
+                                                        <StackPanel Grid.Column="3" VerticalAlignment="Center"><TextBlock FontSize="11" Foreground="#7890A6" Text="总量" /><TextBlock Margin="0,5,0,0" FontSize="14" FontWeight="SemiBold" Foreground="#1C9E94" Text="{Binding TotalText}" /></StackPanel>
+                                                        <StackPanel Grid.Column="4" VerticalAlignment="Center"><TextBlock FontSize="11" Foreground="#7890A6" Text="实时" /><TextBlock Margin="0,5,0,0" FontSize="14" FontWeight="SemiBold" Foreground="#53718E" Text="{Binding RateText}" /></StackPanel>
                                                     </Grid>
                                                 </Border>
                                             </DataTemplate>
                                         </ListBox.ItemTemplate>
                                     </ListBox>
-                                    <TextBlock x:Name="TrafficStatsEmptyText" Grid.Row="2" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="11" Foreground="#7890A6" Text="尚无应用级流量数据" Visibility="Visible" />
+                                    <TextBlock x:Name="TrafficStatsEmptyText" Grid.Row="2" MaxWidth="520" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="12" Foreground="#7890A6" TextAlignment="Center" TextWrapping="Wrap" Text="尚未启用应用级监控&#x0a;全局网卡速率仍会正常显示；按进程明细需要点击上方按钮并在 UAC 中授权。" Visibility="Visible" />
                                 </Grid>
                             </Border>
                         </Grid>
