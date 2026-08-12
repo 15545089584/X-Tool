@@ -299,7 +299,7 @@ internal static class AgentInstallationManager
             {
                 folder = root.GetFolder("X-Tool");
             }
-            catch (COMException)
+            catch (Exception exception) when (exception is COMException or FileNotFoundException)
             {
                 folder = root.CreateFolder("X-Tool");
             }
