@@ -67,7 +67,7 @@ public partial class SystemToolsView : UserControl
     private IReadOnlyList<DiskFileChange> _diskHistoryHoverChanges = Array.Empty<DiskFileChange>();
     private Border? _diskHistoryHoverCard;
     private TextBlock? _diskHistoryHoverText;
-    private WpfShapes.Rectangle? _diskHistoryHoverRegion;
+    private WpfShapes.Polygon? _diskHistoryHoverRegion;
     private WpfShapes.Line? _diskHistoryHoverGuide;
     private WpfShapes.Line? _diskHistoryHoverHorizontalGuide;
     private bool _processesAscending = true;
@@ -697,7 +697,7 @@ public partial class SystemToolsView : UserControl
         }
     }
 
-    /// <summary>高亮当前鼠标所在的相邻快照区间，视觉上保持与整张趋势图连贯。</summary>
+    /// <summary>高亮当前鼠标所在区间折线下方到横轴的面积，视觉上保持与整张趋势图连贯。</summary>
     private void UpdateDiskHistoryHoverRegion(int segment)
     {
         if (_diskHistoryHoverRegion is null || _diskHistoryChartPoints.Count < 2)
@@ -706,12 +706,15 @@ public partial class SystemToolsView : UserControl
         }
 
         var safeSegment = Math.Clamp(segment, 0, _diskHistoryChartPoints.Count - 2);
-        var startX = _diskHistoryChartPoints[safeSegment].X;
-        var endX = _diskHistoryChartPoints[safeSegment + 1].X;
-        Canvas.SetLeft(_diskHistoryHoverRegion, startX);
-        Canvas.SetTop(_diskHistoryHoverRegion, _diskHistoryChartTop);
-        _diskHistoryHoverRegion.Width = Math.Max(1, endX - startX);
-        _diskHistoryHoverRegion.Height = Math.Max(1, _diskHistoryChartBottom - _diskHistoryChartTop);
+        var startPoint = _diskHistoryChartPoints[safeSegment];
+        var endPoint = _diskHistoryChartPoints[safeSegment + 1];
+        _diskHistoryHoverRegion.Points = new PointCollection
+        {
+            startPoint,
+            endPoint,
+            new Point(endPoint.X, _diskHistoryChartBottom),
+            new Point(startPoint.X, _diskHistoryChartBottom)
+        };
         _diskHistoryHoverRegion.Visibility = Visibility.Visible;
     }
 
@@ -803,11 +806,16 @@ public partial class SystemToolsView : UserControl
                 MappingMode = BrushMappingMode.RelativeToBoundingBox
             }
         });
-        _diskHistoryHoverRegion = new WpfShapes.Rectangle
+        _diskHistoryHoverRegion = new WpfShapes.Polygon
         {
-            RadiusX = 8,
-            RadiusY = 8,
-            Fill = new SolidColorBrush(Color.FromArgb(54, 102, 170, 255)),
+            Fill = new LinearGradientBrush(
+                Color.FromArgb(92, 102, 170, 255),
+                Color.FromArgb(20, 102, 170, 255),
+                new Point(0, 0),
+                new Point(0, 1))
+            {
+                MappingMode = BrushMappingMode.RelativeToBoundingBox
+            },
             Stroke = new SolidColorBrush(Color.FromArgb(145, 102, 158, 245)),
             StrokeThickness = 1,
             IsHitTestVisible = false,
