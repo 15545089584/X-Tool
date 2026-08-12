@@ -367,7 +367,7 @@ public partial class MainWindow : Window
         RegisterVoiceInputHotKey(handle);
         _clipboardListenerRegistered = NativeMethods.AddClipboardFormatListener(handle);
 
-        if (!_hotKeyRegistered)
+        if (!_hotKeyRegistered && _screenshotHotKeySuppressor?.IsInstalled != true)
         {
             Dispatcher.BeginInvoke(() => ShowToast($"{_screenshotShortcut.DisplayText} 已被其他程序占用"), DispatcherPriority.Loaded);
         }
@@ -1391,7 +1391,7 @@ public partial class MainWindow : Window
         _screenshotHotKeySuppressor?.Dispose();
         _screenshotHotKeySuppressor = null;
         Interlocked.Exchange(ref _screenshotHookTriggeredAt, 0);
-        if (!_hotKeyRegistered || !_screenshotShortcut.IsSupportedGlobalCombination)
+        if (!_screenshotShortcut.IsSupportedGlobalCombination)
         {
             return;
         }
@@ -2347,12 +2347,15 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (target == "Screenshot" && _hotKeyRegistered)
+        if (target == "Screenshot")
         {
             _screenshotHotKeySuppressor?.Dispose();
             _screenshotHotKeySuppressor = null;
-            NativeMethods.UnregisterHotKey(_windowSource.Handle, NativeMethods.HotKeyId);
-            _hotKeyRegistered = false;
+            if (_hotKeyRegistered)
+            {
+                NativeMethods.UnregisterHotKey(_windowSource.Handle, NativeMethods.HotKeyId);
+                _hotKeyRegistered = false;
+            }
         }
         else if (target == "Clipboard" && _clipboardHotKeyRegistered)
         {
@@ -2383,7 +2386,9 @@ public partial class MainWindow : Window
         {
             _hotKeyRegistered = RegisterStandardShortcut(_windowSource.Handle, NativeMethods.HotKeyId, _screenshotShortcut);
             InstallScreenshotHotKeySuppressor();
-            return _hotKeyRegistered;
+            // RegisterHotKey 可能被 Windows Shell 或其他程序占用；低级钩子仍可独占拦截截图键，
+            // 这样 Apps 等单键快捷键不会把菜单命令继续传给浏览器或播放器。
+            return _hotKeyRegistered || _screenshotHotKeySuppressor?.IsInstalled == true;
         }
         if (target == "Clipboard")
         {
