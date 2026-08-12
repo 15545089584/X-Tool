@@ -1,4 +1,5 @@
 using System.Net.NetworkInformation;
+using System.Collections.Concurrent;
 
 namespace ScreenshotApp.NetworkWorkbench;
 
@@ -36,6 +37,7 @@ internal sealed class NetworkMonitorCoordinator : IAsyncDisposable
     private bool _alertSettingsLoaded;
     private int _budgetCheckTicks;
     private DateTime _lastBudgetAlertDate;
+    private readonly ConcurrentDictionary<Task, byte> _pendingPersistence = new();
 
     public NetworkMonitorCoordinator(NetworkHistoryStore historyStore) => _historyStore = historyStore;
 
@@ -73,6 +75,7 @@ internal sealed class NetworkMonitorCoordinator : IAsyncDisposable
         cancellation.Cancel();
         try { if (monitorTask is not null) await monitorTask; } catch (OperationCanceledException) { }
         await PersistBucketAsync(CancellationToken.None);
+        await AwaitPendingPersistenceAsync();
         cancellation.Dispose();
     }
 
@@ -134,13 +137,13 @@ internal sealed class NetworkMonitorCoordinator : IAsyncDisposable
             DetectOperationalAlerts(sample);
             if (++_probePersistTicks % 5 == 0)
             {
-                _ = _historyStore.AddProbeAsync(new NetworkProbeHistoryPoint(snapshot.CapturedAt, snapshot.ActiveAdapterId,
+                TrackPersistence(_historyStore.AddProbeAsync(new NetworkProbeHistoryPoint(snapshot.CapturedAt, snapshot.ActiveAdapterId,
                     snapshot.ConnectivityProbeText.Contains("网关 可达", StringComparison.Ordinal),
                     snapshot.ConnectivityProbeText.Contains("DNS 正常", StringComparison.Ordinal),
                     snapshot.ConnectivityProbeText.Contains("HTTP 正常", StringComparison.Ordinal),
-                    snapshot.GatewayLatencyMs, snapshot.DnsLatencyMs, snapshot.HttpLatencyMs));
+                    snapshot.GatewayLatencyMs, snapshot.DnsLatencyMs, snapshot.HttpLatencyMs)).AsTask());
             }
-            if (++_budgetCheckTicks % 60 == 0) _ = CheckDailyBudgetAsync(snapshot);
+            if (++_budgetCheckTicks % 60 == 0) TrackPersistence(CheckDailyBudgetAsync(snapshot));
             AccumulateTraffic(sample);
             _previousSnapshot = snapshot;
             SampleAvailable?.Invoke(this, sample);
@@ -164,7 +167,7 @@ internal sealed class NetworkMonitorCoordinator : IAsyncDisposable
         {
             var completedPoint = CreateBucketPoint();
             ResetBucket(bucket, sample.Snapshot);
-            if (completedPoint is not null) _ = PersistPointAsync(completedPoint, CancellationToken.None);
+            if (completedPoint is not null) TrackPersistence(PersistPointAsync(completedPoint, CancellationToken.None));
         }
         else if (_currentBucket == default)
         {
@@ -178,7 +181,7 @@ internal sealed class NetworkMonitorCoordinator : IAsyncDisposable
         _bucketPeakDownloadRate = Math.Max(_bucketPeakDownloadRate, sample.DownloadRate);
         _bucketPeakUploadRate = Math.Max(_bucketPeakUploadRate, sample.UploadRate);
         _bucketSampleCount++;
-        if (++_persistTicks % 10 == 0) _ = PersistBucketAsync(CancellationToken.None);
+        if (++_persistTicks % 10 == 0) TrackPersistence(PersistBucketAsync(CancellationToken.None));
     }
 
     private void ResetBucket(DateTime bucket, NetworkOverviewSnapshot snapshot)
@@ -332,8 +335,28 @@ internal sealed class NetworkMonitorCoordinator : IAsyncDisposable
 
     private void PublishEvent(NetworkTimelineEvent entry)
     {
-        _ = _historyStore.AddEventAsync(entry);
+        TrackPersistence(_historyStore.AddEventAsync(entry).AsTask());
         TimelineEventAvailable?.Invoke(this, entry);
+    }
+
+    private void TrackPersistence(Task task)
+    {
+        _pendingPersistence.TryAdd(task, 0);
+        _ = task.ContinueWith(completed =>
+        {
+            _ = completed.Exception;
+            _pendingPersistence.TryRemove(completed, out _);
+        }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+    }
+
+    private async Task AwaitPendingPersistenceAsync()
+    {
+        while (true)
+        {
+            var pending = _pendingPersistence.Keys.ToArray();
+            if (pending.Length == 0) return;
+            try { await Task.WhenAll(pending); } catch { }
+        }
     }
 
     private void RegisterNetworkEvents()

@@ -1,4 +1,5 @@
 using ScreenshotApp.SystemTools;
+using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Net;
@@ -66,6 +67,11 @@ public partial class NetworkWorkbenchView : UserControl
     private DateTime _trafficUsageLastPersistedAt = DateTime.MinValue;
     private int _trafficUsageRefreshBusy;
     private int _trafficUsagePersistBusy;
+    private int _trafficUsageHoverIndex = -1;
+    private readonly object _monitorStopSync = new();
+    private Task? _monitorStopTask;
+    private int _shutdownStarted;
+    private readonly ConcurrentDictionary<Task, byte> _pendingPersistence = new();
 
     public NetworkWorkbenchView()
     {
@@ -87,7 +93,7 @@ public partial class NetworkWorkbenchView : UserControl
         WifiChannelDistributionCanvas.SizeChanged += (_, _) => UpdateWifiChannelDistribution();
         Loaded += NetworkWorkbenchView_Loaded;
         Unloaded += NetworkWorkbenchView_Unloaded;
-        Application.Current.Exit += (_, _) => _trafficClient.Dispose();
+        Application.Current.Exit += NetworkWorkbenchView_ApplicationExit;
         SelectTab("Overview");
     }
 
@@ -100,8 +106,43 @@ public partial class NetworkWorkbenchView : UserControl
 
     private async void NetworkWorkbenchView_Unloaded(object sender, RoutedEventArgs e)
     {
-        await _monitorCoordinator.StopAsync();
+        await StopMonitorAsync();
         _deepNetworkCancellation?.Cancel();
+    }
+
+    private Task StopMonitorAsync()
+    {
+        lock (_monitorStopSync)
+        {
+            if (_monitorStopTask is { IsCompleted: false }) return _monitorStopTask;
+            _monitorStopTask = _monitorCoordinator.StopAsync();
+            return _monitorStopTask;
+        }
+    }
+
+    private void NetworkWorkbenchView_ApplicationExit(object? sender, ExitEventArgs e)
+    {
+        if (Interlocked.Exchange(ref _shutdownStarted, 1) != 0) return;
+        try
+        {
+            // 应用退出前等待最后一个采样桶和 SQLite 写入完成，避免尾部历史丢失。
+            StopMonitorAsync().GetAwaiter().GetResult();
+            AwaitPendingPersistenceAsync().GetAwaiter().GetResult();
+            if (_trafficClient.IsRunning)
+            {
+                var measurements = _trafficClient.GetProcessMeasurements(consumeRates: false);
+                var points = BuildTrafficProcessHistoryPoints(measurements, _proxySnapshot);
+                PersistProcessTrafficAsync(_trafficClient.SessionId, points).GetAwaiter().GetResult();
+                PersistTrafficUsageDeltaAsync(measurements, _proxySnapshot).GetAwaiter().GetResult();
+            }
+            AwaitPendingPersistenceAsync().GetAwaiter().GetResult();
+            _trafficClient.Dispose();
+            _historyStore.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
+        catch
+        {
+            // 退出清理失败不应阻止主窗口关闭。
+        }
     }
 
     public async Task StartPersistentTrafficAsync(bool silent = false)
@@ -640,7 +681,12 @@ public partial class NetworkWorkbenchView : UserControl
         catch (Exception exception) { MessageBox.Show(exception.Message, "保存告警设置失败", MessageBoxButton.OK, MessageBoxImage.Warning); }
     }
 
-    private static string EscapeCsv(string value) => value.Replace("\"", "\"\"");
+    private static string EscapeCsv(string value)
+    {
+        var safe = value ?? string.Empty;
+        if (safe.Length > 0 && safe[0] is '=' or '+' or '-' or '@') safe = "'" + safe;
+        return safe.Replace("\"", "\"\"");
+    }
 
     private void UpdateTrafficChart()
     {
@@ -727,7 +773,7 @@ public partial class NetworkWorkbenchView : UserControl
                 TrafficStatsMonitorStatusText.Text = "ETW 已启动，等待应用产生网络流量";
             }
             // 首先把内存中的统计显示出来，历史库写入放到后台，不阻塞首屏列表。
-            _ = PersistProcessTrafficAsync(_trafficClient.SessionId, livePoints);
+            TrackPersistence(PersistProcessTrafficAsync(_trafficClient.SessionId, livePoints));
             if (usageChanged && _activeTab == "TrafficStats") _ = RefreshTrafficUsageChartAsync();
             var processTotal = measurements.Sum(item => item.TotalBytes) + _trafficHistoricalTotals.Values.Sum(item => item.TotalBytes);
             var proxyTotal = livePoints.Sum(item => item.ProxyExitSentBytes + item.ProxyExitReceivedBytes) +
@@ -770,6 +816,26 @@ public partial class NetworkWorkbenchView : UserControl
     {
         try { await _historyStore.UpsertProcessTrafficAsync(sessionId, points); }
         catch { /* 历史落盘失败不阻塞当前实时展示。 */ }
+    }
+
+    private void TrackPersistence(Task task)
+    {
+        _pendingPersistence.TryAdd(task, 0);
+        _ = task.ContinueWith(completed =>
+        {
+            _ = completed.Exception;
+            _pendingPersistence.TryRemove(completed, out _);
+        }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+    }
+
+    private async Task AwaitPendingPersistenceAsync()
+    {
+        while (true)
+        {
+            var pending = _pendingPersistence.Keys.ToArray();
+            if (pending.Length == 0) return;
+            try { await Task.WhenAll(pending); } catch { }
+        }
     }
 
     private async Task<bool> PersistTrafficUsageDeltaAsync(
@@ -841,7 +907,7 @@ public partial class NetworkWorkbenchView : UserControl
         if (!_trafficClient.IsRunning) return;
         try
         {
-            var measurements = await Task.Run(() => _trafficClient.GetProcessMeasurements());
+            var measurements = await Task.Run(() => _trafficClient.GetProcessMeasurements(consumeRates: false));
             await PersistTrafficUsageDeltaAsync(measurements, _proxySnapshot);
         }
         catch
@@ -975,7 +1041,7 @@ public partial class NetworkWorkbenchView : UserControl
         }
     }
 
-    private void DrawTrafficUsageChart(int highlightedIndex = -1)
+    private void DrawTrafficUsageChart()
     {
         var width = TrafficUsageCanvas.ActualWidth;
         var height = TrafficUsageCanvas.ActualHeight;
@@ -1009,14 +1075,6 @@ public partial class NetworkWorkbenchView : UserControl
             var nonProxyHeight = bucket.NonProxyBytes / ceiling * height;
             var proxyHeight = bucket.ProxyBytes / ceiling * height;
             var x = index * slot + (slot - barWidth) / 2d;
-            if (index == highlightedIndex)
-            {
-                TrafficUsageCanvas.Children.Add(new Rectangle
-                {
-                    Width = slot, Height = height, Fill = BrushFrom("#194D7CFE")
-                });
-                Canvas.SetLeft(TrafficUsageCanvas.Children[^1], index * slot);
-            }
             var nonProxyBar = new Rectangle
             {
                 Width = barWidth, Height = Math.Max(0, nonProxyHeight), Fill = BrushFrom("#C94D7CFE"),
@@ -1041,6 +1099,8 @@ public partial class NetworkWorkbenchView : UserControl
         if (_trafficUsageChartBuckets.Count == 0 || TrafficUsageCanvas.ActualWidth <= 0) return;
         var position = e.GetPosition(TrafficUsageCanvas);
         var index = Math.Clamp((int)(position.X / (TrafficUsageCanvas.ActualWidth / _trafficUsageChartBuckets.Count)), 0, _trafficUsageChartBuckets.Count - 1);
+        if (index == _trafficUsageHoverIndex) return;
+        _trafficUsageHoverIndex = index;
         var bucket = _trafficUsageChartBuckets[index];
         var label = _trafficUsageRange == "24h"
             ? $"{bucket.Start:MM-dd HH:00}–{bucket.Start.AddHours(1):HH:00}"
@@ -1048,13 +1108,17 @@ public partial class NetworkWorkbenchView : UserControl
         TrafficUsageTooltipText.Text = $"{label}\n总用量 {FormatBytes(bucket.TotalBytes)}\n非代理 {FormatBytes(bucket.NonProxyBytes)}\n代理出口 {FormatBytes(bucket.ProxyBytes)}";
         TrafficUsageTooltip.Visibility = Visibility.Visible;
         TrafficUsageTooltip.Margin = new Thickness(Math.Clamp(position.X + 12, 0, Math.Max(0, TrafficUsageCanvas.ActualWidth - 220)), 6, 0, 0);
-        DrawTrafficUsageChart(index);
+        var slot = TrafficUsageCanvas.ActualWidth / _trafficUsageChartBuckets.Count;
+        TrafficUsageHoverHighlight.Width = slot;
+        TrafficUsageHoverHighlight.Margin = new Thickness(index * slot, 0, 0, 0);
+        TrafficUsageHoverHighlight.Visibility = Visibility.Visible;
     }
 
     private void TrafficUsageCanvas_MouseLeave(object sender, System.Windows.Input.MouseEventArgs e)
     {
         TrafficUsageTooltip.Visibility = Visibility.Collapsed;
-        DrawTrafficUsageChart();
+        TrafficUsageHoverHighlight.Visibility = Visibility.Collapsed;
+        _trafficUsageHoverIndex = -1;
     }
 
     private static double RoundTrafficUsageScale(double bytes)
@@ -2127,7 +2191,7 @@ public partial class NetworkWorkbenchView : UserControl
     {
         var dialog = new Microsoft.Win32.SaveFileDialog { Filter = "CSV 文件 (*.csv)|*.csv", FileName = $"X-Tool-网络连接-{DateTime.Now:yyyyMMdd-HHmmss}.csv" };
         if (dialog.ShowDialog() != true) return;
-        static string Csv(string value) => $"\"{value.Replace("\"", "\"\"")}\"";
+        static string Csv(string value) => $"\"{EscapeCsv(value)}\"";
         var lines = new List<string> { "协议,本地端点,远程端点,进程,PID,进程估算速率,会话估算累计,状态" };
         lines.AddRange(_connections.Select(item => string.Join(",", new[] { Csv(item.Protocol), Csv(item.LocalAddress), Csv(item.RemoteAddress), Csv(item.ProcessName), item.ProcessId.ToString(), Csv(item.TrafficText), Csv(item.TotalTrafficText), Csv(item.State) })));
         File.WriteAllLines(dialog.FileName, lines, new UTF8Encoding(true));

@@ -4,6 +4,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
+using System.Net;
 using System.Text;
 using System.Text.Json;
 
@@ -106,7 +107,10 @@ internal static class NetworkEtwTrafficHelper
 
 internal sealed class NetworkEtwTrafficClient : IDisposable
 {
+    private static readonly TimeSpan InactiveFlowRetention = TimeSpan.FromMinutes(5);
     private readonly ConcurrentDictionary<FlowKey, FlowTotal> _flows = new();
+    private readonly ConcurrentDictionary<ProcessIdentity, ArchivedProcessTotal> _archivedProcesses = new();
+    private readonly object _measurementSync = new();
     private CancellationTokenSource? _cancellation;
     private Process? _helperProcess;
     private DateTimeOffset _lastSampleAt;
@@ -137,6 +141,7 @@ internal sealed class NetworkEtwTrafficClient : IDisposable
     private void BeginSession()
     {
         _flows.Clear();
+        _archivedProcesses.Clear();
         _processInfoCache.Clear();
         _lastSampleAt = default;
         SessionId = Guid.NewGuid().ToString("N");
@@ -231,12 +236,7 @@ internal sealed class NetworkEtwTrafficClient : IDisposable
                     if (sample is null || sample.ProcessId <= 0) continue;
                     var key = new FlowKey(sample.ProcessId, sample.ProcessStartTicks, sample.Protocol,
                         Normalize(sample.LocalEndpoint), Normalize(sample.RemoteEndpoint));
-                    var total = _flows.GetOrAdd(key, _ => new FlowTotal());
-                    Interlocked.Add(ref total.SentBytes, sample.SentBytes);
-                    Interlocked.Add(ref total.ReceivedBytes, sample.ReceivedBytes);
-                    Interlocked.Exchange(ref total.LastSentBytes, sample.SentBytes);
-                    Interlocked.Exchange(ref total.LastReceivedBytes, sample.ReceivedBytes);
-                    total.LastSampleAt = sample.CapturedAt;
+                    RecordSample(key, sample);
                     _lastSampleAt = sample.CapturedAt;
                     if (Interlocked.Exchange(ref _firstSampleRaised, 1) == 0) FirstSampleAvailable?.Invoke(this, EventArgs.Empty);
                 }
@@ -271,6 +271,7 @@ internal sealed class NetworkEtwTrafficClient : IDisposable
             pair.Key.LocalEndpoint == normalizedLocal &&
             (pair.Key.RemoteEndpoint == normalizedRemote || IsWildcardRemote(normalizedRemote)))
             .Select(pair => pair.Value).ToArray();
+        // 闲置连接会压缩进进程累计，逐连接视图只展示仍活跃连接的会话累计。
         var sentTotal = matches.Sum(value => Interlocked.Read(ref value.SentBytes));
         var receivedTotal = matches.Sum(value => Interlocked.Read(ref value.ReceivedBytes));
         var sentRate = matches.Sum(value => Interlocked.Exchange(ref value.LastSentBytes, 0)) * 8d;
@@ -281,36 +282,65 @@ internal sealed class NetworkEtwTrafficClient : IDisposable
     /// <summary>
     /// 返回当前 ETW 会话按进程聚合的流量快照。只读取字节计数，不保存数据包正文。
     /// </summary>
-    public IReadOnlyList<NetworkTrafficProcessMeasurement> GetProcessMeasurements()
+    public IReadOnlyList<NetworkTrafficProcessMeasurement> GetProcessMeasurements(bool consumeRates = true)
     {
-        var groups = _flows.ToArray()
-            .GroupBy(pair => new ProcessIdentity(pair.Key.ProcessId, pair.Key.ProcessStartTicks));
+        ActiveFlowSnapshot[] active;
+        Dictionary<ProcessIdentity, ArchivedProcessTotal> archived;
+        lock (_measurementSync)
+        {
+            ArchiveInactiveFlows();
+            active = _flows.Select(pair =>
+            {
+                lock (pair.Value.Sync)
+                {
+                    var sentRate = consumeRates ? pair.Value.LastSentBytes : 0;
+                    var receivedRate = consumeRates ? pair.Value.LastReceivedBytes : 0;
+                    if (consumeRates)
+                    {
+                        pair.Value.LastSentBytes = 0;
+                        pair.Value.LastReceivedBytes = 0;
+                    }
+                    return new ActiveFlowSnapshot(pair.Key, pair.Value.SentBytes, pair.Value.ReceivedBytes,
+                        sentRate, receivedRate);
+                }
+            }).ToArray();
+            archived = _archivedProcesses.ToDictionary(pair => pair.Key, pair => pair.Value);
+        }
+        var identities = active.Select(flow => new ProcessIdentity(flow.Key.ProcessId, flow.Key.ProcessStartTicks))
+            .Concat(archived.Keys)
+            .Distinct().ToArray();
         var result = new List<NetworkTrafficProcessMeasurement>();
-        foreach (var group in groups)
+        foreach (var identity in identities)
         {
             var sent = 0L;
             var received = 0L;
             var sentRate = 0L;
             var receivedRate = 0L;
             var flows = new List<NetworkTrafficFlowMeasurement>();
-            foreach (var pair in group)
+            foreach (var flow in active.Where(flow => flow.Key.ProcessId == identity.ProcessId && flow.Key.ProcessStartTicks == identity.ProcessStartTicks))
             {
-                var flow = pair.Value;
-                var flowSent = Interlocked.Read(ref flow.SentBytes);
-                var flowReceived = Interlocked.Read(ref flow.ReceivedBytes);
-                var flowSentRate = Interlocked.Exchange(ref flow.LastSentBytes, 0);
-                var flowReceivedRate = Interlocked.Exchange(ref flow.LastReceivedBytes, 0);
-                sent += flowSent;
-                received += flowReceived;
-                sentRate += flowSentRate;
-                receivedRate += flowReceivedRate;
-                flows.Add(new NetworkTrafficFlowMeasurement(pair.Key.Protocol, pair.Key.LocalEndpoint,
-                    pair.Key.RemoteEndpoint, flowSent, flowReceived, flowSentRate, flowReceivedRate));
+                sent += flow.SentBytes;
+                received += flow.ReceivedBytes;
+                sentRate += flow.SentRateBytes;
+                receivedRate += flow.ReceivedRateBytes;
+                flows.Add(new NetworkTrafficFlowMeasurement(flow.Key.Protocol, flow.Key.LocalEndpoint,
+                    flow.Key.RemoteEndpoint, flow.SentBytes, flow.ReceivedBytes, flow.SentRateBytes, flow.ReceivedRateBytes));
+            }
+            if (archived.TryGetValue(identity, out var archivedTotal))
+            {
+                sent += archivedTotal.SentBytes;
+                received += archivedTotal.ReceivedBytes;
+                if (archivedTotal.ExternalSentBytes > 0 || archivedTotal.ExternalReceivedBytes > 0)
+                    flows.Add(new NetworkTrafficFlowMeasurement("历史累计", "0.0.0.0:0", "0.0.0.1:0",
+                        archivedTotal.ExternalSentBytes, archivedTotal.ExternalReceivedBytes, 0, 0));
+                if (archivedTotal.LoopbackSentBytes > 0 || archivedTotal.LoopbackReceivedBytes > 0)
+                    flows.Add(new NetworkTrafficFlowMeasurement("历史累计", "127.0.0.1:0", "127.0.0.1:0",
+                        archivedTotal.LoopbackSentBytes, archivedTotal.LoopbackReceivedBytes, 0, 0));
             }
 
-            var processInfo = ResolveProcessInfo(group.Key);
+            var processInfo = ResolveProcessInfo(identity);
 
-            result.Add(new NetworkTrafficProcessMeasurement(group.Key.ProcessId, group.Key.ProcessStartTicks,
+            result.Add(new NetworkTrafficProcessMeasurement(identity.ProcessId, identity.ProcessStartTicks,
                 processInfo.Name, processInfo.Path, sent, received, sentRate * 8d, receivedRate * 8d, flows));
         }
         return result;
@@ -342,11 +372,81 @@ internal sealed class NetworkEtwTrafficClient : IDisposable
         return info;
     }
 
+    private void ArchiveInactiveFlows()
+    {
+        var cutoff = DateTimeOffset.Now - InactiveFlowRetention;
+        foreach (var pair in _flows.ToArray())
+        {
+            lock (pair.Value.Sync)
+            {
+                if (pair.Value.Archived || pair.Value.LastSampleAt >= cutoff ||
+                    !_flows.TryRemove(new KeyValuePair<FlowKey, FlowTotal>(pair.Key, pair.Value))) continue;
+                pair.Value.Archived = true;
+                var sent = pair.Value.SentBytes;
+                var received = pair.Value.ReceivedBytes;
+                var loopback = IsLoopbackEndpoint(pair.Key.LocalEndpoint) || IsLoopbackEndpoint(pair.Key.RemoteEndpoint);
+                var identity = new ProcessIdentity(pair.Key.ProcessId, pair.Key.ProcessStartTicks);
+                _archivedProcesses.AddOrUpdate(identity,
+                    _ => new ArchivedProcessTotal(sent, received,
+                        loopback ? 0 : sent, loopback ? 0 : received,
+                        loopback ? sent : 0, loopback ? received : 0),
+                    (_, current) => current.Add(sent, received, loopback));
+            }
+        }
+    }
+
+    private void RecordSample(FlowKey key, NetworkFlowSample sample)
+    {
+        while (true)
+        {
+            var total = _flows.GetOrAdd(key, _ => new FlowTotal());
+            lock (total.Sync)
+            {
+                if (total.Archived) continue;
+                total.SentBytes += sample.SentBytes;
+                total.ReceivedBytes += sample.ReceivedBytes;
+                total.LastSentBytes += sample.SentBytes;
+                total.LastReceivedBytes += sample.ReceivedBytes;
+                total.LastSampleAt = sample.CapturedAt;
+                return;
+            }
+        }
+    }
+
+    private static bool IsLoopbackEndpoint(string endpoint)
+    {
+        var host = endpoint.StartsWith("[", StringComparison.Ordinal)
+            ? endpoint[1..Math.Max(1, endpoint.IndexOf(']'))]
+            : endpoint[..Math.Max(0, endpoint.LastIndexOf(':'))];
+        return IPAddress.TryParse(host, out var address) && IPAddress.IsLoopback(address);
+    }
+
     private static bool IsWildcardRemote(string value) => value is "0.0.0.0:0" or "[::]:0" or "*:*" or "*:*";
     private readonly record struct FlowKey(int ProcessId, long ProcessStartTicks, string Protocol, string LocalEndpoint, string RemoteEndpoint);
     private readonly record struct ProcessIdentity(int ProcessId, long ProcessStartTicks);
+    private readonly record struct ActiveFlowSnapshot(
+        FlowKey Key, long SentBytes, long ReceivedBytes, long SentRateBytes, long ReceivedRateBytes);
     private readonly record struct ProcessInfo(string Name, string Path);
-    private sealed class FlowTotal { public long SentBytes; public long ReceivedBytes; public long LastSentBytes; public long LastReceivedBytes; public DateTimeOffset LastSampleAt; }
+    private readonly record struct ArchivedProcessTotal(
+        long SentBytes, long ReceivedBytes,
+        long ExternalSentBytes, long ExternalReceivedBytes,
+        long LoopbackSentBytes, long LoopbackReceivedBytes)
+    {
+        public ArchivedProcessTotal Add(long sent, long received, bool loopback) => new(
+            SentBytes + sent, ReceivedBytes + received,
+            ExternalSentBytes + (loopback ? 0 : sent), ExternalReceivedBytes + (loopback ? 0 : received),
+            LoopbackSentBytes + (loopback ? sent : 0), LoopbackReceivedBytes + (loopback ? received : 0));
+    }
+    private sealed class FlowTotal
+    {
+        public readonly object Sync = new();
+        public long SentBytes;
+        public long ReceivedBytes;
+        public long LastSentBytes;
+        public long LastReceivedBytes;
+        public DateTimeOffset LastSampleAt;
+        public bool Archived;
+    }
 }
 
 internal sealed record NetworkFlowSample(int ProcessId, long ProcessStartTicks, string Protocol, string LocalEndpoint,

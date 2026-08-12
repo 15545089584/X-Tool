@@ -33,6 +33,7 @@ public static class DiskHistoryStore
     });
     private static CancellationTokenSource? FileChangeTrackingCancellation;
     private static Task? FileChangeWriterTask;
+    private static DateTime LastFileChangePruneAt = DateTime.MinValue;
 
     private static string DatabasePath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -244,14 +245,19 @@ public static class DiskHistoryStore
             changed_at TEXT NOT NULL,
             volume_id TEXT NOT NULL,
             change_kind TEXT NOT NULL,
-            path TEXT NOT NULL);";
+            path TEXT NOT NULL);
+            CREATE INDEX IF NOT EXISTS ix_disk_file_changes_volume_time
+                ON disk_file_changes(volume_id, changed_at DESC);
+            CREATE INDEX IF NOT EXISTS ix_disk_file_changes_time
+                ON disk_file_changes(changed_at);";
         changes.ExecuteNonQuery();
     }
 
     private static void Prune(SqliteConnection connection)
     {
         using var command = connection.CreateCommand();
-        command.CommandText = "DELETE FROM disk_snapshots WHERE captured_at < $cutoff;";
+        command.CommandText = @"DELETE FROM disk_snapshots WHERE captured_at < $cutoff;
+            DELETE FROM disk_file_changes WHERE changed_at < $cutoff;";
         command.Parameters.AddWithValue("$cutoff", DateTime.Today.AddDays(-RetentionDays).ToString("O"));
         command.ExecuteNonQuery();
     }
@@ -312,6 +318,11 @@ public static class DiskHistoryStore
             {
                 RecentFileChanges.TryRemove(item.Key, out _);
             }
+            if (RecentFileChanges.Count > 12_000)
+            {
+                foreach (var item in RecentFileChanges.OrderBy(item => item.Value).Take(2_000))
+                    RecentFileChanges.TryRemove(item.Key, out _);
+            }
         }
 
         FileChangeChannel.Writer.TryWrite(new DiskFileChange(now, root, changeKind, path));
@@ -369,11 +380,16 @@ public static class DiskHistoryStore
             command.ExecuteNonQuery();
         }
 
-        using var prune = connection.CreateCommand();
-        prune.Transaction = transaction;
-        prune.CommandText = "DELETE FROM disk_file_changes WHERE changed_at < $cutoff;";
-        prune.Parameters.AddWithValue("$cutoff", DateTime.Now.AddDays(-RetentionDays).ToString("O"));
-        prune.ExecuteNonQuery();
+        var now = DateTime.Now;
+        if (now - LastFileChangePruneAt >= TimeSpan.FromHours(1))
+        {
+            using var prune = connection.CreateCommand();
+            prune.Transaction = transaction;
+            prune.CommandText = "DELETE FROM disk_file_changes WHERE changed_at < $cutoff;";
+            prune.Parameters.AddWithValue("$cutoff", now.AddDays(-RetentionDays).ToString("O"));
+            prune.ExecuteNonQuery();
+            LastFileChangePruneAt = now;
+        }
         transaction.Commit();
     }
 }

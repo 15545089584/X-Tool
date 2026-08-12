@@ -50,6 +50,8 @@ public partial class SystemToolsView : UserControl
     private readonly DispatcherTimer _portAutoRefreshTimer;
     private readonly DispatcherTimer _diskHistoryAutoCaptureTimer;
     private bool _isRefreshingPorts;
+    private bool _isRefreshingProcesses;
+    private bool _isRefreshingServices;
     private bool _isRefreshingRelationships;
     private bool _isRefreshingDeviceInfo;
     private bool _isRefreshingStorage;
@@ -124,7 +126,6 @@ public partial class SystemToolsView : UserControl
             ConfigureProcessColumns();
             if (EnvironmentOnly)
             {
-                StartDiskHistoryAutoCapture();
                 await RefreshDeviceInfoAsync();
                 RefreshEnvironment();
             }
@@ -159,16 +160,22 @@ public partial class SystemToolsView : UserControl
 
     private async Task RefreshProcessesAsync()
     {
+        if (_isRefreshingProcesses) return;
+        _isRefreshingProcesses = true;
         ProcessesSummaryText.Text = "正在采样 CPU 与内存…";
         try { _allProcesses = await Task.Run(SystemToolsService.GetProcesses); ApplyProcessFilter(); ConfigureProcessColumns(); }
         catch (Exception exception) { ProcessesSummaryText.Text = $"读取失败：{exception.Message}"; }
+        finally { _isRefreshingProcesses = false; }
     }
 
     private async Task RefreshServicesAsync()
     {
+        if (_isRefreshingServices) return;
+        _isRefreshingServices = true;
         ServicesSummaryText.Text = "正在读取…";
         try { _allServices = await Task.Run(SystemToolsService.GetServices); ApplyServiceFilter(); }
         catch (Exception exception) { ServicesSummaryText.Text = $"读取失败：{exception.Message}"; }
+        finally { _isRefreshingServices = false; }
     }
 
     /// <summary>通过同一次快照建立服务、进程与端口关系，避免页面间依赖搜索框或重复读取数据。</summary>
@@ -1048,7 +1055,11 @@ public partial class SystemToolsView : UserControl
         else if (section == "Services") _ = RefreshServicesAsync();
         else if (section == "Relations") _ = RefreshRelationshipsAsync();
         else if (section == "Overview") _ = RefreshDeviceInfoAsync();
-        else if (section == "Storage") _ = RefreshStorageAsync();
+        else if (section == "Storage")
+        {
+            StartDiskHistoryAutoCapture();
+            _ = RefreshStorageAsync();
+        }
         else if (section == "Environment") RefreshEnvironment();
     }
 
@@ -1466,10 +1477,18 @@ public partial class SystemToolsView : UserControl
     private async void AutoRefreshPorts_Tick(object? sender, EventArgs e)
     {
         if (AutoRefreshCheckBox.IsChecked != true) return;
-        if (PortsPanel.Visibility == Visibility.Visible) await RefreshPortsAsync();
-        else if (ProcessesPanel.Visibility == Visibility.Visible) await RefreshProcessesAsync();
-        else if (ServicesPanel.Visibility == Visibility.Visible) await RefreshServicesAsync();
-        else if (RelationsBubblePanel.Visibility == Visibility.Visible) await RefreshRelationshipsAsync();
+        _portAutoRefreshTimer.Stop();
+        try
+        {
+            if (PortsPanel.Visibility == Visibility.Visible) await RefreshPortsAsync();
+            else if (ProcessesPanel.Visibility == Visibility.Visible) await RefreshProcessesAsync();
+            else if (ServicesPanel.Visibility == Visibility.Visible) await RefreshServicesAsync();
+            else if (RelationsBubblePanel.Visibility == Visibility.Visible) await RefreshRelationshipsAsync();
+        }
+        finally
+        {
+            if (IsLoaded && IsVisible && AutoRefreshCheckBox.IsChecked == true) _portAutoRefreshTimer.Start();
+        }
     }
     private void ProcessFilterTextBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyProcessFilter();
     private void ProcessDisplayOption_Changed(object sender, RoutedEventArgs e)

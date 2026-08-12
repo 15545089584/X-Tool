@@ -26,15 +26,22 @@ public partial class CollaborationView : UserControl
             RefreshStatus();
             RefreshFiles();
         };
-        _statusTimer.Start();
         RefreshStatus();
         RefreshFiles();
+        Loaded += (_, _) =>
+        {
+            if (IsVisible) _statusTimer.Start();
+        };
+        Unloaded += (_, _) => _statusTimer.Stop();
         IsVisibleChanged += (_, _) =>
         {
             if (IsVisible)
             {
                 RefreshStatus();
+                RefreshFiles();
+                _statusTimer.Start();
             }
+            else _statusTimer.Stop();
         };
     }
 

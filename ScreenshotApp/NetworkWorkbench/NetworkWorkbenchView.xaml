@@ -312,6 +312,7 @@
                                 <Grid Grid.Column="1" Margin="4,0,0,0">
                                     <Canvas x:Name="TrafficUsageGridCanvas" ClipToBounds="True" IsHitTestVisible="False" />
                                     <Canvas x:Name="TrafficUsageCanvas" Panel.ZIndex="2" ClipToBounds="True" Background="Transparent" MouseMove="TrafficUsageCanvas_MouseMove" MouseLeave="TrafficUsageCanvas_MouseLeave" />
+                                    <Rectangle x:Name="TrafficUsageHoverHighlight" Panel.ZIndex="3" HorizontalAlignment="Left" VerticalAlignment="Stretch" Fill="#194D7CFE" IsHitTestVisible="False" Visibility="Collapsed" />
                                     <Border x:Name="TrafficUsageTooltip" Panel.ZIndex="4" MaxWidth="210" Padding="10,7" HorizontalAlignment="Left" VerticalAlignment="Top" Background="#F2FFFFFF" BorderBrush="#7AAED3EC" BorderThickness="1" CornerRadius="9" IsHitTestVisible="False" Visibility="Collapsed">
                                         <TextBlock x:Name="TrafficUsageTooltipText" FontSize="10" Foreground="#405F7C" TextWrapping="Wrap" />
                                     </Border>

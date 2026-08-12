@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Windows.Media.Imaging;
@@ -20,6 +21,12 @@ public sealed class CollaborationService
     private const int MaxRequestHeaderBytes = 8192;
     // 请求体上限：剪贴板文本与文件上传共用；单文件上限 512 MB，超出会连接失败。
     private const int MaxRequestBodyBytes = 512 * 1024 * 1024;
+    private const int MaxClipboardBodyBytes = 16 * 1024 * 1024;
+    private const int MaxClipboardTextBodyBytes = 1024 * 1024;
+    private const long MaxClipboardImagePixels = 16_000_000;
+    private const int MaxConcurrentClients = 4;
+    private const long MaxIncomingDirectoryBytes = 10L * 1024 * 1024 * 1024;
+    private const long MinimumFreeSpaceBytes = 1024L * 1024 * 1024;
     private const int ClipboardHistoryCount = 20;
     private const int SessionLifetimeHours = 24;
 
@@ -28,6 +35,11 @@ public sealed class CollaborationService
     private sealed record SessionInfo(DateTime Expires, DateTime LastSeen);
     private readonly ConcurrentDictionary<string, SessionInfo> _sessions = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, string> _deviceSessions = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, PairAttemptInfo> _pairAttempts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly SemaphoreSlim _clientGate = new(MaxConcurrentClients, MaxConcurrentClients);
+    private readonly SemaphoreSlim _uploadGate = new(1, 1);
+    private readonly object _pairAttemptSync = new();
+    private sealed record PairAttemptInfo(int Failures, DateTime BlockedUntil, DateTime LastAttempt);
     private TcpListener? _listener;
     private CancellationTokenSource? _acceptCts;
     private long _clipboardSeq;
@@ -95,9 +107,10 @@ public sealed class CollaborationService
         Port = port;
         Directory.CreateDirectory(IncomingDirectory);
         Directory.CreateDirectory(OutgoingDirectory);
-        _pin = Random.Shared.Next(100000, 1000000).ToString(CultureInfo.InvariantCulture);
+        _pin = CreatePairingPin();
         LocalIpAddress = ResolveLanIpAddress();
         _pageHtml = LoadEmbeddedPage();
+        CleanupStaleUploads();
 
         _acceptCts = new CancellationTokenSource();
         _listener = new TcpListener(IPAddress.Any, Port);
@@ -116,11 +129,21 @@ public sealed class CollaborationService
         _acceptCts?.Cancel();
         _listener?.Stop();
         _listener = null;
+        _acceptCts?.Dispose();
+        _acceptCts = null;
+        _sessions.Clear();
+        _deviceSessions.Clear();
+        _pairAttempts.Clear();
+        _pin = null;
         IsRunning = false;
     }
 
     /// <summary>重新生成配对 PIN；旧 PIN 立即失效，已配对的会话不受影响。</summary>
-    public void RegeneratePin() => _pin = Random.Shared.Next(100000, 1000000).ToString(CultureInfo.InvariantCulture);
+    public void RegeneratePin()
+    {
+        _pin = CreatePairingPin();
+        _pairAttempts.Clear();
+    }
 
     /// <summary>当前活跃设备数：同一设备重复配对只计一台，网页会话按匿名计数。</summary>
     public int SessionCount
@@ -219,12 +242,19 @@ public sealed class CollaborationService
             {
                 continue;
             }
-            _ = HandleClientAsync(client);
+            if (!_clientGate.Wait(0))
+            {
+                client.Dispose();
+                continue;
+            }
+            _ = HandleClientAsync(client, cancellationToken);
         }
     }
 
-    private async Task HandleClientAsync(TcpClient client)
+    private async Task HandleClientAsync(TcpClient client, CancellationToken serviceToken)
     {
+        string? temporaryBodyPath = null;
+        var uploadSlotOwned = false;
         try
         {
             using (client)
@@ -232,30 +262,55 @@ public sealed class CollaborationService
             {
                 stream.ReadTimeout = 15000;
                 stream.WriteTimeout = 60000;
-                var request = await ReadRequestAsync(stream);
+                var request = await ReadRequestAsync(stream, serviceToken);
                 if (request == null)
                 {
                     return;
                 }
-                await DispatchAsync(stream, request);
+                temporaryBodyPath = request.TemporaryBodyPath;
+                uploadSlotOwned = request.UploadSlotOwned;
+                var consumed = await DispatchAsync(stream, request, client.Client.RemoteEndPoint as IPEndPoint, serviceToken);
+                if (consumed) temporaryBodyPath = null;
             }
         }
         catch
         {
             // 单个客户端异常不影响服务。
         }
+        finally
+        {
+            if (!string.IsNullOrWhiteSpace(temporaryBodyPath))
+            {
+                try { File.Delete(temporaryBodyPath); } catch { }
+            }
+            if (uploadSlotOwned) _uploadGate.Release();
+            _clientGate.Release();
+        }
     }
 
-    private sealed record HttpRequest(string Method, string Path, string Query, Dictionary<string, string> Headers, byte[]? Body);
+    private sealed record HttpRequest(
+        string Method,
+        string Path,
+        string Query,
+        Dictionary<string, string> Headers,
+        byte[]? Body,
+        string? TemporaryBodyPath,
+        long BodyLength,
+        bool UploadSlotOwned);
 
-    private static async Task<HttpRequest?> ReadRequestAsync(NetworkStream stream)
+    private async Task<HttpRequest?> ReadRequestAsync(NetworkStream stream, CancellationToken serviceToken)
     {
         var headerBytes = new MemoryStream();
         var buffer = new byte[1024];
         var headerEnd = -1;
+        var headerDeadline = DateTime.UtcNow.AddSeconds(15);
         while (headerBytes.Length < MaxRequestHeaderBytes)
         {
-            var read = await stream.ReadAsync(buffer, 0, buffer.Length);
+            var headerTimeLeft = headerDeadline - DateTime.UtcNow;
+            if (headerTimeLeft <= TimeSpan.Zero) return null;
+            var remainingHeader = MaxRequestHeaderBytes - (int)headerBytes.Length;
+            var read = await ReadWithIdleTimeoutAsync(stream, buffer.AsMemory(0, Math.Min(buffer.Length, remainingHeader)),
+                headerTimeLeft, serviceToken);
             if (read <= 0)
             {
                 return null;
@@ -308,44 +363,102 @@ public sealed class CollaborationService
         }
 
         byte[]? body = null;
-        if (headers.TryGetValue("Content-Length", out var lengthText) && int.TryParse(lengthText, out var length) && length > 0)
+        if (headers.TryGetValue("Content-Length", out var lengthText))
         {
+            if (!int.TryParse(lengthText, out var length) || length < 0 || length > MaxRequestBodyBytes)
+            {
+                return null;
+            }
+            if (length == 0) return new HttpRequest(method, path, query, headers, null, null, 0, false);
+            var normalizedMethod = method.ToUpperInvariant();
+            var normalizedPath = path.ToLowerInvariant();
+            var parsedQuery = ParseQuery(query);
+            var isPairRequest = normalizedMethod == "GET" && normalizedPath is "/pair" or "/api/pair";
+            if (isPairRequest) return null;
+            var token = parsedQuery.GetValueOrDefault("t");
+            if (!IsSessionTokenFormatValid(token) || !IsValidSession(token)) return null;
+            var isFileUpload = normalizedMethod == "PUT" && normalizedPath == "/api/files/upload";
+            var isClipboardPush = normalizedMethod == "POST" && normalizedPath == "/api/clipboard/push";
+            if (!isFileUpload && !isClipboardPush) return null;
+            var contentType = headers.GetValueOrDefault("Content-Type") ?? string.Empty;
+            var maximumForEndpoint = isFileUpload
+                ? MaxRequestBodyBytes
+                : contentType.Contains("image/png", StringComparison.OrdinalIgnoreCase)
+                    ? MaxClipboardBodyBytes
+                    : MaxClipboardTextBodyBytes;
+            if (length > maximumForEndpoint) return null;
             var total = (int)headerBytes.Length - headerEnd - 4;
             var bodyStart = headerEnd + 4;
             var existing = headerBytes.ToArray();
-            var remaining = length - total;
-            if (remaining > 0)
+            var copied = Math.Min(Math.Max(0, total), length);
+            if (isFileUpload)
             {
-                if (remaining > MaxRequestBodyBytes)
+                await _uploadGate.WaitAsync(serviceToken);
+                var uploadSlotOwned = true;
+                try
                 {
-                    return null;
-                }
-                var rest = new byte[remaining];
-                var read = 0;
-                while (read < remaining)
-                {
-                    var chunk = await stream.ReadAsync(rest, read, remaining - read);
-                    if (chunk <= 0)
+                    Directory.CreateDirectory(IncomingDirectory);
+                    if (!HasUploadCapacity(length))
                     {
+                        _uploadGate.Release();
                         return null;
                     }
-                    read += chunk;
                 }
-                body = new byte[length];
-                Array.Copy(existing, bodyStart, body, 0, total);
-                Array.Copy(rest, 0, body, total, remaining);
+                catch
+                {
+                    _uploadGate.Release();
+                    return null;
+                }
+                var temporaryPath = Path.Combine(IncomingDirectory, $".xtool-upload-{Guid.NewGuid():N}.tmp");
+                try
+                {
+                    await using var output = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None,
+                        128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+                    if (copied > 0) await output.WriteAsync(existing.AsMemory(bodyStart, copied));
+                    var transferBuffer = new byte[128 * 1024];
+                    var received = copied;
+                    var bodyDeadline = CreateBodyDeadline(length, isFileUpload: true);
+                    while (received < length)
+                    {
+                        var timeLeft = bodyDeadline - DateTime.UtcNow;
+                        if (timeLeft <= TimeSpan.Zero) throw new TimeoutException("文件上传超过允许时限。");
+                        var chunk = await ReadWithIdleTimeoutAsync(stream,
+                            transferBuffer.AsMemory(0, Math.Min(transferBuffer.Length, length - received)),
+                            MinTimeout(TimeSpan.FromSeconds(30), timeLeft), serviceToken);
+                        if (chunk <= 0) throw new EndOfStreamException("文件上传在完成前中断。");
+                        await output.WriteAsync(transferBuffer.AsMemory(0, chunk));
+                        received += chunk;
+                    }
+                    await output.FlushAsync();
+                    return new HttpRequest(method, path, query, headers, null, temporaryPath, length, uploadSlotOwned);
+                }
+                catch
+                {
+                    try { File.Delete(temporaryPath); } catch { }
+                    _uploadGate.Release();
+                    return null;
+                }
             }
-            else
+
+            body = new byte[length];
+            if (copied > 0) Array.Copy(existing, bodyStart, body, 0, copied);
+            var clipboardDeadline = CreateBodyDeadline(length, isFileUpload: false);
+            while (copied < length)
             {
-                body = new byte[length];
-                Array.Copy(existing, bodyStart, body, 0, length);
+                var timeLeft = clipboardDeadline - DateTime.UtcNow;
+                if (timeLeft <= TimeSpan.Zero) return null;
+                var chunk = await ReadWithIdleTimeoutAsync(stream, body.AsMemory(copied, length - copied),
+                    MinTimeout(TimeSpan.FromSeconds(15), timeLeft), serviceToken);
+                if (chunk <= 0) return null;
+                copied += chunk;
             }
         }
 
-        return new HttpRequest(method, path, query, headers, body);
+        return new HttpRequest(method, path, query, headers, body, null, body?.LongLength ?? 0, false);
     }
 
-    private async Task DispatchAsync(NetworkStream stream, HttpRequest request)
+    private async Task<bool> DispatchAsync(NetworkStream stream, HttpRequest request, IPEndPoint? remoteEndpoint,
+        CancellationToken serviceToken)
     {
         try
         {
@@ -354,38 +467,38 @@ public sealed class CollaborationService
 
             if (path == "/pair" && request.Method == "GET")
             {
-                if (!IsRunning || query.GetValueOrDefault("pin") != _pin)
+                if (!TryValidatePairingPin(remoteEndpoint, query.GetValueOrDefault("pin")))
                 {
-                    await WriteTextAsync(stream, 401, "text/plain; charset=utf-8", "配对 PIN 不正确");
-                    return;
+                    await WriteTextAsync(stream, 401, "text/plain; charset=utf-8", "配对 PIN 不正确", serviceToken);
+                    return false;
                 }
                 var token = Guid.NewGuid().ToString("N");
                 RegisterSession(token, query.GetValueOrDefault("device"));
                 var html = (_pageHtml ?? string.Empty)
                     .Replace("__TOKEN__", token)
                     .Replace("__HOST__", $"http://{LocalIpAddress}:{Port}");
-                await WriteBytesAsync(stream, 200, "text/html; charset=utf-8", Encoding.UTF8.GetBytes(html));
-                return;
+                await WriteBytesAsync(stream, 200, "text/html; charset=utf-8", Encoding.UTF8.GetBytes(html), serviceToken);
+                return false;
             }
 
             // 手机原生 App 使用的 JSON 配对端点；网页端仍走 /pair 返回页面。
             if (path == "/api/pair" && request.Method == "GET")
             {
-                if (!IsRunning || query.GetValueOrDefault("pin") != _pin)
+                if (!TryValidatePairingPin(remoteEndpoint, query.GetValueOrDefault("pin")))
                 {
-                    await WriteJsonAsync(stream, 401, new { ok = false, error = "配对 PIN 不正确" });
-                    return;
+                    await WriteJsonAsync(stream, 401, new { ok = false, error = "配对 PIN 不正确" }, serviceToken);
+                    return false;
                 }
                 var token = Guid.NewGuid().ToString("N");
                 RegisterSession(token, query.GetValueOrDefault("device"));
-                await WriteJsonAsync(stream, 200, new { ok = true, token, host = $"{LocalIpAddress}:{Port}" });
-                return;
+                await WriteJsonAsync(stream, 200, new { ok = true, token, host = $"{LocalIpAddress}:{Port}" }, serviceToken);
+                return false;
             }
 
             if (!IsValidSession(query.GetValueOrDefault("t")))
             {
-                await WriteJsonAsync(stream, 401, new { error = "未授权或会话已过期" });
-                return;
+                await WriteJsonAsync(stream, 401, new { error = "未授权或会话已过期" }, serviceToken);
+                return false;
             }
 
             if (path == "/api/logout")
@@ -399,14 +512,14 @@ public sealed class CollaborationService
                         _deviceSessions.TryRemove(pair, out _);
                     }
                 }
-                await WriteJsonAsync(stream, 200, new { ok = true });
-                return;
+                await WriteJsonAsync(stream, 200, new { ok = true }, serviceToken);
+                return false;
             }
 
             if (path == "/")
             {
-                await WriteTextAsync(stream, 200, "text/plain; charset=utf-8", "X-Tool 协作中心：请使用手机扫描电脑端二维码完成配对。");
-                return;
+                await WriteTextAsync(stream, 200, "text/plain; charset=utf-8", "X-Tool 协作中心：请使用手机扫描电脑端二维码完成配对。", serviceToken);
+                return false;
             }
 
             if (path == "/api/status")
@@ -426,8 +539,8 @@ public sealed class CollaborationService
                         latestAt = latest?.CreatedAt.ToString("O")
                     };
                 }
-                await WriteJsonAsync(stream, 200, statusPayload);
-                return;
+                await WriteJsonAsync(stream, 200, statusPayload, serviceToken);
+                return false;
             }
 
             if (path == "/api/clipboard/pull" && request.Method == "GET")
@@ -449,8 +562,8 @@ public sealed class CollaborationService
                         .ToArray();
                     pullPayload = new { ok = true, currentSeq = _clipboardSeq, entries };
                 }
-                await WriteJsonAsync(stream, 200, pullPayload);
-                return;
+                await WriteJsonAsync(stream, 200, pullPayload, serviceToken);
+                return false;
             }
 
             if (path == "/api/clipboard/push" && request.Method == "POST")
@@ -463,33 +576,38 @@ public sealed class CollaborationService
                     if (!string.IsNullOrWhiteSpace(text))
                     {
                         await WriteClipboardFromMobileAsync(text, imageBytes: null);
-                        await WriteJsonAsync(stream, 200, new { ok = true });
-                        return;
+                        await WriteJsonAsync(stream, 200, new { ok = true }, serviceToken);
+                        return false;
                     }
                 }
                 else if (contentType.Contains("image/png", StringComparison.OrdinalIgnoreCase) && request.Body is { Length: > 0 })
                 {
+                    if (!IsSafePng(request.Body))
+                    {
+                        await WriteJsonAsync(stream, 400, new { error = "图片尺寸过大或 PNG 格式无效" }, serviceToken);
+                        return false;
+                    }
                     await WriteClipboardFromMobileAsync(null, request.Body);
-                    await WriteJsonAsync(stream, 200, new { ok = true });
-                    return;
+                    await WriteJsonAsync(stream, 200, new { ok = true }, serviceToken);
+                    return false;
                 }
-                await WriteJsonAsync(stream, 400, new { error = "不支持的剪贴板内容" });
-                return;
+                await WriteJsonAsync(stream, 400, new { error = "不支持的剪贴板内容" }, serviceToken);
+                return false;
             }
 
             if (path == "/api/files/upload" && request.Method == "PUT")
             {
                 var name = SanitizeFileName(query.GetValueOrDefault("name"));
-                if (string.IsNullOrWhiteSpace(name) || request.Body == null)
+                if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(request.TemporaryBodyPath) ||
+                    !File.Exists(request.TemporaryBodyPath))
                 {
-                    await WriteJsonAsync(stream, 400, new { error = "缺少文件名或内容" });
-                    return;
+                    await WriteJsonAsync(stream, 400, new { error = "缺少文件名或内容" }, serviceToken);
+                    return false;
                 }
-                var target = UniquePath(Path.Combine(IncomingDirectory, name));
-                await File.WriteAllBytesAsync(target, request.Body);
-                FileReceived?.Invoke(Path.GetFileName(target), request.Body.LongLength);
-                await WriteJsonAsync(stream, 200, new { ok = true, name = Path.GetFileName(target) });
-                return;
+                var target = MoveUploadToUniqueTarget(request.TemporaryBodyPath, IncomingDirectory, name);
+                FileReceived?.Invoke(Path.GetFileName(target), request.BodyLength);
+                await WriteJsonAsync(stream, 200, new { ok = true, name = Path.GetFileName(target) }, serviceToken);
+                return true;
             }
 
             if (path == "/api/files/list" && request.Method == "GET")
@@ -497,42 +615,47 @@ public sealed class CollaborationService
                 var dir = query.GetValueOrDefault("dir") == "outgoing" ? OutgoingDirectory : IncomingDirectory;
                 var files = Directory.Exists(dir)
                     ? Directory.EnumerateFiles(dir)
+                        .Where(file => !Path.GetFileName(file).StartsWith(".xtool-upload-", StringComparison.OrdinalIgnoreCase))
+                        .Take(2000)
                         .Select(file => new FileInfo(file))
                         .OrderByDescending(info => info.LastWriteTime)
+                        .Take(500)
                         .Select(info => new { name = info.Name, size = info.Length, at = info.LastWriteTime.ToString("O") })
                         .ToArray()
                     : Array.Empty<object>();
-                await WriteJsonAsync(stream, 200, new { ok = true, files });
-                return;
+                await WriteJsonAsync(stream, 200, new { ok = true, files }, serviceToken);
+                return false;
             }
 
             if (path == "/api/files/download" && request.Method == "GET")
             {
                 var dir = query.GetValueOrDefault("dir") == "outgoing" ? OutgoingDirectory : IncomingDirectory;
                 var name = SanitizeFileName(query.GetValueOrDefault("name"));
-                var filePath = Path.Combine(dir, name);
-                if (!File.Exists(filePath))
+                var filePath = ResolveSafeChildPath(dir, name);
+                if (filePath is null || !File.Exists(filePath) ||
+                    File.GetAttributes(filePath).HasFlag(FileAttributes.ReparsePoint))
                 {
-                    await WriteJsonAsync(stream, 404, new { error = "文件不存在" });
-                    return;
+                    await WriteJsonAsync(stream, 404, new { error = "文件不存在" }, serviceToken);
+                    return false;
                 }
-                var bytes = await File.ReadAllBytesAsync(filePath);
-                await WriteBytesAsync(stream, 200, "application/octet-stream", bytes);
-                return;
+                await WriteFileAsync(stream, filePath, serviceToken);
+                return false;
             }
 
-            await WriteJsonAsync(stream, 404, new { error = "接口不存在" });
+            await WriteJsonAsync(stream, 404, new { error = "接口不存在" }, serviceToken);
+            return false;
         }
-        catch (Exception exception)
+        catch (Exception)
         {
             try
             {
-                await WriteJsonAsync(stream, 500, new { error = exception.Message });
+                await WriteJsonAsync(stream, 500, new { error = "服务器处理请求失败" }, serviceToken);
             }
             catch
             {
                 // 响应写入失败时连接已不可用。
             }
+            return false;
         }
     }
 
@@ -586,6 +709,9 @@ public sealed class CollaborationService
         return false;
     }
 
+    private static bool IsSessionTokenFormatValid(string? token) =>
+        token is { Length: 32 } && token.All(Uri.IsHexDigit);
+
     /// <summary>注册配对会话；带设备 ID 时同一设备重复配对替换旧会话，不重复计数。</summary>
     private void RegisterSession(string token, string? deviceId)
     {
@@ -627,26 +753,136 @@ public sealed class CollaborationService
         {
             builder.Append(invalid.Contains(ch) ? '_' : ch);
         }
-        return builder.ToString();
+        var safe = Path.GetFileName(builder.ToString()).Trim().TrimEnd('.', ' ');
+        if (safe is "." or ".." || safe.Length is 0 or > 200 ||
+            safe.StartsWith(".xtool-upload-", StringComparison.OrdinalIgnoreCase)) return string.Empty;
+        var stem = Path.GetFileNameWithoutExtension(safe);
+        var reserved = new[] { "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9" };
+        return reserved.Contains(stem, StringComparer.OrdinalIgnoreCase) ? string.Empty : safe;
     }
 
-    private static string UniquePath(string path)
+    private static bool IsSafePng(byte[] bytes)
     {
-        if (!File.Exists(path))
+        if (bytes.Length < 33 || !bytes.AsSpan(0, 8).SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }) ||
+            ReadBigEndianUInt32(bytes.AsSpan(8, 4)) != 13 ||
+            !bytes.AsSpan(12, 4).SequenceEqual(new byte[] { 73, 72, 68, 82 }))
+            return false;
+        var width = ReadBigEndianUInt32(bytes.AsSpan(16, 4));
+        var height = ReadBigEndianUInt32(bytes.AsSpan(20, 4));
+        return width is > 0 and <= 16384 && height is > 0 and <= 16384 && (long)width * height <= MaxClipboardImagePixels;
+    }
+
+    private static uint ReadBigEndianUInt32(ReadOnlySpan<byte> value) =>
+        ((uint)value[0] << 24) | ((uint)value[1] << 16) | ((uint)value[2] << 8) | value[3];
+
+    private static async Task<int> ReadWithIdleTimeoutAsync(
+        NetworkStream stream, Memory<byte> buffer, TimeSpan timeout, CancellationToken serviceToken)
+    {
+        using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(serviceToken);
+        timeoutSource.CancelAfter(timeout);
+        return await stream.ReadAsync(buffer, timeoutSource.Token);
+    }
+
+    private static string CreatePairingPin() =>
+        RandomNumberGenerator.GetInt32(100000, 1000000).ToString(CultureInfo.InvariantCulture);
+
+    private bool TryValidatePairingPin(IPEndPoint? remoteEndpoint, string? suppliedPin)
+    {
+        if (!IsRunning) return false;
+        var address = remoteEndpoint?.Address.ToString() ?? "unknown";
+        var now = DateTime.UtcNow;
+        lock (_pairAttemptSync)
         {
-            return path;
-        }
-        var directory = Path.GetDirectoryName(path)!;
-        var name = Path.GetFileNameWithoutExtension(path);
-        var extension = Path.GetExtension(path);
-        for (var i = 1; ; i++)
-        {
-            var candidate = Path.Combine(directory, $"{name}_{i}{extension}");
-            if (!File.Exists(candidate))
+            foreach (var stale in _pairAttempts.Where(pair => pair.Value.LastAttempt < now.AddMinutes(-10))
+                         .Select(pair => pair.Key).Take(32).ToArray())
+                _pairAttempts.TryRemove(stale, out _);
+            if (_pairAttempts.TryGetValue(address, out var attempt) && attempt.BlockedUntil > now) return false;
+            if (string.Equals(suppliedPin, _pin, StringComparison.Ordinal))
             {
-                return candidate;
+                _pairAttempts.TryRemove(address, out _);
+                return true;
+            }
+            var failures = (attempt?.Failures ?? 0) + 1;
+            _pairAttempts[address] = failures >= 8
+                ? new PairAttemptInfo(0, now.AddMinutes(2), now)
+                : new PairAttemptInfo(failures, DateTime.MinValue, now);
+            return false;
+        }
+    }
+
+    private static DateTime CreateBodyDeadline(int length, bool isFileUpload)
+    {
+        // 上传按最低 256 KiB/s 计算总时限；短剪贴板请求最多允许 30 秒。
+        var seconds = isFileUpload
+            ? Math.Clamp(60d + length / (256d * 1024d), 60d, 36 * 60d)
+            : 30d;
+        return DateTime.UtcNow.AddSeconds(seconds);
+    }
+
+    private static TimeSpan MinTimeout(TimeSpan first, TimeSpan second) => first <= second ? first : second;
+
+    private void CleanupStaleUploads()
+    {
+        try
+        {
+            foreach (var path in Directory.EnumerateFiles(IncomingDirectory, ".xtool-upload-*.tmp"))
+            {
+                try
+                {
+                    if (File.GetLastWriteTimeUtc(path) < DateTime.UtcNow.AddHours(-1)) File.Delete(path);
+                }
+                catch { }
             }
         }
+        catch { }
+    }
+
+    private static string MoveUploadToUniqueTarget(string temporaryPath, string directory, string fileName)
+    {
+        var root = Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var name = Path.GetFileNameWithoutExtension(fileName);
+        var extension = Path.GetExtension(fileName);
+        for (var index = 0; index < 10_000; index++)
+        {
+            var candidateName = index == 0 ? fileName : $"{name}_{index}{extension}";
+            var candidate = Path.GetFullPath(Path.Combine(root, candidateName));
+            if (!candidate.StartsWith(root, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("文件名超出接收目录边界。");
+            try
+            {
+                File.Move(temporaryPath, candidate, overwrite: false);
+                return candidate;
+            }
+            catch (IOException) when (File.Exists(candidate)) { }
+        }
+        throw new IOException("同名文件过多，无法生成安全的接收文件名。");
+    }
+
+    private static string? ResolveSafeChildPath(string directory, string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName)) return null;
+        try
+        {
+            var root = Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            var candidate = Path.GetFullPath(Path.Combine(root, fileName));
+            return candidate.StartsWith(root, StringComparison.OrdinalIgnoreCase) ? candidate : null;
+        }
+        catch { return null; }
+    }
+
+    private bool HasUploadCapacity(long incomingBytes)
+    {
+        try
+        {
+            var used = Directory.EnumerateFiles(IncomingDirectory)
+                .Select(path => new FileInfo(path).Length)
+                .Aggregate(0L, (total, length) => total > MaxIncomingDirectoryBytes - length ? MaxIncomingDirectoryBytes : total + length);
+            if (used > MaxIncomingDirectoryBytes - incomingBytes) return false;
+            var root = Path.GetPathRoot(Path.GetFullPath(IncomingDirectory));
+            if (string.IsNullOrWhiteSpace(root)) return false;
+            var drive = new DriveInfo(root);
+            return drive.AvailableFreeSpace - incomingBytes >= MinimumFreeSpaceBytes;
+        }
+        catch { return false; }
     }
 
     private static string? ResolveLanIpAddress()
@@ -714,16 +950,18 @@ public sealed class CollaborationService
         }
     }
 
-    private static async Task WriteTextAsync(NetworkStream stream, int status, string contentType, string text) =>
-        await WriteBytesAsync(stream, status, contentType, Encoding.UTF8.GetBytes(text));
+    private static async Task WriteTextAsync(NetworkStream stream, int status, string contentType, string text,
+        CancellationToken cancellationToken) =>
+        await WriteBytesAsync(stream, status, contentType, Encoding.UTF8.GetBytes(text), cancellationToken);
 
-    private static async Task WriteJsonAsync(NetworkStream stream, int status, object payload)
+    private static async Task WriteJsonAsync(NetworkStream stream, int status, object payload, CancellationToken cancellationToken)
     {
         var bytes = JsonSerializer.SerializeToUtf8Bytes(payload);
-        await WriteBytesAsync(stream, status, "application/json; charset=utf-8", bytes);
+        await WriteBytesAsync(stream, status, "application/json; charset=utf-8", bytes, cancellationToken);
     }
 
-    private static async Task WriteBytesAsync(NetworkStream stream, int status, string contentType, byte[] body)
+    private static async Task WriteBytesAsync(NetworkStream stream, int status, string contentType, byte[] body,
+        CancellationToken cancellationToken)
     {
         var reason = status switch
         {
@@ -734,13 +972,36 @@ public sealed class CollaborationService
             500 => "Internal Server Error",
             _ => "OK"
         };
-        var head = $"HTTP/1.1 {status} {reason}\r\nContent-Type: {contentType}\r\nContent-Length: {body.Length}\r\nCache-Control: no-store\r\nConnection: close\r\nAccess-Control-Allow-Origin: *\r\n\r\n";
+        var head = $"HTTP/1.1 {status} {reason}\r\nContent-Type: {contentType}\r\nContent-Length: {body.Length}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n";
         var headBytes = Encoding.UTF8.GetBytes(head);
-        await stream.WriteAsync(headBytes, 0, headBytes.Length);
+        using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutSource.CancelAfter(TimeSpan.FromSeconds(30));
+        await stream.WriteAsync(headBytes.AsMemory(), timeoutSource.Token);
         if (body.Length > 0)
         {
-            await stream.WriteAsync(body, 0, body.Length);
+            await stream.WriteAsync(body.AsMemory(), timeoutSource.Token);
         }
-        await stream.FlushAsync();
+        await stream.FlushAsync(timeoutSource.Token);
+    }
+
+    private static async Task WriteFileAsync(NetworkStream stream, string filePath, CancellationToken cancellationToken)
+    {
+        await using var file = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read,
+            128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        var head = $"HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {file.Length}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n";
+        var headBytes = Encoding.UTF8.GetBytes(head);
+        using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutSource.CancelAfter(TimeSpan.FromMinutes(30));
+        await stream.WriteAsync(headBytes.AsMemory(), timeoutSource.Token);
+        var buffer = new byte[128 * 1024];
+        while (true)
+        {
+            var read = await file.ReadAsync(buffer.AsMemory(), timeoutSource.Token);
+            if (read == 0) break;
+            using var writeTimeout = CancellationTokenSource.CreateLinkedTokenSource(timeoutSource.Token);
+            writeTimeout.CancelAfter(TimeSpan.FromSeconds(30));
+            await stream.WriteAsync(buffer.AsMemory(0, read), writeTimeout.Token);
+        }
+        await stream.FlushAsync(timeoutSource.Token);
     }
 }

@@ -8,13 +8,15 @@ namespace ScreenshotApp.NetworkWorkbench;
 internal sealed class NetworkHistoryStore : IAsyncDisposable
 {
     private readonly string _databasePath;
-    private readonly Channel<WriteRequest> _writeQueue = Channel.CreateUnbounded<WriteRequest>(new UnboundedChannelOptions
+    private readonly Channel<WriteRequest> _writeQueue = Channel.CreateBounded<WriteRequest>(new BoundedChannelOptions(512)
     {
         SingleReader = true,
-        SingleWriter = false
+        SingleWriter = false,
+        FullMode = BoundedChannelFullMode.Wait
     });
     private readonly TaskCompletionSource _initialized = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly Task _writerTask;
+    private readonly SemaphoreSlim _pendingSlots = new(512, 512);
 
     public NetworkHistoryStore()
     {
@@ -345,10 +347,18 @@ internal sealed class NetworkHistoryStore : IAsyncDisposable
 
     private async Task EnqueueAsync(Action<SqliteConnection> action, CancellationToken cancellationToken = default)
     {
-        await _initialized.Task.WaitAsync(cancellationToken);
-        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        await _writeQueue.Writer.WriteAsync(new WriteRequest(action, completion), cancellationToken);
-        await completion.Task.WaitAsync(cancellationToken);
+        if (!_pendingSlots.Wait(0)) throw new InvalidOperationException("网络历史写入队列繁忙，请稍后重试。");
+        try
+        {
+            await _initialized.Task.WaitAsync(cancellationToken);
+            var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            await _writeQueue.Writer.WriteAsync(new WriteRequest(action, completion), cancellationToken);
+            await completion.Task.WaitAsync(cancellationToken);
+        }
+        finally
+        {
+            _pendingSlots.Release();
+        }
     }
 
     private async Task WriterLoopAsync()
@@ -476,6 +486,7 @@ internal sealed class NetworkHistoryStore : IAsyncDisposable
     {
         _writeQueue.Writer.TryComplete();
         try { await _writerTask; } catch { }
+        _pendingSlots.Dispose();
     }
 
     private sealed record WriteRequest(Action<SqliteConnection> Action, TaskCompletionSource Completion);
