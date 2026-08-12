@@ -60,6 +60,7 @@ public static class DiskHistoryStore
     public static async Task<IReadOnlyList<DiskHistoryPoint>> LoadHistoryAsync(string volumeId, int days)
     {
         days = Math.Clamp(days, 1, RetentionDays);
+        volumeId = NormalizeVolumeId(volumeId);
         await Gate.WaitAsync();
         try
         {
@@ -68,9 +69,11 @@ public static class DiskHistoryStore
                 using var connection = OpenConnection();
                 using var command = connection.CreateCommand();
                 command.CommandText = @"SELECT captured_at, total_bytes, available_bytes FROM disk_snapshots
-                    WHERE volume_id = $id AND snapshot_date >= $since_date AND snapshot_date <= $today
+                    WHERE (volume_id = $id OR volume_id = $id_with_separator)
+                    AND snapshot_date >= $since_date AND snapshot_date <= $today
                     ORDER BY snapshot_date, captured_at;";
                 command.Parameters.AddWithValue("$id", volumeId);
+                command.Parameters.AddWithValue("$id_with_separator", volumeId + "\\");
                 var today = DateTime.Today;
                 command.Parameters.AddWithValue("$since_date", today.AddDays(-(days - 1)).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
                 command.Parameters.AddWithValue("$today", today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
@@ -144,5 +147,11 @@ public static class DiskHistoryStore
         command.CommandText = "DELETE FROM disk_snapshots WHERE captured_at < $cutoff;";
         command.Parameters.AddWithValue("$cutoff", DateTime.Today.AddDays(-RetentionDays).ToString("O"));
         command.ExecuteNonQuery();
+    }
+
+    private static string NormalizeVolumeId(string volumeId)
+    {
+        var normalized = volumeId.Trim();
+        return normalized.EndsWith("\\", StringComparison.Ordinal) ? normalized[..^1] : normalized;
     }
 }
