@@ -11,8 +11,6 @@ internal static class NativeMethods
     internal const int WmHotKey = 0x0312;
     internal const int WmClipboardUpdate = 0x031D;
     private const uint WmCancelMode = 0x001F;
-    private const uint WmKeyDown = 0x0100;
-    private const uint WmKeyUp = 0x0101;
     internal const uint ModControl = 0x0002;
     internal const uint ModShift = 0x0004;
     internal const uint ModAlt = 0x0001;
@@ -313,41 +311,9 @@ internal static class NativeMethods
             return;
         }
 
-        // 菜单通常由独立的临时窗口接收输入，直接 PostMessage 到宿主窗口
-        // 不一定能关闭它；在隐藏 X-Tool 前向当前前台输入队列发送真实 ESC。
-        _ = SendEscapeKey();
+        // 只发送 WM_CANCELMODE。不要向前台应用注入真实 ESC，否则浏览器全屏视频、
+        // 播放器和编辑器会把截图触发误认为用户按下了取消键。
         _ = PostMessage(windowHandle, WmCancelMode, IntPtr.Zero, IntPtr.Zero);
-        _ = PostMessage(windowHandle, WmKeyDown, new IntPtr(VirtualKeyEscape), IntPtr.Zero);
-        _ = PostMessage(windowHandle, WmKeyUp, new IntPtr(VirtualKeyEscape), IntPtr.Zero);
-    }
-
-    private static bool SendEscapeKey()
-    {
-        var inputs = new[]
-        {
-            new Input
-            {
-                Type = InputKeyboard,
-                Data = new InputUnion
-                {
-                    Keyboard = new KeyboardInput { VirtualKey = (ushort)VirtualKeyEscape }
-                }
-            },
-            new Input
-            {
-                Type = InputKeyboard,
-                Data = new InputUnion
-                {
-                    Keyboard = new KeyboardInput
-                    {
-                        VirtualKey = (ushort)VirtualKeyEscape,
-                        Flags = KeyEventKeyUp
-                    }
-                }
-            }
-        };
-
-        return SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<Input>()) == inputs.Length;
     }
 
     internal static bool ActivateWindowAtPoint(int x, int y)

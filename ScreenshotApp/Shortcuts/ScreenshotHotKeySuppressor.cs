@@ -19,20 +19,34 @@ internal sealed class ScreenshotHotKeySuppressor : IDisposable
     private const uint VkMenu = 0x12;
     private const uint VkLeftWindows = 0x5B;
     private const uint VkRightWindows = 0x5C;
+    private const uint VkApps = 0x5D;
+    private const uint VkSnapshot = 0x2C;
 
     private readonly GlobalShortcut _shortcut;
     private readonly HookProcedure _procedure;
     private IntPtr _hook;
     private int _suppressTargetUntilUp;
+    private int _lastInstallError;
 
     internal ScreenshotHotKeySuppressor(GlobalShortcut shortcut)
     {
         _shortcut = shortcut;
         _procedure = HookCallback;
-        _hook = SetWindowsHookEx(WhKeyboardLl, _procedure, GetModuleHandle(null), 0);
+        _hook = SetWindowsHookEx(WhKeyboardLl, _procedure, GetModuleHandle(IntPtr.Zero), 0);
+        if (_hook == IntPtr.Zero)
+        {
+            _lastInstallError = Marshal.GetLastWin32Error();
+            _hook = SetWindowsHookEx(WhKeyboardLl, _procedure, IntPtr.Zero, 0);
+            if (_hook == IntPtr.Zero)
+            {
+                _lastInstallError = Marshal.GetLastWin32Error();
+            }
+        }
     }
 
     internal bool IsInstalled => _hook != IntPtr.Zero;
+
+    internal int LastInstallError => _lastInstallError;
 
     internal event EventHandler? Pressed;
 
@@ -57,7 +71,7 @@ internal sealed class ScreenshotHotKeySuppressor : IDisposable
             var isUp = keyboardMessage is WmKeyUp or WmSysKeyUp;
             if ((isDown || isUp) && hookData.VirtualKeyCode == _shortcut.VirtualKey)
             {
-                if (isDown && IsExactModifierState())
+                if (isDown && (IsExactModifierState() || IsShellReservedShortcutKey()))
                 {
                     if (Interlocked.Exchange(ref _suppressTargetUntilUp, 1) == 0)
                     {
@@ -91,6 +105,9 @@ internal sealed class ScreenshotHotKeySuppressor : IDisposable
                IsKeyDown(VkLeftWindows) == _shortcut.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Windows) &&
                IsKeyDown(VkRightWindows) == _shortcut.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Windows);
     }
+
+    private bool IsShellReservedShortcutKey() =>
+        _shortcut.VirtualKey is VkApps or VkSnapshot;
 
     private static bool IsKeyDown(uint virtualKey) =>
         (GetAsyncKeyState((int)virtualKey) & 0x8000) != 0;
@@ -128,6 +145,6 @@ internal sealed class ScreenshotHotKeySuppressor : IDisposable
     [DllImport("user32.dll")]
     private static extern short GetAsyncKeyState(int virtualKey);
 
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
-    private static extern IntPtr GetModuleHandle(string? moduleName);
+    [DllImport("kernel32.dll", EntryPoint = "GetModuleHandleW", SetLastError = true)]
+    private static extern IntPtr GetModuleHandle(IntPtr moduleName);
 }
