@@ -1107,7 +1107,7 @@ public partial class NetworkWorkbenchView : UserControl
             : bucket.Start.ToString("yyyy-MM-dd");
         TrafficUsageTooltipText.Text = $"{label}\n总用量 {FormatBytes(bucket.TotalBytes)}\n非代理 {FormatBytes(bucket.NonProxyBytes)}\n代理出口 {FormatBytes(bucket.ProxyBytes)}";
         TrafficUsageTooltip.Visibility = Visibility.Visible;
-        TrafficUsageTooltip.Margin = new Thickness(Math.Clamp(position.X + 12, 0, Math.Max(0, TrafficUsageCanvas.ActualWidth - 220)), 6, 0, 0);
+        TrafficUsageTooltip.Margin = new Thickness(Math.Clamp(position.X + 14, 0, Math.Max(0, TrafficUsageCanvas.ActualWidth - 290)), 8, 0, 0);
         var slot = TrafficUsageCanvas.ActualWidth / _trafficUsageChartBuckets.Count;
         TrafficUsageHoverHighlight.Width = slot;
         TrafficUsageHoverHighlight.Margin = new Thickness(index * slot, 0, 0, 0);
@@ -2566,6 +2566,12 @@ public partial class NetworkWorkbenchView : UserControl
         public Visibility ProxyBadgeVisibility => ProxyRole == ProxyTrafficRole.None ? Visibility.Collapsed : Visibility.Visible;
         public Brush BadgeBackground => ProxyRole == ProxyTrafficRole.Exit ? BrushFrom("#E9E1FFFF") : BrushFrom("#E7F5EEFF");
         public Brush BadgeForeground => ProxyRole == ProxyTrafficRole.Exit ? BrushFrom("#7651B5") : BrushFrom("#3B8A60");
+        public Brush CardAccentBrush => ProxyRole switch
+        {
+            ProxyTrafficRole.Exit => BrushFrom("#9B6DDF"),
+            ProxyTrafficRole.Ingress => BrushFrom("#55B982"),
+            _ => BrushFrom("#78A5C7")
+        };
     }
 
     private sealed record ProcessTrafficUsageSnapshot(long ExternalBytes, bool IsProxyExit);
