@@ -30,6 +30,11 @@ public partial class SystemToolsView : UserControl
     private readonly ObservableCollection<StorageVolumeEntry> _storageVolumes = new();
     private readonly ObservableCollection<PhysicalStorageEntry> _physicalStorage = new();
     private readonly ObservableCollection<SystemDiagnosticGroup> _diagnosticGroups = new();
+    private readonly DispatcherTimer _hardwareMonitorRenderTimer;
+    private HardwareMonitorSnapshot? _latestHardwareSnapshot;
+    private TimeSpan _hardwareHistoryRange = TimeSpan.FromMinutes(5);
+    /// <summary>实时硬件监控的独立显示模型，采集代理只需推送中立快照。</summary>
+    public HardwareMonitorPresenter HardwareMonitor { get; } = new();
     private IReadOnlyList<PortEntry> _allPorts = Array.Empty<PortEntry>();
     private IReadOnlyList<ProcessEntry> _allProcesses = Array.Empty<ProcessEntry>();
     private IReadOnlyList<ServiceEntry> _allServices = Array.Empty<ServiceEntry>();
@@ -109,6 +114,8 @@ public partial class SystemToolsView : UserControl
         _portAutoRefreshTimer.Tick += AutoRefreshPorts_Tick;
         _diskHistoryAutoCaptureTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(15) };
         _diskHistoryAutoCaptureTimer.Tick += DiskHistoryAutoCaptureTimer_Tick;
+        _hardwareMonitorRenderTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _hardwareMonitorRenderTimer.Tick += HardwareMonitorRenderTimer_Tick;
         EnvironmentScopeComboBox.SelectedIndex = 0;
         AutoRefreshIntervalComboBox.SelectedIndex = 1;
         UpdatePortAutoRefreshInterval();
@@ -124,6 +131,7 @@ public partial class SystemToolsView : UserControl
             ConfigureInteractiveHeaders();
             ConfigurePortColumns();
             ConfigureProcessColumns();
+            _hardwareMonitorRenderTimer.Start();
             if (EnvironmentOnly)
             {
                 await RefreshDeviceInfoAsync();
@@ -135,6 +143,7 @@ public partial class SystemToolsView : UserControl
         {
             _portAutoRefreshTimer.Stop();
             _diskHistoryAutoCaptureTimer.Stop();
+            _hardwareMonitorRenderTimer.Stop();
             StorageAnalysisView.CancelActiveScan();
             CancelActiveDiagnostics();
         };
@@ -145,7 +154,65 @@ public partial class SystemToolsView : UserControl
                 StorageAnalysisView.CancelActiveScan();
                 CancelActiveDiagnostics();
             }
+            else if (OverviewPanel.Visibility == Visibility.Visible)
+            {
+                RenderLatestHardwareSnapshot();
+            }
         };
+    }
+
+    /// <summary>接收采集端的一秒快照；页面不可见时仅写入内存历史，不触发界面重绘。</summary>
+    public void ApplyHardwareMonitorSnapshot(HardwareMonitorSnapshot snapshot)
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.BeginInvoke(new Action(() => ApplyHardwareMonitorSnapshot(snapshot)), DispatcherPriority.Background);
+            return;
+        }
+
+        _latestHardwareSnapshot = snapshot;
+        HardwareMonitor.Apply(snapshot, updatePresentation: false, recordHistory: true);
+    }
+
+    private void HardwareMonitorRenderTimer_Tick(object? sender, EventArgs e)
+    {
+        if (!IsVisible || OverviewPanel.Visibility != Visibility.Visible) return;
+        RenderLatestHardwareSnapshot();
+    }
+
+    private void RenderLatestHardwareSnapshot()
+    {
+        if (_latestHardwareSnapshot is not null)
+            HardwareMonitor.Apply(_latestHardwareSnapshot, updatePresentation: true, recordHistory: false);
+        if (HardwareHistoryPanel.Visibility == Visibility.Visible)
+            HardwareHistoryChart.SetPoints(HardwareMonitor.GetHistory(_hardwareHistoryRange));
+    }
+
+    private void HardwareMonitorMode_Click(object sender, RoutedEventArgs e)
+    {
+        var showHistory = string.Equals((sender as FrameworkElement)?.Tag?.ToString(), "History", StringComparison.OrdinalIgnoreCase);
+        HardwareRealtimePanel.Visibility = showHistory ? Visibility.Collapsed : Visibility.Visible;
+        HardwareHistoryPanel.Visibility = showHistory ? Visibility.Visible : Visibility.Collapsed;
+        HardwareHistoryRangePanel.Visibility = showHistory ? Visibility.Visible : Visibility.Collapsed;
+        SetHardwareToggleStyle(HardwareRealtimeTabButton, !showHistory);
+        SetHardwareToggleStyle(HardwareHistoryTabButton, showHistory);
+        if (showHistory) HardwareHistoryChart.SetPoints(HardwareMonitor.GetHistory(_hardwareHistoryRange));
+    }
+
+    private void HardwareHistoryRange_Click(object sender, RoutedEventArgs e)
+    {
+        if (!int.TryParse((sender as FrameworkElement)?.Tag?.ToString(), out var minutes)) minutes = 5;
+        _hardwareHistoryRange = TimeSpan.FromMinutes(Math.Clamp(minutes, 5, 30));
+        foreach (var button in HardwareHistoryRangePanel.Children.OfType<Button>())
+            SetHardwareToggleStyle(button, string.Equals(button.Tag?.ToString(), minutes.ToString(), StringComparison.Ordinal));
+        HardwareHistoryChart.SetPoints(HardwareMonitor.GetHistory(_hardwareHistoryRange));
+    }
+
+    private static void SetHardwareToggleStyle(Button button, bool active)
+    {
+        button.Background = new SolidColorBrush(active ? Color.FromRgb(77, 124, 254) : Color.FromArgb(134, 255, 255, 255));
+        button.BorderBrush = new SolidColorBrush(active ? Color.FromRgb(118, 160, 255) : Color.FromRgb(166, 209, 232));
+        button.Foreground = active ? Brushes.White : new SolidColorBrush(Color.FromRgb(74, 105, 135));
     }
 
     private async Task RefreshPortsAsync()

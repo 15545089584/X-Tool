@@ -52,6 +52,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- 独立管理员传感器代理只作为构建依赖，不加载进普通权限主程序进程。 -->
+    <ProjectReference Include="..\XTool.HardwareSensorAgent\XTool.HardwareSensorAgent.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- WinForms 仅用于系统托盘；避免其全局 using 与 WPF 类型重名。 -->
     <Using Remove="System.Drawing" />
     <Using Remove="System.Windows.Forms" />
@@ -60,6 +65,29 @@
   <Target Name="RemoveObsoleteHardwareSensorArtifacts" BeforeTargets="Build">
     <!-- 清除旧版增量构建可能遗留的助手目录，避免已废弃二进制被再次随主程序发布。 -->
     <RemoveDir Directories="$(OutDir)tools\hardware-sensor" />
+  </Target>
+
+  <Target Name="CopyHardwareSensorAgentBundle" AfterTargets="Build">
+    <ItemGroup>
+      <HardwareSensorAgentBundle Include="..\XTool.HardwareSensorAgent\bin\$(Configuration)\net8.0-windows\win-x64\XTool.HardwareSensorAgent.exe" />
+      <HardwareSensorAgentBundle Include="..\XTool.HardwareSensorAgent\bin\$(Configuration)\net8.0-windows\win-x64\XTool.HardwareSensorAgent.dll" />
+      <HardwareSensorAgentBundle Include="..\XTool.HardwareSensorAgent\bin\$(Configuration)\net8.0-windows\win-x64\XTool.HardwareSensorAgent.deps.json" />
+      <HardwareSensorAgentBundle Include="..\XTool.HardwareSensorAgent\bin\$(Configuration)\net8.0-windows\win-x64\XTool.HardwareSensorAgent.runtimeconfig.json" />
+      <HardwareSensorAgentBundle Include="..\XTool.HardwareSensorAgent\bin\$(Configuration)\net8.0-windows\win-x64\LibreHardwareMonitorLib.dll" />
+      <HardwareSensorAgentBundle Include="..\XTool.HardwareSensorAgent\bin\$(Configuration)\net8.0-windows\win-x64\BlackSharp.Core.dll" Condition="Exists('..\XTool.HardwareSensorAgent\bin\$(Configuration)\net8.0-windows\win-x64\BlackSharp.Core.dll')" />
+      <HardwareSensorAgentBundle Include="..\XTool.HardwareSensorAgent\bin\$(Configuration)\net8.0-windows\win-x64\DiskInfoToolkit.dll" Condition="Exists('..\XTool.HardwareSensorAgent\bin\$(Configuration)\net8.0-windows\win-x64\DiskInfoToolkit.dll')" />
+      <HardwareSensorAgentBundle Include="..\XTool.HardwareSensorAgent\bin\$(Configuration)\net8.0-windows\win-x64\HidSharp.dll" Condition="Exists('..\XTool.HardwareSensorAgent\bin\$(Configuration)\net8.0-windows\win-x64\HidSharp.dll')" />
+      <HardwareSensorAgentBundle Include="..\XTool.HardwareSensorAgent\bin\$(Configuration)\net8.0-windows\win-x64\libMonoPosixHelper.dll" Condition="Exists('..\XTool.HardwareSensorAgent\bin\$(Configuration)\net8.0-windows\win-x64\libMonoPosixHelper.dll')" />
+      <HardwareSensorAgentBundle Include="..\XTool.HardwareSensorAgent\bin\$(Configuration)\net8.0-windows\win-x64\Mono.Posix.NETStandard.dll" Condition="Exists('..\XTool.HardwareSensorAgent\bin\$(Configuration)\net8.0-windows\win-x64\Mono.Posix.NETStandard.dll')" />
+      <HardwareSensorAgentBundle Include="..\XTool.HardwareSensorAgent\bin\$(Configuration)\net8.0-windows\win-x64\MonoPosixHelper.dll" Condition="Exists('..\XTool.HardwareSensorAgent\bin\$(Configuration)\net8.0-windows\win-x64\MonoPosixHelper.dll')" />
+      <HardwareSensorAgentBundle Include="..\XTool.HardwareSensorAgent\bin\$(Configuration)\net8.0-windows\win-x64\RAMSPDToolkit-NDD.dll" Condition="Exists('..\XTool.HardwareSensorAgent\bin\$(Configuration)\net8.0-windows\win-x64\RAMSPDToolkit-NDD.dll')" />
+      <HardwareSensorAgentBundle Include="..\XTool.HardwareSensorAgent\bin\$(Configuration)\net8.0-windows\win-x64\System.CodeDom.dll" Condition="Exists('..\XTool.HardwareSensorAgent\bin\$(Configuration)\net8.0-windows\win-x64\System.CodeDom.dll')" />
+      <HardwareSensorAgentBundle Include="..\XTool.HardwareSensorAgent\bin\$(Configuration)\net8.0-windows\win-x64\System.IO.Ports.dll" Condition="Exists('..\XTool.HardwareSensorAgent\bin\$(Configuration)\net8.0-windows\win-x64\System.IO.Ports.dll')" />
+      <HardwareSensorAgentBundle Include="..\XTool.HardwareSensorAgent\bin\$(Configuration)\net8.0-windows\win-x64\System.Management.dll" Condition="Exists('..\XTool.HardwareSensorAgent\bin\$(Configuration)\net8.0-windows\win-x64\System.Management.dll')" />
+      <HardwareSensorAgentBundle Include="..\XTool.HardwareSensorAgent\bin\$(Configuration)\net8.0-windows\win-x64\System.Threading.AccessControl.dll" Condition="Exists('..\XTool.HardwareSensorAgent\bin\$(Configuration)\net8.0-windows\win-x64\System.Threading.AccessControl.dll')" />
+    </ItemGroup>
+    <MakeDir Directories="$(OutDir)tools\hardware-sensors-v2" />
+    <Copy SourceFiles="@(HardwareSensorAgentBundle)" DestinationFolder="$(OutDir)tools\hardware-sensors-v2" SkipUnchangedFiles="true" />
   </Target>
 
   <ItemGroup>

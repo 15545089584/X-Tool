@@ -28,6 +28,17 @@
 - 许可证：Apache License 2.0。
 - 项目与许可证：<https://www.nuget.org/packages/ZXing.Net/0.16.11>。
 
+## LibreHardwareMonitorLib 0.9.6
+
+- 用途：独立管理员传感器代理中的 CPU、GPU、内存、主板、存储与风扇只读实时采集。
+- 引用方式：仅由 `XTool.HardwareSensorAgent` 通过 NuGet `LibreHardwareMonitorLib` 0.9.6 使用；普通权限主程序不直接加载该库。
+- 许可证：Mozilla Public License 2.0（MPL-2.0）。
+- 项目与许可证：<https://github.com/LibreHardwareMonitor/LibreHardwareMonitor>。
+
+按 MPL-2.0 要求，修改过的受许可源文件仍须以 MPL-2.0 提供。本项目当前未修改
+LibreHardwareMonitor 源文件，仅通过 NuGet 引用其已编译库；发布包仍应保留本声明和
+上游许可证入口。
+
 ## sherpa-onnx 1.13.4 与 SenseVoice int8 模型
 
 - 用途：本地离线语音输入的麦克风语音识别。
