@@ -75,13 +75,13 @@
                             <Grid>
                                 <StackPanel>
                                     <TextBlock FontSize="18" FontWeight="SemiBold" Foreground="#2E4B67" Text="设备信息" />
-                                    <TextBlock Margin="0,2,0,0" FontSize="10" Foreground="#728BA3" Text="查看当前设备的硬件规格与实时传感器；驱动信息已独立迁移到“驱动”页面，所有数据均为只读。" />
+                                    <TextBlock Margin="0,2,0,0" FontSize="10" Foreground="#728BA3" Text="查看当前设备的硬件规格；驱动信息已独立迁移到“驱动”页面，所有数据均为只读。" />
                                 </StackPanel>
                                 <Button HorizontalAlignment="Right" Width="110" Height="40" Padding="0" Style="{StaticResource SystemPrimaryButton}" Click="RefreshDeviceInfo_Click"><TextBlock FontWeight="SemiBold" Foreground="White" Text="刷新信息" /></Button>
                             </Grid>
                             <Border Margin="0,10,0,0" Padding="10" Background="#54FFFFFF" BorderBrush="#8ED6E9F8" BorderThickness="1" CornerRadius="13">
                                 <Viewbox Stretch="Uniform" StretchDirection="Both">
-                                    <Grid Width="1400" Height="470">
+                                    <Grid Width="1400" Height="580">
                                         <ItemsControl x:Name="OverviewInfoItems" Margin="18,0" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
                                             <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="8" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                                             <ItemsControl.ItemTemplate>
