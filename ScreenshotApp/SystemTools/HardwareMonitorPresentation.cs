@@ -15,7 +15,8 @@ public sealed record HardwareMonitorSnapshot(
     IReadOnlyList<HardwareMonitorSensorValue> Sensors,
     int HardwareNodeCount = 0,
     int SamplingWarningCount = 0,
-    string? LowLevelAccessSummary = null);
+    string? LowLevelAccessSummary = null,
+    string? EcSuperIoSummary = null);
 
 public enum HardwareMonitorConnectionState
 {
@@ -72,6 +73,7 @@ public sealed class HardwareMonitorPresenter : INotifyPropertyChanged
     private string _statusDetail = "请先在设置中授权并启用硬件实时监控";
     private string _lastUpdatedText = "尚无数据";
     private string _diagnosticSummary = "代理未连接 · 尚无传感器诊断数据";
+    private string _ecSuperIoDiagnosticSummary = "EC/SuperIO 原始诊断等待代理连接";
     private Brush _statusAccent = new SolidColorBrush(Color.FromRgb(122, 144, 166));
 
     public ObservableCollection<HardwareMetricDisplay> InstantMetrics { get; } = new();
@@ -80,6 +82,7 @@ public sealed class HardwareMonitorPresenter : INotifyPropertyChanged
     public string StatusDetail { get => _statusDetail; private set => SetField(ref _statusDetail, value); }
     public string LastUpdatedText { get => _lastUpdatedText; private set => SetField(ref _lastUpdatedText, value); }
     public string DiagnosticSummary { get => _diagnosticSummary; private set => SetField(ref _diagnosticSummary, value); }
+    public string EcSuperIoDiagnosticSummary { get => _ecSuperIoDiagnosticSummary; private set => SetField(ref _ecSuperIoDiagnosticSummary, value); }
     public Brush StatusAccent { get => _statusAccent; private set => SetField(ref _statusAccent, value); }
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -115,6 +118,11 @@ public sealed class HardwareMonitorPresenter : INotifyPropertyChanged
             ? $"更新于 {snapshot.CapturedAt.ToLocalTime():HH:mm:ss}"
             : "等待有效数据";
         DiagnosticSummary = BuildDiagnosticSummary(snapshot, sensors);
+        EcSuperIoDiagnosticSummary = snapshot.Status == HardwareMonitorConnectionState.Connected
+            ? string.IsNullOrWhiteSpace(snapshot.EcSuperIoSummary)
+                ? "EC/SuperIO 原始诊断未返回"
+                : snapshot.EcSuperIoSummary
+            : "EC/SuperIO 原始诊断等待代理连接";
         StatusAccent = new SolidColorBrush(snapshot.Status switch
         {
             HardwareMonitorConnectionState.Connected => Color.FromRgb(22, 185, 155),
@@ -194,7 +202,7 @@ public sealed class HardwareMonitorPresenter : INotifyPropertyChanged
                         ? "代理已连接；底层未返回此类温度传感器"
                         : realtimeSensors.Length == 0
                             ? "代理仅返回安全阈值，未返回当前温度读数"
-                        : $"代理已发现 {categorySensors.Length} 个此类传感器，但当前读数无效";
+                        : BuildUnavailableTemperatureReason(realtimeSensors.Length, categorySensors.Length - realtimeSensors.Length);
                 yield return HardwareTemperatureDisplay.Unsupported(category.Item1, reason, category.Item3);
                 continue;
             }
@@ -241,6 +249,11 @@ public sealed class HardwareMonitorPresenter : INotifyPropertyChanged
         HardwareMonitorConnectionState.Unavailable => "代理暂不可用",
         _ => "连接异常"
     };
+
+    private static string BuildUnavailableTemperatureReason(int realtimeCount, int thresholdCount) =>
+        thresholdCount > 0
+            ? $"代理发现 {realtimeCount} 个当前温度项目，但读数暂时无效；另有 {thresholdCount} 个安全阈值已忽略"
+            : $"代理已发现 {realtimeCount} 个当前温度项目，但读数暂时无效";
 
     private static HardwareMetricDisplay Metric(string title, string scope, HardwareMonitorSensorValue? sensor, string fallbackUnit, string accent)
     {

@@ -231,7 +231,7 @@ internal static class Program
         {
             try
             {
-                (IReadOnlyList<HardwareSensorReading> sensors, IReadOnlyList<string> warnings) = collector.Capture();
+                (IReadOnlyList<HardwareSensorReading> sensors, IReadOnlyList<string> warnings, string ecSuperIoSummary) = collector.Capture();
                 await HardwareSensorProtocol.WriteFrameAsync(
                     pipe,
                     new HardwareSensorSnapshotMessage(
@@ -243,7 +243,8 @@ internal static class Program
                         collector.HardwareCount,
                         sensors,
                         warnings.Take(20).ToArray(),
-                        PawnIoAccessProbe.GetSummary()),
+                        PawnIoAccessProbe.GetSummary(),
+                        ecSuperIoSummary),
                     cancellationToken).ConfigureAwait(false);
             }
             catch (IOException)

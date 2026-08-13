@@ -25,14 +25,15 @@ internal sealed class HardwareSensorCollector : IDisposable
         _opened = true;
     }
 
-    public (IReadOnlyList<HardwareSensorReading> Sensors, IReadOnlyList<string> Warnings) Capture()
+    public (IReadOnlyList<HardwareSensorReading> Sensors, IReadOnlyList<string> Warnings, string EcSuperIoSummary) Capture()
     {
         List<HardwareSensorReading> readings = [];
         List<string> warnings = [];
+        var diagnostics = new EcSuperIoDiagnostics();
 
         foreach (IHardware hardware in _computer.Hardware)
         {
-            CaptureHardware(hardware, null, readings, warnings);
+            CaptureHardware(hardware, null, readings, warnings, diagnostics);
             if (readings.Count >= HardwareSensorProtocol.MaximumSensorCount)
             {
                 warnings.Add($"传感器数量超过 {HardwareSensorProtocol.MaximumSensorCount}，其余项目已忽略。");
@@ -40,7 +41,7 @@ internal sealed class HardwareSensorCollector : IDisposable
             }
         }
 
-        return (readings, warnings);
+        return (readings, warnings, diagnostics.ToSummary());
     }
 
     public void Dispose()
@@ -57,7 +58,8 @@ internal sealed class HardwareSensorCollector : IDisposable
         IHardware hardware,
         string? parentHardwareId,
         ICollection<HardwareSensorReading> readings,
-        ICollection<string> warnings)
+        ICollection<string> warnings,
+        EcSuperIoDiagnostics diagnostics)
     {
         try
         {
@@ -70,6 +72,7 @@ internal sealed class HardwareSensorCollector : IDisposable
         }
 
         string hardwareId = LimitText(hardware.Identifier.ToString());
+        diagnostics.Observe(hardware);
         foreach (ISensor sensor in hardware.Sensors)
         {
             if (readings.Count >= HardwareSensorProtocol.MaximumSensorCount)
@@ -103,7 +106,7 @@ internal sealed class HardwareSensorCollector : IDisposable
                 return;
             }
 
-            CaptureHardware(subHardware, hardwareId, readings, warnings);
+            CaptureHardware(subHardware, hardwareId, readings, warnings, diagnostics);
         }
     }
 
@@ -152,4 +155,62 @@ internal sealed class HardwareSensorCollector : IDisposable
 
     private static string? LimitNullableText(string? value) =>
         value is null ? null : LimitText(value);
+
+    /// <summary>仅汇总 EC/SuperIO 温度元数据，用于确认是否存在未归类的真实读数。</summary>
+    private sealed class EcSuperIoDiagnostics
+    {
+        private const int MaximumNames = 6;
+        private int _nodes;
+        private int _temperatureSensors;
+        private int _realtimeValues;
+        private int _thresholds;
+        private int _invalidValues;
+        private readonly List<string> _names = [];
+
+        public void Observe(IHardware hardware)
+        {
+            if (hardware.HardwareType is not (HardwareType.SuperIO or HardwareType.Motherboard))
+            {
+                return;
+            }
+
+            _nodes++;
+            foreach (ISensor sensor in hardware.Sensors.Where(item => item.SensorType == SensorType.Temperature))
+            {
+                _temperatureSensors++;
+                string name = LimitText(sensor.Name);
+                if (IsThreshold(name))
+                {
+                    _thresholds++;
+                }
+                else if (sensor.Value is float value && float.IsFinite(value) && value > 0 && value < 130)
+                {
+                    _realtimeValues++;
+                }
+                else
+                {
+                    _invalidValues++;
+                }
+
+                if (_names.Count < MaximumNames && !string.IsNullOrWhiteSpace(name) && !_names.Contains(name, StringComparer.OrdinalIgnoreCase))
+                {
+                    _names.Add(name);
+                }
+            }
+        }
+
+        public string ToSummary()
+        {
+            string names = _names.Count == 0 ? "无" : string.Join("、", _names);
+            return $"EC/SuperIO 原始诊断：节点 {_nodes} 个，温度项 {_temperatureSensors} 个（当前值 {_realtimeValues} / 阈值 {_thresholds} / 无效 {_invalidValues}）；名称：{names}";
+        }
+
+        private static bool IsThreshold(string name) =>
+            name.Contains("Critical", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("Limit", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("Threshold", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("Warning", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("TjMax", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("Shutdown", StringComparison.OrdinalIgnoreCase);
+    }
 }
