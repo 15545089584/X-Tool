@@ -283,16 +283,6 @@ public sealed class HardwareSensorMonitorCoordinator : IAsyncDisposable
 
     private static HardwareMonitorSensorValue MapSensor(HardwareSensorReading sensor)
     {
-        HardwareMonitorDeviceKind device = sensor.HardwareType switch
-        {
-            "Cpu" => HardwareMonitorDeviceKind.Cpu,
-            "GpuNvidia" or "GpuAmd" or "GpuIntel" => HardwareMonitorDeviceKind.Gpu,
-            "Memory" => HardwareMonitorDeviceKind.Memory,
-            "Motherboard" or "SuperIO" => HardwareMonitorDeviceKind.Mainboard,
-            "Storage" => HardwareMonitorDeviceKind.Storage,
-            "Controller" => HardwareMonitorDeviceKind.Fan,
-            _ => HardwareMonitorDeviceKind.Other
-        };
         HardwareMonitorMetricKind metric = sensor.SensorType switch
         {
             "Load" => HardwareMonitorMetricKind.Load,
@@ -305,8 +295,42 @@ public sealed class HardwareSensorMonitorCoordinator : IAsyncDisposable
             "Data" => HardwareMonitorMetricKind.MemoryTotal,
             _ => HardwareMonitorMetricKind.Load
         };
+        HardwareMonitorDeviceKind device = MapDeviceKind(sensor, metric);
         return new(sensor.SensorId, sensor.SensorName, sensor.HardwareId, sensor.HardwareName, device, metric, sensor.Value, sensor.Unit);
     }
+
+    private static HardwareMonitorDeviceKind MapDeviceKind(HardwareSensorReading sensor, HardwareMonitorMetricKind metric)
+    {
+        HardwareMonitorDeviceKind device = sensor.HardwareType switch
+        {
+            "Cpu" => HardwareMonitorDeviceKind.Cpu,
+            "GpuNvidia" or "GpuAmd" or "GpuIntel" => HardwareMonitorDeviceKind.Gpu,
+            "Memory" => HardwareMonitorDeviceKind.Memory,
+            "Motherboard" or "SuperIO" => HardwareMonitorDeviceKind.Mainboard,
+            "Storage" => HardwareMonitorDeviceKind.Storage,
+            "Controller" => HardwareMonitorDeviceKind.Fan,
+            _ => HardwareMonitorDeviceKind.Other
+        };
+
+        // 笔记本常把 CPU/内存热传感器挂在 SuperIO 或主板节点下；仅对温度
+        // 做名称归类，避免把风扇、负载和电压等主板项目误判成 CPU 项目。
+        if (metric != HardwareMonitorMetricKind.Temperature
+            || device is not (HardwareMonitorDeviceKind.Mainboard or HardwareMonitorDeviceKind.Other))
+            return device;
+
+        string name = $"{sensor.HardwareName} {sensor.SensorName}";
+        if (ContainsAny(name, "memory", "dram", "dimm", "spd", "pmic", "内存"))
+            return HardwareMonitorDeviceKind.Memory;
+        if (ContainsAny(name, "gpu", "graphics", "显卡", "video"))
+            return HardwareMonitorDeviceKind.Gpu;
+        if (ContainsAny(name, "cpu", "package", "core", "die", "tctl", "tdie", "ccd", "peci", "处理器"))
+            return HardwareMonitorDeviceKind.Cpu;
+
+        return device;
+    }
+
+    private static bool ContainsAny(string value, params string[] terms)
+        => terms.Any(term => value.Contains(term, StringComparison.OrdinalIgnoreCase));
 
     private void Publish(HardwareMonitorConnectionState state, string detail) => SnapshotAvailable?.Invoke(new(
         DateTimeOffset.Now,
