@@ -33,7 +33,8 @@ internal static class NetworkEtwAutoStartService
 
     public static async Task<(bool Success, string Message)> UnregisterAsync()
     {
-        // 主程序会先关闭已连接的命名管道；删除任务只需一次 UAC。
+        // 当前用户可直接请求结束自己的任务；失败也继续删除，整个注销流程只弹出一次 UAC。
+        await RunSchtasksAsync($"/End /TN \"{TaskName}\"");
         return await RunElevatedSchtasksAsync($"/Delete /TN \"{TaskName}\" /F", "已取消网络流量自动获取授权。");
     }
 

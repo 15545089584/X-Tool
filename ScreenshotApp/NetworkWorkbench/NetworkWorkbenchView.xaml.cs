@@ -145,15 +145,24 @@ public partial class NetworkWorkbenchView : UserControl
         }
     }
 
-    public async Task StartPersistentTrafficAsync(bool silent = false)
+    public async Task<(bool Success, string Message)> StartPersistentTrafficAsync(bool silent = false)
     {
-        if (_trafficClient.IsRunning) return;
+        if (_trafficClient.IsRunning) return (true, "独立 ETW 辅助进程正在运行");
         if (!silent) SetTrafficStatsLoading(true, "正在连接独立 ETW 辅助进程…");
-        var result = await _trafficClient.StartPersistentAsync();
+        (bool Success, string Message) result;
+        try
+        {
+            result = await _trafficClient.StartPersistentAsync();
+        }
+        catch (Exception exception)
+        {
+            result = (false, $"精确监测启动失败：{exception.GetBaseException().Message}");
+        }
         if (!result.Success)
         {
             if (!silent) SetTrafficStatsLoading(false, result.Message);
-            return;
+            else if (IsVisible) TrafficStatsMonitorStatusText.Text = result.Message;
+            return result;
         }
 
         ResetTrafficUsageSession();
@@ -163,6 +172,7 @@ public partial class NetworkWorkbenchView : UserControl
             TrafficStatsMonitorStatusText.Text = "独立 ETW 已启动，等待首批网络事件…";
             await RefreshTrafficStatsAsync();
         }
+        return result;
     }
 
     public void StopTrafficMonitoring() => _trafficClient.Stop();

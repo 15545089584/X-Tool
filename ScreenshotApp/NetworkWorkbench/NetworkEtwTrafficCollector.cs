@@ -15,6 +15,9 @@ namespace ScreenshotApp.NetworkWorkbench;
 /// </summary>
 internal static class NetworkEtwTrafficHelper
 {
+    private const string SessionNamePrefix = "XTool.Network.";
+    private const string SessionName = "XTool.Network.Persistent";
+
     public static int Run(string pipeName)
     {
         if (string.IsNullOrWhiteSpace(pipeName)) return 2;
@@ -37,7 +40,8 @@ internal static class NetworkEtwTrafficHelper
             }
             if (!connected) return 3;
             using var writer = new StreamWriter(pipe, new UTF8Encoding(false)) { AutoFlush = true };
-            using var session = new TraceEventSession($"XTool.Network.{Environment.ProcessId}");
+            CleanupOrphanedSessions();
+            using var session = new TraceEventSession(SessionName);
             session.StopOnDispose = true;
             session.EnableKernelProvider(KernelTraceEventParser.Keywords.NetworkTCPIP);
             var buckets = new ConcurrentDictionary<FlowKey, FlowBucket>();
@@ -92,6 +96,24 @@ internal static class NetworkEtwTrafficHelper
         }
     }
 
+    private static void CleanupOrphanedSessions()
+    {
+        // 异常关机可能绕过 Dispose，下一次启动只清理由 X-Tool 自己命名的遗留会话。
+        foreach (var activeSessionName in TraceEventSession.GetActiveSessionNames())
+        {
+            if (!activeSessionName.StartsWith(SessionNamePrefix, StringComparison.Ordinal)) continue;
+            try
+            {
+                using var orphanedSession = new TraceEventSession(activeSessionName);
+                orphanedSession.Stop();
+            }
+            catch
+            {
+                // 单个遗留会话清理失败不应阻止其余会话或本次采集继续尝试。
+            }
+        }
+    }
+
     private static long GetProcessStartTicks(int processId)
     {
         try { using var process = Process.GetProcessById(processId); return process.StartTime.ToUniversalTime().Ticks; }
@@ -111,6 +133,7 @@ internal sealed class NetworkEtwTrafficClient : IDisposable
     private readonly ConcurrentDictionary<FlowKey, FlowTotal> _flows = new();
     private readonly ConcurrentDictionary<ProcessIdentity, ArchivedProcessTotal> _archivedProcesses = new();
     private readonly object _measurementSync = new();
+    private readonly SemaphoreSlim _startGate = new(1, 1);
     private CancellationTokenSource? _cancellation;
     private Process? _helperProcess;
     private DateTimeOffset _lastSampleAt;
@@ -125,17 +148,33 @@ internal sealed class NetworkEtwTrafficClient : IDisposable
 
     public async Task<(bool Success, string Message)> StartAsync()
     {
-        if (IsRunning) return (true, "逐连接精确监测正在运行");
-        BeginSession();
-        var pipeName = $"XTool.NetworkEtw.{Environment.ProcessId}.{Guid.NewGuid():N}";
-        return await StartWithPipeAsync(pipeName, launchPersistentTask: false);
+        await _startGate.WaitAsync();
+        try
+        {
+            if (IsRunning) return (true, "逐连接精确监测正在运行");
+            BeginSession();
+            var pipeName = $"XTool.NetworkEtw.{Environment.ProcessId}.{Guid.NewGuid():N}";
+            return await StartWithPipeAsync(pipeName, launchPersistentTask: false);
+        }
+        finally
+        {
+            _startGate.Release();
+        }
     }
 
     public async Task<(bool Success, string Message)> StartPersistentAsync()
     {
-        if (IsRunning) return (true, "独立 ETW 辅助进程正在运行");
-        BeginSession();
-        return await StartWithPipeAsync(NetworkEtwAutoStartService.PersistentPipeName, launchPersistentTask: true);
+        await _startGate.WaitAsync();
+        try
+        {
+            if (IsRunning) return (true, "独立 ETW 辅助进程正在运行");
+            BeginSession();
+            return await StartWithPipeAsync(NetworkEtwAutoStartService.PersistentPipeName, launchPersistentTask: true);
+        }
+        finally
+        {
+            _startGate.Release();
+        }
     }
 
     private void BeginSession()
@@ -163,17 +202,19 @@ internal sealed class NetworkEtwTrafficClient : IDisposable
 
     private async Task<(bool Success, string Message)> StartWithPipeAsync(string pipeName, bool launchPersistentTask)
     {
-        var server = new NamedPipeServerStream(pipeName, PipeDirection.In, 1, PipeTransmissionMode.Byte,
-            PipeOptions.Asynchronous);
-        _server = server;
+        NamedPipeServerStream? server = null;
         try
         {
+            // 固定管道在旧启动尚未完全退出时可能短暂被占用；必须转为可恢复结果。
+            server = new NamedPipeServerStream(pipeName, PipeDirection.In, 1, PipeTransmissionMode.Byte,
+                PipeOptions.Asynchronous);
+            _server = server;
             if (launchPersistentTask)
             {
                 var taskResult = await NetworkEtwAutoStartService.RunTaskAsync();
                 if (!taskResult.Success)
                 {
-                    server.Dispose();
+                    server?.Dispose();
                     _server = null;
                     return taskResult;
                 }
@@ -190,7 +231,7 @@ internal sealed class NetworkEtwTrafficClient : IDisposable
                 });
                 if (_helperProcess is null)
                 {
-                    server.Dispose();
+                    server?.Dispose();
                     _server = null;
                     return (false, "未能启动精确监测辅助进程。");
                 }
@@ -204,7 +245,7 @@ internal sealed class NetworkEtwTrafficClient : IDisposable
         }
         catch (System.ComponentModel.Win32Exception exception) when (exception.NativeErrorCode == 1223)
         {
-            server.Dispose();
+            server?.Dispose();
             _server = null;
             try { if (!_persistentTaskConnection && _helperProcess is { HasExited: false }) _helperProcess.Kill(); } catch { }
             StatusText = "用户取消管理员授权";
@@ -212,11 +253,13 @@ internal sealed class NetworkEtwTrafficClient : IDisposable
         }
         catch (Exception exception)
         {
-            server.Dispose();
+            server?.Dispose();
             _server = null;
             try { if (!_persistentTaskConnection && _helperProcess is { HasExited: false }) _helperProcess.Kill(); } catch { }
             _persistentTaskConnection = false;
-            StatusText = $"精确监测启动失败：{exception.Message}";
+            StatusText = exception is IOException
+                ? "精确监测启动失败：已有旧连接正在释放，请稍候重试。"
+                : $"精确监测启动失败：{exception.Message}";
             return (false, StatusText);
         }
     }

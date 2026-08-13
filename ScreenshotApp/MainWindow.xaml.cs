@@ -229,6 +229,7 @@ public partial class MainWindow : Window
         await RefreshNetworkEtwAuthorizationStateAsync();
         if (_preferences.NetworkEtwAutoStart && await Task.Run(NetworkEtwAutoStartService.IsRegistered))
         {
+            // 恢复原有后台连接时序，避免主窗口加载被 ETW 管道等待阻塞。
             _ = NetworkWorkbenchView.StartPersistentTrafficAsync(silent: true);
         }
     }
@@ -272,10 +273,20 @@ public partial class MainWindow : Window
                     _preferences.Save();
                     NetworkEtwAuthorizationButton.Content = "取消授权";
                     NetworkEtwAuthorizationStatusText.Text = "已授权：启动 X-Tool 时自动运行独立 ETW 辅助进程";
-                    await NetworkWorkbenchView.StartPersistentTrafficAsync();
+                    var startResult = await NetworkWorkbenchView.StartPersistentTrafficAsync();
+                    if (!startResult.Success)
+                    {
+                        NetworkEtwAuthorizationStatusText.Text = $"已授权，但暂未连接：{startResult.Message}";
+                    }
                 }
                 ShowToast(result.Message);
             }
+        }
+        catch (Exception exception)
+        {
+            // 授权结果或管道启动异常不能导致主窗口退出。
+            ShowToast($"网络流量授权操作失败：{exception.GetBaseException().Message}");
+            await RefreshNetworkEtwAuthorizationStateAsync();
         }
         finally
         {
