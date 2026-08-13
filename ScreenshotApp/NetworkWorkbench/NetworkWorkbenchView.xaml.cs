@@ -1240,7 +1240,7 @@ public partial class NetworkWorkbenchView : UserControl
                 ? externalReceived + (history?.ProxyExitReceivedBytes ?? 0)
                 : measurement.ReceivedBytes + (history?.ReceivedBytes ?? 0);
             rows.Add(new NetworkTrafficProcessRow(measurement, role, displaySent, displayReceived,
-                displaySent + displayReceived));
+                displaySent + displayReceived, IsProcessRunning(measurement)));
         }
         foreach (var history in _trafficHistoricalTotals.Values)
         {
@@ -1251,9 +1251,34 @@ public partial class NetworkWorkbenchView : UserControl
             var displayReceived = _trafficStatsMode == "Proxy" && role == ProxyTrafficRole.Exit ? history.ProxyExitReceivedBytes : history.ReceivedBytes;
             var measurement = new NetworkTrafficProcessMeasurement(0, 0, history.ProcessName, history.ProcessPath,
                 history.SentBytes, history.ReceivedBytes, 0, 0, Array.Empty<NetworkTrafficFlowMeasurement>());
-            rows.Add(new NetworkTrafficProcessRow(measurement, role, displaySent, displayReceived, displaySent + displayReceived, true));
+            rows.Add(new NetworkTrafficProcessRow(measurement, role, displaySent, displayReceived,
+                displaySent + displayReceived, false, true));
         }
         return rows.OrderByDescending(item => item.TotalBytes).ToArray();
+    }
+
+    private static bool IsProcessRunning(NetworkTrafficProcessMeasurement measurement)
+    {
+        if (measurement.ProcessId <= 0) return false;
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(measurement.ProcessId);
+            if (process.HasExited) return false;
+            if (measurement.ProcessStartTicks <= 0) return true;
+            try
+            {
+                return process.StartTime.ToUniversalTime().Ticks == measurement.ProcessStartTicks;
+            }
+            catch
+            {
+                // 某些受保护进程不允许读取启动时间，但进程句柄仍表明它正在运行。
+                return true;
+            }
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static ProxyTrafficRole ResolveProxyRole(ProxyTrafficRole currentRole, NetworkProcessTrafficHistoryTotal? history) =>
@@ -2588,6 +2613,7 @@ public partial class NetworkWorkbenchView : UserControl
         long DisplaySentBytes,
         long DisplayReceivedBytes,
         long DisplayTotalBytes,
+        bool IsRunning,
         bool IsHistorical = false)
     {
         public int ProcessId => Measurement.ProcessId;
@@ -2599,12 +2625,23 @@ public partial class NetworkWorkbenchView : UserControl
         public string DownloadText => FormatBytes(DownloadedBytes);
         public string UploadText => FormatBytes(UploadedBytes);
         public string TotalText => FormatBytes(DisplayTotalBytes);
-        public string RateText => FormatBitRate((long)Math.Max(0, Measurement.TotalBitsPerSecond));
+        public string RateText => !IsRunning
+            ? "—"
+            : Measurement.TotalBitsPerSecond > 0
+                ? FormatBitRate((long)Measurement.TotalBitsPerSecond)
+                : "0 bps";
         public string DetailText => IsHistorical
             ? "历史库累计 · 当前未运行"
+            : !IsRunning
+                ? string.IsNullOrWhiteSpace(ProcessPath)
+                    ? $"PID {ProcessId} · 进程已退出"
+                    : $"PID {ProcessId} · 已退出 · {ProcessPath}"
             : string.IsNullOrWhiteSpace(ProcessPath)
-                ? $"PID {ProcessId} · 路径不可读"
+                ? $"PID {ProcessId} · 路径受系统保护"
                 : $"PID {ProcessId} · {ProcessPath}";
+        public string RunningStatusText => IsRunning ? "正在运行" : "当前未运行";
+        public Brush RunningStatusBrush => BrushFrom(IsRunning ? "#39C983" : "#EF6670");
+        public Color RunningStatusGlowColor => (Color)ColorConverter.ConvertFromString(IsRunning ? "#39C983" : "#EF6670");
         public string ProxyBadge => ProxyRole switch
         {
             ProxyTrafficRole.Exit => "代理出口 · 对外",

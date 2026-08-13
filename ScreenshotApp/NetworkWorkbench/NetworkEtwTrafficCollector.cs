@@ -5,8 +5,10 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
 using System.Net;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Win32.SafeHandles;
 
 namespace ScreenshotApp.NetworkWorkbench;
 
@@ -400,20 +402,49 @@ internal sealed class NetworkEtwTrafficClient : IDisposable
 
     private ProcessInfo ResolveProcessInfo(ProcessIdentity identity)
     {
-        if (_processInfoCache.TryGetValue(identity, out var cached)) return cached;
-        var processName = $"PID {identity.ProcessId}";
+        if (_processInfoCache.TryGetValue(identity, out var cached) && !string.IsNullOrWhiteSpace(cached.Path)) return cached;
+        var processName = cached.Name ?? $"PID {identity.ProcessId}";
         var processPath = string.Empty;
         try
         {
             using var process = Process.GetProcessById(identity.ProcessId);
             processName = process.ProcessName;
-            processPath = process.MainModule?.FileName ?? string.Empty;
+            processPath = TryGetProcessPath(identity.ProcessId);
         }
         catch { }
         var info = new ProcessInfo(processName, processPath);
         _processInfoCache[identity] = info;
         return info;
     }
+
+    private static string TryGetProcessPath(int processId)
+    {
+        try
+        {
+            using var processHandle = OpenProcess(ProcessQueryLimitedInformation, false, processId);
+            if (processHandle.IsInvalid) return string.Empty;
+            var capacity = 32768;
+            var path = new StringBuilder(capacity);
+            return QueryFullProcessImageName(processHandle, 0, path, ref capacity) ? path.ToString() : string.Empty;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private const uint ProcessQueryLimitedInformation = 0x1000;
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern SafeProcessHandle OpenProcess(uint desiredAccess, bool inheritHandle, int processId);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool QueryFullProcessImageName(
+        SafeProcessHandle processHandle,
+        int flags,
+        StringBuilder executablePath,
+        ref int size);
 
     private void ArchiveInactiveFlows()
     {
