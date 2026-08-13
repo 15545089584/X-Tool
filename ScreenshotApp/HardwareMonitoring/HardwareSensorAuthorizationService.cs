@@ -104,7 +104,7 @@ public static class HardwareSensorAuthorizationService
             HardwareAgentBundleManifest sourceManifest = await EnsureBundleManifestAsync(cancellationToken).ConfigureAwait(false);
             if (!await ValidateInstalledFilesAsync(sourceManifest, cancellationToken).ConfigureAwait(false))
             {
-                return new(HardwareSensorAuthorizationState.RepairRequired, "代理文件与当前版本不一致，需要重新授权修复");
+                return new(HardwareSensorAuthorizationState.RepairRequired, "X-Tool 更新了受保护代理；仅需重新授权修复一次，之后重启会自动连接");
             }
 
             return new(HardwareSensorAuthorizationState.Authorized, "已授权：启动 X-Tool 时自动连接独立传感器代理");

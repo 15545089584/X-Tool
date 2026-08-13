@@ -1009,7 +1009,7 @@
                                             </Grid.ColumnDefinitions>
                                             <StackPanel VerticalAlignment="Center">
                                                 <TextBlock FontSize="15" Text="硬件实时监控" />
-                                                <TextBlock Margin="0,5,18,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="一次授权后按需启动独立管理员传感器代理；主程序保持普通权限" TextWrapping="Wrap" />
+                                                <TextBlock Margin="0,5,18,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="一次授权后按需启动独立管理员传感器代理；重启自动连接，仅在 X-Tool 更新代理后需要修复" TextWrapping="Wrap" />
                                                 <TextBlock x:Name="HardwareSensorAuthorizationStatusText" Margin="0,4,18,0" FontSize="10" Foreground="#5E819F" Text="尚未授权硬件实时监控" TextWrapping="Wrap" />
                                             </StackPanel>
                                             <Button x:Name="HardwareSensorAuthorizationButton" Grid.Column="1" Width="160" Height="32" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource StorageLocationButtonStyle}" Content="授权并自动监控" Click="HardwareSensorAuthorizationButton_Click" />
