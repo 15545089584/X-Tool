@@ -104,10 +104,9 @@
                                     </Grid>
                                 </Viewbox>
                             </Border>
-                            <Border Margin="0,16,0,2" Padding="20" Background="#A8F8FCFF" BorderBrush="#B6D6EAF8" BorderThickness="1" CornerRadius="18">
-                                <Border.Effect><DropShadowEffect BlurRadius="20" ShadowDepth="4" Direction="270" Opacity="0.10" Color="#456886" /></Border.Effect>
+                            <Border Margin="0,16,0,2" Padding="20" Background="#66F8FCFF" BorderBrush="#A4D6EAF8" BorderThickness="1" CornerRadius="18">
                                 <Grid DataContext="{Binding HardwareMonitor, RelativeSource={RelativeSource AncestorType=systemTools:SystemToolsView}}">
-                                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="16" /><RowDefinition Height="Auto" /><RowDefinition Height="16" /><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="300" /></Grid.RowDefinitions>
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="16" /><RowDefinition Height="Auto" /><RowDefinition Height="16" /><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="270" /></Grid.RowDefinitions>
                                     <Grid>
                                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                         <StackPanel>
@@ -122,7 +121,7 @@
                                             <StackPanel><TextBlock HorizontalAlignment="Right" FontSize="11" Foreground="#6683A0" Text="{Binding LastUpdatedText}" /><TextBlock Margin="0,3,0,0" HorizontalAlignment="Right" FontSize="10" Foreground="#87A0B7" Text="1 秒采样 · 本机只读" /></StackPanel>
                                         </Border>
                                     </Grid>
-                                    <ItemsControl Grid.Row="2" ItemsSource="{Binding InstantMetrics}">
+                                    <ItemsControl Grid.Row="2" Visibility="Collapsed" ItemsSource="{Binding InstantMetrics}">
                                         <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="4" Rows="2" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                                         <ItemsControl.ItemTemplate><DataTemplate>
                                             <Border Margin="0,0,10,10" Padding="13,11" MinHeight="66" Background="#96FFFFFF" BorderBrush="#78D5E8F7" BorderThickness="1" CornerRadius="12" ToolTip="{Binding DetailText}">
@@ -130,13 +129,21 @@
                                             </Border>
                                         </DataTemplate></ItemsControl.ItemTemplate>
                                     </ItemsControl>
-                                    <Grid Grid.Row="4">
-                                        <StackPanel Orientation="Horizontal"><Button x:Name="HardwareRealtimeTabButton" Width="82" Height="36" Padding="0" Style="{StaticResource SystemPrimaryButton}" Click="HardwareMonitorMode_Click" Tag="Realtime"><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="实时传感器" /></Button><Button x:Name="HardwareHistoryTabButton" Width="82" Height="36" Margin="8,0,0,0" Padding="0" Style="{StaticResource SystemButton}" Click="HardwareMonitorMode_Click" Tag="History"><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="历史曲线" /></Button></StackPanel>
-                                        <StackPanel x:Name="HardwareHistoryRangePanel" HorizontalAlignment="Right" Orientation="Horizontal" Visibility="Collapsed"><Button Width="58" Height="34" Padding="0" Style="{StaticResource SystemPrimaryButton}" Click="HardwareHistoryRange_Click" Tag="5"><TextBlock FontSize="11" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="5 分钟" /></Button><Button Width="64" Height="34" Margin="7,0,0,0" Padding="0" Style="{StaticResource SystemButton}" Click="HardwareHistoryRange_Click" Tag="15"><TextBlock FontSize="11" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="15 分钟" /></Button><Button Width="64" Height="34" Margin="7,0,0,0" Padding="0" Style="{StaticResource SystemButton}" Click="HardwareHistoryRange_Click" Tag="30"><TextBlock FontSize="11" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="30 分钟" /></Button></StackPanel>
+                                    <Grid Grid.Row="4" Visibility="Collapsed">
+                                        <StackPanel Orientation="Horizontal"><Button x:Name="HardwareRealtimeTabButton" Width="110" Height="36" Padding="0" Style="{StaticResource SystemPrimaryButton}" Click="HardwareMonitorMode_Click" Tag="Realtime"><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="实时温度" /></Button></StackPanel>
+                                        <StackPanel x:Name="HardwareHistoryRangePanel" Visibility="Collapsed" />
+                                        <Button x:Name="HardwareHistoryTabButton" Visibility="Collapsed" />
                                     </Grid>
-                                    <Border Grid.Row="6" Padding="12" Background="#60EFF7FD" BorderBrush="#78D5E8F7" BorderThickness="1" CornerRadius="13">
+                                    <Border Grid.Row="6" Padding="0" Background="Transparent" BorderBrush="Transparent" BorderThickness="0" CornerRadius="0">
                                         <Grid>
-                                            <ScrollViewer x:Name="HardwareRealtimePanel" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><ItemsControl ItemsSource="{Binding Temperatures}"><ItemsControl.ItemTemplate><DataTemplate><Border Margin="0,0,0,8" Padding="13,10" Background="#8FFFFFFF" BorderBrush="#58D5E8F7" BorderThickness="1" CornerRadius="11"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="200" /><ColumnDefinition Width="*" /><ColumnDefinition Width="84" /></Grid.ColumnDefinitions><StackPanel VerticalAlignment="Center"><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#45627E" Text="{Binding DeviceName}" TextTrimming="CharacterEllipsis" ToolTip="{Binding DeviceName}" /><TextBlock Margin="0,3,0,0" FontSize="10" Foreground="#7890A6" Text="{Binding SensorName}" TextTrimming="CharacterEllipsis" ToolTip="{Binding SensorName}" /></StackPanel><Grid Grid.Column="1" Margin="16,0"><ProgressBar Minimum="0" Maximum="110" Value="{Binding Value}" Foreground="{Binding Accent}" Style="{StaticResource HardwareTemperatureBar}" /></Grid><TextBlock Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="16" FontWeight="SemiBold" Foreground="{Binding Accent}" Text="{Binding ValueText}" /></Grid></Border></DataTemplate></ItemsControl.ItemTemplate></ItemsControl></ScrollViewer>
+                                            <ItemsControl x:Name="HardwareRealtimePanel" ItemsSource="{Binding Temperatures}">
+                                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="5" Rows="1" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate><DataTemplate>
+                                                    <Border Margin="0,0,10,0" Padding="13,12" MinHeight="116" Background="#8FFFFFFF" BorderBrush="{Binding Accent}" BorderThickness="1" CornerRadius="13" ToolTip="{Binding SensorName}">
+                                                        <Grid><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#45627E" Text="{Binding DeviceName}" TextTrimming="CharacterEllipsis" /><TextBlock Grid.Row="1" Margin="0,4,0,0" FontSize="10" Foreground="#7890A6" Text="{Binding SensorName}" TextTrimming="CharacterEllipsis" /><ProgressBar Grid.Row="2" Margin="0,14,0,10" Minimum="0" Maximum="110" Value="{Binding Value}" Foreground="{Binding Accent}" Style="{StaticResource HardwareTemperatureBar}" /><TextBlock Grid.Row="3" FontSize="18" FontWeight="SemiBold" Foreground="{Binding Accent}" Text="{Binding ValueText}" /></Grid>
+                                                    </Border>
+                                                </DataTemplate></ItemsControl.ItemTemplate>
+                                            </ItemsControl>
                                             <Grid x:Name="HardwareHistoryPanel" Visibility="Collapsed"><systemTools:HardwareMonitorHistoryChart x:Name="HardwareHistoryChart" /><StackPanel Margin="38,6,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Orientation="Horizontal"><TextBlock FontSize="11" Foreground="#4D7CFE" Text="● CPU 温度" /><TextBlock Margin="14,0,0,0" FontSize="11" Foreground="#8F65DB" Text="● GPU 温度" /><TextBlock Margin="14,0,0,0" FontSize="11" Foreground="#16B99B" Text="● CPU 占用" /></StackPanel></Grid>
                                         </Grid>
                                     </Border>

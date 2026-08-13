@@ -191,13 +191,11 @@ public partial class SystemToolsView : UserControl
 
     private void HardwareMonitorMode_Click(object sender, RoutedEventArgs e)
     {
-        var showHistory = string.Equals((sender as FrameworkElement)?.Tag?.ToString(), "History", StringComparison.OrdinalIgnoreCase);
-        HardwareRealtimePanel.Visibility = showHistory ? Visibility.Collapsed : Visibility.Visible;
-        HardwareHistoryPanel.Visibility = showHistory ? Visibility.Visible : Visibility.Collapsed;
-        HardwareHistoryRangePanel.Visibility = showHistory ? Visibility.Visible : Visibility.Collapsed;
-        SetHardwareToggleStyle(HardwareRealtimeTabButton, !showHistory);
-        SetHardwareToggleStyle(HardwareHistoryTabButton, showHistory);
-        if (showHistory) HardwareHistoryChart.SetPoints(HardwareMonitor.GetHistory(_hardwareHistoryRange));
+        // 曲线暂时停用，实时温度卡固定保持可见。
+        HardwareRealtimePanel.Visibility = Visibility.Visible;
+        HardwareHistoryPanel.Visibility = Visibility.Collapsed;
+        HardwareHistoryRangePanel.Visibility = Visibility.Collapsed;
+        SetHardwareToggleStyle(HardwareRealtimeTabButton, true);
     }
 
     private void HardwareHistoryRange_Click(object sender, RoutedEventArgs e)

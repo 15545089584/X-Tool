@@ -151,26 +151,35 @@ public sealed class HardwareMonitorPresenter : INotifyPropertyChanged
 
     private static IEnumerable<HardwareTemperatureDisplay> BuildTemperatures(IReadOnlyList<HardwareMonitorSensorValue> sensors)
     {
-        var temperatureSensors = sensors
-            .Where(item => item.MetricKind == HardwareMonitorMetricKind.Temperature && item.IsSupported && item.Value.HasValue)
-            .GroupBy(item => item.DeviceId, StringComparer.OrdinalIgnoreCase)
-            .Select(group => group.OrderByDescending(item => IsPreferredName(item.SensorName)).ThenByDescending(item => item.Value).First())
-            .OrderBy(item => DeviceOrder(item.DeviceKind))
-            .ThenBy(item => item.DeviceName, StringComparer.CurrentCultureIgnoreCase)
-            .ToArray();
-
-        if (temperatureSensors.Length == 0)
+        // 高级监控只展示五个稳定的用户关心类别，不把 Composite、Core #N 等底层原始项目直接铺满页面。
+        var categories = new[]
         {
-            foreach (var placeholder in new[] { ("处理器温度", "CPU"), ("显卡温度", "GPU"), ("硬盘温度", "存储") })
-                yield return HardwareTemperatureDisplay.Unsupported(placeholder.Item1, placeholder.Item2);
-            yield break;
-        }
+            ("CPU 温度", HardwareMonitorDeviceKind.Cpu, "#4D7CFE"),
+            ("显卡温度", HardwareMonitorDeviceKind.Gpu, "#8B68DE"),
+            ("内存温度", HardwareMonitorDeviceKind.Memory, "#16B99B"),
+            ("主板温度", HardwareMonitorDeviceKind.Mainboard, "#F09345"),
+            ("磁盘温度", HardwareMonitorDeviceKind.Storage, "#38A8D8")
+        };
 
-        foreach (var sensor in temperatureSensors)
+        foreach (var category in categories)
         {
+            var sensor = sensors
+                .Where(item => item.DeviceKind == category.Item2
+                    && item.MetricKind == HardwareMonitorMetricKind.Temperature
+                    && item.IsSupported
+                    && item.Value is > 0 and < 130)
+                .OrderByDescending(item => IsPreferredName(item.SensorName))
+                .ThenByDescending(item => item.Value)
+                .FirstOrDefault();
+            if (sensor is null)
+            {
+                yield return HardwareTemperatureDisplay.Unsupported(category.Item1, "当前设备未提供此温度传感器", category.Item3);
+                continue;
+            }
+
             var value = Math.Clamp(sensor.Value!.Value, 0, 110);
             yield return new HardwareTemperatureDisplay(
-                string.IsNullOrWhiteSpace(sensor.DeviceName) ? FriendlyDeviceName(sensor.DeviceKind) : sensor.DeviceName,
+                category.Item1,
                 sensor.SensorName,
                 $"{value:F0}°C",
                 value,
@@ -258,7 +267,7 @@ public sealed class HardwareMonitorPresenter : INotifyPropertyChanged
 public sealed record HardwareMetricDisplay(string Title, string Scope, string ValueText, string DetailText, string Accent, bool IsSupported);
 public sealed record HardwareTemperatureDisplay(string DeviceName, string SensorName, string ValueText, double Value, bool IsSupported, string Accent)
 {
-    public static HardwareTemperatureDisplay Unsupported(string deviceName, string sensorName)
-        => new(deviceName, sensorName, "不受支持", 0, false, "#7890A6");
+    public static HardwareTemperatureDisplay Unsupported(string deviceName, string sensorName, string accent = "#7890A6")
+        => new(deviceName, sensorName, "不受支持", 0, false, accent);
 }
 public readonly record struct HardwareHistoryPoint(DateTimeOffset CapturedAt, double? CpuTemperature, double? GpuTemperature, double? CpuLoad);
