@@ -89,10 +89,13 @@ public sealed class HardwareMonitorPresenter : INotifyPropertyChanged
         var sensors = snapshot.Sensors ?? Array.Empty<HardwareMonitorSensorValue>();
         if (recordHistory && snapshot.Status == HardwareMonitorConnectionState.Connected)
         {
-            var cpuTemperature = FindPreferred(sensors, HardwareMonitorDeviceKind.Cpu, HardwareMonitorMetricKind.Temperature)?.Value;
-            var gpuTemperature = FindPreferred(sensors, HardwareMonitorDeviceKind.Gpu, HardwareMonitorMetricKind.Temperature)?.Value;
-            var cpuLoad = FindPreferred(sensors, HardwareMonitorDeviceKind.Cpu, HardwareMonitorMetricKind.Load)?.Value;
-            AddHistory(new HardwareHistoryPoint(snapshot.CapturedAt, cpuTemperature, gpuTemperature, cpuLoad));
+            AddHistory(new HardwareHistoryPoint(
+                snapshot.CapturedAt,
+                FindTemperature(sensors, HardwareMonitorDeviceKind.Cpu),
+                FindTemperature(sensors, HardwareMonitorDeviceKind.Gpu),
+                FindTemperature(sensors, HardwareMonitorDeviceKind.Memory),
+                FindTemperature(sensors, HardwareMonitorDeviceKind.Mainboard),
+                FindTemperature(sensors, HardwareMonitorDeviceKind.Storage)));
         }
         if (!updatePresentation) return;
 
@@ -197,7 +200,8 @@ public sealed class HardwareMonitorPresenter : INotifyPropertyChanged
                 $"{value:F0}°C",
                 value,
                 true,
-                TemperatureAccent(value));
+                TemperatureAccent(value),
+                TemperatureState(value));
         }
     }
 
@@ -236,6 +240,9 @@ public sealed class HardwareMonitorPresenter : INotifyPropertyChanged
             .OrderByDescending(item => IsPreferredName(item.SensorName))
             .ThenByDescending(item => item.Value)
             .FirstOrDefault();
+
+    private static double? FindTemperature(IEnumerable<HardwareMonitorSensorValue> sensors, HardwareMonitorDeviceKind deviceKind)
+        => FindPreferred(sensors.Where(item => item.Value is > 0 and < 130), deviceKind, HardwareMonitorMetricKind.Temperature)?.Value;
 
     private static bool IsPreferredName(string name)
         => name.Contains("Package", StringComparison.OrdinalIgnoreCase)
@@ -284,6 +291,14 @@ public sealed class HardwareMonitorPresenter : INotifyPropertyChanged
         _ => "#16B99B"
     };
 
+    private static string TemperatureState(double value) => value switch
+    {
+        >= 90 => "过热",
+        >= 75 => "偏高",
+        >= 55 => "温热",
+        _ => "正常"
+    };
+
     private static void Replace<T>(ObservableCollection<T> target, IEnumerable<T> values)
     {
         target.Clear();
@@ -299,9 +314,15 @@ public sealed class HardwareMonitorPresenter : INotifyPropertyChanged
 }
 
 public sealed record HardwareMetricDisplay(string Title, string Scope, string ValueText, string DetailText, string Accent, bool IsSupported);
-public sealed record HardwareTemperatureDisplay(string DeviceName, string SensorName, string ValueText, double Value, bool IsSupported, string Accent)
+public sealed record HardwareTemperatureDisplay(string DeviceName, string SensorName, string ValueText, double Value, bool IsSupported, string Accent, string StateText)
 {
     public static HardwareTemperatureDisplay Unsupported(string deviceName, string sensorName, string accent = "#7890A6")
-        => new(deviceName, sensorName, "不受支持", 0, false, accent);
+        => new(deviceName, sensorName, "不受支持", 0, false, accent, "不可用");
 }
-public readonly record struct HardwareHistoryPoint(DateTimeOffset CapturedAt, double? CpuTemperature, double? GpuTemperature, double? CpuLoad);
+public readonly record struct HardwareHistoryPoint(
+    DateTimeOffset CapturedAt,
+    double? CpuTemperature,
+    double? GpuTemperature,
+    double? MemoryTemperature,
+    double? MainboardTemperature,
+    double? StorageTemperature);

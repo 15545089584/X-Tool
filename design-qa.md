@@ -1,24 +1,23 @@
-# 系统诊断 14 天范围与结果标签设计核验
+# 高级硬件监控圆环与温度曲线设计核验
 
-- Source visual truth paths:
-  - `C:\Windows\TEMP\codex-clipboard-f2f77747-12b1-4a7e-9ca1-bed1ee110308.png`
-  - `C:\Windows\TEMP\codex-clipboard-e4395342-ec92-425e-bd40-357fa1c450eb.png`
-- Implementation screenshot paths:
-  - `D:\Claude Code\X-Tool\system-diagnostics-14day-dropdown.jpg`
-  - `D:\Claude Code\X-Tool\system-diagnostics-14day-results.jpg`
-- Viewport: 1480 × 900 logical pixels
-- Source pixels: 246 × 260（下拉局部）、1261 × 933（结果区）
-- Implementation pixels: 1480 × 900
-- Density normalization: 参考图包含局部裁剪，实际图为完整 X-Tool 窗口；对照时分别聚焦顶部下拉菜单和下方结果标签区域，不比较裁剪外内容。
-- State: 系统诊断页展开时间范围下拉框；随后选择“最近 14 天”并完成只读诊断，选中 7/30 整列。
+- Source visual truth path: `C:\Windows\TEMP\codex-clipboard-56130795-d1b3-45bd-9888-7d5ce3b082ea.png`
+- Implementation screenshot path: `D:\Claude Code\X-Tool\hardware-monitor-redesign.png`
+- Viewport: 1707 × 1026 logical pixels，最大化 X-Tool 窗口
+- Source pixels: 1320 × 994
+- Implementation pixels: 1707 × 1026
+- Density normalization: 参考图是完整独立深色监控页，实现是 X-Tool 设备信息页中的监控区；对比时聚焦“五个温度仪表 + 下方 30 分钟曲线”的共同内容结构，不要求照搬外围导航和深色配色。
+- State: 硬件代理旧安装与当前版本不一致，监控未启用；验证圆环与曲线的无数据状态。有效温度与曲线数据由用户重新授权后进行实际 UI 验证。
 
 ## Full-view comparison evidence
 
-时间范围下拉框现有最近 24 小时、7 天、14 天、30 天四项；运行 14 天诊断后，异常时间格从 7/17 到 7/30 正好呈现 14 个日期列。相邻列继续使用交替浅色玻璃底纹，日期标签与列中心对应。
+实现保留了参考图上方五个同权重温度仪表、下方温度趋势和同色图例的核心层级。页面采用现有 X-Tool 浅色毛玻璃、蓝灰文字、15–18 像素圆角和轻描边，没有复制参考图的黑色工业面板。最大化窗口下五列仪表与曲线可在同一监控卡内完整阅读。
 
 ## Focused region comparison evidence
 
-结果卡片右侧等级标签统一为 86 × 25 的毛玻璃胶囊，描边从 1 提升到 1.5，文字字号从 9 提升到 10.5，并同时设置水平、垂直及文本居中。结果数据新增独立 `SeverityPriority`，实际可访问性树显示列表项携带明确优先级；当前 7/30 没有关键事件，因此错误事件从高频到低频排列在前，警告事件随后显示。
+- 圆环使用 270° 开口和圆角端点，CPU、显卡、内存、主板、磁盘依次使用蓝、紫、绿、橙、青强调色。
+- 无有效读数时只绘制中性轨道，中心显示“不受支持 / 不可用”，没有彩色进度或 0°C 假值。
+- 曲线区采用 20–100°C 固定温标，按真实采样时间落在最近 30 分钟轴上；缺失读数会断线。
+- 图例与圆环颜色一一对应，最大化与 1480 × 900 普通窗口下均未发生重叠或截断。
 
 ## Findings
 
@@ -26,26 +25,20 @@
 
 ## Required fidelity surfaces
 
-- Fonts and typography: 等级标签字号、字重和居中状态均已增强，不再贴近边缘。
-- Spacing and layout rhythm: 胶囊固定宽高，列表与详情头部使用同一尺寸；14 个日期格均匀分布。
-- Colors and visual tokens: 延续现有浅色毛玻璃背景和各危险等级语义色，描边使用完整语义色提升对比度。
-- Image quality and asset fidelity: 页面没有新增位图 UI 资产；现有 Segoe Fluent Icons 与代码绘制图表保持不变。
-- Copy and content: 新增“最近 14 天”，排序说明继续明确为危险等级从高到低。
+- Fonts and typography: 继续使用 Microsoft YaHei UI 与现有页面字号层级；温度值为 20 像素半粗体，状态与传感器原因保持次级层级。
+- Spacing and layout rhythm: 五列等宽，圆环 112 × 112，卡片间距、圆角和上下区间距与现有 SystemCard 体系一致。
+- Colors and visual tokens: 沿用 X-Tool 浅色玻璃背景、蓝灰前景和既有五类强调色；深色参考配色属于有意不采用。
+- Image quality and asset fidelity: 页面没有需要栅格化的品牌或插画资产；圆环和曲线使用 WPF 矢量绘制，在窗口缩放下保持清晰。
+- Copy and content: 保留代理状态、诊断摘要、只读采样说明；新增正常/温热/偏高/过热与不可用状态，缺失原因明确可读。
 
 ## Comparison history
 
-1. 参考状态缺少 14 天选项，等级标签字号较小、描边偏浅且视觉居中不足。
-2. 新增 14 天范围和统一等级胶囊，并把排序改为不依赖枚举数值的显式优先级。
-3. Release 构建通过后实际展开下拉菜单并运行 14 天诊断，确认四个选项、14 个日期列、标签视觉和结果顺序。
+1. 第一版恢复五路曲线并增加圆环后，发现无数据圆环中心仍写“实时”，与“不受支持”语义冲突。
+2. 修正为有效温度显示正常/温热/偏高/过热，无数据显示不可用；重新启动最终 Release 后，可访问性树与截图均确认生效。
+3. 最终复核发现早期样本按序号铺满曲线会误导 30 分钟跨度，已改为按真实采样时间定位。
 
-## Implementation checklist
+## Follow-up polish
 
-- [x] 新增最近 14 天选项
-- [x] 24 小时、7 天、14 天、30 天分别生成 24、7、14、30 格
-- [x] 结果按关键、错误、警告显式优先级排序
-- [x] 同等级按发生次数与最近时间降序
-- [x] 放大等级标签并增强描边
-- [x] 列表与详情标签文字水平、垂直居中
-- [x] Release 构建与实际 14 天 UI 验证通过
+- P3：代理重新授权后，可根据真实五路曲线密度再评估线宽和颜色透明度。
 
 final result: passed

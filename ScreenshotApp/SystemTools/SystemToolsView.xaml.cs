@@ -32,7 +32,7 @@ public partial class SystemToolsView : UserControl
     private readonly ObservableCollection<SystemDiagnosticGroup> _diagnosticGroups = new();
     private readonly DispatcherTimer _hardwareMonitorRenderTimer;
     private HardwareMonitorSnapshot? _latestHardwareSnapshot;
-    private TimeSpan _hardwareHistoryRange = TimeSpan.FromMinutes(5);
+    private readonly TimeSpan _hardwareHistoryRange = TimeSpan.FromMinutes(30);
     /// <summary>实时硬件监控的独立显示模型，采集代理只需推送中立快照。</summary>
     public HardwareMonitorPresenter HardwareMonitor { get; } = new();
     private IReadOnlyList<PortEntry> _allPorts = Array.Empty<PortEntry>();
@@ -187,31 +187,6 @@ public partial class SystemToolsView : UserControl
             HardwareMonitor.Apply(_latestHardwareSnapshot, updatePresentation: true, recordHistory: false);
         if (HardwareHistoryPanel.Visibility == Visibility.Visible)
             HardwareHistoryChart.SetPoints(HardwareMonitor.GetHistory(_hardwareHistoryRange));
-    }
-
-    private void HardwareMonitorMode_Click(object sender, RoutedEventArgs e)
-    {
-        // 曲线暂时停用，实时温度卡固定保持可见。
-        HardwareRealtimePanel.Visibility = Visibility.Visible;
-        HardwareHistoryPanel.Visibility = Visibility.Collapsed;
-        HardwareHistoryRangePanel.Visibility = Visibility.Collapsed;
-        SetHardwareToggleStyle(HardwareRealtimeTabButton, true);
-    }
-
-    private void HardwareHistoryRange_Click(object sender, RoutedEventArgs e)
-    {
-        if (!int.TryParse((sender as FrameworkElement)?.Tag?.ToString(), out var minutes)) minutes = 5;
-        _hardwareHistoryRange = TimeSpan.FromMinutes(Math.Clamp(minutes, 5, 30));
-        foreach (var button in HardwareHistoryRangePanel.Children.OfType<Button>())
-            SetHardwareToggleStyle(button, string.Equals(button.Tag?.ToString(), minutes.ToString(), StringComparison.Ordinal));
-        HardwareHistoryChart.SetPoints(HardwareMonitor.GetHistory(_hardwareHistoryRange));
-    }
-
-    private static void SetHardwareToggleStyle(Button button, bool active)
-    {
-        button.Background = new SolidColorBrush(active ? Color.FromRgb(77, 124, 254) : Color.FromArgb(134, 255, 255, 255));
-        button.BorderBrush = new SolidColorBrush(active ? Color.FromRgb(118, 160, 255) : Color.FromRgb(166, 209, 232));
-        button.Foreground = active ? Brushes.White : new SolidColorBrush(Color.FromRgb(74, 105, 135));
     }
 
     private async Task RefreshPortsAsync()
