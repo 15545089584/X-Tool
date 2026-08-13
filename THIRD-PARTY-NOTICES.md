@@ -43,7 +43,7 @@ LibreHardwareMonitor 源文件，仅通过 NuGet 引用其已编译库；发布�
 
 - 用途：高级硬件实时监控的默认低层只读访问依赖，帮助兼容部分 CPU、内存和主板传感器。
 - 发布文件：`ScreenshotApp/tools/pawnio/PawnIO_setup.exe`，版本 2.2.0，长度 3,410,960 字节，SHA-256 `1F519A22E47187F70A1379A48CA604981C4FCF694F4E65B734AAA74A9FBA3032`。纳入前已验证 Authenticode 签名有效，签名主体为 `namazso.eu`。
-- 安装方式：用户首次授权硬件实时监控时，经同一次 UAC 由管理员代理完成固定哈希验证后交互式运行官方安装器；不使用未验证的静默参数，不绕过 Windows 驱动签名或安全策略。取消 X-Tool 授权不卸载 PawnIO。
+- 安装方式：用户首次授权硬件实时监控时，经同一次 UAC 由管理员代理完成固定哈希验证后，以 PawnIO 2.2.0 官方已验证参数 `-install -silent` 后台安装并等待完成；接受 `0` 与 Windows 重启完成码 `3010`，不绕过 Windows 驱动签名或安全策略。取消 X-Tool 授权不卸载 PawnIO。
 - 许可证与源码：PawnIO 采用 GPL-2.0 并含独立模块例外，固定源码为 [2.2.0 标签](https://github.com/namazso/PawnIO/tree/2.2.0)（提交 `5cdf470831fdfff3f7f1d06363ca6b230f3bf35a`），上游许可证与源码见 <https://github.com/namazso/PawnIO>。
 - 随附源码归档：`ScreenshotApp/tools/pawnio/sources/PawnIO-2.2.0-source.zip`（123,386 字节，SHA-256 `93AA5D410B76C71E9004CAC406ED19D0550A735410A9ABE4D0C9A838B8B98EAC`）及其固定子模块 `PawnPP-e64e4c37-source.zip`（35,340 字节，SHA-256 `20AA0638B95C90D296935310F3F28CC22DE1FB24855C5BAA6721E2AE95EB6042`）。
 

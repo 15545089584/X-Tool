@@ -139,7 +139,7 @@ public static class HardwareSensorAuthorizationService
             {
                 return new(false, true, "已取消硬件传感器授权，原有设置未改变");
             }
-            if (exitCode != 0)
+            if (exitCode is not 0 and not 3010)
             {
                 string detail = await ReadInstallerResultAsync(cancellationToken).ConfigureAwait(false)
                     ?? "代理安装器未返回具体原因";
@@ -148,7 +148,9 @@ public static class HardwareSensorAuthorizationService
 
             HardwareSensorAuthorizationStatus status = await GetStatusAsync(cancellationToken).ConfigureAwait(false);
             return status.State == HardwareSensorAuthorizationState.Authorized
-                ? new(true, false, "硬件实时监控已授权，之后启动 X-Tool 会自动连接")
+                ? new(true, false, exitCode == 3010
+                    ? "硬件实时监控已授权；PawnIO 安装完成，重启 Windows 后启用底层温度访问"
+                    : "硬件实时监控已授权，之后启动 X-Tool 会自动连接")
                 : new(false, false, status.Message);
         }
         catch (Exception exception)

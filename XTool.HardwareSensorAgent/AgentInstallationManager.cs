@@ -54,8 +54,8 @@ internal static class AgentInstallationManager
         string version = ValidateVersion(manifest.AgentVersion);
 
         // PawnIO 是随高级硬件监控授权安装的固定版内核组件，先校验清单和文件哈希，
-        // 再交给官方交互式安装器处理驱动签名、UAC、卸载信息与系统策略。
-        InstallBundledPawnIo(source, manifest);
+        // 再以官方静默参数交给安装器处理驱动签名、卸载信息与系统策略。
+        int pawnIoExitCode = InstallBundledPawnIo(source, manifest);
 
         Directory.CreateDirectory(InstallationRoot);
         EnsureNoReparsePoints(InstallationRoot, Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles));
@@ -96,7 +96,7 @@ internal static class AgentInstallationManager
                 TryDeleteOwnedDirectory(backup);
             }
 
-            return 0;
+            return pawnIoExitCode;
         }
         catch
         {
@@ -241,12 +241,12 @@ internal static class AgentInstallationManager
         }
     }
 
-    private static void InstallBundledPawnIo(string source, HardwareAgentBundleManifest manifest)
+    private static int InstallBundledPawnIo(string source, HardwareAgentBundleManifest manifest)
     {
         if (PawnIo.IsInstalled)
         {
             // 已存在官方组件时不重复打开安装器；后续升级由新的固定安装器版本触发迁移。
-            return;
+            return 0;
         }
 
         HardwareAgentBundleFile? installer = manifest.Files.SingleOrDefault(file =>
@@ -274,16 +274,24 @@ internal static class AgentInstallationManager
 
         ProcessStartInfo startInfo = new(installerPath)
         {
-            UseShellExecute = true,
+            // 参数由 PawnIO 2.2.0 官方 Chocolatey 包验证；父代理已在同一次 UAC 中提升，
+            // 因此不会出现第二个安装向导，也不会绕过驱动签名或系统安全策略。
+            UseShellExecute = false,
+            CreateNoWindow = true,
             WorkingDirectory = source
         };
+        startInfo.ArgumentList.Add("-install");
+        startInfo.ArgumentList.Add("-silent");
         using Process process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("无法启动 PawnIO 官方安装器。");
         process.WaitForExit();
-        if (process.ExitCode != 0)
+        if (process.ExitCode is not 0 and not 3010)
         {
             throw new InvalidOperationException("PawnIO 官方安装器未完成；硬件监控授权未更改。");
         }
+
+        // 3010 是 Windows 标准的“成功但需要重启”，让主程序完成任务注册后明确提醒用户。
+        return process.ExitCode;
     }
 
     private static void VerifyAgentAssemblyVersion(string staging, string expectedVersion)

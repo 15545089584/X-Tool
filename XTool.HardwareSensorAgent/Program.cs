@@ -38,7 +38,13 @@ internal static class Program
             };
             if (installerMode)
             {
-                WriteInstallerResult(exitCode, exitCode == 0 ? "管理员代理任务已更新" : "安装器未能完成操作");
+                WriteInstallerResult(
+                    exitCode,
+                    exitCode == 0
+                        ? "管理员代理任务已更新"
+                        : exitCode == 3010
+                            ? "PawnIO 已安装，需要重启 Windows 后才能启用底层温度访问"
+                            : "安装器未能完成操作");
             }
             return exitCode;
         }
