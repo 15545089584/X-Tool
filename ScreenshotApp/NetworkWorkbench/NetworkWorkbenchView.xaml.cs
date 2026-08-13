@@ -1048,16 +1048,26 @@ public partial class NetworkWorkbenchView : UserControl
         if (width <= 1 || height <= 1) return;
         TrafficUsageCanvas.Children.Clear();
         TrafficUsageGridCanvas.Children.Clear();
-        var peak = _trafficUsageChartBuckets.Count == 0 ? 0L : _trafficUsageChartBuckets.Max(item => item.TotalBytes);
+        var usageValues = _trafficUsageChartBuckets.Select(item => (double)item.TotalBytes).ToArray();
+        var peak = usageValues.Length == 0 ? 0d : usageValues.Max();
         TrafficUsageEmptyText.Visibility = peak <= 0 ? Visibility.Visible : Visibility.Collapsed;
-        var ceiling = RoundTrafficUsageScale(Math.Max(1, peak));
-        TrafficUsageAxisMaxText.Text = FormatBytes(ceiling);
-        TrafficUsageAxisMidText.Text = FormatBytes(ceiling / 2d);
+        var scale = CreateAdaptiveTrafficUsageScale(usageValues);
+        TrafficUsageAxisMaxText.Text = FormatBytes(scale.Peak);
+        TrafficUsageAxisAdaptiveText.Text = FormatBytes(scale.LinearCeiling);
+        TrafficUsageAxisAdaptiveText.Visibility = scale.IsAdaptive ? Visibility.Visible : Visibility.Collapsed;
+        TrafficUsageAxisMidText.Text = FormatBytes(scale.LinearCeiling / 2d);
         TrafficUsageAxisMinText.Text = "0 B";
         Canvas.SetTop(TrafficUsageAxisMaxText, 0);
-        Canvas.SetTop(TrafficUsageAxisMidText, Math.Max(0, height / 2d - 6));
+        var normalCeilingY = height * (1d - TrafficUsageChartScale.LinearHeightRatio);
+        Canvas.SetTop(TrafficUsageAxisAdaptiveText, Math.Max(0, normalCeilingY - 6));
+        Canvas.SetTop(TrafficUsageAxisMidText, Math.Max(0, (scale.IsAdaptive
+            ? height * (1d - TrafficUsageChartScale.LinearHeightRatio / 2d)
+            : height / 2d) - 6));
         Canvas.SetTop(TrafficUsageAxisMinText, Math.Max(0, height - 13));
-        foreach (var y in new[] { 0d, height / 2d, height - 1d })
+        var gridLines = scale.IsAdaptive
+            ? new[] { 0d, normalCeilingY, height * (1d - TrafficUsageChartScale.LinearHeightRatio / 2d), height - 1d }
+            : new[] { 0d, height / 2d, height - 1d };
+        foreach (var y in gridLines)
         {
             TrafficUsageGridCanvas.Children.Add(new Line
             {
@@ -1072,8 +1082,9 @@ public partial class NetworkWorkbenchView : UserControl
         for (var index = 0; index < _trafficUsageChartBuckets.Count; index++)
         {
             var bucket = _trafficUsageChartBuckets[index];
-            var nonProxyHeight = bucket.NonProxyBytes / ceiling * height;
-            var proxyHeight = bucket.ProxyBytes / ceiling * height;
+            var nonProxyHeight = MapTrafficUsageToHeight(bucket.NonProxyBytes, height, scale);
+            var totalHeight = MapTrafficUsageToHeight(bucket.TotalBytes, height, scale);
+            var proxyHeight = Math.Max(0d, totalHeight - nonProxyHeight);
             var x = index * slot + (slot - barWidth) / 2d;
             var nonProxyBar = new Rectangle
             {
@@ -1092,6 +1103,33 @@ public partial class NetworkWorkbenchView : UserControl
             Canvas.SetTop(proxyBar, height - nonProxyHeight - proxyHeight);
             TrafficUsageCanvas.Children.Add(proxyBar);
         }
+    }
+
+    /// <summary>让极端流量峰值不压扁日常用量，同时始终保留原始数值用于悬停提示。</summary>
+    private static TrafficUsageChartScale CreateAdaptiveTrafficUsageScale(IReadOnlyCollection<double> values)
+    {
+        var linearPeak = RoundTrafficUsageScale(Math.Max(1d, values.DefaultIfEmpty(0d).Max()));
+        if (values.Count < 12) return new TrafficUsageChartScale(linearPeak, linearPeak, false);
+
+        var ordered = values.Where(value => value > 0d).OrderBy(value => value).ToArray();
+        if (ordered.Length < 4) return new TrafficUsageChartScale(linearPeak, linearPeak, false);
+
+        var percentile90 = ordered[Math.Clamp((int)Math.Ceiling(ordered.Length * 0.90d) - 1, 0, ordered.Length - 1)];
+        var normalCeiling = RoundTrafficUsageScale(Math.Max(1d, percentile90 * 1.25d));
+        return linearPeak > normalCeiling * 2d
+            ? new TrafficUsageChartScale(normalCeiling, linearPeak, true)
+            : new TrafficUsageChartScale(linearPeak, linearPeak, false);
+    }
+
+    private static double MapTrafficUsageToHeight(double value, double height, TrafficUsageChartScale scale)
+    {
+        value = Math.Max(0d, value);
+        if (!scale.IsAdaptive || value <= scale.LinearCeiling)
+            return Math.Min(1d, value / scale.LinearCeiling) * height * (scale.IsAdaptive ? TrafficUsageChartScale.LinearHeightRatio : 1d);
+
+        var compressed = Math.Log(Math.Max(1d, value / scale.LinearCeiling)) /
+                         Math.Log(Math.Max(1d, scale.Peak / scale.LinearCeiling));
+        return height * (TrafficUsageChartScale.LinearHeightRatio + Math.Clamp(compressed, 0d, 1d) * (1d - TrafficUsageChartScale.LinearHeightRatio));
     }
 
     private void TrafficUsageCanvas_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
@@ -2579,6 +2617,11 @@ public partial class NetworkWorkbenchView : UserControl
     private sealed record TrafficUsageChartBucket(DateTime Start, long NonProxyBytes, long ProxyBytes)
     {
         public long TotalBytes => NonProxyBytes + ProxyBytes;
+    }
+
+    private sealed record TrafficUsageChartScale(double LinearCeiling, double Peak, bool IsAdaptive)
+    {
+        internal const double LinearHeightRatio = 0.76d;
     }
 
     private static string FormatByteRate(double bytes)

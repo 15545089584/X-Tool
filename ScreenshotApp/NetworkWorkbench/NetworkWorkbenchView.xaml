@@ -306,6 +306,7 @@
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="54" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                                 <Canvas x:Name="TrafficUsageAxisCanvas" ClipToBounds="False">
                                     <TextBlock x:Name="TrafficUsageAxisMaxText" Canvas.Right="0" FontSize="9" Foreground="#7890A6" Text="0 B" />
+                                    <TextBlock x:Name="TrafficUsageAxisAdaptiveText" Canvas.Right="0" FontSize="9" Foreground="#7890A6" Text="0 B" Visibility="Collapsed" />
                                     <TextBlock x:Name="TrafficUsageAxisMidText" Canvas.Right="0" FontSize="9" Foreground="#7890A6" Text="0 B" />
                                     <TextBlock x:Name="TrafficUsageAxisMinText" Canvas.Right="0" FontSize="9" Foreground="#7890A6" Text="0 B" />
                                 </Canvas>
