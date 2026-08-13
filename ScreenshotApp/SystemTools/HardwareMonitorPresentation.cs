@@ -12,7 +12,9 @@ public sealed record HardwareMonitorSnapshot(
     HardwareMonitorConnectionState Status,
     string StatusDetail,
     string Source,
-    IReadOnlyList<HardwareMonitorSensorValue> Sensors);
+    IReadOnlyList<HardwareMonitorSensorValue> Sensors,
+    int HardwareNodeCount = 0,
+    int SamplingWarningCount = 0);
 
 public enum HardwareMonitorConnectionState
 {
@@ -68,6 +70,7 @@ public sealed class HardwareMonitorPresenter : INotifyPropertyChanged
     private string _statusText = "等待传感器代理";
     private string _statusDetail = "请先在设置中授权并启用硬件实时监控";
     private string _lastUpdatedText = "尚无数据";
+    private string _diagnosticSummary = "代理未连接 · 尚无传感器诊断数据";
     private Brush _statusAccent = new SolidColorBrush(Color.FromRgb(122, 144, 166));
 
     public ObservableCollection<HardwareMetricDisplay> InstantMetrics { get; } = new();
@@ -75,6 +78,7 @@ public sealed class HardwareMonitorPresenter : INotifyPropertyChanged
     public string StatusText { get => _statusText; private set => SetField(ref _statusText, value); }
     public string StatusDetail { get => _statusDetail; private set => SetField(ref _statusDetail, value); }
     public string LastUpdatedText { get => _lastUpdatedText; private set => SetField(ref _lastUpdatedText, value); }
+    public string DiagnosticSummary { get => _diagnosticSummary; private set => SetField(ref _diagnosticSummary, value); }
     public Brush StatusAccent { get => _statusAccent; private set => SetField(ref _statusAccent, value); }
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -106,6 +110,7 @@ public sealed class HardwareMonitorPresenter : INotifyPropertyChanged
         LastUpdatedText = snapshot.Status == HardwareMonitorConnectionState.Connected
             ? $"更新于 {snapshot.CapturedAt.ToLocalTime():HH:mm:ss}"
             : "等待有效数据";
+        DiagnosticSummary = BuildDiagnosticSummary(snapshot, sensors);
         StatusAccent = new SolidColorBrush(snapshot.Status switch
         {
             HardwareMonitorConnectionState.Connected => Color.FromRgb(22, 185, 155),
@@ -115,7 +120,7 @@ public sealed class HardwareMonitorPresenter : INotifyPropertyChanged
         });
 
         Replace(InstantMetrics, BuildInstantMetrics(sensors));
-        Replace(Temperatures, BuildTemperatures(sensors));
+        Replace(Temperatures, BuildTemperatures(sensors, snapshot.Status));
     }
 
     public IReadOnlyList<HardwareHistoryPoint> GetHistory(TimeSpan range)
@@ -134,7 +139,7 @@ public sealed class HardwareMonitorPresenter : INotifyPropertyChanged
     private void ShowWaitingState()
     {
         Replace(InstantMetrics, BuildInstantMetrics(Array.Empty<HardwareMonitorSensorValue>()));
-        Replace(Temperatures, BuildTemperatures(Array.Empty<HardwareMonitorSensorValue>()));
+        Replace(Temperatures, BuildTemperatures(Array.Empty<HardwareMonitorSensorValue>(), HardwareMonitorConnectionState.Disabled));
     }
 
     private static IEnumerable<HardwareMetricDisplay> BuildInstantMetrics(IReadOnlyList<HardwareMonitorSensorValue> sensors)
@@ -149,7 +154,9 @@ public sealed class HardwareMonitorPresenter : INotifyPropertyChanged
         yield return Metric("风扇转速", "散热", FindPreferred(sensors, HardwareMonitorDeviceKind.Fan, HardwareMonitorMetricKind.FanSpeed), "RPM", "#38A8D8");
     }
 
-    private static IEnumerable<HardwareTemperatureDisplay> BuildTemperatures(IReadOnlyList<HardwareMonitorSensorValue> sensors)
+    private static IEnumerable<HardwareTemperatureDisplay> BuildTemperatures(
+        IReadOnlyList<HardwareMonitorSensorValue> sensors,
+        HardwareMonitorConnectionState connectionState)
     {
         // 高级监控只展示五个稳定的用户关心类别，不把 Composite、Core #N 等底层原始项目直接铺满页面。
         var categories = new[]
@@ -163,17 +170,23 @@ public sealed class HardwareMonitorPresenter : INotifyPropertyChanged
 
         foreach (var category in categories)
         {
-            var sensor = sensors
+            var categorySensors = sensors
                 .Where(item => item.DeviceKind == category.Item2
-                    && item.MetricKind == HardwareMonitorMetricKind.Temperature
-                    && item.IsSupported
-                    && item.Value is > 0 and < 130)
+                    && item.MetricKind == HardwareMonitorMetricKind.Temperature)
+                .ToArray();
+            var sensor = categorySensors
+                .Where(item => item.IsSupported && item.Value is > 0 and < 130)
                 .OrderByDescending(item => IsPreferredName(item.SensorName))
                 .ThenByDescending(item => item.Value)
                 .FirstOrDefault();
             if (sensor is null)
             {
-                yield return HardwareTemperatureDisplay.Unsupported(category.Item1, "当前设备未提供此温度传感器", category.Item3);
+                string reason = connectionState != HardwareMonitorConnectionState.Connected
+                    ? "等待代理连接并返回有效快照"
+                    : categorySensors.Length == 0
+                        ? "代理已连接；底层未返回此类温度传感器"
+                        : $"代理已发现 {categorySensors.Length} 个此类传感器，但当前读数无效";
+                yield return HardwareTemperatureDisplay.Unsupported(category.Item1, reason, category.Item3);
                 continue;
             }
 
@@ -187,6 +200,27 @@ public sealed class HardwareMonitorPresenter : INotifyPropertyChanged
                 TemperatureAccent(value));
         }
     }
+
+    private static string BuildDiagnosticSummary(
+        HardwareMonitorSnapshot snapshot,
+        IReadOnlyList<HardwareMonitorSensorValue> sensors)
+    {
+        if (snapshot.Status != HardwareMonitorConnectionState.Connected)
+            return $"代理未连接 · {ConnectionReason(snapshot.Status)}";
+
+        int Count(HardwareMonitorDeviceKind kind) => sensors.Count(item =>
+            item.DeviceKind == kind && item.MetricKind == HardwareMonitorMetricKind.Temperature);
+        int temperatureCount = sensors.Count(item => item.MetricKind == HardwareMonitorMetricKind.Temperature);
+        return $"代理已连接 · 硬件节点 {snapshot.HardwareNodeCount} · 温度传感器 {temperatureCount} 个（CPU {Count(HardwareMonitorDeviceKind.Cpu)} / 显卡 {Count(HardwareMonitorDeviceKind.Gpu)} / 内存 {Count(HardwareMonitorDeviceKind.Memory)} / 主板 {Count(HardwareMonitorDeviceKind.Mainboard)} / 磁盘 {Count(HardwareMonitorDeviceKind.Storage)}） · 采样警告 {snapshot.SamplingWarningCount} 项";
+    }
+
+    private static string ConnectionReason(HardwareMonitorConnectionState state) => state switch
+    {
+        HardwareMonitorConnectionState.Disabled => "监控未启用",
+        HardwareMonitorConnectionState.Connecting => "正在建立安全连接",
+        HardwareMonitorConnectionState.Unavailable => "代理暂不可用",
+        _ => "连接异常"
+    };
 
     private static HardwareMetricDisplay Metric(string title, string scope, HardwareMonitorSensorValue? sensor, string fallbackUnit, string accent)
     {

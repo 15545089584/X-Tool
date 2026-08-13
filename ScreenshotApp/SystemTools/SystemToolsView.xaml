@@ -116,6 +116,7 @@
                                             </StackPanel>
                                             <TextBlock Margin="22,5,0,0" FontSize="12" FontWeight="SemiBold" Foreground="{Binding StatusAccent}" Text="{Binding StatusText}" />
                                             <TextBlock Margin="22,3,0,0" MaxWidth="760" FontSize="11" Foreground="#728BA3" Text="{Binding StatusDetail}" TextWrapping="Wrap" ToolTip="{Binding StatusDetail}" />
+                                            <TextBlock Margin="22,5,0,0" MaxWidth="900" FontSize="10" Foreground="#607E9B" Text="{Binding DiagnosticSummary}" TextWrapping="Wrap" ToolTip="{Binding DiagnosticSummary}" />
                                         </StackPanel>
                                         <Border Grid.Column="1" Padding="12,8" VerticalAlignment="Top" Background="#80FFFFFF" BorderBrush="#7FD5E8F7" BorderThickness="1" CornerRadius="11">
                                             <StackPanel><TextBlock HorizontalAlignment="Right" FontSize="11" Foreground="#6683A0" Text="{Binding LastUpdatedText}" /><TextBlock Margin="0,3,0,0" HorizontalAlignment="Right" FontSize="10" Foreground="#87A0B7" Text="1 秒采样 · 本机只读" /></StackPanel>

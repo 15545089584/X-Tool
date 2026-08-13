@@ -65,7 +65,8 @@ internal sealed class HardwareSensorCollector : IDisposable
         }
         catch (Exception ex)
         {
-            warnings.Add($"{LimitText(hardware.Name)}：{LimitText(ex.Message)}");
+            // 跨权限边界只报告受控摘要，不转发可能包含路径或驱动细节的异常文本。
+            warnings.Add($"{LimitText(hardware.Name)} 节点更新失败（{ex.GetType().Name}）。");
         }
 
         string hardwareId = LimitText(hardware.Identifier.ToString());

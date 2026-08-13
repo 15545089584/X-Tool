@@ -234,6 +234,7 @@ internal static class Program
                         nonce,
                         DateTimeOffset.UtcNow,
                         ++sequence,
+                        collector.HardwareCount,
                         sensors,
                         warnings.Take(20).ToArray()),
                     cancellationToken).ConfigureAwait(false);
@@ -288,11 +289,13 @@ internal static class Program
     {
         try
         {
-            string message = exception.Message.Replace('\r', ' ').Replace('\n', ' ').Trim();
-            if (message.Length > 300)
+            // 代理错误可能来自驱动或文件系统，不能把异常原文跨权限边界发送到界面。
+            string message = code switch
             {
-                message = message[..300];
-            }
+                "sensor_initialization_failed" => "只读硬件传感器初始化失败，请重新授权或检查系统安全策略。",
+                "sampling_failed" => "本次硬件传感器采样失败，代理将在下一周期重试。",
+                _ => "硬件传感器代理操作失败。"
+            };
 
             await HardwareSensorProtocol.WriteFrameAsync(
                 pipe,

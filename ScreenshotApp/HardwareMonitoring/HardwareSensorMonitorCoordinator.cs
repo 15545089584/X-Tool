@@ -104,7 +104,7 @@ public sealed class HardwareSensorMonitorCoordinator : IAsyncDisposable
         catch (Exception exception)
         {
             await CleanupConnectionAsync(endTask: true).ConfigureAwait(false);
-            Publish(HardwareMonitorConnectionState.Error, $"传感器代理启动失败：{exception.GetBaseException().Message}");
+            Publish(HardwareMonitorConnectionState.Error, $"传感器代理启动失败：{DescribeFailure(exception, startup: true)}");
         }
         finally
         {
@@ -154,12 +154,18 @@ public sealed class HardwareSensorMonitorCoordinator : IAsyncDisposable
                 case "snapshot":
                     HardwareSensorSnapshotMessage snapshot = Deserialize<HardwareSensorSnapshotMessage>(frame);
                     ValidateSnapshot(snapshot, nonce);
+                    HardwareMonitorSensorValue[] mappedSensors = snapshot.Sensors.Select(MapSensor).ToArray();
+                    string warningSummary = snapshot.Warnings.Count == 0
+                        ? "采样正常，未发现警告"
+                        : $"采样警告 {snapshot.Warnings.Count} 项：{Limit(snapshot.Warnings[0])}";
                     SnapshotAvailable?.Invoke(new HardwareMonitorSnapshot(
                         snapshot.TimestampUtc,
                         HardwareMonitorConnectionState.Connected,
-                        snapshot.Warnings.Count == 0 ? "只读高级传感器，每秒更新" : $"部分传感器不可用：{Limit(snapshot.Warnings[0])}",
+                        warningSummary,
                         "独立管理员传感器代理",
-                        snapshot.Sensors.Select(MapSensor).ToArray()));
+                        mappedSensors,
+                        snapshot.HardwareCount,
+                        snapshot.Warnings.Count));
                     break;
                 case "error":
                     HardwareAgentErrorMessage error = Deserialize<HardwareAgentErrorMessage>(frame);
@@ -188,7 +194,7 @@ public sealed class HardwareSensorMonitorCoordinator : IAsyncDisposable
         }
         catch (Exception exception)
         {
-            Publish(HardwareMonitorConnectionState.Error, $"传感器连接异常：{exception.GetBaseException().Message}");
+            Publish(HardwareMonitorConnectionState.Error, $"传感器连接异常：{DescribeFailure(exception, startup: false)}");
         }
     }
 
@@ -250,6 +256,8 @@ public sealed class HardwareSensorMonitorCoordinator : IAsyncDisposable
         ValidateEnvelope(snapshot.ProtocolVersion, snapshot.Nonce, snapshot.TimestampUtc, nonce);
         long previous = Interlocked.Read(ref _lastSequence);
         if (snapshot.Sequence <= previous
+            || snapshot.HardwareCount < 0
+            || snapshot.HardwareCount > HardwareSensorProtocol.MaximumSensorCount
             || snapshot.Sensors.Count > HardwareSensorProtocol.MaximumSensorCount
             || snapshot.Warnings.Count > 20)
         {
@@ -343,6 +351,21 @@ public sealed class HardwareSensorMonitorCoordinator : IAsyncDisposable
     {
         string normalized = (value ?? string.Empty).Replace('\r', ' ').Replace('\n', ' ').Trim();
         return normalized.Length <= 256 ? normalized : normalized[..256];
+    }
+
+    private static string DescribeFailure(Exception exception, bool startup)
+    {
+        Exception failure = exception.GetBaseException();
+        return failure switch
+        {
+            TimeoutException => startup ? "等待代理连接超时" : "读取代理数据超时",
+            OperationCanceledException => "操作已取消",
+            UnauthorizedAccessException => "代理身份或访问权限校验未通过",
+            InvalidDataException => "代理握手或采样数据校验未通过",
+            IOException => "安全管道连接已中断",
+            System.ComponentModel.Win32Exception => "Windows 任务或进程操作失败",
+            _ => startup ? "无法完成代理启动" : "无法继续读取代理数据"
+        };
     }
 
     private static void ValidateConnectedAgent(NamedPipeServerStream pipe, int claimedProcessId)

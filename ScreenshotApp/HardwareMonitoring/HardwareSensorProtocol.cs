@@ -140,6 +140,7 @@ public sealed record HardwareSensorSnapshotMessage(
     string Nonce,
     DateTimeOffset TimestampUtc,
     long Sequence,
+    int HardwareCount,
     IReadOnlyList<HardwareSensorReading> Sensors,
     IReadOnlyList<string> Warnings);
 
