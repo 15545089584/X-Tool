@@ -178,7 +178,10 @@ public sealed class HardwareMonitorPresenter : INotifyPropertyChanged
                 .Where(item => item.DeviceKind == category.Item2
                     && item.MetricKind == HardwareMonitorMetricKind.Temperature)
                 .ToArray();
-            var sensor = categorySensors
+            var realtimeSensors = categorySensors
+                .Where(IsRealtimeTemperature)
+                .ToArray();
+            var sensor = realtimeSensors
                 .Where(item => item.IsSupported && item.Value is > 0 and < 130)
                 .OrderByDescending(item => IsPreferredName(item.SensorName))
                 .ThenByDescending(item => item.Value)
@@ -189,6 +192,8 @@ public sealed class HardwareMonitorPresenter : INotifyPropertyChanged
                     ? "等待代理连接并返回有效快照"
                     : categorySensors.Length == 0
                         ? "代理已连接；底层未返回此类温度传感器"
+                        : realtimeSensors.Length == 0
+                            ? "代理仅返回安全阈值，未返回当前温度读数"
                         : $"代理已发现 {categorySensors.Length} 个此类传感器，但当前读数无效";
                 yield return HardwareTemperatureDisplay.Unsupported(category.Item1, reason, category.Item3);
                 continue;
@@ -214,12 +219,19 @@ public sealed class HardwareMonitorPresenter : INotifyPropertyChanged
             return $"代理未连接 · {ConnectionReason(snapshot.Status)}";
 
         int Count(HardwareMonitorDeviceKind kind) => sensors.Count(item =>
-            item.DeviceKind == kind && item.MetricKind == HardwareMonitorMetricKind.Temperature);
-        int temperatureCount = sensors.Count(item => item.MetricKind == HardwareMonitorMetricKind.Temperature);
+            item.DeviceKind == kind
+            && item.MetricKind == HardwareMonitorMetricKind.Temperature
+            && IsRealtimeTemperature(item));
+        int temperatureCount = sensors.Count(item =>
+            item.MetricKind == HardwareMonitorMetricKind.Temperature
+            && IsRealtimeTemperature(item));
+        int thresholdCount = sensors.Count(item =>
+            item.MetricKind == HardwareMonitorMetricKind.Temperature
+            && !IsRealtimeTemperature(item));
         string access = string.IsNullOrWhiteSpace(snapshot.LowLevelAccessSummary)
             ? "底层访问状态未返回"
             : snapshot.LowLevelAccessSummary;
-        return $"代理已连接 · 硬件节点 {snapshot.HardwareNodeCount} · 温度传感器 {temperatureCount} 个（CPU {Count(HardwareMonitorDeviceKind.Cpu)} / 显卡 {Count(HardwareMonitorDeviceKind.Gpu)} / 内存 {Count(HardwareMonitorDeviceKind.Memory)} / 主板 {Count(HardwareMonitorDeviceKind.Mainboard)} / 磁盘 {Count(HardwareMonitorDeviceKind.Storage)}） · 采样警告 {snapshot.SamplingWarningCount} 项 · {access}";
+        return $"代理已连接 · 硬件节点 {snapshot.HardwareNodeCount} · 实时温度 {temperatureCount} 个（CPU {Count(HardwareMonitorDeviceKind.Cpu)} / 显卡 {Count(HardwareMonitorDeviceKind.Gpu)} / 内存 {Count(HardwareMonitorDeviceKind.Memory)} / 主板 {Count(HardwareMonitorDeviceKind.Mainboard)} / 磁盘 {Count(HardwareMonitorDeviceKind.Storage)}） · 已忽略阈值 {thresholdCount} 项 · 采样警告 {snapshot.SamplingWarningCount} 项 · {access}";
     }
 
     private static string ConnectionReason(HardwareMonitorConnectionState state) => state switch
@@ -246,7 +258,22 @@ public sealed class HardwareMonitorPresenter : INotifyPropertyChanged
             .FirstOrDefault();
 
     private static double? FindTemperature(IEnumerable<HardwareMonitorSensorValue> sensors, HardwareMonitorDeviceKind deviceKind)
-        => FindPreferred(sensors.Where(item => item.Value is > 0 and < 130), deviceKind, HardwareMonitorMetricKind.Temperature)?.Value;
+        => FindPreferred(
+            sensors.Where(item => item.Value is > 0 and < 130 && IsRealtimeTemperature(item)),
+            deviceKind,
+            HardwareMonitorMetricKind.Temperature)?.Value;
+
+    /// <summary>阈值表示固件保护界限，不是可绘制或展示的实时温度。</summary>
+    private static bool IsRealtimeTemperature(HardwareMonitorSensorValue sensor)
+    {
+        string name = sensor.SensorName ?? string.Empty;
+        return !name.Contains("Critical", StringComparison.OrdinalIgnoreCase)
+               && !name.Contains("Limit", StringComparison.OrdinalIgnoreCase)
+               && !name.Contains("Threshold", StringComparison.OrdinalIgnoreCase)
+               && !name.Contains("Warning", StringComparison.OrdinalIgnoreCase)
+               && !name.Contains("TjMax", StringComparison.OrdinalIgnoreCase)
+               && !name.Contains("Shutdown", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static bool IsPreferredName(string name)
         => name.Contains("Package", StringComparison.OrdinalIgnoreCase)
