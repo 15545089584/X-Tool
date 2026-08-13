@@ -104,63 +104,6 @@
                                     </Grid>
                                 </Viewbox>
                             </Border>
-                            <Border Margin="0,16,0,2" Padding="20" Background="#66F8FCFF" BorderBrush="#A4D6EAF8" BorderThickness="1" CornerRadius="18">
-                                <Grid DataContext="{Binding HardwareMonitor, RelativeSource={RelativeSource AncestorType=systemTools:SystemToolsView}}">
-                                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="18" /><RowDefinition Height="190" /><RowDefinition Height="20" /><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="230" /></Grid.RowDefinitions>
-                                    <Grid>
-                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                                        <StackPanel>
-                                            <StackPanel Orientation="Horizontal">
-                                                <Border Width="12" Height="12" Margin="0,0,10,0" VerticalAlignment="Center" Background="{Binding StatusAccent}" CornerRadius="6"><Border.Effect><DropShadowEffect BlurRadius="8" ShadowDepth="0" Opacity="0.55" Color="#4D7CFE" /></Border.Effect></Border>
-                                                <TextBlock FontSize="19" FontWeight="SemiBold" Foreground="#2E4B67" Text="高级硬件实时监控" />
-                                            </StackPanel>
-                                            <TextBlock Margin="22,5,0,0" FontSize="12" FontWeight="SemiBold" Foreground="{Binding StatusAccent}" Text="{Binding StatusText}" />
-                                            <TextBlock Margin="22,3,0,0" MaxWidth="760" FontSize="11" Foreground="#728BA3" Text="{Binding StatusDetail}" TextWrapping="Wrap" ToolTip="{Binding StatusDetail}" />
-                                            <TextBlock Margin="22,5,0,0" MaxWidth="900" FontSize="10" Foreground="#607E9B" Text="{Binding DiagnosticSummary}" TextWrapping="Wrap" ToolTip="{Binding DiagnosticSummary}" />
-                                            <TextBlock Margin="22,3,0,0" MaxWidth="900" FontSize="10" Foreground="#7890A6" Text="{Binding EcSuperIoDiagnosticSummary}" TextWrapping="Wrap" ToolTip="{Binding EcSuperIoDiagnosticSummary}" />
-                                        </StackPanel>
-                                        <Border Grid.Column="1" Padding="12,8" VerticalAlignment="Top" Background="#80FFFFFF" BorderBrush="#7FD5E8F7" BorderThickness="1" CornerRadius="11">
-                                            <StackPanel><TextBlock HorizontalAlignment="Right" FontSize="11" Foreground="#6683A0" Text="{Binding LastUpdatedText}" /><TextBlock Margin="0,3,0,0" HorizontalAlignment="Right" FontSize="10" Foreground="#87A0B7" Text="1 秒采样 · 本机只读" /></StackPanel>
-                                        </Border>
-                                    </Grid>
-                                    <ItemsControl x:Name="HardwareRealtimePanel" Grid.Row="2" ItemsSource="{Binding Temperatures}">
-                                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="5" Rows="1" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-                                        <ItemsControl.ItemTemplate><DataTemplate>
-                                            <Border Margin="0,0,10,0" Padding="12,10" Background="#92FFFFFF" BorderBrush="#7FD5E8F7" BorderThickness="1" CornerRadius="15" ToolTip="{Binding SensorName}">
-                                                <Grid>
-                                                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                                                    <TextBlock HorizontalAlignment="Center" FontSize="12" FontWeight="SemiBold" Foreground="#45627E" Text="{Binding DeviceName}" TextTrimming="CharacterEllipsis" />
-                                                    <Grid Grid.Row="1" Margin="0,4,0,2">
-                                                        <systemTools:HardwareTemperatureGauge Width="112" Height="112" HorizontalAlignment="Center" VerticalAlignment="Center" Accent="{Binding Accent}" IsSupported="{Binding IsSupported}" Value="{Binding Value}" />
-                                                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                            <TextBlock HorizontalAlignment="Center" FontSize="20" FontWeight="SemiBold" Foreground="{Binding Accent}" Text="{Binding ValueText}" />
-                                                            <TextBlock Margin="0,3,0,0" HorizontalAlignment="Center" FontSize="9" FontWeight="SemiBold" Foreground="#7890A6" Text="{Binding StateText}" />
-                                                        </StackPanel>
-                                                    </Grid>
-                                                    <TextBlock Grid.Row="2" MaxWidth="180" HorizontalAlignment="Center" FontSize="9" Foreground="#7890A6" Text="{Binding SensorName}" TextAlignment="Center" TextTrimming="CharacterEllipsis" />
-                                                </Grid>
-                                            </Border>
-                                        </DataTemplate></ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                    <Grid Grid.Row="4">
-                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock FontSize="15" FontWeight="SemiBold" Foreground="#3F607E" Text="温度趋势" />
-                                            <TextBlock Margin="8,2,0,0" VerticalAlignment="Center" FontSize="10" Foreground="#7890A6" Text="最近 30 分钟 · 缺失读数保持断线" />
-                                        </StackPanel>
-                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Orientation="Horizontal">
-                                            <TextBlock FontSize="10" Foreground="#4D7CFE" Text="● CPU" />
-                                            <TextBlock Margin="12,0,0,0" FontSize="10" Foreground="#8F65DB" Text="● 显卡" />
-                                            <TextBlock Margin="12,0,0,0" FontSize="10" Foreground="#16B99B" Text="● 内存" />
-                                            <TextBlock Margin="12,0,0,0" FontSize="10" Foreground="#F09345" Text="● 主板" />
-                                            <TextBlock Margin="12,0,0,0" FontSize="10" Foreground="#38A8D8" Text="● 磁盘" />
-                                        </StackPanel>
-                                    </Grid>
-                                    <Border x:Name="HardwareHistoryPanel" Grid.Row="6" Padding="8,6" Background="#72FFFFFF" BorderBrush="#73D5E8F7" BorderThickness="1" CornerRadius="14">
-                                        <systemTools:HardwareMonitorHistoryChart x:Name="HardwareHistoryChart" />
-                                    </Border>
-                                </Grid>
-                            </Border>
                             <Border x:Name="LegacyDriverPanel" Visibility="Collapsed" Margin="0,14,0,2" Padding="14" Background="#54FFFFFF" BorderBrush="#8ED6E9F8" BorderThickness="1" CornerRadius="13">
                                 <Grid>
                                     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="38" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>

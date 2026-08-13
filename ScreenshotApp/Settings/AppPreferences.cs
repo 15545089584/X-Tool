@@ -48,9 +48,6 @@ public sealed class AppPreferences
     /// <summary>是否使用一次授权注册的独立 ETW 辅助计划任务。</summary>
     public bool NetworkEtwAutoStart { get; set; }
 
-    /// <summary>是否使用一次授权注册的独立硬件传感器代理。</summary>
-    public bool HardwareSensorAutoStart { get; set; }
-
     public string ScreenshotShortcut { get; set; } = "Ctrl+Shift+A";
 
     public string ClipboardShortcut { get; set; } = "Ctrl+Shift+V";

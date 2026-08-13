@@ -30,11 +30,6 @@ public partial class SystemToolsView : UserControl
     private readonly ObservableCollection<StorageVolumeEntry> _storageVolumes = new();
     private readonly ObservableCollection<PhysicalStorageEntry> _physicalStorage = new();
     private readonly ObservableCollection<SystemDiagnosticGroup> _diagnosticGroups = new();
-    private readonly DispatcherTimer _hardwareMonitorRenderTimer;
-    private HardwareMonitorSnapshot? _latestHardwareSnapshot;
-    private readonly TimeSpan _hardwareHistoryRange = TimeSpan.FromMinutes(30);
-    /// <summary>实时硬件监控的独立显示模型，采集代理只需推送中立快照。</summary>
-    public HardwareMonitorPresenter HardwareMonitor { get; } = new();
     private IReadOnlyList<PortEntry> _allPorts = Array.Empty<PortEntry>();
     private IReadOnlyList<ProcessEntry> _allProcesses = Array.Empty<ProcessEntry>();
     private IReadOnlyList<ServiceEntry> _allServices = Array.Empty<ServiceEntry>();
@@ -115,8 +110,6 @@ public partial class SystemToolsView : UserControl
         _portAutoRefreshTimer.Tick += AutoRefreshPorts_Tick;
         _diskHistoryAutoCaptureTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(15) };
         _diskHistoryAutoCaptureTimer.Tick += DiskHistoryAutoCaptureTimer_Tick;
-        _hardwareMonitorRenderTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-        _hardwareMonitorRenderTimer.Tick += HardwareMonitorRenderTimer_Tick;
         EnvironmentScopeComboBox.SelectedIndex = 0;
         AutoRefreshIntervalComboBox.SelectedIndex = 1;
         UpdatePortAutoRefreshInterval();
@@ -132,7 +125,6 @@ public partial class SystemToolsView : UserControl
             ConfigureInteractiveHeaders();
             ConfigurePortColumns();
             ConfigureProcessColumns();
-            _hardwareMonitorRenderTimer.Start();
             if (EnvironmentOnly)
             {
                 await RefreshDeviceInfoAsync();
@@ -144,7 +136,6 @@ public partial class SystemToolsView : UserControl
         {
             _portAutoRefreshTimer.Stop();
             _diskHistoryAutoCaptureTimer.Stop();
-            _hardwareMonitorRenderTimer.Stop();
             StorageAnalysisView.CancelActiveScan();
             CancelActiveDiagnostics();
         };
@@ -155,38 +146,7 @@ public partial class SystemToolsView : UserControl
                 StorageAnalysisView.CancelActiveScan();
                 CancelActiveDiagnostics();
             }
-            else if (OverviewPanel.Visibility == Visibility.Visible)
-            {
-                RenderLatestHardwareSnapshot();
-            }
         };
-    }
-
-    /// <summary>接收采集端的一秒快照；页面不可见时仅写入内存历史，不触发界面重绘。</summary>
-    public void ApplyHardwareMonitorSnapshot(HardwareMonitorSnapshot snapshot)
-    {
-        if (!Dispatcher.CheckAccess())
-        {
-            Dispatcher.BeginInvoke(new Action(() => ApplyHardwareMonitorSnapshot(snapshot)), DispatcherPriority.Background);
-            return;
-        }
-
-        _latestHardwareSnapshot = snapshot;
-        HardwareMonitor.Apply(snapshot, updatePresentation: false, recordHistory: true);
-    }
-
-    private void HardwareMonitorRenderTimer_Tick(object? sender, EventArgs e)
-    {
-        if (!IsVisible || OverviewPanel.Visibility != Visibility.Visible) return;
-        RenderLatestHardwareSnapshot();
-    }
-
-    private void RenderLatestHardwareSnapshot()
-    {
-        if (_latestHardwareSnapshot is not null)
-            HardwareMonitor.Apply(_latestHardwareSnapshot, updatePresentation: true, recordHistory: false);
-        if (HardwareHistoryPanel.Visibility == Visibility.Visible)
-            HardwareHistoryChart.SetPoints(HardwareMonitor.GetHistory(_hardwareHistoryRange));
     }
 
     private async Task RefreshPortsAsync()

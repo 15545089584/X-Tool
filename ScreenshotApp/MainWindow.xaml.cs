@@ -23,7 +23,6 @@ using ScreenshotApp.StorageAnalysis;
 using ScreenshotApp.Translation;
 using ScreenshotApp.VoiceInput;
 using ScreenshotApp.NetworkWorkbench;
-using ScreenshotApp.HardwareMonitoring;
 
 namespace ScreenshotApp;
 
@@ -37,7 +36,6 @@ public partial class MainWindow : Window
     private readonly ScrollCaptureService _scrollCaptureService;
     private readonly ScreenRecordingService _screenRecordingService;
     private readonly AppPreferences _preferences = AppPreferences.Load();
-    private readonly HardwareSensorMonitorCoordinator _hardwareSensorCoordinator = new();
     private readonly ScreenshotHistoryStore _historyStore;
     private readonly ObservableCollection<ScreenshotHistoryItem> _historyItems = new();
     private readonly ObservableCollection<ScreenshotHistoryItem> _textHistoryItems = new();
@@ -140,7 +138,6 @@ public partial class MainWindow : Window
         _voiceInputService.RecordingFaulted += VoiceInputService_RecordingFaulted;
         _voiceInputService.PartialResultAvailable += VoiceInputService_PartialResultAvailable;
         SystemToolsView.FileWorkbenchRequested += SystemToolsView_FileWorkbenchRequested;
-        _hardwareSensorCoordinator.SnapshotAvailable += SystemToolsView.ApplyHardwareMonitorSnapshot;
         UpdateStorageLocationText();
         // 长截图需要连续拿到“此刻”的画面。每次重新创建桌面复制会话时，
         // 部分显卡驱动可能先返回上一帧，因此滚动采集优先使用同步的 GDI 帧，
@@ -233,84 +230,6 @@ public partial class MainWindow : Window
         if (_preferences.NetworkEtwAutoStart && await Task.Run(NetworkEtwAutoStartService.IsRegistered))
         {
             _ = NetworkWorkbenchView.StartPersistentTrafficAsync(silent: true);
-        }
-        HardwareSensorAuthorizationState hardwareSensorState = await RefreshHardwareSensorAuthorizationStateAsync();
-        if (_preferences.HardwareSensorAutoStart)
-        {
-            if (hardwareSensorState == HardwareSensorAuthorizationState.Authorized)
-            {
-                _ = _hardwareSensorCoordinator.StartAsync(silent: true);
-            }
-            else
-            {
-                _preferences.HardwareSensorAutoStart = false;
-                _preferences.Save();
-            }
-        }
-    }
-
-    private async Task<HardwareSensorAuthorizationState> RefreshHardwareSensorAuthorizationStateAsync()
-    {
-        HardwareSensorAuthorizationStatus status = await HardwareSensorAuthorizationService.GetStatusAsync();
-        bool authorized = status.State == HardwareSensorAuthorizationState.Authorized;
-        if (!authorized && status.State == HardwareSensorAuthorizationState.NotAuthorized && _preferences.HardwareSensorAutoStart)
-        {
-            _preferences.HardwareSensorAutoStart = false;
-            _preferences.Save();
-        }
-        HardwareSensorAuthorizationButton.Content = authorized ? "取消授权" : status.State == HardwareSensorAuthorizationState.RepairRequired ? "重新授权修复" : "授权并自动监控";
-        HardwareSensorAuthorizationStatusText.Text = status.Message;
-        if (!authorized)
-        {
-            SystemToolsView.ApplyHardwareMonitorSnapshot(new(
-                DateTimeOffset.Now,
-                status.State == HardwareSensorAuthorizationState.Unavailable ? SystemTools.HardwareMonitorConnectionState.Unavailable : SystemTools.HardwareMonitorConnectionState.Disabled,
-                status.Message,
-                "独立管理员传感器代理",
-                Array.Empty<SystemTools.HardwareMonitorSensorValue>()));
-        }
-        return status.State;
-    }
-
-    private async void HardwareSensorAuthorizationButton_Click(object sender, RoutedEventArgs e)
-    {
-        HardwareSensorAuthorizationButton.IsEnabled = false;
-        try
-        {
-            HardwareSensorAuthorizationStatus current = await HardwareSensorAuthorizationService.GetStatusAsync();
-            HardwareSensorAuthorizationResult result;
-            if (current.State == HardwareSensorAuthorizationState.Authorized)
-            {
-                await _hardwareSensorCoordinator.StopAsync();
-                result = await HardwareSensorAuthorizationService.UninstallAsync();
-                if (result.Success)
-                {
-                    _preferences.HardwareSensorAutoStart = false;
-                    _preferences.Save();
-                }
-            }
-            else
-            {
-                result = await HardwareSensorAuthorizationService.InstallAsync();
-                if (result.Success)
-                {
-                    _preferences.HardwareSensorAutoStart = true;
-                    _preferences.Save();
-                    await _hardwareSensorCoordinator.StartAsync();
-                }
-            }
-
-            await RefreshHardwareSensorAuthorizationStateAsync();
-            ShowToast(result.Message);
-        }
-        catch (Exception exception)
-        {
-            ShowToast($"硬件监控设置失败：{exception.GetBaseException().Message}");
-            await RefreshHardwareSensorAuthorizationStateAsync();
-        }
-        finally
-        {
-            HardwareSensorAuthorizationButton.IsEnabled = true;
         }
     }
 
@@ -520,16 +439,6 @@ public partial class MainWindow : Window
 
     private void MainWindow_Closed(object? sender, EventArgs e)
     {
-        _hardwareSensorCoordinator.SnapshotAvailable -= SystemToolsView.ApplyHardwareMonitorSnapshot;
-        try
-        {
-            _hardwareSensorCoordinator.DisposeAsync().AsTask().GetAwaiter().GetResult();
-        }
-        catch
-        {
-            // 退出时管道已关闭即可；计划任务还会通过父进程句柄自行收尾。
-        }
-
         if (_windowSource is null)
         {
             return;
