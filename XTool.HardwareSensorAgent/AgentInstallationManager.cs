@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Security.Principal;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using LibreHardwareMonitor.PawnIo;
 using ScreenshotApp.HardwareMonitoring;
 
 namespace XTool.HardwareSensorAgent;
@@ -13,6 +14,9 @@ internal static class AgentInstallationManager
 {
     private const string InstalledManifestName = "agent-manifest.json";
     private const int MaximumManifestBytes = 128 * 1024;
+    private const string PawnIoInstallerName = "PawnIO_setup.exe";
+    private const long PawnIoInstallerLength = 3410960;
+    private const string PawnIoInstallerSha256 = "1F519A22E47187F70A1379A48CA604981C4FCF694F4E65B734AAA74A9FBA3032";
     private static readonly string InstallationRoot = Path.GetFullPath(
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "X-Tool", "Agents", "HardwareSensors"));
     private static readonly Regex VersionPattern = new("^[0-9A-Za-z._-]{1,64}$", RegexOptions.CultureInvariant);
@@ -34,7 +38,8 @@ internal static class AgentInstallationManager
         "System.CodeDom.dll",
         "System.IO.Ports.dll",
         "System.Management.dll",
-        "System.Threading.AccessControl.dll"
+        "System.Threading.AccessControl.dll",
+        PawnIoInstallerName
     };
     private static readonly string[] RequiredBundleFiles = AllowedBundleFiles.ToArray();
 
@@ -47,6 +52,10 @@ internal static class AgentInstallationManager
         string source = ValidateSourceDirectory(sourceDirectory);
         HardwareAgentBundleManifest manifest = ReadAndValidateManifest(manifestPath, requestingUserSid);
         string version = ValidateVersion(manifest.AgentVersion);
+
+        // PawnIO 是随高级硬件监控授权安装的固定版内核组件，先校验清单和文件哈希，
+        // 再交给官方交互式安装器处理驱动签名、UAC、卸载信息与系统策略。
+        InstallBundledPawnIo(source, manifest);
 
         Directory.CreateDirectory(InstallationRoot);
         EnsureNoReparsePoints(InstallationRoot, Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles));
@@ -229,6 +238,51 @@ internal static class AgentInstallationManager
             {
                 throw new InvalidDataException($"传感器代理落盘校验失败：{expected.Name}");
             }
+        }
+    }
+
+    private static void InstallBundledPawnIo(string source, HardwareAgentBundleManifest manifest)
+    {
+        if (PawnIo.IsInstalled)
+        {
+            // 已存在官方组件时不重复打开安装器；后续升级由新的固定安装器版本触发迁移。
+            return;
+        }
+
+        HardwareAgentBundleFile? installer = manifest.Files.SingleOrDefault(file =>
+            string.Equals(file.Name, PawnIoInstallerName, StringComparison.OrdinalIgnoreCase));
+        if (installer is null
+            || installer.Length != PawnIoInstallerLength
+            || !string.Equals(installer.Sha256, PawnIoInstallerSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidDataException("PawnIO 安装器清单校验失败。");
+        }
+
+        string installerPath = Path.Combine(source, PawnIoInstallerName);
+        FileInfo info = new(installerPath);
+        if (!info.Exists || (info.Attributes & FileAttributes.ReparsePoint) != 0 || info.Length != PawnIoInstallerLength)
+        {
+            throw new InvalidDataException("PawnIO 安装器文件不存在或不安全。");
+        }
+
+        using FileStream stream = new(installerPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        string hash = Convert.ToHexString(SHA256.HashData(stream));
+        if (!string.Equals(hash, PawnIoInstallerSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidDataException("PawnIO 安装器哈希校验失败。");
+        }
+
+        ProcessStartInfo startInfo = new(installerPath)
+        {
+            UseShellExecute = true,
+            WorkingDirectory = source
+        };
+        using Process process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("无法启动 PawnIO 官方安装器。");
+        process.WaitForExit();
+        if (process.ExitCode != 0)
+        {
+            throw new InvalidOperationException("PawnIO 官方安装器未完成；硬件监控授权未更改。");
         }
     }
 

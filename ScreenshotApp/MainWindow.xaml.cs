@@ -140,7 +140,7 @@ public partial class MainWindow : Window
         _voiceInputService.RecordingFaulted += VoiceInputService_RecordingFaulted;
         _voiceInputService.PartialResultAvailable += VoiceInputService_PartialResultAvailable;
         SystemToolsView.FileWorkbenchRequested += SystemToolsView_FileWorkbenchRequested;
-        _hardwareSensorCoordinator.SnapshotAvailable += HardwareSensorCoordinator_SnapshotAvailable;
+        _hardwareSensorCoordinator.SnapshotAvailable += SystemToolsView.ApplyHardwareMonitorSnapshot;
         UpdateStorageLocationText();
         // 长截图需要连续拿到“此刻”的画面。每次重新创建桌面复制会话时，
         // 部分显卡驱动可能先返回上一帧，因此滚动采集优先使用同步的 GDI 帧，
@@ -249,17 +249,6 @@ public partial class MainWindow : Window
         }
     }
 
-    private void HardwareSensorCoordinator_SnapshotAvailable(SystemTools.HardwareMonitorSnapshot snapshot)
-    {
-        SystemToolsView.ApplyHardwareMonitorSnapshot(snapshot);
-        _ = Dispatcher.BeginInvoke(new Action(() =>
-        {
-            PawnIoStatusText.Text = string.IsNullOrWhiteSpace(snapshot.LowLevelAccessSummary)
-                ? "等待代理返回底层访问状态"
-                : snapshot.LowLevelAccessSummary;
-        }));
-    }
-
     private async Task<HardwareSensorAuthorizationState> RefreshHardwareSensorAuthorizationStateAsync()
     {
         HardwareSensorAuthorizationStatus status = await HardwareSensorAuthorizationService.GetStatusAsync();
@@ -322,47 +311,6 @@ public partial class MainWindow : Window
         finally
         {
             HardwareSensorAuthorizationButton.IsEnabled = true;
-        }
-    }
-
-    private async void PawnIoRefreshButton_Click(object sender, RoutedEventArgs e)
-    {
-        PawnIoRefreshButton.IsEnabled = false;
-        try
-        {
-            HardwareSensorAuthorizationStatus authorization = await HardwareSensorAuthorizationService.GetStatusAsync();
-            if (authorization.State != HardwareSensorAuthorizationState.Authorized)
-            {
-                PawnIoStatusText.Text = "请先授权硬件实时监控，再重新采样 PawnIO 状态";
-                ShowToast("请先授权硬件实时监控。");
-                return;
-            }
-
-            PawnIoStatusText.Text = "正在重新启动只读代理并采样…";
-            await _hardwareSensorCoordinator.StopAsync();
-            await _hardwareSensorCoordinator.StartAsync();
-        }
-        catch
-        {
-            PawnIoStatusText.Text = "重新采样失败；保持基础只读访问";
-            ShowToast("PawnIO 状态重新采样失败。");
-        }
-        finally
-        {
-            PawnIoRefreshButton.IsEnabled = true;
-        }
-    }
-
-    private void PawnIoOfficialSiteButton_Click(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            Process.Start(new ProcessStartInfo("https://pawnio.eu/") { UseShellExecute = true });
-            PawnIoStatusText.Text = "已打开官方安装页；请自行核验签名、完成安装后重新采样";
-        }
-        catch
-        {
-            PawnIoStatusText.Text = "无法打开官方安装页，请在浏览器访问 pawnio.eu";
         }
     }
 
@@ -572,7 +520,7 @@ public partial class MainWindow : Window
 
     private void MainWindow_Closed(object? sender, EventArgs e)
     {
-        _hardwareSensorCoordinator.SnapshotAvailable -= HardwareSensorCoordinator_SnapshotAvailable;
+        _hardwareSensorCoordinator.SnapshotAvailable -= SystemToolsView.ApplyHardwareMonitorSnapshot;
         try
         {
             _hardwareSensorCoordinator.DisposeAsync().AsTask().GetAwaiter().GetResult();

@@ -26,6 +26,7 @@ public sealed record HardwareSensorAuthorizationResult(bool Success, bool Cancel
 public static class HardwareSensorAuthorizationService
 {
     private const string AgentExecutableName = "XTool.HardwareSensorAgent.exe";
+    private const string PawnIoInstallerName = "PawnIO_setup.exe";
     private const string ManifestFileName = "bundle-manifest-v2.json";
     private const string LastInstallerResultFileName = "last-installer-result.json";
     private static readonly string[] BundleFileNames =
@@ -45,7 +46,8 @@ public static class HardwareSensorAuthorizationService
         "System.CodeDom.dll",
         "System.IO.Ports.dll",
         "System.Management.dll",
-        "System.Threading.AccessControl.dll"
+        "System.Threading.AccessControl.dll",
+        PawnIoInstallerName
     ];
 
     private static readonly HashSet<string> RequiredBundleFiles = new(BundleFileNames, StringComparer.OrdinalIgnoreCase);
