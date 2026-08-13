@@ -14,7 +14,8 @@ public sealed record HardwareMonitorSnapshot(
     string Source,
     IReadOnlyList<HardwareMonitorSensorValue> Sensors,
     int HardwareNodeCount = 0,
-    int SamplingWarningCount = 0);
+    int SamplingWarningCount = 0,
+    string? LowLevelAccessSummary = null);
 
 public enum HardwareMonitorConnectionState
 {
@@ -215,7 +216,10 @@ public sealed class HardwareMonitorPresenter : INotifyPropertyChanged
         int Count(HardwareMonitorDeviceKind kind) => sensors.Count(item =>
             item.DeviceKind == kind && item.MetricKind == HardwareMonitorMetricKind.Temperature);
         int temperatureCount = sensors.Count(item => item.MetricKind == HardwareMonitorMetricKind.Temperature);
-        return $"代理已连接 · 硬件节点 {snapshot.HardwareNodeCount} · 温度传感器 {temperatureCount} 个（CPU {Count(HardwareMonitorDeviceKind.Cpu)} / 显卡 {Count(HardwareMonitorDeviceKind.Gpu)} / 内存 {Count(HardwareMonitorDeviceKind.Memory)} / 主板 {Count(HardwareMonitorDeviceKind.Mainboard)} / 磁盘 {Count(HardwareMonitorDeviceKind.Storage)}） · 采样警告 {snapshot.SamplingWarningCount} 项";
+        string access = string.IsNullOrWhiteSpace(snapshot.LowLevelAccessSummary)
+            ? "底层访问状态未返回"
+            : snapshot.LowLevelAccessSummary;
+        return $"代理已连接 · 硬件节点 {snapshot.HardwareNodeCount} · 温度传感器 {temperatureCount} 个（CPU {Count(HardwareMonitorDeviceKind.Cpu)} / 显卡 {Count(HardwareMonitorDeviceKind.Gpu)} / 内存 {Count(HardwareMonitorDeviceKind.Memory)} / 主板 {Count(HardwareMonitorDeviceKind.Mainboard)} / 磁盘 {Count(HardwareMonitorDeviceKind.Storage)}） · 采样警告 {snapshot.SamplingWarningCount} 项 · {access}";
     }
 
     private static string ConnectionReason(HardwareMonitorConnectionState state) => state switch

@@ -236,7 +236,8 @@ internal static class Program
                         ++sequence,
                         collector.HardwareCount,
                         sensors,
-                        warnings.Take(20).ToArray()),
+                        warnings.Take(20).ToArray(),
+                        PawnIoAccessProbe.GetSummary()),
                     cancellationToken).ConfigureAwait(false);
             }
             catch (IOException)

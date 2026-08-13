@@ -39,6 +39,14 @@
 LibreHardwareMonitor 源文件，仅通过 NuGet 引用其已编译库；发布包仍应保留本声明和
 上游许可证入口。
 
+## PawnIO（可选，不随 X-Tool 分发）
+
+- 用途：部分设备在 LibreHardwareMonitor 基础只读访问无法返回 CPU、内存或主板温度时，可由用户自行安装 PawnIO 以提供低层访问能力。
+- X-Tool 行为：不包含、不下载、不静默执行 PawnIO 驱动或安装器；设置页只打开其官方站点，并在已授权的只读代理快照中报告是否检测到该组件。
+- 许可证与来源：PawnIO 源码采用 GPL-2.0 并含独立模块例外，详见 <https://github.com/namazso/PawnIO>；官方站点为 <https://pawnio.eu/>。
+
+未来若改变为随 X-Tool 分发或自动安装 PawnIO，必须重新完成许可证、签名、安装、卸载、回滚和供应链审计，不能沿用本声明。
+
 ## sherpa-onnx 1.13.4 与 SenseVoice int8 模型
 
 - 用途：本地离线语音输入的麦克风语音识别。

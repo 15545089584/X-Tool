@@ -142,7 +142,8 @@ public sealed record HardwareSensorSnapshotMessage(
     long Sequence,
     int HardwareCount,
     IReadOnlyList<HardwareSensorReading> Sensors,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings,
+    string? LowLevelAccessSummary = null);
 
 public sealed record HardwareSensorReading(
     string HardwareId,

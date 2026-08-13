@@ -165,7 +165,8 @@ public sealed class HardwareSensorMonitorCoordinator : IAsyncDisposable
                         "独立管理员传感器代理",
                         mappedSensors,
                         snapshot.HardwareCount,
-                        snapshot.Warnings.Count));
+                        snapshot.Warnings.Count,
+                        Limit(snapshot.LowLevelAccessSummary)));
                     break;
                 case "error":
                     HardwareAgentErrorMessage error = Deserialize<HardwareAgentErrorMessage>(frame);
@@ -259,7 +260,8 @@ public sealed class HardwareSensorMonitorCoordinator : IAsyncDisposable
             || snapshot.HardwareCount < 0
             || snapshot.HardwareCount > HardwareSensorProtocol.MaximumSensorCount
             || snapshot.Sensors.Count > HardwareSensorProtocol.MaximumSensorCount
-            || snapshot.Warnings.Count > 20)
+            || snapshot.Warnings.Count > 20
+            || snapshot.LowLevelAccessSummary?.Length > HardwareSensorProtocol.MaximumStringLength)
         {
             throw new InvalidDataException("传感器快照数量或序号无效。");
         }

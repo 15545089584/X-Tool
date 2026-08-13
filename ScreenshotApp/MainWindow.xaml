@@ -992,6 +992,23 @@
                                         </Grid>
                                         </Border>
                                         <Border Style="{StaticResource SettingCardStyle}">
+                                        <Grid Height="124" Margin="20,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="170" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel VerticalAlignment="Center">
+                                                <TextBlock FontSize="15" Text="可选深度温度访问（PawnIO）" />
+                                                <TextBlock Margin="0,5,18,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="可帮助部分设备读取 CPU、内存或主板温度；只读采样，不控制风扇或修改硬件设置" TextWrapping="Wrap" />
+                                                <TextBlock x:Name="PawnIoStatusText" Margin="0,4,18,0" FontSize="10" Foreground="#5E819F" Text="未检测；不会自动安装内核驱动" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                                <Button x:Name="PawnIoRefreshButton" Width="160" Height="30" Style="{StaticResource StorageLocationButtonStyle}" Content="重新采样状态" Click="PawnIoRefreshButton_Click" />
+                                                <Button Width="160" Height="28" Margin="0,8,0,0" Style="{StaticResource StorageLocationButtonStyle}" Content="打开官方安装页" Click="PawnIoOfficialSiteButton_Click" />
+                                            </StackPanel>
+                                        </Grid>
+                                        </Border>
+                                        <Border Style="{StaticResource SettingCardStyle}">
                                         <Grid Height="94" Margin="20,0">
                                             <StackPanel VerticalAlignment="Center">
                                                 <TextBlock FontSize="15" Text="网络流量自动获取" />
