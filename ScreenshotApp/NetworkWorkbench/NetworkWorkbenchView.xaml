@@ -378,11 +378,11 @@
                                                                 <StackPanel Grid.Column="2" VerticalAlignment="Center"><TextBlock FontSize="11" Foreground="#7890A6" Text="总量" /><TextBlock Margin="0,5,0,0" FontSize="14" FontWeight="SemiBold" Foreground="#1C9E94" Text="{Binding TotalText}" /></StackPanel>
                                                                 <StackPanel Grid.Column="3" VerticalAlignment="Center"><TextBlock FontSize="11" Foreground="#7890A6" Text="实时" /><TextBlock Margin="0,5,0,0" FontSize="14" FontWeight="SemiBold" Foreground="#53718E" Text="{Binding RateText}" /></StackPanel>
                                                             </Grid>
-                                                            <Ellipse Grid.Column="2" Width="10" Height="10" HorizontalAlignment="Right" VerticalAlignment="Center" Fill="{Binding RunningStatusBrush}" ToolTip="{Binding RunningStatusText}">
-                                                                <Ellipse.Effect>
-                                                                    <DropShadowEffect BlurRadius="12" Color="{Binding RunningStatusGlowColor}" Opacity="0.9" ShadowDepth="0" />
-                                                                </Ellipse.Effect>
-                                                            </Ellipse>
+                                                            <Grid Grid.Column="2" Width="20" Height="20" HorizontalAlignment="Right" VerticalAlignment="Center" ToolTip="{Binding RunningStatusText}">
+                                                                <Ellipse Width="20" Height="20" Fill="{Binding RunningStatusBrush}" Opacity="0.18" />
+                                                                <Ellipse Width="12" Height="12" Fill="{Binding RunningStatusBrush}" Opacity="0.28" />
+                                                                <Ellipse Width="8" Height="8" Fill="{Binding RunningStatusBrush}" />
+                                                            </Grid>
                                                         </Grid>
                                                     </Grid>
                                                 </Border>

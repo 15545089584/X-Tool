@@ -16,6 +16,8 @@ namespace ScreenshotApp.NetworkWorkbench;
 
 public partial class NetworkWorkbenchView : UserControl
 {
+    private const int MaxDisplayedTrafficProcesses = 60;
+    private const long MinimumHistoricalProcessBytes = 64 * 1024;
     private readonly ObservableCollection<NetworkAdapterEntry> _adapters = new();
     private readonly ObservableCollection<NetworkProfile> _profiles = new();
     private readonly ObservableCollection<NetworkTimelineEvent> _timelineEvents = new();
@@ -748,17 +750,18 @@ public partial class NetworkWorkbenchView : UserControl
             {
                 _trafficStatsLoading = false;
                 TrafficStatsLoadingBar.Visibility = Visibility.Collapsed;
-                var savedRows = BuildTrafficProcessRows(Array.Empty<NetworkTrafficProcessMeasurement>(), _proxySnapshot, out _);
+                var savedRows = BuildTrafficProcessRows(Array.Empty<NetworkTrafficProcessMeasurement>(), _proxySnapshot, out _, out var savedMatchingRows);
                 ApplyTrafficProcessRows(savedRows);
                 TrafficStatsProcessTotalText.Text = FormatBytes(_trafficHistoricalTotals.Values.Sum(item => item.TotalBytes));
                 TrafficStatsProxyTotalText.Text = FormatBytes(_trafficHistoricalTotals.Values.Sum(item => item.ProxyExitTotalBytes));
-                var savedProxyRows = _trafficHistoricalTotals.Values.Count(item => item.ProxyExitSeen || item.ProxyIngressSeen);
+                var savedProxyRows = _trafficHistoricalTotals.Values.Count(item =>
+                    item.TotalBytes >= MinimumHistoricalProcessBytes && (item.ProxyExitSeen || item.ProxyIngressSeen));
                 TrafficStatsProxyHintText.Text = savedProxyRows == 0 ? "暂无已保存的代理记录" : $"已保存 {savedProxyRows} 个代理相关进程";
                 TrafficStatsProxySummaryText.Text = savedProxyRows == 0
                     ? "代理判定：暂无已保存的本地代理记录"
                     : $"代理判定：已保存 {savedProxyRows} 个进程 · 数据保留 {_trafficHistoryRetentionDays} 天";
                 TrafficStatsDetailText.Text = "当前未启用应用级监控；下方显示网络历史库中已保存的进程累计，速率将在授权后恢复实时采集。";
-                TrafficStatsRowsSummaryText.Text = $"{savedRows.Count} 项 · 已保存 {_trafficHistoryRetentionDays} 天";
+                TrafficStatsRowsSummaryText.Text = BuildTrafficRowsSummary(savedRows.Count, savedMatchingRows, $"已保存 {_trafficHistoryRetentionDays} 天");
                 TrafficStatsEmptyText.Text = "尚未保存应用级流量数据\n全局网卡速率仍会正常显示；点击上方按钮并完成 UAC 授权后开始新的实时采集。";
                 TrafficStatsEmptyText.Visibility = savedRows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
                 return;
@@ -766,10 +769,15 @@ public partial class NetworkWorkbenchView : UserControl
 
             var proxySnapshot = _proxySnapshot;
             var measurements = await Task.Run(() => _trafficClient.GetProcessMeasurements());
-            var rows = await Task.Run(() => BuildTrafficProcessRows(measurements, proxySnapshot, out _).ToArray());
+            var rowBuild = await Task.Run(() =>
+            {
+                var builtRows = BuildTrafficProcessRows(measurements, proxySnapshot, out _, out var matchingRows).ToArray();
+                return (Rows: builtRows, MatchingRows: matchingRows);
+            });
+            var rows = rowBuild.Rows;
             var livePoints = BuildTrafficProcessHistoryPoints(measurements, proxySnapshot);
             var usageChanged = await PersistTrafficUsageDeltaAsync(measurements, proxySnapshot);
-            ApplyTrafficProcessRows(rows);
+            if (_trafficUsageHoverIndex < 0) ApplyTrafficProcessRows(rows);
             if (measurements.Count > 0)
             {
                 _trafficStatsLoading = false;
@@ -784,20 +792,22 @@ public partial class NetworkWorkbenchView : UserControl
             }
             // 首先把内存中的统计显示出来，历史库写入放到后台，不阻塞首屏列表。
             TrackPersistence(PersistProcessTrafficAsync(_trafficClient.SessionId, livePoints));
-            if (usageChanged && _activeTab == "TrafficStats") _ = RefreshTrafficUsageChartAsync();
+            if (usageChanged && _activeTab == "TrafficStats" && _trafficUsageHoverIndex < 0) _ = RefreshTrafficUsageChartAsync();
             var processTotal = measurements.Sum(item => item.TotalBytes) + _trafficHistoricalTotals.Values.Sum(item => item.TotalBytes);
             var proxyTotal = livePoints.Sum(item => item.ProxyExitSentBytes + item.ProxyExitReceivedBytes) +
                              _trafficHistoricalTotals.Values.Sum(item => item.ProxyExitTotalBytes);
             var proxyRows = rows.Count(item => item.ProxyRole != ProxyTrafficRole.None);
             TrafficStatsProcessTotalText.Text = FormatBytes(processTotal);
             TrafficStatsProxyTotalText.Text = FormatBytes(proxyTotal);
-            var allProxyRows = proxyRows + _trafficHistoricalTotals.Values.Count(item => item.ProxyExitSeen || item.ProxyIngressSeen);
+            var allProxyRows = proxyRows + _trafficHistoricalTotals.Values.Count(item =>
+                item.TotalBytes >= MinimumHistoricalProcessBytes && (item.ProxyExitSeen || item.ProxyIngressSeen));
             TrafficStatsProxyHintText.Text = allProxyRows == 0 ? "未识别代理出口" : $"识别 {allProxyRows} 个代理相关进程";
             TrafficStatsProxySummaryText.Text = proxyRows == 0
                 ? "代理判定：未发现本地代理出口"
                 : $"代理判定：{allProxyRows} 个进程 · 仅出口流量计入代理总量";
             TrafficStatsDetailText.Text = $"代理出口按对外连接统计；127.0.0.1 / ::1 回环流量只用于识别代理接入，不与出口流量重复相加。历史累计保留 {_trafficHistoryRetentionDays} 天。";
-            TrafficStatsRowsSummaryText.Text = $"{rows.Length} 项 · {_trafficStatsMode switch { "Proxy" => "代理相关", _ => "全部进程" }} · 含历史累计";
+            TrafficStatsRowsSummaryText.Text = BuildTrafficRowsSummary(rows.Length, rowBuild.MatchingRows,
+                $"{_trafficStatsMode switch { "Proxy" => "代理相关", _ => "有实际流量" }} · 含历史累计");
             TrafficStatsEmptyText.Text = "暂未采集到应用级流量\n请产生网络活动后稍候刷新；全局网卡速率仍会持续更新。";
             TrafficStatsEmptyText.Visibility = rows.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         }
@@ -954,9 +964,17 @@ public partial class NetworkWorkbenchView : UserControl
 
     private void ApplyTrafficProcessRows(IReadOnlyList<NetworkTrafficProcessRow> rows)
     {
+        // 暂时断开 ItemsSource，避免逐条 Add 触发数十次 WPF 测量与排列。
+        TrafficProcessesListBox.ItemsSource = null;
         _trafficProcesses.Clear();
         foreach (var row in rows) _trafficProcesses.Add(row);
+        TrafficProcessesListBox.ItemsSource = _trafficProcesses;
     }
+
+    private static string BuildTrafficRowsSummary(int displayedRows, int matchingRows, string suffix) =>
+        matchingRows > displayedRows
+            ? $"显示前 {displayedRows} / {matchingRows} 项 · {suffix}"
+            : $"{displayedRows} 项 · {suffix}";
 
     private async void TrafficUsageRange_Click(object sender, RoutedEventArgs e)
     {
@@ -1167,6 +1185,9 @@ public partial class NetworkWorkbenchView : UserControl
         TrafficUsageTooltip.Visibility = Visibility.Collapsed;
         TrafficUsageHoverHighlight.Visibility = Visibility.Collapsed;
         _trafficUsageHoverIndex = -1;
+        // 悬停期间暂停的列表与图表刷新在离开后补一次即可。
+        _ = RefreshTrafficStatsAsync();
+        _ = RefreshTrafficUsageChartAsync();
     }
 
     private static double RoundTrafficUsageScale(double bytes)
@@ -1186,6 +1207,7 @@ public partial class NetworkWorkbenchView : UserControl
         var points = new List<NetworkProcessTrafficHistoryPoint>();
         foreach (var measurement in measurements)
         {
+            if (measurement.TotalBytes <= 0 && measurement.TotalBitsPerSecond <= 0) continue;
             var loopbackFlows = measurement.Flows.Where(flow => IsLoopbackEndpoint(flow.LocalEndpoint) || IsLoopbackEndpoint(flow.RemoteEndpoint)).ToArray();
             var externalFlows = measurement.Flows.Where(flow =>
                 !IsLoopbackEndpoint(flow.LocalEndpoint) && !IsLoopbackEndpoint(flow.RemoteEndpoint)).ToArray();
@@ -1209,13 +1231,15 @@ public partial class NetworkWorkbenchView : UserControl
     private IReadOnlyList<NetworkTrafficProcessRow> BuildTrafficProcessRows(
         IReadOnlyList<NetworkTrafficProcessMeasurement> measurements,
         ProxySettingsSnapshot proxySnapshot,
-        out IReadOnlyList<NetworkProcessTrafficHistoryPoint> historyPoints)
+        out IReadOnlyList<NetworkProcessTrafficHistoryPoint> historyPoints,
+        out int matchingRowCount)
     {
         historyPoints = BuildTrafficProcessHistoryPoints(measurements, proxySnapshot);
         var configuredPorts = ParseProxyPorts(proxySnapshot.Server);
         var rows = new List<NetworkTrafficProcessRow>();
         foreach (var measurement in measurements)
         {
+            if (measurement.TotalBytes <= 0 && measurement.TotalBitsPerSecond <= 0) continue;
             var loopbackFlows = measurement.Flows.Where(flow => IsLoopbackEndpoint(flow.LocalEndpoint) || IsLoopbackEndpoint(flow.RemoteEndpoint)).ToArray();
             var externalFlows = measurement.Flows.Where(flow =>
                 !IsLoopbackEndpoint(flow.LocalEndpoint) && !IsLoopbackEndpoint(flow.RemoteEndpoint)).ToArray();
@@ -1249,12 +1273,15 @@ public partial class NetworkWorkbenchView : UserControl
             if (_trafficStatsMode == "Proxy" && role == ProxyTrafficRole.None) continue;
             var displaySent = _trafficStatsMode == "Proxy" && role == ProxyTrafficRole.Exit ? history.ProxyExitSentBytes : history.SentBytes;
             var displayReceived = _trafficStatsMode == "Proxy" && role == ProxyTrafficRole.Exit ? history.ProxyExitReceivedBytes : history.ReceivedBytes;
+            if (displaySent + displayReceived < MinimumHistoricalProcessBytes) continue;
             var measurement = new NetworkTrafficProcessMeasurement(0, 0, history.ProcessName, history.ProcessPath,
                 history.SentBytes, history.ReceivedBytes, 0, 0, Array.Empty<NetworkTrafficFlowMeasurement>());
             rows.Add(new NetworkTrafficProcessRow(measurement, role, displaySent, displayReceived,
                 displaySent + displayReceived, false, true));
         }
-        return rows.OrderByDescending(item => item.TotalBytes).ToArray();
+        var orderedRows = rows.OrderByDescending(item => item.TotalBytes).ToArray();
+        matchingRowCount = orderedRows.Length;
+        return orderedRows.Take(MaxDisplayedTrafficProcesses).ToArray();
     }
 
     private static bool IsProcessRunning(NetworkTrafficProcessMeasurement measurement)
@@ -2641,7 +2668,6 @@ public partial class NetworkWorkbenchView : UserControl
                 : $"PID {ProcessId} · {ProcessPath}";
         public string RunningStatusText => IsRunning ? "正在运行" : "当前未运行";
         public Brush RunningStatusBrush => BrushFrom(IsRunning ? "#39C983" : "#EF6670");
-        public Color RunningStatusGlowColor => (Color)ColorConverter.ConvertFromString(IsRunning ? "#39C983" : "#EF6670");
         public string ProxyBadge => ProxyRole switch
         {
             ProxyTrafficRole.Exit => "代理出口 · 对外",
