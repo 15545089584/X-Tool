@@ -47,6 +47,8 @@ public partial class MainWindow : Window
     private bool _hotKeyRegistered;
     private ScreenshotHotKeySuppressor? _screenshotHotKeySuppressor;
     private long _screenshotHookTriggeredAt;
+    private bool _fullScreenHotKeyRegistered;
+    private RightControlHotKeyMonitor? _fullScreenHotKeyMonitor;
     private bool _clipboardHotKeyRegistered;
     private bool _voiceInputHotKeyRegistered;
     private RightAltHotKeyMonitor? _voiceInputHotKeyMonitor;
@@ -68,6 +70,7 @@ public partial class MainWindow : Window
     private bool _voiceInputAwaitingConfirmation;
     private string _voiceInputTranslatedText = string.Empty;
     private GlobalShortcut _screenshotShortcut;
+    private GlobalShortcut _fullScreenShortcut;
     private GlobalShortcut _clipboardShortcut;
     private GlobalShortcut _voiceInputShortcut;
 
@@ -123,6 +126,7 @@ public partial class MainWindow : Window
             }
         };
         _ = GlobalShortcut.TryParse(_preferences.ScreenshotShortcut, GlobalShortcut.ScreenshotDefault, out _screenshotShortcut);
+        _ = GlobalShortcut.TryParse(_preferences.FullScreenShortcut, GlobalShortcut.FullScreenDefault, out _fullScreenShortcut);
         _ = GlobalShortcut.TryParse(_preferences.ClipboardShortcut, GlobalShortcut.ClipboardDefault, out _clipboardShortcut);
         _ = GlobalShortcut.TryParse(_preferences.VoiceInputShortcut, GlobalShortcut.VoiceDefault, out _voiceInputShortcut);
         StickerTopmostCheckBox.IsChecked = _preferences.StickerTopmost;
@@ -430,6 +434,7 @@ public partial class MainWindow : Window
 
         _hotKeyRegistered = RegisterStandardShortcut(handle, NativeMethods.HotKeyId, _screenshotShortcut);
         InstallScreenshotHotKeySuppressor();
+        RegisterFullScreenHotKey(handle);
         _clipboardHotKeyRegistered = RegisterStandardShortcut(handle, NativeMethods.ClipboardHotKeyId, _clipboardShortcut);
         RegisterVoiceInputHotKey(handle);
         _clipboardListenerRegistered = NativeMethods.AddClipboardFormatListener(handle);
@@ -441,6 +446,10 @@ public partial class MainWindow : Window
         if (!_clipboardHotKeyRegistered)
         {
             Dispatcher.BeginInvoke(() => ShowToast($"{_clipboardShortcut.DisplayText} 已被其他程序占用"), DispatcherPriority.Loaded);
+        }
+        if (!_fullScreenHotKeyRegistered)
+        {
+            Dispatcher.BeginInvoke(() => ShowToast($"{_fullScreenShortcut.DisplayText} 已被其他程序占用"), DispatcherPriority.Loaded);
         }
         if (_preferences.VoiceInputEnabled && !_voiceInputHotKeyRegistered)
         {
@@ -461,6 +470,7 @@ public partial class MainWindow : Window
         }
         _screenshotHotKeySuppressor?.Dispose();
         _screenshotHotKeySuppressor = null;
+        UnregisterFullScreenHotKey();
         if (_clipboardHotKeyRegistered)
         {
             NativeMethods.UnregisterHotKey(_windowSource.Handle, NativeMethods.ClipboardHotKeyId);
@@ -549,6 +559,11 @@ public partial class MainWindow : Window
 
             handled = true;
             _ = StartRegionCaptureAsync();
+        }
+        else if (message == NativeMethods.WmHotKey && wParam.ToInt32() == NativeMethods.FullScreenHotKeyId)
+        {
+            handled = true;
+            _ = StartFullScreenCaptureAsync();
         }
         else if (message == NativeMethods.WmHotKey && wParam.ToInt32() == NativeMethods.ClipboardHotKeyId)
         {
@@ -647,6 +662,65 @@ public partial class MainWindow : Window
         finally
         {
             if (wasVisible && restoreWindowAfterCapture)
+            {
+                Show();
+                WindowState = previousState;
+                if (previousState != WindowState.Minimized)
+                {
+                    Activate();
+                }
+            }
+
+            _captureInProgress = false;
+        }
+    }
+
+    /// <summary>直接截取鼠标所在显示器，不显示选区或标注界面。</summary>
+    private async Task StartFullScreenCaptureAsync()
+    {
+        if (_captureInProgress)
+        {
+            return;
+        }
+
+        _captureInProgress = true;
+        var wasVisible = IsVisible;
+        var previousState = WindowState;
+        var clipboardSaved = false;
+
+        try
+        {
+            var sourceWindow = NativeMethods.GetForegroundWindow();
+            NativeMethods.DismissForegroundTransientUi(sourceWindow);
+            Hide();
+            await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+            NativeMethods.DwmFlush();
+            await Task.Delay(120);
+            NativeMethods.DismissForegroundTransientUi(sourceWindow);
+            await Task.Delay(40);
+
+            var frame = await _captureBackend.CaptureCurrentMonitorAsync();
+            var saveTask = TrySaveCaptureAsync(frame.Bitmap, false);
+            await SetClipboardImageWithRetryAsync(frame.Bitmap);
+            clipboardSaved = true;
+            var savedPath = await saveTask;
+            if (savedPath is null)
+            {
+                ShowToast("全屏截图已复制，但无法保存到截图目录");
+            }
+
+            if (Application.Current is App app)
+            {
+                app.ShowTrayBalloon("全屏截图完成", "截图已保存到剪贴板");
+            }
+        }
+        catch (Exception exception)
+        {
+            ShowToast($"全屏截图失败：{exception.Message}");
+        }
+        finally
+        {
+            if (wasVisible && !clipboardSaved)
             {
                 Show();
                 WindowState = previousState;
@@ -1444,6 +1518,57 @@ public partial class MainWindow : Window
             _voiceInputHotKeyMonitor.Dispose();
             _voiceInputHotKeyMonitor = null;
         }
+    }
+
+    private void RegisterFullScreenHotKey(IntPtr handle)
+    {
+        UnregisterFullScreenHotKey();
+        if (_fullScreenShortcut.IsRightCtrl)
+        {
+            var monitor = new RightControlHotKeyMonitor();
+            if (!monitor.IsInstalled)
+            {
+                monitor.Dispose();
+                _fullScreenHotKeyRegistered = false;
+                return;
+            }
+
+            monitor.Pressed += FullScreenHotKeyMonitor_Pressed;
+            _fullScreenHotKeyMonitor = monitor;
+            _fullScreenHotKeyRegistered = true;
+            return;
+        }
+
+        _fullScreenHotKeyRegistered = RegisterStandardShortcut(
+            handle,
+            NativeMethods.FullScreenHotKeyId,
+            _fullScreenShortcut);
+    }
+
+    private void UnregisterFullScreenHotKey()
+    {
+        _fullScreenHotKeyMonitor?.Dispose();
+        _fullScreenHotKeyMonitor = null;
+        if (_windowSource is not null && _fullScreenHotKeyRegistered && !_fullScreenShortcut.IsRightCtrl)
+        {
+            NativeMethods.UnregisterHotKey(_windowSource.Handle, NativeMethods.FullScreenHotKeyId);
+        }
+
+        _fullScreenHotKeyRegistered = false;
+    }
+
+    private void FullScreenHotKeyMonitor_Pressed(object? sender, EventArgs e)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            // 语音输入期间右 Ctrl 保留为翻译操作，避免一次按键同时触发两个功能。
+            if (_voiceInputService.IsRecording || _voiceInputAwaitingConfirmation || _voiceTranslationPreviewActive)
+            {
+                return;
+            }
+
+            _ = StartFullScreenCaptureAsync();
+        });
     }
 
     private static bool RegisterStandardShortcut(IntPtr handle, int hotKeyId, GlobalShortcut shortcut) =>
@@ -2285,7 +2410,11 @@ public partial class MainWindow : Window
 
     private void OpenShortcutSettings()
     {
-        var window = new ShortcutSettingsWindow(_screenshotShortcut, _clipboardShortcut, _voiceInputShortcut)
+        var window = new ShortcutSettingsWindow(
+            _screenshotShortcut,
+            _fullScreenShortcut,
+            _clipboardShortcut,
+            _voiceInputShortcut)
         {
             Owner = this
         };
@@ -2298,7 +2427,7 @@ public partial class MainWindow : Window
     /// <summary>快捷键弹框回调：完成合法性检查、冲突探测、热键重注册与偏好保存。</summary>
     private string? ApplyShortcutRequested(string target, GlobalShortcut candidate)
     {
-        if (!candidate.IsRightAlt && !candidate.IsSupportedGlobalCombination)
+        if (!candidate.IsRightAlt && !candidate.IsRightCtrl && !candidate.IsSupportedGlobalCombination)
         {
             return "请使用 Ctrl、Shift 或 Alt 加一个非修饰键；Windows 徽标键组合不允许设置。";
         }
@@ -2313,12 +2442,20 @@ public partial class MainWindow : Window
             return "右 Alt 仅可作为本地语音输入快捷键。";
         }
 
+        if (candidate.IsRightCtrl && target != "FullScreen")
+        {
+            return "右 Ctrl 单键仅可作为全屏截图快捷键。";
+        }
+
         if (!TryValidateShortcut(target, candidate, out var reason))
         {
             return reason;
         }
 
-        ApplyShortcut(target, candidate);
+        if (!ApplyShortcut(target, candidate))
+        {
+            return "新快捷键注册失败，已恢复原快捷键。";
+        }
         HomeScreenshotShortcutText.Text = _screenshotShortcut.DisplayText;
         UpdateSettingsShortcutSummary();
         return null;
@@ -2330,6 +2467,7 @@ public partial class MainWindow : Window
         var currentShortcut = target switch
         {
             "Screenshot" => _screenshotShortcut,
+            "FullScreen" => _fullScreenShortcut,
             "Clipboard" => _clipboardShortcut,
             _ => _voiceInputShortcut
         };
@@ -2340,9 +2478,10 @@ public partial class MainWindow : Window
 
         var otherShortcuts = target switch
         {
-            "Screenshot" => new[] { _clipboardShortcut, _voiceInputShortcut },
-            "Clipboard" => new[] { _screenshotShortcut, _voiceInputShortcut },
-            _ => new[] { _screenshotShortcut, _clipboardShortcut }
+            "Screenshot" => new[] { _fullScreenShortcut, _clipboardShortcut, _voiceInputShortcut },
+            "FullScreen" => new[] { _screenshotShortcut, _clipboardShortcut, _voiceInputShortcut },
+            "Clipboard" => new[] { _screenshotShortcut, _fullScreenShortcut, _voiceInputShortcut },
+            _ => new[] { _screenshotShortcut, _fullScreenShortcut, _clipboardShortcut }
         };
         if (otherShortcuts.Contains(candidate))
         {
@@ -2353,6 +2492,11 @@ public partial class MainWindow : Window
         if (candidate.IsRightAlt)
         {
             reason = "右 Alt 已设为语音快捷键。该键通过键盘监听实现，Windows 无法枚举其他软件的低级键盘钩子。";
+            return true;
+        }
+        if (candidate.IsRightCtrl)
+        {
+            reason = "右 Ctrl 使用键盘监听实现；与其他按键组合时不会触发全屏截图。";
             return true;
         }
 
@@ -2375,11 +2519,12 @@ public partial class MainWindow : Window
         return true;
     }
 
-    private void ApplyShortcut(string target, GlobalShortcut candidate)
+    private bool ApplyShortcut(string target, GlobalShortcut candidate)
     {
         var previous = target switch
         {
             "Screenshot" => _screenshotShortcut,
+            "FullScreen" => _fullScreenShortcut,
             "Clipboard" => _clipboardShortcut,
             _ => _voiceInputShortcut
         };
@@ -2391,18 +2536,21 @@ public partial class MainWindow : Window
             SetShortcut(target, previous);
             _ = RegisterShortcut(target);
             ShowToast("新快捷键注册失败，已恢复原快捷键");
-            return;
+            return false;
         }
 
         _preferences.ScreenshotShortcut = _screenshotShortcut.ToPreferenceValue();
+        _preferences.FullScreenShortcut = _fullScreenShortcut.ToPreferenceValue();
         _preferences.ClipboardShortcut = _clipboardShortcut.ToPreferenceValue();
         _preferences.VoiceInputShortcut = _voiceInputShortcut.ToPreferenceValue();
         _preferences.Save();
+        return true;
     }
 
     private void SetShortcut(string target, GlobalShortcut shortcut)
     {
         if (target == "Screenshot") _screenshotShortcut = shortcut;
+        else if (target == "FullScreen") _fullScreenShortcut = shortcut;
         else if (target == "Clipboard") _clipboardShortcut = shortcut;
         else _voiceInputShortcut = shortcut;
     }
@@ -2423,6 +2571,10 @@ public partial class MainWindow : Window
                 NativeMethods.UnregisterHotKey(_windowSource.Handle, NativeMethods.HotKeyId);
                 _hotKeyRegistered = false;
             }
+        }
+        else if (target == "FullScreen")
+        {
+            UnregisterFullScreenHotKey();
         }
         else if (target == "Clipboard" && _clipboardHotKeyRegistered)
         {
@@ -2461,6 +2613,11 @@ public partial class MainWindow : Window
         {
             return _clipboardHotKeyRegistered = RegisterStandardShortcut(_windowSource.Handle, NativeMethods.ClipboardHotKeyId, _clipboardShortcut);
         }
+        if (target == "FullScreen")
+        {
+            RegisterFullScreenHotKey(_windowSource.Handle);
+            return _fullScreenHotKeyRegistered;
+        }
 
         RegisterVoiceInputHotKey(_windowSource.Handle);
         return _voiceInputHotKeyRegistered;
@@ -2469,7 +2626,7 @@ public partial class MainWindow : Window
     private void UpdateSettingsShortcutSummary()
     {
         SettingsShortcutSummaryText.Text =
-            $"截图 {_screenshotShortcut.DisplayText} · 剪贴板 {_clipboardShortcut.DisplayText} · 语音 {_voiceInputShortcut.DisplayText}";
+            $"截图 {_screenshotShortcut.DisplayText} · 全屏 {_fullScreenShortcut.DisplayText} · 剪贴板 {_clipboardShortcut.DisplayText} · 语音 {_voiceInputShortcut.DisplayText}";
     }
 
     private void ShowToast(string message)

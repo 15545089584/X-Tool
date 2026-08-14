@@ -539,7 +539,7 @@
                                         <StackPanel>
                                             <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#F4E8FF" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#9A58C7" Text="&#xE765;" /></Border>
                                             <TextBlock Margin="0,11,0,0" FontSize="16" FontWeight="SemiBold" Text="快捷键" />
-                                            <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="统一管理截图、剪贴板与本地语音输入热键" />
+                                            <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="统一管理区域截图、全屏截图、剪贴板与本地语音输入热键" />
                                         </StackPanel>
                                     </Button>
                                     <Button Height="148" Margin="8,8,0,0" Style="{StaticResource ActionCardStyle}" Tag="DeveloperTools" Click="HomeNavigate_Click">

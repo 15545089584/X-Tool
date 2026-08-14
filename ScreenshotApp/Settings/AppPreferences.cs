@@ -50,6 +50,8 @@ public sealed class AppPreferences
 
     public string ScreenshotShortcut { get; set; } = "Ctrl+Shift+A";
 
+    public string FullScreenShortcut { get; set; } = "RightCtrl";
+
     public string ClipboardShortcut { get; set; } = "Ctrl+Shift+V";
 
     public string VoiceInputShortcut { get; set; } = "RightAlt";

@@ -7,7 +7,8 @@ internal static class NativeMethods
     internal const int HotKeyId = 0x4A59;
     internal const int ClipboardHotKeyId = 0x4A5A;
     internal const int VoiceHotKeyId = 0x4A5B;
-    internal const int ShortcutProbeHotKeyId = 0x4A5C;
+    internal const int FullScreenHotKeyId = 0x4A5C;
+    internal const int ShortcutProbeHotKeyId = 0x4A5D;
     internal const int WmHotKey = 0x0312;
     internal const int WmClipboardUpdate = 0x031D;
     private const uint WmCancelMode = 0x001F;
