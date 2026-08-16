@@ -65,6 +65,7 @@ public partial class NetworkWorkbenchView : UserControl
     private string _trafficUsageRange = "24h";
     private readonly List<TrafficUsageChartBucket> _trafficUsageChartBuckets = new();
     private readonly Dictionary<string, ProcessTrafficUsageSnapshot> _trafficUsageLastSnapshots = new(StringComparer.OrdinalIgnoreCase);
+    private readonly SortedDictionary<DateTime, ProcessTrafficUsageDelta> _trafficUsagePendingDeltas = new();
     private string _trafficUsageSessionId = string.Empty;
     private DateTime _trafficUsageLastPersistedAt = DateTime.MinValue;
     private int _trafficUsageRefreshBusy;
@@ -871,6 +872,7 @@ public partial class NetworkWorkbenchView : UserControl
                 _trafficUsageSessionId = _trafficClient.SessionId;
                 _trafficUsageLastSnapshots.Clear();
                 _trafficUsageLastPersistedAt = DateTime.MinValue;
+                _trafficUsagePendingDeltas.Clear();
             }
 
             var now = DateTime.Now;
@@ -904,17 +906,30 @@ public partial class NetworkWorkbenchView : UserControl
                 _trafficUsageLastSnapshots.Remove(staleKey);
 
             _trafficUsageLastPersistedAt = now;
-            if (nonProxyDelta <= 0 && proxyDelta <= 0) return false;
-            try
+            // 历史库暂时繁忙时按采样小时保留增量，重试时仍写回原小时，避免把整段流量挪到恢复后的时段。
+            var bucket = new DateTime(now.Year, now.Month, now.Day, now.Hour, 0, 0, DateTimeKind.Local);
+            if (nonProxyDelta > 0 || proxyDelta > 0)
             {
-                await _historyStore.AddProcessTrafficUsageAsync(now, nonProxyDelta, proxyDelta);
-                return true;
+                _trafficUsagePendingDeltas.TryGetValue(bucket, out var currentPending);
+                _trafficUsagePendingDeltas[bucket] = currentPending.Add(nonProxyDelta, proxyDelta);
             }
-            catch
+
+            var usageChanged = false;
+            foreach (var pending in _trafficUsagePendingDeltas.ToArray())
             {
-                // 用量趋势写入失败不影响实时排行和 ETW 采集。
-                return false;
+                try
+                {
+                    await _historyStore.AddProcessTrafficUsageAsync(pending.Key, pending.Value.NonProxyBytes, pending.Value.ProxyBytes);
+                    _trafficUsagePendingDeltas.Remove(pending.Key);
+                    usageChanged = true;
+                }
+                catch
+                {
+                    // 用量趋势写入失败不影响实时排行和 ETW 采集；保留当前及后续小时的增量等待重试。
+                    break;
+                }
             }
+            return usageChanged;
         }
         finally
         {
@@ -941,6 +956,7 @@ public partial class NetworkWorkbenchView : UserControl
         _trafficUsageSessionId = string.Empty;
         _trafficUsageLastSnapshots.Clear();
         _trafficUsageLastPersistedAt = DateTime.MinValue;
+        _trafficUsagePendingDeltas.Clear();
     }
 
     private void SetTrafficStatsLoading(bool loading, string status)
@@ -1014,8 +1030,8 @@ public partial class NetworkWorkbenchView : UserControl
                 for (var index = 0; index < 24; index++)
                 {
                     var bucketStart = start.AddHours(index);
-                    var matching = samples.Where(item => item.BucketTime >= bucketStart && item.BucketTime < bucketStart.AddHours(1));
-                    _trafficUsageChartBuckets.Add(new TrafficUsageChartBucket(bucketStart, matching.Sum(item => item.NonProxyBytes), matching.Sum(item => item.ProxyBytes)));
+                    var matching = samples.Where(item => item.BucketTime >= bucketStart && item.BucketTime < bucketStart.AddHours(1)).ToArray();
+                    _trafficUsageChartBuckets.Add(new TrafficUsageChartBucket(bucketStart, matching.Sum(item => item.NonProxyBytes), matching.Sum(item => item.ProxyBytes), matching.Length > 0));
                 }
             }
             else
@@ -1024,16 +1040,17 @@ public partial class NetworkWorkbenchView : UserControl
                 for (var index = 0; index < days; index++)
                 {
                     var bucketStart = start.Date.AddDays(index);
-                    var matching = samples.Where(item => item.BucketTime.Date == bucketStart.Date);
-                    _trafficUsageChartBuckets.Add(new TrafficUsageChartBucket(bucketStart, matching.Sum(item => item.NonProxyBytes), matching.Sum(item => item.ProxyBytes)));
+                    var matching = samples.Where(item => item.BucketTime.Date == bucketStart.Date).ToArray();
+                    _trafficUsageChartBuckets.Add(new TrafficUsageChartBucket(bucketStart, matching.Sum(item => item.NonProxyBytes), matching.Sum(item => item.ProxyBytes), matching.Length > 0));
                 }
             }
 
             var nonProxyTotal = _trafficUsageChartBuckets.Sum(item => item.NonProxyBytes);
             var proxyTotal = _trafficUsageChartBuckets.Sum(item => item.ProxyBytes);
+            var missingSamples = _trafficUsageChartBuckets.Count(item => !item.HasSample);
             TrafficUsageChartSummaryText.Text = nonProxyTotal + proxyTotal == 0
-                ? "该范围暂无分时用量；数据从新版启用并获得应用级监控后开始记录"
-                : $"范围累计 {FormatBytes(nonProxyTotal + proxyTotal)} · 非代理 {FormatBytes(nonProxyTotal)} · 代理出口 {FormatBytes(proxyTotal)}";
+                ? $"该范围暂无已落盘的应用级用量；软件运行状态与全局网卡流量不等于应用级记录{(missingSamples > 0 ? $" · {missingSamples} 个时段无应用级样本" : string.Empty)}"
+                : $"范围累计 {FormatBytes(nonProxyTotal + proxyTotal)} · 非代理 {FormatBytes(nonProxyTotal)} · 代理出口 {FormatBytes(proxyTotal)}{(missingSamples > 0 ? $" · {missingSamples} 个时段无应用级样本" : string.Empty)}";
             UpdateTrafficUsageAxisLabels();
             DrawTrafficUsageChart();
         }
@@ -1171,7 +1188,9 @@ public partial class NetworkWorkbenchView : UserControl
         var label = _trafficUsageRange == "24h"
             ? $"{bucket.Start:MM-dd HH:00}–{bucket.Start.AddHours(1):HH:00}"
             : bucket.Start.ToString("yyyy-MM-dd");
-        TrafficUsageTooltipText.Text = $"{label}\n总用量 {FormatBytes(bucket.TotalBytes)}\n非代理 {FormatBytes(bucket.NonProxyBytes)}\n代理出口 {FormatBytes(bucket.ProxyBytes)}";
+        TrafficUsageTooltipText.Text = bucket.HasSample
+            ? $"{label}\n总用量 {FormatBytes(bucket.TotalBytes)}\n非代理 {FormatBytes(bucket.NonProxyBytes)}\n代理出口 {FormatBytes(bucket.ProxyBytes)}"
+            : $"{label}\n未记录应用级样本\n这不等于软件未运行；请同时查看全局网卡统计和 ETW 状态";
         TrafficUsageTooltip.Visibility = Visibility.Visible;
         TrafficUsageTooltip.Margin = new Thickness(Math.Clamp(position.X + 14, 0, Math.Max(0, TrafficUsageCanvas.ActualWidth - 290)), 8, 0, 0);
         var slot = TrafficUsageCanvas.ActualWidth / _trafficUsageChartBuckets.Count;
@@ -2687,7 +2706,20 @@ public partial class NetworkWorkbenchView : UserControl
 
     private sealed record ProcessTrafficUsageSnapshot(long ExternalBytes, bool IsProxyExit);
 
-    private sealed record TrafficUsageChartBucket(DateTime Start, long NonProxyBytes, long ProxyBytes)
+    private readonly record struct ProcessTrafficUsageDelta(long NonProxyBytes, long ProxyBytes)
+    {
+        public ProcessTrafficUsageDelta Add(long nonProxyBytes, long proxyBytes) => new(
+            SaturatingAdd(NonProxyBytes, nonProxyBytes), SaturatingAdd(ProxyBytes, proxyBytes));
+
+        private static long SaturatingAdd(long left, long right)
+        {
+            if (left <= 0) return Math.Max(0, right);
+            if (right <= 0) return left;
+            return left > long.MaxValue - right ? long.MaxValue : left + right;
+        }
+    }
+
+    private sealed record TrafficUsageChartBucket(DateTime Start, long NonProxyBytes, long ProxyBytes, bool HasSample)
     {
         public long TotalBytes => NonProxyBytes + ProxyBytes;
     }
