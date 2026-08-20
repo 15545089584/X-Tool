@@ -69,11 +69,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- 协作中心手机端网页，随程序嵌入并按配对会话动态注入令牌。 -->
-    <EmbeddedResource Include="Collaboration\CollaborationPage.html" />
-  </ItemGroup>
-
-  <ItemGroup>
     <!-- 随程序发布经校验的 FFmpeg 命令行引擎；运行时优先从 tools\ffmpeg 查找。 -->
     <Content Include="tools\ffmpeg\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

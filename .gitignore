@@ -33,3 +33,6 @@ ScreenshotApp/Models/VoiceInput/sensevoice.tar.bz2
 *.suo
 *.tmp
 *.log
+
+# 协作中心已从主线移除；本机遗留的 Android 构建缓存不再纳入当前产品。
+AndroidApp/

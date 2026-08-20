@@ -1,6 +1,6 @@
 # X-Tool 开发交接文档
 
-更新时间：2026-08-16
+更新时间：2026-08-20
 
 项目目录：`D:\Claude Code\X-Tool`
 
@@ -8,7 +8,7 @@
 
 当前分支：`main`
 
-当前最新功能代码基线以实际 `git log --oneline` 为准。开发者工具、系统工具、转换器二维码、协作中心等既有模块均以历史提交为基线；文件工作台仍有未提交待确认改动。
+当前最新功能代码基线以实际 `git log --oneline` 为准。开发者工具、系统工具、转换器二维码等既有模块均以历史提交为基线；协作中心已从当前产品移除并保存在独立本地备份分支；文件工作台仍有未提交待确认改动。
 
 > 当前网络功能最新基线已推进到 `b0f5f9e 新增代理与非代理流量用量趋势`，其前为 `4ccfc32 新增网络流量自动授权任务`、`54bfeec 更新网络流量统计交接文档`、`a590d13 新增网络流量统计工作台`；后续修复以实际 `git log` 为准。2026-08-16 已修复应用级用量历史写入队列繁忙时丢增量的问题：待写增量按原采样小时保留并重试，图表悬停会区分“未记录应用级样本”和真实用量；全局网卡历史仍可用于判断该时段是否存在网络活动。上方历史长列表仅保留为旧交接快照，后续必须以本段和实际 Git 日志为准。
 
@@ -81,8 +81,7 @@ git log -5 --oneline
 6. 资源管理
 7. 系统工具
 8. 开发者工具
-9. 协作中心
-10. 设置
+9. 设置
 
 剪贴板不再是一级侧栏项，而是屏幕工作台的组成部分；首页与屏幕工作台均可进入剪贴板。快捷键不再是一级导航项，改为设置页中的可点击条目，点击后弹出毛玻璃快捷键设置窗口（`ShortcutSettingsWindow`）。
 
@@ -166,16 +165,11 @@ git log -5 --oneline
 - 环境诊断新增 MySQL 规则（`MYSQL_HOME` 与当前 `mysql.exe` 一致性、mysql/mysqld 是否同安装、EOL 警告）与 Docker 规则（守护进程可用性、Desktop 已安装但 PATH 缺失、WSL2 状态）；扫描版本解析兼容 MySQL 5.x 的 `Distrib 5.7.19` 与 8.x/9.x 的 `Ver 8.4.6` 格式，以及 Docker 的 `Docker version` 格式。
 - 托管安装“查看日志”打开毛玻璃日志弹框（`ManagedLogWindow`），按成功/警告/错误级别展示最近 2000 条记录，支持刷新、复制、打开日志文件与日志目录。
 
-### 协作中心（一期已实现，原生手机 App 为独立阶段）
+### 协作中心（已从当前产品移除并封存）
 
-- 一级导航新增“协作中心”，页面为 `ScreenshotApp\Collaboration\CollaborationView.xaml(.cs)`，服务为 `CollaborationService.cs`，手机端网页为内嵌资源 `CollaborationPage.html`。
-- 电脑端以普通权限 `TcpListener` 自建极简 HTTP 服务（默认端口 18120，无 URL ACL 需求，零新依赖），同一局域网（同一 WiFi 或电脑热点）下手机可访问。
-- 配对：服务启动生成 6 位 PIN 与配对地址，页面用 ZXing 生成二维码；手机扫码进入 `/pair?pin=xxx` 校验后获得 24 小时会话令牌，后续 API 均需令牌。
-- 剪贴板桥：电脑外部复制（文本/图片）经现有捕获链路转发到服务（`PushClipboardText`/`PushClipboardImage`），手机网页每 3 秒轮询拉取并展示（文本可复制、图片可长按保存）；手机页面“发送到电脑”经 JSON/PNG 推送，由电脑写入系统剪贴板并记入剪贴板历史。页面提供“电脑→手机同步”玻璃开关；手机网页受浏览器限制无法后台监听剪贴板，读取手机剪贴板在支持 `navigator.clipboard` 的浏览器可用，否则降级为长按粘贴。
-- 文件传输：手机网页 `PUT` 上传到 `%LocalAppData%\X-Tool\Transfer\Incoming`；电脑端“发送文件到手机…”复制到 `Outgoing` 目录，手机页面列出发送目录并下载；同名自动避让。
-- 防火墙：服务运行中可点击“放行防火墙…”按需 UAC 添加 `netsh advfirewall` 入站规则；不放行时手机无法连接但服务仍可本机自测。
-- 已知边界：`System.Text.Json` 默认把非 ASCII 字符转义为 `\uXXXX`（手机 JS 正常解码）；图片以 PNG base64 传输；网页端不支持后台自动读取手机剪贴板；原生 Android App（无障碍服务 + 前台服务实现后台剪贴板同步）与 iOS 能力边界分析已完成，作为独立阶段待开发。
-- 当前验证：冒烟端到端 7 项全通过（配对页面令牌注入、状态、剪贴板拉取、手机推送、文件上传、列表、下载）；已修复局域网 IP 选择（排除 VMware/Hyper-V/VPN 等虚拟网卡，本机 WiFi 场景正确选中 `192.168.31.x`）并确认防火墙放行后手机可连接；人工验证手机端与电脑端双向剪贴板（文本）正常；图片同步与文件传输的人工验证待补。
+- 2026-08-20 已从 `main` 的一级导航、主窗口初始化、剪贴板转发、设置项、项目资源和桌面端源码中移除协作中心；配套原生 `AndroidApp` 源码也不再属于当前产品和构建范围。
+- 完整历史实现保存在本地分支 `backup/collaboration-center-20260820`，分支固定指向移除前提交 `886d5e522ff6936b3540a6cba8bfa7a578ac315d`。该分支仅作未来方案参考，不会随 `main` 构建、启动或注册后台服务。
+- 若未来重新评估，应从该备份分支新建独立工作树或功能分支，重新审计网络暴露、配对令牌、文件边界、Android 后台限制和安装体验；不要把旧文件零散复制回当前主线。
 
 ### 网络工作台（第三阶段已完成）
 
@@ -453,7 +447,6 @@ git log -5 --oneline
 | Windows 后缀关联图标缓存 | `ScreenshotApp\FileWorkbench\FileTypeIconProvider.cs` |
 | 普通搜索与重复文件永久删除 | `ScreenshotApp\FileWorkbench\FileWorkbenchService.cs`、`FileWorkbenchView.xaml(.cs)` |
 | 开发环境扫描、工具链列表、托管安装与环境诊断 | `ScreenshotApp\DeveloperTools\DeveloperToolsView.xaml(.cs)`、`DeveloperEnvironmentScanner.cs`、`DeveloperEnvironmentModels.cs`、`SafeDeveloperCommandRunner.cs`、`ManagedToolchainModels.cs`、`ManagedToolchainService.cs` |
-| 协作中心（配对、剪贴板桥、文件传输） | `ScreenshotApp\Collaboration\CollaborationView.xaml(.cs)`、`CollaborationService.cs`、`CollaborationPage.html` |
 | 系统工具（设备信息、折叠 PnP 驱动清单、存储容量概览、环境变量、系统诊断） | `ScreenshotApp\SystemTools\SystemToolsView.xaml(.cs)`、`SystemToolsService.cs`、`SystemDiagnosticService.cs`、`SystemDiagnosticModels.cs`、`SystemDiagnosticRules.cs`、`SystemProgramIdentityResolver.cs` |
 | 存储空间快速分析与原生兜底 | `ScreenshotApp\StorageAnalysis\StorageAnalysisView.xaml(.cs)`、`StorageAnalysisService.cs`、`EverythingStorageIndexClient.cs` |
 | 网络工作台主页面 | `ScreenshotApp\NetworkWorkbench\NetworkWorkbenchView.xaml(.cs)` |
@@ -467,7 +460,7 @@ git log -5 --oneline
 
 ## 八、当前已知限制与建议顺序
 
-> 2026-08-12 已完成一次全程序稳定性与安全审计并落地协作中心、ETW、网络历史、磁盘历史和自动刷新修复；详细证据、已修复边界及后续项见根目录 `SECURITY-AUDIT-2026-08-12.md`。SQLite 高危传递依赖与 .NET 8 迁移已于 2026-08-13 解决；管理员 IPC 重构仍须单独立项。
+> 2026-08-12 的稳定性与安全审计曾覆盖当时存在的协作中心、ETW、网络历史、磁盘历史和自动刷新；该文档属于历史证据。协作中心已于 2026-08-20 从当前产品移除，其旧审计记录不代表当前仍包含该功能。SQLite 高危传递依赖与 .NET 8 迁移已于 2026-08-13 解决；管理员 IPC 重构仍须单独立项。
 
 1. **网络第三阶段人工矩阵**：代码与普通权限 UI 已完成并通过 Release 启动验证；发布前仍应在真实 UAC 环境分别验证代理/DNS/网卡配置、网络方案应用失败后的回滚、局域网扫描取消，以及断网/切网/休眠恢复。新增“流量统计”仍需人工验证：未授权时全局网卡速率正常、授权取消提示正常、ETW 进程排行刷新、代理端口和回环/出口判定、`com.vortex.helper.exe` 等未签名代理核心的路径与安全提示、CSV 导出，以及设置页一次授权后的任务注册、重启自动连接、取消授权和任务残留清理；趋势图还需验证 24 小时/7 天/30 天固定桶数、空桶、跨日、悬停、代理与非代理颜色、回环不重复计量、切页/重启后继续累计和清理历史联动。顶部旧 ETW 入口仍已移除，不得通过自动化静默接受 UAC 或擅自恢复该入口。
 2. **音视频人工回归与视频页统一**：已内置 FFmpeg；发布前用短 MP3/WAV/MP4/MOV 分别验证探测、进度、取消、输出与日志。视频功能逻辑已接通，视觉控件仍可继续向最新音频页统一。
@@ -481,8 +474,6 @@ git log -5 --oneline
 10. **重复文件与删除回归**：使用包含同名不同内容、不同名相同内容、大文件、硬链接、被占用文件和无权限文件的目录验证重复分组、取消与失败提示；验证普通搜索选择“删除文件”后才显示玻璃复选框，勾选可跨分页、筛选和排序保留并实时同步右侧预览，未勾选时删除按钮不可用，确认后永久删除且不进入回收站；重复文件页必须每组至少保留一个文件，红色按钮永久删除明确勾选的副本且不会进入回收站，需重点验证强确认、部分失败反馈和删除后列表刷新。
 11. **开发环境中心回归**：在未安装工具、同一工具多个版本、PATH 含中文/空格/重复/失效目录、WindowsApps Python 别名、项目虚拟环境、版本管理器入口、版本命令超时和普通权限目录不可读场景验证扫描、取消、证据与失败隔离；分别验证系统/用户 PATH 的确认、UAC 取消、去重、失败回滚、写入后自动重扫及界面不冻结。Temurin 托管安装还需人工验证大文件下载进度、取消清理、错误哈希拒绝、`java -version` 验证、清单损坏保护，以及被 PATH/JAVA_HOME/运行进程引用时拒绝卸载；uv Python 需验证本机无 uv 时的降级提示、3.10–3.14 目录、安装取消/回滚、与外部 uv 安装隔离、`python --version` 验证和 uv 安全卸载；Volta Node.js 需验证无 Volta 降级、WinGet/UAC 取消、安装后重检、受支持版本生命周期筛选、`volta fetch` 不改变默认版本、下载取消和缓存版本只读显示。不得擅自加入静默安装、外部安装目录删除、Volta 缓存目录删除、全局版本切换或 Shim。
 12. **二维码人工回归**：分别验证自由文本/网址、WiFi、vCard、邮件、电话/短信与批量生成的预览、保存、复制与中文内容扫码；验证参数变化（纠错、尺寸、留白、前景/背景色）实时刷新且不卡界面；用多二维码图片、旋转图片、含中文的二维码、损坏图片和无二维码图片验证识别、取消、失败隔离与分类徽章；验证网址打开的确认拦截、历史保存开关、搜索筛选、单条删除与清空；确认“保存历史”关闭后生成/识别不落库。
-13. **协作中心人工回归**：同一 WiFi 与热点两种网络下验证扫码配对、PIN 失效更换、24 小时会话、电脑→手机文本/图片同步、手机→电脑文本推送并写入系统剪贴板、双向文件传输与同名避让、停止服务后手机断连、防火墙未放行时的提示，以及“电脑→手机同步”开关关闭后仅手机→电脑可用；网页端需覆盖不支持 `navigator.clipboard` 的浏览器的降级路径。
-
 ## 九、最近关键提交
 
 - `e2abcb2` 新增截图区域 GIF 录制功能

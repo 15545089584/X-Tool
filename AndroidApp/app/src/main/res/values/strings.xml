@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="app_name">X-Tool 协作</string>
-    <string name="accessibility_description">用于后台检测手机剪贴板变化并同步到电脑端 X-Tool 协作中心。声明的能力仅为系统剪贴板访问所需；代码不采集屏幕内容，不读取任何界面数据。</string>
-</resources>

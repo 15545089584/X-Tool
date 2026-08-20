@@ -24,18 +24,6 @@ public sealed class AppPreferences
 
     public string ClipboardDirectory { get; set; } = @"E:\截影\Clipboard";
 
-    public string CollaborationIncomingDirectory { get; set; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "X-Tool",
-        "Transfer",
-        "Incoming");
-
-    public string CollaborationOutgoingDirectory { get; set; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "X-Tool",
-        "Transfer",
-        "Outgoing");
-
     public bool StickerTopmost { get; set; } = true;
 
     public bool VoiceInputEnabled { get; set; } = true;

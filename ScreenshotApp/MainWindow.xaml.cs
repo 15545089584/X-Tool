@@ -13,7 +13,6 @@ using Microsoft.Win32;
 using Forms = System.Windows.Forms;
 using ScreenshotApp.Capture;
 using ScreenshotApp.ClipboardUi;
-using ScreenshotApp.Collaboration;
 using ScreenshotApp.Converters;
 using ScreenshotApp.History;
 using ScreenshotApp.Recording;
@@ -78,26 +77,6 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         _historyStore = new ScreenshotHistoryStore(_preferences);
-        CollaborationService.Instance.IncomingDirectory = _preferences.CollaborationIncomingDirectory;
-        CollaborationService.Instance.OutgoingDirectory = _preferences.CollaborationOutgoingDirectory;
-        CollaborationService.Instance.FileReceived += (name, size) =>
-        {
-            if (Application.Current is App app)
-            {
-                var directory = CollaborationService.Instance.IncomingDirectory;
-                app.ShowTrayBalloon("收到手机文件", $"{name}（{FormatCollaborationSize(size)}）已存入接收目录，点击打开", () =>
-                {
-                    try
-                    {
-                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{directory}\"") { UseShellExecute = true });
-                    }
-                    catch
-                    {
-                        // 打开目录失败时忽略。
-                    }
-                });
-            }
-        };
         QrCodeConverterViewHost.HistoryStore = _historyStore;
         ClipboardService.TextRecordRequested += async content =>
         {
@@ -375,7 +354,6 @@ public partial class MainWindow : Window
         ResourceManagementView.Visibility = page == "ResourceManagement" ? Visibility.Visible : Visibility.Collapsed;
         SystemToolsView.Visibility = page == "SystemTools" ? Visibility.Visible : Visibility.Collapsed;
         DeveloperToolsView.Visibility = page == "DeveloperTools" ? Visibility.Visible : Visibility.Collapsed;
-        CollaborationView.Visibility = page == "Collaboration" ? Visibility.Visible : Visibility.Collapsed;
         if (page == "ImageConverter")
         {
             Dispatcher.BeginInvoke(new Action(() => NormalizeImageConverterLabels(ImageConverterView)), DispatcherPriority.Loaded);
@@ -396,14 +374,6 @@ public partial class MainWindow : Window
         NavigateToPage("FileWorkbench");
         await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Render);
         await FileWorkbenchView.OpenFolderFromStorageAsync(e.FolderPath, e.SearchKeyword, e.KnownFilePath);
-    }
-
-    /// <summary>协作中心请求打开设置页的收发目录区块。</summary>
-    internal void OpenCollaborationSettings()
-    {
-        CollaborationNav.IsChecked = true;
-        NavigateToPage("Settings");
-        CollaborationSettingsExpander.IsExpanded = true;
     }
 
     private async void CaptureAction_Click(object sender, RoutedEventArgs e)
@@ -998,7 +968,6 @@ public partial class MainWindow : Window
                 LogClipboardCapture($"文本已保存 {savedTextPath}");
                 InsertClipboardItem(savedTextPath, isText: true);
                 LogClipboardCapture("文本缓存插入完成");
-                CollaborationService.Instance.PushClipboardText(content);
             }
             else if (Clipboard.ContainsImage())
             {
@@ -1021,7 +990,6 @@ public partial class MainWindow : Window
                 LogClipboardCapture($"图片已保存 {savedImagePath}");
                 InsertClipboardItem(savedImagePath, isText: false);
                 LogClipboardCapture("图片缓存插入完成");
-                CollaborationService.Instance.PushClipboardImage(image);
             }
             else
             {
@@ -1072,19 +1040,6 @@ public partial class MainWindow : Window
             LogClipboardCapture($"缓存插入异常：{exception.GetBaseException().Message}");
             // 条目构造失败时由随后的全量刷新兜底。
         }
-    }
-
-    private static string FormatCollaborationSize(long bytes)
-    {
-        if (bytes >= 1024L * 1024 * 1024)
-        {
-            return $"{bytes / 1024.0 / 1024 / 1024:0.0} GB";
-        }
-        if (bytes >= 1024L * 1024)
-        {
-            return $"{bytes / 1024.0 / 1024:0.0} MB";
-        }
-        return $"{bytes / 1024.0:0.0} KB";
     }
 
 #if SCROLL_CAPTURE_TEST
@@ -1304,8 +1259,6 @@ public partial class MainWindow : Window
         "翻译" => _preferences.TranslationDirectory,
         "屏幕录制" => _preferences.RecordingDirectory,
         "外部复制" => _preferences.ClipboardDirectory,
-        "协作接收" => _preferences.CollaborationIncomingDirectory,
-        "协作发送" => _preferences.CollaborationOutgoingDirectory,
         _ => string.Empty
     };
 
@@ -1332,14 +1285,6 @@ public partial class MainWindow : Window
             case "外部复制":
                 _preferences.ClipboardDirectory = fullPath;
                 break;
-            case "协作接收":
-                _preferences.CollaborationIncomingDirectory = fullPath;
-                CollaborationService.Instance.IncomingDirectory = fullPath;
-                break;
-            case "协作发送":
-                _preferences.CollaborationOutgoingDirectory = fullPath;
-                CollaborationService.Instance.OutgoingDirectory = fullPath;
-                break;
         }
     }
 
@@ -1351,8 +1296,6 @@ public partial class MainWindow : Window
         TranslationStoragePathText.Text = _preferences.TranslationDirectory;
         RecordingStoragePathText.Text = _preferences.RecordingDirectory;
         ClipboardStoragePathText.Text = _preferences.ClipboardDirectory;
-        CollaborationIncomingPathText.Text = _preferences.CollaborationIncomingDirectory;
-        CollaborationOutgoingPathText.Text = _preferences.CollaborationOutgoingDirectory;
     }
 
     private void OpenHistoryItem_Click(object sender, RoutedEventArgs e)
