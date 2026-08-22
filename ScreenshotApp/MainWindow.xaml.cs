@@ -5,7 +5,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using System.Windows.Interop;
@@ -23,6 +22,7 @@ using ScreenshotApp.StorageAnalysis;
 using ScreenshotApp.Translation;
 using ScreenshotApp.VoiceInput;
 using ScreenshotApp.NetworkWorkbench;
+using ScreenshotApp.Motion;
 
 namespace ScreenshotApp;
 
@@ -70,6 +70,8 @@ public partial class MainWindow : Window
     private bool _voiceInputAwaitingConfirmation;
     private string _voiceInputTranslatedText = string.Empty;
     private string _currentPage = "Home";
+    private FrameworkElement? _visiblePageView;
+    private int _pageTransitionGeneration;
     private int _toastAnimationGeneration;
     private GlobalShortcut _screenshotShortcut;
     private GlobalShortcut _fullScreenShortcut;
@@ -79,6 +81,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        _visiblePageView = HomeView;
         _historyStore = new ScreenshotHistoryStore(_preferences);
         QrCodeConverterViewHost.HistoryStore = _historyStore;
         ClipboardService.TextRecordRequested += async content =>
@@ -344,33 +347,53 @@ public partial class MainWindow : Window
     private void NavigateToPage(string page)
     {
         var targetView = GetPageView(page);
-        var shouldAnimate = !string.Equals(_currentPage, page, StringComparison.Ordinal);
+        if (targetView is null)
+        {
+            return;
+        }
 
-        HomeView.Visibility = page == "Home" ? Visibility.Visible : Visibility.Collapsed;
-        ScreenWorkbenchView.Visibility = page == "ScreenWorkbench" ? Visibility.Visible : Visibility.Collapsed;
-        ConverterWorkbenchView.Visibility = page == "ConverterWorkbench" ? Visibility.Visible : Visibility.Collapsed;
-        ImageConverterView.Visibility = page == "ImageConverter" ? Visibility.Visible : Visibility.Collapsed;
-        AudioConverterView.Visibility = page == "AudioConverter" ? Visibility.Visible : Visibility.Collapsed;
-          VideoConverterView.Visibility = page == "VideoConverter" ? Visibility.Visible : Visibility.Collapsed;
-          PdfConverterView.Visibility = page == "PdfConverter" ? Visibility.Visible : Visibility.Collapsed;
-          EncodingConverterView.Visibility = page == "EncodingConverter" ? Visibility.Visible : Visibility.Collapsed;
-          QrCodeConverterView.Visibility = page == "QrCodeConverter" ? Visibility.Visible : Visibility.Collapsed;
-        FileWorkbenchView.Visibility = page == "FileWorkbench" ? Visibility.Visible : Visibility.Collapsed;
-        NetworkWorkbenchView.Visibility = page == "NetworkWorkbench" ? Visibility.Visible : Visibility.Collapsed;
-        ResourceManagementView.Visibility = page == "ResourceManagement" ? Visibility.Visible : Visibility.Collapsed;
-        SystemToolsView.Visibility = page == "SystemTools" ? Visibility.Visible : Visibility.Collapsed;
-        DeveloperToolsView.Visibility = page == "DeveloperTools" ? Visibility.Visible : Visibility.Collapsed;
+        var outgoingView = _visiblePageView;
+        if (!ReferenceEquals(outgoingView, targetView))
+        {
+            var transitionGeneration = ++_pageTransitionGeneration;
+            var direction = GetPageOrder(page) >= GetPageOrder(_currentPage) ? 1 : -1;
+            foreach (var view in GetPageViews())
+            {
+                if (!ReferenceEquals(view, outgoingView) && !ReferenceEquals(view, targetView))
+                {
+                    AppMotion.ResetPage(view);
+                    view.Visibility = Visibility.Collapsed;
+                }
+            }
+
+            _visiblePageView = targetView;
+            _currentPage = page;
+            AppMotion.AnimatePageTransition(outgoingView, targetView, direction, () =>
+            {
+                if (transitionGeneration != _pageTransitionGeneration)
+                {
+                    return;
+                }
+
+                if (outgoingView is not null && !ReferenceEquals(outgoingView, targetView))
+                {
+                    outgoingView.Visibility = Visibility.Collapsed;
+                    outgoingView.IsHitTestVisible = true;
+                    AppMotion.ResetPage(outgoingView);
+                }
+
+                AppMotion.ResetPage(targetView);
+            });
+        }
+        else
+        {
+            targetView.Visibility = Visibility.Visible;
+            _currentPage = page;
+        }
+
         if (page == "ImageConverter")
         {
             Dispatcher.BeginInvoke(new Action(() => NormalizeImageConverterLabels(ImageConverterView)), DispatcherPriority.Loaded);
-        }
-        HistoryView.Visibility = page == "History" ? Visibility.Visible : Visibility.Collapsed;
-        SettingsView.Visibility = page == "Settings" ? Visibility.Visible : Visibility.Collapsed;
-
-        _currentPage = page;
-        if (shouldAnimate && targetView is not null)
-        {
-            AnimatePageEntrance(targetView);
         }
 
         if (page is "History" or "ScreenWorkbench")
@@ -400,36 +423,52 @@ public partial class MainWindow : Window
         _ => null
     };
 
-    private void AnimatePageEntrance(FrameworkElement target)
+    private FrameworkElement[] GetPageViews() =>
+    [
+        HomeView,
+        ScreenWorkbenchView,
+        ConverterWorkbenchView,
+        ImageConverterView,
+        AudioConverterView,
+        VideoConverterView,
+        PdfConverterView,
+        EncodingConverterView,
+        QrCodeConverterView,
+        FileWorkbenchView,
+        NetworkWorkbenchView,
+        ResourceManagementView,
+        SystemToolsView,
+        DeveloperToolsView,
+        HistoryView,
+        SettingsView
+    ];
+
+    private static int GetPageOrder(string page) => page switch
     {
-        var translate = new TranslateTransform();
-        target.RenderTransform = translate;
-        target.Opacity = 1;
-
-        if (!IsLoaded || !SystemParameters.ClientAreaAnimation)
-        {
-            return;
-        }
-
-        var duration = TimeSpan.FromMilliseconds(190);
-        var easing = new CubicEase { EasingMode = EasingMode.EaseOut };
-        target.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, duration)
-        {
-            EasingFunction = easing,
-            FillBehavior = FillBehavior.Stop
-        }, HandoffBehavior.SnapshotAndReplace);
-        translate.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(14, 0, duration)
-        {
-            EasingFunction = easing,
-            FillBehavior = FillBehavior.Stop
-        }, HandoffBehavior.SnapshotAndReplace);
-    }
+        "Home" => 0,
+        "ScreenWorkbench" => 10,
+        "History" => 11,
+        "ConverterWorkbench" => 20,
+        "ImageConverter" => 21,
+        "AudioConverter" => 22,
+        "VideoConverter" => 23,
+        "PdfConverter" => 24,
+        "EncodingConverter" => 25,
+        "QrCodeConverter" => 26,
+        "FileWorkbench" => 30,
+        "NetworkWorkbench" => 40,
+        "ResourceManagement" => 50,
+        "SystemTools" => 60,
+        "DeveloperTools" => 70,
+        "Settings" => 80,
+        _ => 0
+    };
 
     private void InteractiveCard_MouseEnter(object sender, MouseEventArgs e)
     {
         if (sender is FrameworkElement element)
         {
-            AnimateInteractiveCard(element, 1.016, -3, 135);
+            AppMotion.AnimateCard(element, 1.024, -5, 220);
         }
     }
 
@@ -437,46 +476,9 @@ public partial class MainWindow : Window
     {
         if (sender is FrameworkElement element)
         {
-            AnimateInteractiveCard(element, 1, 0, 170);
+            AppMotion.AnimateCard(element, 1, 0, 260);
         }
     }
-
-    private static void AnimateInteractiveCard(FrameworkElement element, double scale, double offsetY, int durationMilliseconds)
-    {
-        if (element.RenderTransform is not TransformGroup group ||
-            group.Children.Count != 2 ||
-            group.Children[0] is not ScaleTransform ||
-            group.Children[1] is not TranslateTransform)
-        {
-            group = new TransformGroup();
-            group.Children.Add(new ScaleTransform(1, 1));
-            group.Children.Add(new TranslateTransform());
-            element.RenderTransform = group;
-            element.RenderTransformOrigin = new Point(0.5, 0.5);
-        }
-
-        var scaleTransform = (ScaleTransform)group.Children[0];
-        var translateTransform = (TranslateTransform)group.Children[1];
-        if (!SystemParameters.ClientAreaAnimation)
-        {
-            scaleTransform.ScaleX = scale;
-            scaleTransform.ScaleY = scale;
-            translateTransform.Y = offsetY;
-            return;
-        }
-
-        var duration = TimeSpan.FromMilliseconds(durationMilliseconds);
-        var easing = new QuadraticEase { EasingMode = EasingMode.EaseOut };
-        scaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, CreateMotionAnimation(scale, duration, easing), HandoffBehavior.SnapshotAndReplace);
-        scaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, CreateMotionAnimation(scale, duration, easing), HandoffBehavior.SnapshotAndReplace);
-        translateTransform.BeginAnimation(TranslateTransform.YProperty, CreateMotionAnimation(offsetY, duration, easing), HandoffBehavior.SnapshotAndReplace);
-    }
-
-    private static DoubleAnimation CreateMotionAnimation(double target, TimeSpan duration, IEasingFunction easing) => new(target, duration)
-    {
-        EasingFunction = easing,
-        FillBehavior = FillBehavior.HoldEnd
-    };
 
     /// <summary>存储页仅负责发现空间来源；用户点击后才切到文件工作台继续搜索或批处理。</summary>
     private async void SystemToolsView_FileWorkbenchRequested(object? sender, FileWorkbenchNavigationRequestedEventArgs e)
@@ -2688,26 +2690,7 @@ public partial class MainWindow : Window
         _toastAnimationGeneration++;
         ToastText.Text = message;
         ToastBorder.Visibility = Visibility.Visible;
-        ToastBorder.Opacity = 1;
-        var translate = ToastBorder.RenderTransform as TranslateTransform ?? new TranslateTransform();
-        ToastBorder.RenderTransform = translate;
-        translate.Y = 0;
-
-        if (SystemParameters.ClientAreaAnimation)
-        {
-            var duration = TimeSpan.FromMilliseconds(170);
-            var easing = new CubicEase { EasingMode = EasingMode.EaseOut };
-            ToastBorder.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, duration)
-            {
-                EasingFunction = easing,
-                FillBehavior = FillBehavior.Stop
-            }, HandoffBehavior.SnapshotAndReplace);
-            translate.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(10, 0, duration)
-            {
-                EasingFunction = easing,
-                FillBehavior = FillBehavior.Stop
-            }, HandoffBehavior.SnapshotAndReplace);
-        }
+        AppMotion.AnimateToastIn(ToastBorder);
 
         _toastTimer.Stop();
         _toastTimer.Start();
@@ -2721,22 +2704,7 @@ public partial class MainWindow : Window
         }
 
         var generation = ++_toastAnimationGeneration;
-        if (!SystemParameters.ClientAreaAnimation)
-        {
-            ToastBorder.Visibility = Visibility.Collapsed;
-            return;
-        }
-
-        var translate = ToastBorder.RenderTransform as TranslateTransform ?? new TranslateTransform();
-        ToastBorder.RenderTransform = translate;
-        var duration = TimeSpan.FromMilliseconds(145);
-        var easing = new QuadraticEase { EasingMode = EasingMode.EaseIn };
-        var fade = new DoubleAnimation(0, duration)
-        {
-            EasingFunction = easing,
-            FillBehavior = FillBehavior.HoldEnd
-        };
-        fade.Completed += (_, _) =>
+        AppMotion.AnimateToastOut(ToastBorder, () =>
         {
             if (generation != _toastAnimationGeneration)
             {
@@ -2746,15 +2714,8 @@ public partial class MainWindow : Window
             ToastBorder.Visibility = Visibility.Collapsed;
             ToastBorder.BeginAnimation(OpacityProperty, null);
             ToastBorder.Opacity = 1;
-            translate.BeginAnimation(TranslateTransform.YProperty, null);
-            translate.Y = 0;
-        };
-        ToastBorder.BeginAnimation(OpacityProperty, fade, HandoffBehavior.SnapshotAndReplace);
-        translate.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(0, 6, duration)
-        {
-            EasingFunction = easing,
-            FillBehavior = FillBehavior.HoldEnd
-        }, HandoffBehavior.SnapshotAndReplace);
+            ToastBorder.RenderTransform = new TranslateTransform();
+        });
     }
 
 #if DEBUG
