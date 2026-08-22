@@ -1,6 +1,6 @@
 # X-Tool 开发交接文档
 
-更新时间：2026-08-20
+更新时间：2026-08-23
 
 项目目录：`D:\Claude Code\X-Tool`
 
@@ -8,7 +8,18 @@
 
 当前分支：`main`
 
-当前最新功能代码基线以实际 `git log --oneline` 为准。开发者工具、系统工具、转换器二维码等既有模块均以历史提交为基线；协作中心已从当前产品移除并保存在独立本地备份分支；文件工作台仍有未提交待确认改动。
+当前最新功能代码基线以实际 `git log --oneline` 为准。当前最近五个功能提交为（文档提交可能位于其后）：`0298bf0 移除协作中心并封存备用方案`、`886d5e5 修复应用流量趋势漏记`、`996d1c9 新增右Ctrl全屏截图与完成通知`、`4866d16 优化流量统计悬停与进程列表性能`、`5d15d46 完善应用流量进程状态与路径显示`。协作中心已从当前产品移除并保存在独立本地备份分支；文件工作台与开发者工具仍有未提交待确认改动。
+
+当前工作区不是干净状态，必须先以实际 `git status --short` 判断，不得 reset、checkout、清理或覆盖现有改动。除本文件外，当前已知未提交内容包括：开发者工具的 Nginx 扫描/托管安装与工具链图标资源、文件工作台 Windows Search/完整扫描/重复文件查找/永久删除、翻译引擎、语音输入，以及本地 `ClipboardDiagnostics/`。这些内容属于已有工作，后续除非用户明确要求，不得顺带暂存、提交、删除或回退。最近一次 Release 构建已在 2026-08-23 通过（0 警告、0 错误），并已启动新版 XTool。
+
+主题状态：当前保持原来的浅蓝色毛玻璃配色；此前提出的粉蓝渐变主题没有进入 `App.xaml` 或 `MainWindow.xaml`，后续不要擅自重新改色。
+
+## 交接文档清单（2026-08-23）
+
+- 当前真正的交接文档只有这一份：根目录 `HANDOFF.md`。
+- `NETWORK-WORKBENCH-PHASE3.md` 是网络第三阶段历史设计与验收记录，不是交接文档，仍被本文件引用，必须保留。
+- `SECURITY-AUDIT-2026-08-12.md`、根目录及 `ScreenshotApp` 下的 `design-qa.md`、`README.md`、`THIRD-PARTY-NOTICES.md` 和模型/许可证说明是审计、核验、说明或许可材料，不属于交接文档，不能因“只保留一份交接文档”而删除。
+- 已通过当前工作树文件名、内容关键词和 Git 历史核对，没有发现第二份旧版 `HANDOFF`/`交接` 文档；以后只更新本文件，不再新建带日期的交接副本。
 
 > 当前网络功能最新基线已推进到 `b0f5f9e 新增代理与非代理流量用量趋势`，其前为 `4ccfc32 新增网络流量自动授权任务`、`54bfeec 更新网络流量统计交接文档`、`a590d13 新增网络流量统计工作台`；后续修复以实际 `git log` 为准。2026-08-16 已修复应用级用量历史写入队列繁忙时丢增量的问题：待写增量按原采样小时保留并重试，图表悬停会区分“未记录应用级样本”和真实用量；全局网卡历史仍可用于判断该时段是否存在网络活动。上方历史长列表仅保留为旧交接快照，后续必须以本段和实际 Git 日志为准。
 
@@ -18,7 +29,7 @@
 
 > 本文档以当前代码为准。旧名称“截影 / JieYing”只可能残留在部分内部命名和本机配置目录中，不再代表当前产品定位。
 
-> **当前工作区状态（2026-08-12）**：文件工作台的 Windows Search、完整扫描、重复文件与勾选式永久删除仍处于未提交待确认状态；相关 `FileWorkbench` 文件、`ScreenshotApp.csproj` 和新增搜索/重复文件服务必须继续保留。当前工作区还保留 `Translation\TranslationEngineProvider.cs`、`VoiceInput\VoiceInputService.cs` 的既有未提交改动；保护边界仍包括 `ScreenshotApp\App.xaml.cs`，这些文件下一轮不得顺带暂存、覆盖或提交。`ClipboardDiagnostics/` 仍是禁止修改、删除或提交的本地临时目录；`ScreenshotApp/VoiceInput/Runtime/` 的 GPU 试验材料已经用户确认删除，不再存在。屏幕工具及用量历史改动已创建中文本地提交；网络流量统计基线为 `a590d13`，后续提交 `4ccfc32` 增加一次授权的独立 ETW 计划任务。本轮继续增加代理/非代理流量用量趋势、分时历史落盘和 24 小时/7 天/30 天图表。另需说明：`System.Data.OleDb` 包引用随体积优化提交 `5fe6188` 一并进入历史，该行本属文件工作台任务，重写历史风险较大故未回退，请知悉。
+> **保护边界（2026-08-23）**：文件工作台的 Windows Search、完整扫描、重复文件与勾选式永久删除仍处于未提交待确认状态；相关 `FileWorkbench` 文件、`ScreenshotApp.csproj` 和新增搜索/重复文件服务必须继续保留。当前工作区还保留 `Translation\TranslationEngineProvider.cs`、`VoiceInput\VoiceInputService.cs` 的既有未提交改动；`ScreenshotApp\App.xaml.cs` 也属于禁止顺带修改或提交的保护文件。`ClipboardDiagnostics/` 是本地临时目录，禁止修改、删除或提交；`ScreenshotApp\VoiceInput\Runtime\` 的 GPU 试验材料已经用户确认删除，不得重新下载或接入。开发者工具当前还有 Nginx 托管安装相关未提交改动（包括扫描器、环境配置规划、托管服务、模型和页面控件，以及 `ScreenshotApp\Assets\Toolchains\` 图标资源），除非用户明确要求，不得覆盖、回退或单独提交。另需说明：`System.Data.OleDb` 包引用随体积优化提交 `5fe6188` 一并进入历史，该行本属文件工作台任务，重写历史风险较大故未回退，请知悉。
 
 ## 一、必须遵守的开发约定
 
@@ -139,7 +150,7 @@ git log -5 --oneline
 ### 开发者工具（扫描诊断与受控环境配置）
 
 - 一级导航“开发者工具”进入独立的“开发环境中心”，首页原“设置”能力卡已替换为开发者工具入口；设置仍保留在左侧底部一级导航。
-- 当前包含“开发环境总览”“SDK 与工具链”“托管安装”“环境诊断”四个页面，扫描支持 Java、Python、Node.js、.NET SDK、Git、Maven、Gradle、MySQL 与 Docker。项目环境、全局版本切换和 Shim 尚未开放；托管安装目前开放 Eclipse Temurin JDK、uv CPython、Volta Node.js 缓存、MySQL 与 Docker（Desktop 安装器 + docker CLI 静态包）。
+- 当前包含“开发环境总览”“SDK 与工具链”“托管安装”“环境诊断”四个页面，扫描支持 Java、Python、Node.js、.NET SDK、Git、Maven、Gradle、MySQL、Docker 与 Nginx。项目环境、全局版本切换和 Shim 尚未开放；托管安装目前开放 Eclipse Temurin JDK、uv CPython、Volta Node.js 缓存、MySQL、Docker（Desktop 安装器 + docker CLI 静态包）以及工作区中尚未提交的 Nginx 官方 Windows ZIP 方案。
 - 页面首次进入后异步扫描，蓝色按钮原位切换“重新扫描/取消扫描”；离开页面时取消未完成任务。扫描失败按单个工具隔离，不阻断其他结果，也不会申请管理员权限。
 - 发现来源限定为用户/系统持久 PATH、相关环境变量、Python/Git 注册表、常用安装目录，以及固定磁盘顶层名称匹配的有限目录；不会递归扫描整块磁盘、建立常驻索引或后台持续监测。不得改回直接使用 X-Tool 继承的进程 PATH 作为全局环境依据，因为 Codex、IDE 等启动宿主可能注入私有工具路径。
 - Java、Python、Node.js、.NET 与 Git 的版本验证只运行已经解析出的绝对 EXE 路径，统一限制为 8 秒、64 KB 输出，并支持取消与终止进程树。WindowsApps 下的 Python 应用执行别名不会被自动运行，避免触发商店或安装流程。
@@ -163,6 +174,7 @@ git log -5 --oneline
 - MySQL 托管版本与维护状态来自 endoflife.date，下载地址为 MySQL 官方 CDN 归档（`cdn.mysql.com/archives/`）；官方只提供 MD5 与 PGP 签名，安装按官方 MD5 校验并记录 `HashAlgorithm`。推荐区为 8.4 LTS 与 9.7 LTS，历史兼容区仅保留 8.0（已停止官方安全维护，安装前有警告）。MySQL 托管安装不初始化数据目录、不注册 Windows 服务、不修改 PATH；卸载同样要求清单所有权、目录边界、`MYSQL_HOME`/PATH/运行进程检查。
 - Docker 托管分两种模式：“Docker Desktop 安装器”从官方 `appcast.xml` 读取最新版本，下载后做 Authenticode 数字签名校验并启动安装向导；它是系统级安装，需要管理员权限与 WSL2，X-Tool 不静默安装、不写入托管清单，已安装时只读展示本机版本。docker CLI 静态包从官方目录取最新稳定版，解压到 `%LocalAppData%\X-Tool\Dev\Docker` 并写清单，仅提供 CLI（无守护进程），容器引擎仍需 Docker Desktop 或远程 `DOCKER_HOST`。
 - 环境诊断新增 MySQL 规则（`MYSQL_HOME` 与当前 `mysql.exe` 一致性、mysql/mysqld 是否同安装、EOL 警告）与 Docker 规则（守护进程可用性、Desktop 已安装但 PATH 缺失、WSL2 状态）；扫描版本解析兼容 MySQL 5.x 的 `Distrib 5.7.19` 与 8.x/9.x 的 `Ver 8.4.6` 格式，以及 Docker 的 `Docker version` 格式。
+- 当前工作区的 Nginx 增量从 `nginx.org` 读取 Windows ZIP 版本，下载后安全解压到 `%LocalAppData%\X-Tool\Dev\Nginx`，以绝对路径执行 `nginx -v` 校验并写入 X-Tool 托管清单；环境配置只在用户确认后加入 Nginx 命令目录并设置 `NGINX_HOME`，不注册 Windows 服务、不静默安装、不自动修改全局环境。`DeveloperToolsView.xaml` 已补齐 Nginx 状态、空状态和版本卡片以匹配 `DeveloperToolsView.xaml.cs`，但整组改动仍属于未提交工作，不得在无明确授权时单独提交或回退。
 - 托管安装“查看日志”打开毛玻璃日志弹框（`ManagedLogWindow`），按成功/警告/错误级别展示最近 2000 条记录，支持刷新、复制、打开日志文件与日志目录。
 
 ### 协作中心（已从当前产品移除并封存）
@@ -476,6 +488,18 @@ git log -5 --oneline
 12. **二维码人工回归**：分别验证自由文本/网址、WiFi、vCard、邮件、电话/短信与批量生成的预览、保存、复制与中文内容扫码；验证参数变化（纠错、尺寸、留白、前景/背景色）实时刷新且不卡界面；用多二维码图片、旋转图片、含中文的二维码、损坏图片和无二维码图片验证识别、取消、失败隔离与分类徽章；验证网址打开的确认拦截、历史保存开关、搜索筛选、单条删除与清空；确认“保存历史”关闭后生成/识别不落库。
 ## 九、最近关键提交
 
+- `0298bf0` 移除协作中心并封存备用方案；当前 `main` 不再包含协作中心桌面端/Android 工程，历史实现仅保存在本地备份分支 `backup/collaboration-center-20260820`。
+- `886d5e5` 修复应用流量趋势漏记。
+- `996d1c9` 新增右 Ctrl 全屏截图与完成通知。
+- `4866d16` 优化流量统计悬停与进程列表性能。
+- `5d15d46` 完善应用流量进程状态与路径显示。
+- `5a65e75` 修复网络流量授权自动恢复与闪退。
+- `9d177b2` 优化流量用量趋势缩放。
+- `18f19a3` 修复设备信息内容遮挡。
+- `c6e3c3b` 移除高级硬件实时监控。
+- `5e36f1f` 增加 EC 与 SuperIO 温度诊断后，硬件实时监控最终由 `c6e3c3b` 从产品移除；后续不得恢复温度代理、PawnIO 或实时传感器入口，除非用户另行授权完整方案评估。
+- 本轮主题核对确认保持原浅蓝色毛玻璃配色，未提交粉蓝渐变主题改动。
+
 - `e2abcb2` 新增截图区域 GIF 录制功能
 - `3a6832a` 调整截图工具栏居中并更新录像图标
 - `ccc6354` 拦截截图快捷键避免前台应用响应
@@ -585,41 +609,47 @@ git log -5 --oneline
 7. Release 构建通过后启动新版；默认由用户进行实际 UI/功能验证，除非用户明确要求代理测试。
 8. 用户确认较大改动已验证后，只暂存任务相关文件并创建中文本地提交；不推送远端，除非用户明确要求。
 
-## 十一、可直接用于新窗口的提示词
+## 十一、可直接用于新窗口的最新提示词
 
 ```text
 请继续开发 D:\Claude Code\X-Tool 的 X-Tool WPF 项目。
 
-先完整阅读项目根目录 HANDOFF.md，并严格遵循其中记录的当前基线、UTF-8 文件处理要求、构建与启动方式、提交约定、工作区保护规则和各模块现状。开始前执行：
-
+开始前必须完整阅读项目根目录 HANDOFF.md，并执行：
+chcp 65001
 git status --short
 git log -5 --oneline
 
-当前 main 最新功能提交应以 `3812f06 修复 GIF 收尾卡顿与录像菜单跳位` 为首，后接 `e2abcb2 新增截图区域 GIF 录制功能`、`3a6832a 调整截图工具栏居中并更新录像图标`、`ccc6354 拦截截图快捷键避免前台应用响应`、`782008d 避免截图捕获前台瞬态菜单`、`cf88468 加速长截图拼接与剪贴板写入`、`3648b99 修复截图标注面板与工具栏布局抖动`、`e2165f2 修复截图菜单定位与工具栏边界抖动`、`122cc68 稳定截图菜单定位并自动收起标注面板`、`5ea3236 修复截图工具栏定位与形状菜单跳动`、`b172131`、`b43be13`、`b21cff9`；其上可能还有本次更新交接文档的中文本地提交。请以实际 git log 为准，不要假设工作区干净，不要 reset、checkout、清理或丢弃任何现有改动。
+当前 main 最近功能提交以实际日志为准；截至本交接，最近五项为：
+0298bf0 移除协作中心并封存备用方案
+886d5e5 修复应用流量趋势漏记
+996d1c9 新增右Ctrl全屏截图与完成通知
+4866d16 优化流量统计悬停与进程列表性能
+5d15d46 完善应用流量进程状态与路径显示
 
-`ClipboardDiagnostics/` 是未跟踪的本地临时目录，必须保留，禁止提交、删除或修改；`ScreenshotApp/VoiceInput/Runtime/` 的 GPU 试验材料已经确认删除，不要重新下载或接入。`ScreenshotApp/App.xaml.cs`、`ScreenshotApp/Translation/TranslationEngineProvider.cs`、`ScreenshotApp/VoiceInput/VoiceInputService.cs` 是与后续任务无关的既有修改，禁止顺带暂存、覆盖或提交。文件工作台当前仍有未提交的 Windows Search、完整扫描、重复文件查找和永久删除功能；相关 `ScreenshotApp/FileWorkbench/` 文件、`ScreenshotApp/ScreenshotApp.csproj` 与新增服务必须完整保留，也禁止顺带提交。未经我明确要求不要推送 GitHub。
+当前真正的交接文档只有根目录 HANDOFF.md。NETWORK-WORKBENCH-PHASE3.md、SECURITY-AUDIT-2026-08-12.md、design-qa.md、README.md、THIRD-PARTY-NOTICES.md 和模型/许可证说明是历史设计、审计、核验、说明或许可材料，不要误删，也不要新建第二份交接文档。
 
-开发者工具现有“开发环境总览”“SDK 与工具链”“托管安装”“环境诊断”四页。扫描支持 Java、Python、Node.js、.NET SDK、Git、Maven、Gradle、MySQL 与 Docker，使用持久 PATH、环境变量、注册表、常用目录及固定盘顶层有限发现，不得改成全盘递归或常驻监控。版本验证只能运行已解析的绝对 EXE，带超时、输出上限、取消和失败隔离。Java 必须从标准 `java/openjdk version` 行或 `java.version` 解析版本，不能再次把 `OpenJDK 64-Bit Server VM` 中的“64-Bit”识别为版本；MySQL 需兼容 `Distrib 5.7.19` 与 `Ver 8.4.6` 两种输出。
+当前工作区不干净，必须保留并先审阅现有未提交内容：
+- DeveloperTools 下的 Nginx 扫描、环境配置、托管安装、页面控件和 ScreenshotApp/Assets/Toolchains/ 图标资源；Nginx 页面控件已补齐以保证当前工作区可编译，但整组仍未提交。
+- FileWorkbench 的 Windows Search、完整扫描、重复文件查找和永久删除改动，以及相关 ScreenshotApp.csproj 改动。
+- Translation/TranslationEngineProvider.cs、VoiceInput/VoiceInputService.cs 和 ScreenshotApp/App.xaml.cs 的既有保护改动。
+- ClipboardDiagnostics/ 是禁止修改、删除或提交的本地临时目录。不要重新下载、接入或恢复 ScreenshotApp/VoiceInput/Runtime/ GPU 试验材料。
+不得 reset、checkout、清理、覆盖或顺带提交上述内容；未经明确要求不要推送 GitHub。
 
-总览“未加入 PATH”和 SDK 清单“配置环境”可在当前页应用受控配置，默认写系统变量并按需请求 UAC，也可切换用户范围。Java 配置 JDK `bin` 与 `JAVA_HOME`；Python 添加解释器目录及存在的 `Scripts`，不设置 `PYTHONHOME`；Node 在检测到 Volta/nvm/fnm 时不得把具体版本目录写入 PATH。写入管理员子进程必须重新读取最新 PATH、规范化去重、加命名互斥量并在失败时尝试恢复，不能用页面加载时的旧 PATH 覆盖系统变量。
+产品边界：
+- 协作中心已从 main 完整移除，只保存在 backup/collaboration-center-20260820；不要把旧桌面端/Android 工程复制回主线。
+- 高级硬件实时监控、PawnIO、EC/SuperIO 诊断入口已移除；不要恢复温度代理或内核驱动接入，除非先得到新的方案分析授权。
+- 当前主题保持原浅蓝色毛玻璃配色；不要擅自重新引入此前讨论过的粉蓝渐变主题。
+- 网络工作台保留全局网卡统计、应用级 ETW 授权/趋势和后台历史；不得恢复已移除的旧 ETW UI 入口。
+- 开发者工具的 Nginx 增量仍处于未提交状态，若继续开发必须保持官方来源校验、目录边界、普通权限和取消/失败回滚约束。
+- 文件工作台必须继续使用 Windows Search 的 System.ItemUrl + Uri.LocalPath，并保留本地递归兜底、结果上限、异步取消和永久删除确认。
 
-“托管安装”已接入 Temurin JDK、uv CPython、Volta Node.js、MySQL 与 Docker。Temurin 版本来自 Adoptium API，支持官方源与固定清华 TUNA 镜像，下载后始终按官方 SHA-256 校验；“最新特性版”只是官方最新非 LTS 发布线，不代表本机当前生效。uv Python 显示 3.10–3.14 推荐版本以及 uv 仍提供的 3.8/3.9 历史兼容版本，历史版本安装前必须提示停止安全维护。Volta 只执行不改变默认版本的 `volta fetch`，不得改成 `volta install`；缓存目录可能被多个项目共享，禁止直接删除。MySQL 版本来自 endoflife.date 与官方 CDN 归档，按官方 MD5 校验，推荐 8.4/9.7 LTS、历史区仅 8.0。Docker Desktop 安装器来自官方 appcast 并做数字签名校验，只下载并启动安装向导，不得当作绿色安装写入清单或静默安装；docker CLI 静态包可托管到 X-Tool 目录。托管安装或卸载只允许操作 X-Tool 清单明确拥有且通过目录边界、PATH/环境变量及运行进程检查的内容，禁止删除外部安装。不得擅自加入静默安装、全局版本切换、项目绑定或 Shim。
-
-文件工作台默认“开始搜索”使用 `Search.CollatorDSO.1` 查询 `SystemIndex`，必须读取 `System.ItemUrl` 并通过 `Uri.LocalPath` 获取真实路径，不能改回已本地化的 `System.ItemPathDisplay`。顶部“完整扫描”绕过系统索引并异步递归扫描；结果池最多 5,000 项、每页 200 项，筛选和排序只处理当前结果池。不要恢复同步 UI 回填、常驻扫描或自建全盘实时索引。
-
-系统工具只保留静态设备信息、PnP 驱动、只读存储概览、环境变量和按需只读系统诊断。系统诊断按 Windows 可靠性监视器口径提供最近 24 小时、7 天、14 天和 30 天时间格，事件按关键、错误、警告分组；应用故障通过 `SystemProgramIdentityResolver` 解析友好程序名、原始 EXE、发布者、Windows 服务和身份依据，主操作为“打开程序位置”。不得恢复已移除的实时传感器、启动项管理或管理员助手。
-
-网络工作台顶部 ETW 精确流量入口已经移除，不要恢复。语音输入保持 CPU 方案，不得重新接入 `ScreenshotApp/VoiceInput/Runtime/` 中的 GPU 运行时。屏幕截图标注工具栏的独立“取色”按钮位于“形状”之后，已接回选中状态和点击处理，不要再次隐藏。形状按钮默认选择矩形，形状菜单支持圆角矩形、五边形、六边形和星形等扩展形状；工具栏定位优先跟随选区下边界，菜单按空间优先向下、无空间向上展开，开始落笔后自动收起菜单。后续修改不得恢复使用瞬时布局尺寸导致的左上角闪跳或菜单重复开关异常。
-
-若需要继续优化 UI，请保持现有浅色毛玻璃设计语言，不要破坏已实现的异步、取消、失败提示、日志、单飞刷新、历史持久化和权限确认逻辑。任何 ETW、系统网络配置、防火墙、服务、受保护进程或系统环境变量写操作都只能在用户明确点击后按需申请管理员权限，不得让主程序默认长期以管理员运行。
-
-完成代码修改后关闭 XTool/JieYing，执行：
-
-dotnet build .\ScreenshotApp\ScreenshotApp.csproj -c Release
-
-Release 构建通过后启动：
-
-.\ScreenshotApp\bin\Release\net8.0-windows\win-x64\XTool.exe
-
-实际 UI 测试默认由我完成。修改完成后只暂存本次任务相关文件，使用恰当的中文名称创建本地 Git 提交。不要提交现有文件工作台改动、`ClipboardDiagnostics/` 或其他无关文件，不要推送远端。
+代码/构建约定：
+- 所有文件使用 UTF-8；PowerShell 读取中文前执行 chcp 65001，并使用 Get-Content -Encoding UTF8；修改文件使用 apply_patch，中文注释。
+- 修改代码前关闭 XTool/JieYing：
+  Get-Process XTool,JieYing -ErrorAction SilentlyContinue | Stop-Process -Force
+- 然后执行：
+  dotnet build .\ScreenshotApp\ScreenshotApp.csproj -c Release
+- Release 通过后启动：
+  .\ScreenshotApp\bin\Release\net8.0-windows\win-x64\XTool.exe
+- 实际 UI 测试由用户完成。只暂存本次任务相关文件，创建中文本地 Git 提交；不得提交 ClipboardDiagnostics、文件工作台保护改动、翻译/语音/App.xaml.cs 或其他无关文件，不推送远端。
 ```
