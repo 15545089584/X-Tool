@@ -264,7 +264,9 @@
                                     <Grid>
                                         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                                         <Grid>
-                                            <Border Width="38" Height="38" HorizontalAlignment="Left" Background="{Binding IconBackground}" CornerRadius="10"><TextBlock FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="{Binding IconForeground}" Text="{Binding IconGlyph}" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border>
+                                            <Border Width="38" Height="38" HorizontalAlignment="Left" Background="{Binding IconBackground}" CornerRadius="10">
+                                                <Image Width="27" Height="27" Source="{Binding IconSource}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
+                                            </Border>
                                             <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource DeveloperStatusButtonStyle}"
                                                     Background="{Binding StatusBackground}" Foreground="{Binding StatusForeground}" Content="{Binding StatusText}"
                                                     IsEnabled="{Binding CanConfigureFromStatus}" CommandParameter="{Binding}" Click="ConfigureToolchain_Click" />
@@ -293,7 +295,9 @@
                                 <StackPanel>
                                     <Grid>
                                         <StackPanel Orientation="Horizontal">
-                                            <Border Width="40" Height="40" Background="{Binding IconBackground}" CornerRadius="11"><TextBlock FontFamily="Segoe Fluent Icons" FontSize="19" Foreground="{Binding IconForeground}" Text="{Binding IconGlyph}" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border>
+                                            <Border Width="40" Height="40" Background="{Binding IconBackground}" CornerRadius="11">
+                                                <Image Width="29" Height="29" Source="{Binding IconSource}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
+                                            </Border>
                                             <StackPanel Margin="13,0,0,0" VerticalAlignment="Center"><TextBlock FontSize="16" FontWeight="SemiBold" Text="{Binding DisplayName}" /><TextBlock Margin="0,3,0,0" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}" Text="{Binding Description}" /></StackPanel>
                                         </StackPanel>
                                         <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal">

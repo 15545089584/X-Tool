@@ -1,0 +1,5 @@
+开发工具图标来源
+
+本目录中的工具品牌图标来自 Simple Icons 项目提供的品牌图形，通过其 CDN 获取后栅格化为 64×64 PNG，用于 X-Tool 的开发环境识别界面。
+来源：https://simpleicons.org/
+许可：Simple Icons 图形以 CC0 1.0 贡献到公有领域；各品牌名称与商标仍归其各自权利人所有。
