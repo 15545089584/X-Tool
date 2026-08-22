@@ -10,6 +10,7 @@ using System.Windows.Media;
 using WpfShapes = System.Windows.Shapes;
 using System.Windows.Threading;
 using ScreenshotApp.StorageAnalysis;
+using ScreenshotApp.Motion;
 
 namespace ScreenshotApp.SystemTools;
 
@@ -85,6 +86,7 @@ public partial class SystemToolsView : UserControl
     private readonly Dictionary<TextBlock, (string Key, string Title)> _serviceHeaders = new();
     private readonly Dictionary<TextBlock, (string Key, string Title)> _relationshipHeaders = new();
     private readonly HashSet<string> _expandedProcessGroups = new(StringComparer.OrdinalIgnoreCase);
+    private readonly MotionPageGroup _tabMotion;
 
     public SystemToolsView()
     {
@@ -93,6 +95,17 @@ public partial class SystemToolsView : UserControl
         ProcessesListBox.ItemsSource = _processes;
         ServicesListBox.ItemsSource = _services;
         RelationsBubbleListBox.ItemsSource = _relationships;
+        _tabMotion = new MotionPageGroup(
+            PortsPanel,
+            PortsPanel,
+            ProcessesPanel,
+            ServicesPanel,
+            RelationsBubblePanel,
+            OverviewPanel,
+            DriversPanel,
+            StoragePanel,
+            EnvironmentPanel,
+            DiagnosticsPanel);
         EnvironmentListBox.ItemsSource = _environmentVariables;
         PathEntriesListBox.ItemsSource = _pathEntries;
         DriverCategoryItems.ItemsSource = _driverCategories;
@@ -1043,15 +1056,19 @@ public partial class SystemToolsView : UserControl
         {
             CancelActiveDiagnostics();
         }
-        PortsPanel.Visibility = section == "Ports" ? Visibility.Visible : Visibility.Collapsed;
-        ProcessesPanel.Visibility = section == "Processes" ? Visibility.Visible : Visibility.Collapsed;
-        ServicesPanel.Visibility = section == "Services" ? Visibility.Visible : Visibility.Collapsed;
-        RelationsBubblePanel.Visibility = section == "Relations" ? Visibility.Visible : Visibility.Collapsed;
-        OverviewPanel.Visibility = section == "Overview" ? Visibility.Visible : Visibility.Collapsed;
-        DriversPanel.Visibility = section == "Drivers" ? Visibility.Visible : Visibility.Collapsed;
-        StoragePanel.Visibility = section == "Storage" ? Visibility.Visible : Visibility.Collapsed;
-        EnvironmentPanel.Visibility = section == "Environment" ? Visibility.Visible : Visibility.Collapsed;
-        DiagnosticsPanel.Visibility = section == "Diagnostics" ? Visibility.Visible : Visibility.Collapsed;
+        FrameworkElement target = section switch
+        {
+            "Processes" => ProcessesPanel,
+            "Services" => ServicesPanel,
+            "Relations" => RelationsBubblePanel,
+            "Overview" => OverviewPanel,
+            "Drivers" => DriversPanel,
+            "Storage" => StoragePanel,
+            "Environment" => EnvironmentPanel,
+            "Diagnostics" => DiagnosticsPanel,
+            _ => PortsPanel
+        };
+        _tabMotion.Show(target);
         SetActiveTab(section);
         if (section == "Processes") _ = RefreshProcessesAsync();
         else if (section == "Services") _ = RefreshServicesAsync();
@@ -1096,6 +1113,7 @@ public partial class SystemToolsView : UserControl
             StorageOverviewContentPanel.Visibility = Visibility.Visible;
             StorageAnalysisView.Visibility = Visibility.Collapsed;
             OverviewPanel.Visibility = Visibility.Visible;
+            _tabMotion.SetCurrent(OverviewPanel);
             SetActiveTab("Overview");
             SetPageHeading("系统工具", "查看设备信息、存储空间、环境变量与系统诊断；所有写入操作都会在执行前明确确认。");
             return;
@@ -1113,6 +1131,8 @@ public partial class SystemToolsView : UserControl
         HideStorageAnalysis();
         AutoRefreshHostPanel.Visibility = Visibility.Visible;
         EnvironmentPanel.Visibility = Visibility.Collapsed;
+        PortsPanel.Visibility = Visibility.Visible;
+        _tabMotion.SetCurrent(PortsPanel);
         SetPageHeading("资源管理", "查看本机端口、进程、服务与关联关系；系统级操作会在执行时明确提示权限要求。");
     }
 

@@ -11,8 +11,12 @@ namespace ScreenshotApp.Motion;
 /// </summary>
 internal static class AppMotion
 {
-    private static readonly TimeSpan PageEnterDuration = TimeSpan.FromMilliseconds(360);
-    private static readonly TimeSpan PageExitDuration = TimeSpan.FromMilliseconds(230);
+    private static readonly TimeSpan PageEnterDuration = TimeSpan.FromMilliseconds(350);
+    private static readonly TimeSpan PageExitDuration = TimeSpan.FromMilliseconds(200);
+    private static readonly TimeSpan PageEnterDelay = TimeSpan.FromMilliseconds(170);
+    private static readonly TimeSpan SubpageEnterDuration = TimeSpan.FromMilliseconds(320);
+    private static readonly TimeSpan SubpageExitDuration = TimeSpan.FromMilliseconds(180);
+    private static readonly TimeSpan SubpageEnterDelay = TimeSpan.FromMilliseconds(130);
 
     public static void AnimatePageTransition(
         FrameworkElement? outgoing,
@@ -20,35 +24,72 @@ internal static class AppMotion
         int direction,
         Action completed)
     {
-        direction = direction < 0 ? -1 : 1;
+        _ = direction;
         ResetPage(incoming);
         incoming.Visibility = Visibility.Visible;
         incoming.IsHitTestVisible = true;
-        Panel.SetZIndex(incoming, 2);
+        Panel.SetZIndex(incoming, 1);
 
         if (outgoing is not null && !ReferenceEquals(outgoing, incoming))
         {
             ResetPage(outgoing);
             outgoing.Visibility = Visibility.Visible;
             outgoing.IsHitTestVisible = false;
-            Panel.SetZIndex(outgoing, 1);
-            AnimatePageExit(outgoing, direction);
+            Panel.SetZIndex(outgoing, 2);
+            AnimatePageExit(outgoing);
         }
 
-        var (incomingScale, incomingTranslate) = EnsureMotionTransform(incoming);
-        var enterEase = new QuarticEase { EasingMode = EasingMode.EaseOut };
-        incoming.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(300))
-        {
-            EasingFunction = enterEase,
-            FillBehavior = FillBehavior.Stop
-        }, HandoffBehavior.SnapshotAndReplace);
-        incomingScale.BeginAnimation(ScaleTransform.ScaleXProperty, CreateAnimation(0.982, 1, PageEnterDuration, enterEase, FillBehavior.Stop), HandoffBehavior.SnapshotAndReplace);
-        incomingScale.BeginAnimation(ScaleTransform.ScaleYProperty, CreateAnimation(0.982, 1, PageEnterDuration, enterEase, FillBehavior.Stop), HandoffBehavior.SnapshotAndReplace);
-        incomingTranslate.BeginAnimation(TranslateTransform.YProperty, CreateAnimation(7, 0, PageEnterDuration, enterEase, FillBehavior.Stop), HandoffBehavior.SnapshotAndReplace);
+        var (incomingScale, _) = EnsureMotionTransform(incoming);
+        incoming.Opacity = 0;
+        incomingScale.ScaleX = 1.018;
+        incomingScale.ScaleY = 1.018;
+        var enterEase = new CubicEase { EasingMode = EasingMode.EaseOut };
+        incoming.BeginAnimation(UIElement.OpacityProperty, CreateDelayedAnimation(0, 1, PageEnterDuration, PageEnterDelay, enterEase), HandoffBehavior.SnapshotAndReplace);
+        incomingScale.BeginAnimation(ScaleTransform.ScaleXProperty, CreateDelayedAnimation(1.018, 1, PageEnterDuration, PageEnterDelay, enterEase), HandoffBehavior.SnapshotAndReplace);
+        var focus = CreateDelayedAnimation(1.018, 1, PageEnterDuration, PageEnterDelay, enterEase);
+        focus.Completed += (_, _) => completed();
+        incomingScale.BeginAnimation(ScaleTransform.ScaleYProperty, focus, HandoffBehavior.SnapshotAndReplace);
+    }
 
-        var horizontal = CreateAnimation(direction * 34, 0, PageEnterDuration, enterEase, FillBehavior.Stop);
-        horizontal.Completed += (_, _) => completed();
-        incomingTranslate.BeginAnimation(TranslateTransform.XProperty, horizontal, HandoffBehavior.SnapshotAndReplace);
+    public static void AnimateSubpageTransition(FrameworkElement? outgoing, FrameworkElement incoming, Action completed)
+    {
+        ResetPage(incoming);
+        incoming.Visibility = Visibility.Visible;
+        incoming.IsHitTestVisible = true;
+        Panel.SetZIndex(incoming, 1);
+
+        if (outgoing is not null && !ReferenceEquals(outgoing, incoming))
+        {
+            ResetPage(outgoing);
+            outgoing.Visibility = Visibility.Visible;
+            outgoing.IsHitTestVisible = false;
+            Panel.SetZIndex(outgoing, 2);
+            var (outgoingScale, outgoingTranslate) = EnsureMotionTransform(outgoing);
+            var exitEase = new CubicEase { EasingMode = EasingMode.EaseIn };
+            var exit = CreateAnimation(0, SubpageExitDuration, exitEase);
+            exit.Completed += (_, _) =>
+            {
+                if (!outgoing.IsHitTestVisible)
+                {
+                    outgoing.Visibility = Visibility.Collapsed;
+                }
+            };
+            outgoing.BeginAnimation(UIElement.OpacityProperty, exit, HandoffBehavior.SnapshotAndReplace);
+            outgoingScale.BeginAnimation(ScaleTransform.ScaleXProperty, CreateAnimation(0.988, SubpageExitDuration, exitEase), HandoffBehavior.SnapshotAndReplace);
+            outgoingScale.BeginAnimation(ScaleTransform.ScaleYProperty, CreateAnimation(0.988, SubpageExitDuration, exitEase), HandoffBehavior.SnapshotAndReplace);
+            outgoingTranslate.BeginAnimation(TranslateTransform.YProperty, CreateAnimation(0, SubpageExitDuration, exitEase), HandoffBehavior.SnapshotAndReplace);
+        }
+
+        var (incomingScale, _) = EnsureMotionTransform(incoming);
+        incoming.Opacity = 0;
+        incomingScale.ScaleX = 1.012;
+        incomingScale.ScaleY = 1.012;
+        var enterEase = new CubicEase { EasingMode = EasingMode.EaseOut };
+        incoming.BeginAnimation(UIElement.OpacityProperty, CreateDelayedAnimation(0, 1, SubpageEnterDuration, SubpageEnterDelay, enterEase), HandoffBehavior.SnapshotAndReplace);
+        incomingScale.BeginAnimation(ScaleTransform.ScaleXProperty, CreateDelayedAnimation(1.012, 1, SubpageEnterDuration, SubpageEnterDelay, enterEase), HandoffBehavior.SnapshotAndReplace);
+        var focus = CreateDelayedAnimation(1.012, 1, SubpageEnterDuration, SubpageEnterDelay, enterEase);
+        focus.Completed += (_, _) => completed();
+        incomingScale.BeginAnimation(ScaleTransform.ScaleYProperty, focus, HandoffBehavior.SnapshotAndReplace);
     }
 
     public static void ResetPage(FrameworkElement element)
@@ -104,15 +145,22 @@ internal static class AppMotion
             HandoffBehavior.SnapshotAndReplace);
     }
 
-    private static void AnimatePageExit(FrameworkElement outgoing, int direction)
+    private static void AnimatePageExit(FrameworkElement outgoing)
     {
         var (scale, translate) = EnsureMotionTransform(outgoing);
         var exitEase = new CubicEase { EasingMode = EasingMode.EaseIn };
-        outgoing.BeginAnimation(UIElement.OpacityProperty, CreateAnimation(0, PageExitDuration, exitEase), HandoffBehavior.SnapshotAndReplace);
-        scale.BeginAnimation(ScaleTransform.ScaleXProperty, CreateAnimation(0.992, PageExitDuration, exitEase), HandoffBehavior.SnapshotAndReplace);
-        scale.BeginAnimation(ScaleTransform.ScaleYProperty, CreateAnimation(0.992, PageExitDuration, exitEase), HandoffBehavior.SnapshotAndReplace);
-        translate.BeginAnimation(TranslateTransform.XProperty, CreateAnimation(direction * -14, PageExitDuration, exitEase), HandoffBehavior.SnapshotAndReplace);
-        translate.BeginAnimation(TranslateTransform.YProperty, CreateAnimation(-3, PageExitDuration, exitEase), HandoffBehavior.SnapshotAndReplace);
+        var exit = CreateAnimation(0, PageExitDuration, exitEase);
+        exit.Completed += (_, _) =>
+        {
+            if (!outgoing.IsHitTestVisible)
+            {
+                outgoing.Visibility = Visibility.Collapsed;
+            }
+        };
+        outgoing.BeginAnimation(UIElement.OpacityProperty, exit, HandoffBehavior.SnapshotAndReplace);
+        scale.BeginAnimation(ScaleTransform.ScaleXProperty, CreateAnimation(0.99, PageExitDuration, exitEase), HandoffBehavior.SnapshotAndReplace);
+        scale.BeginAnimation(ScaleTransform.ScaleYProperty, CreateAnimation(0.99, PageExitDuration, exitEase), HandoffBehavior.SnapshotAndReplace);
+        translate.BeginAnimation(TranslateTransform.YProperty, CreateAnimation(0, PageExitDuration, exitEase), HandoffBehavior.SnapshotAndReplace);
     }
 
     private static (ScaleTransform Scale, TranslateTransform Translate) EnsureMotionTransform(FrameworkElement element)
@@ -153,6 +201,13 @@ internal static class AppMotion
     private static DoubleAnimation CreateAnimation(double from, double to, TimeSpan duration, IEasingFunction easing, FillBehavior fillBehavior) =>
         CreateAnimation((double?)from, to, duration, easing, fillBehavior);
 
+    private static DoubleAnimation CreateDelayedAnimation(double from, double to, TimeSpan duration, TimeSpan delay, IEasingFunction easing)
+    {
+        var animation = CreateAnimation(from, to, duration, easing, FillBehavior.HoldEnd);
+        animation.BeginTime = delay;
+        return animation;
+    }
+
     private static DoubleAnimation CreateAnimation(double? from, double to, TimeSpan duration, IEasingFunction easing, FillBehavior fillBehavior)
     {
         return new DoubleAnimation
@@ -163,5 +218,65 @@ internal static class AppMotion
             EasingFunction = easing,
             FillBehavior = fillBehavior
         };
+    }
+}
+
+/// <summary>维护一组互斥子页面的当前状态，并安全处理连续快速切换。</summary>
+internal sealed class MotionPageGroup
+{
+    private readonly FrameworkElement[] _pages;
+    private FrameworkElement _current;
+    private int _transitionVersion;
+
+    public MotionPageGroup(FrameworkElement initialPage, params FrameworkElement[] pages)
+    {
+        _current = initialPage;
+        _pages = pages.Distinct().ToArray();
+        foreach (var page in _pages)
+        {
+            page.Visibility = ReferenceEquals(page, initialPage) ? Visibility.Visible : Visibility.Collapsed;
+            page.IsHitTestVisible = ReferenceEquals(page, initialPage);
+        }
+    }
+
+    public void SetCurrent(FrameworkElement current) => _current = current;
+
+    public void Show(FrameworkElement incoming)
+    {
+        if (ReferenceEquals(_current, incoming))
+        {
+            incoming.Visibility = Visibility.Visible;
+            incoming.IsHitTestVisible = true;
+            return;
+        }
+
+        var outgoing = _current;
+        var version = ++_transitionVersion;
+        _current = incoming;
+
+        foreach (var page in _pages)
+        {
+            if (ReferenceEquals(page, incoming) || ReferenceEquals(page, outgoing))
+            {
+                continue;
+            }
+
+            AppMotion.ResetPage(page);
+            page.Visibility = Visibility.Collapsed;
+            page.IsHitTestVisible = false;
+        }
+
+        AppMotion.AnimateSubpageTransition(outgoing, incoming, () =>
+        {
+            if (version != _transitionVersion || ReferenceEquals(_current, outgoing))
+            {
+                return;
+            }
+
+            outgoing.Visibility = Visibility.Collapsed;
+            outgoing.IsHitTestVisible = false;
+            AppMotion.ResetPage(outgoing);
+            Panel.SetZIndex(incoming, 0);
+        });
     }
 }

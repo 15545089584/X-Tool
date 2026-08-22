@@ -11,6 +11,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using System.Windows.Threading;
+using ScreenshotApp.Motion;
 
 namespace ScreenshotApp.NetworkWorkbench;
 
@@ -75,6 +76,7 @@ public partial class NetworkWorkbenchView : UserControl
     private Task? _monitorStopTask;
     private int _shutdownStarted;
     private readonly ConcurrentDictionary<Task, byte> _pendingPersistence = new();
+    private readonly MotionPageGroup _tabMotion;
 
     public NetworkWorkbenchView()
     {
@@ -97,6 +99,14 @@ public partial class NetworkWorkbenchView : UserControl
         Loaded += NetworkWorkbenchView_Loaded;
         Unloaded += NetworkWorkbenchView_Unloaded;
         Application.Current.Exit += NetworkWorkbenchView_ApplicationExit;
+        _tabMotion = new MotionPageGroup(
+            OverviewPanel,
+            OverviewPanel,
+            RoutesFirewallPanel,
+            ProxyPanel,
+            WifiScrollViewer,
+            ProfilesPanel,
+            TrafficStatsScrollViewer);
         SelectTab("Overview");
     }
 
@@ -220,12 +230,16 @@ public partial class NetworkWorkbenchView : UserControl
     private void SelectTab(string tab)
     {
         _activeTab = tab;
-        OverviewPanel.Visibility = tab == "Overview" ? Visibility.Visible : Visibility.Collapsed;
-        RoutesFirewallPanel.Visibility = tab == "NetworkInterfaces" ? Visibility.Visible : Visibility.Collapsed;
-        ProxyPanel.Visibility = tab == "Proxy" ? Visibility.Visible : Visibility.Collapsed;
-        WifiScrollViewer.Visibility = tab == "Wifi" ? Visibility.Visible : Visibility.Collapsed;
-        ProfilesPanel.Visibility = tab == "Profiles" ? Visibility.Visible : Visibility.Collapsed;
-        TrafficStatsScrollViewer.Visibility = tab == "TrafficStats" ? Visibility.Visible : Visibility.Collapsed;
+        FrameworkElement target = tab switch
+        {
+            "NetworkInterfaces" => RoutesFirewallPanel,
+            "Proxy" => ProxyPanel,
+            "Wifi" => WifiScrollViewer,
+            "Profiles" => ProfilesPanel,
+            "TrafficStats" => TrafficStatsScrollViewer,
+            _ => OverviewPanel
+        };
+        _tabMotion.Show(target);
 
         foreach (var button in new[] { OverviewTabButton, NetworkInterfacesTabButton, ProxyTabButton, WifiTabButton, ProfilesTabButton, TrafficStatsTabButton })
         {
