@@ -4,7 +4,32 @@
     <UserControl.Resources>
         <Style x:Key="ToolButton" TargetType="Button">
             <Setter Property="Width" Value="54" /><Setter Property="Height" Value="54" /><Setter Property="Margin" Value="0,0,0,10" /><Setter Property="Padding" Value="0" /><Setter Property="Background" Value="#9AFFFFFF" /><Setter Property="BorderBrush" Value="#B6D5E8F7" /><Setter Property="BorderThickness" Value="1" /><Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="Root" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="14"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" /></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Background" Value="#E2EDFF" /><Setter TargetName="Root" Property="BorderBrush" Value="#7EA8F7" /></Trigger><Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.72" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="14" RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform><ScaleTransform ScaleX="1" ScaleY="1" /></Border.RenderTransform>
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Background" Value="#E2EDFF" /><Setter TargetName="Root" Property="BorderBrush" Value="#7EA8F7" /></Trigger>
+                            <Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.72" /></Trigger>
+                            <EventTrigger RoutedEvent="MouseEnter">
+                                <BeginStoryboard><Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName="Root" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1.045" Duration="0:0:0.12" />
+                                    <DoubleAnimation Storyboard.TargetName="Root" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1.045" Duration="0:0:0.12" />
+                                </Storyboard></BeginStoryboard>
+                            </EventTrigger>
+                            <EventTrigger RoutedEvent="MouseLeave">
+                                <BeginStoryboard><Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName="Root" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1" Duration="0:0:0.16" />
+                                    <DoubleAnimation Storyboard.TargetName="Root" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1" Duration="0:0:0.16" />
+                                </Storyboard></BeginStoryboard>
+                            </EventTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </UserControl.Resources>
     <Border Padding="10" Background="#69FFFFFF" BorderBrush="#8BFFFFFF" BorderThickness="1" CornerRadius="16">

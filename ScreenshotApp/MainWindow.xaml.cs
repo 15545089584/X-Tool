@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using System.Windows.Interop;
@@ -68,6 +69,8 @@ public partial class MainWindow : Window
     private bool _voiceTranslationPreviewActive;
     private bool _voiceInputAwaitingConfirmation;
     private string _voiceInputTranslatedText = string.Empty;
+    private string _currentPage = "Home";
+    private int _toastAnimationGeneration;
     private GlobalShortcut _screenshotShortcut;
     private GlobalShortcut _fullScreenShortcut;
     private GlobalShortcut _clipboardShortcut;
@@ -144,7 +147,7 @@ public partial class MainWindow : Window
         _toastTimer.Tick += (_, _) =>
         {
             _toastTimer.Stop();
-            ToastBorder.Visibility = Visibility.Collapsed;
+            HideToast();
         };
         UpdateSettingsShortcutSummary();
 
@@ -340,6 +343,9 @@ public partial class MainWindow : Window
 
     private void NavigateToPage(string page)
     {
+        var targetView = GetPageView(page);
+        var shouldAnimate = !string.Equals(_currentPage, page, StringComparison.Ordinal);
+
         HomeView.Visibility = page == "Home" ? Visibility.Visible : Visibility.Collapsed;
         ScreenWorkbenchView.Visibility = page == "ScreenWorkbench" ? Visibility.Visible : Visibility.Collapsed;
         ConverterWorkbenchView.Visibility = page == "ConverterWorkbench" ? Visibility.Visible : Visibility.Collapsed;
@@ -361,11 +367,116 @@ public partial class MainWindow : Window
         HistoryView.Visibility = page == "History" ? Visibility.Visible : Visibility.Collapsed;
         SettingsView.Visibility = page == "Settings" ? Visibility.Visible : Visibility.Collapsed;
 
+        _currentPage = page;
+        if (shouldAnimate && targetView is not null)
+        {
+            AnimatePageEntrance(targetView);
+        }
+
         if (page is "History" or "ScreenWorkbench")
         {
             _ = RefreshHistoryAsync();
         }
     }
+
+    private FrameworkElement? GetPageView(string page) => page switch
+    {
+        "Home" => HomeView,
+        "ScreenWorkbench" => ScreenWorkbenchView,
+        "ConverterWorkbench" => ConverterWorkbenchView,
+        "ImageConverter" => ImageConverterView,
+        "AudioConverter" => AudioConverterView,
+        "VideoConverter" => VideoConverterView,
+        "PdfConverter" => PdfConverterView,
+        "EncodingConverter" => EncodingConverterView,
+        "QrCodeConverter" => QrCodeConverterView,
+        "FileWorkbench" => FileWorkbenchView,
+        "NetworkWorkbench" => NetworkWorkbenchView,
+        "ResourceManagement" => ResourceManagementView,
+        "SystemTools" => SystemToolsView,
+        "DeveloperTools" => DeveloperToolsView,
+        "History" => HistoryView,
+        "Settings" => SettingsView,
+        _ => null
+    };
+
+    private void AnimatePageEntrance(FrameworkElement target)
+    {
+        var translate = new TranslateTransform();
+        target.RenderTransform = translate;
+        target.Opacity = 1;
+
+        if (!IsLoaded || !SystemParameters.ClientAreaAnimation)
+        {
+            return;
+        }
+
+        var duration = TimeSpan.FromMilliseconds(190);
+        var easing = new CubicEase { EasingMode = EasingMode.EaseOut };
+        target.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, duration)
+        {
+            EasingFunction = easing,
+            FillBehavior = FillBehavior.Stop
+        }, HandoffBehavior.SnapshotAndReplace);
+        translate.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(14, 0, duration)
+        {
+            EasingFunction = easing,
+            FillBehavior = FillBehavior.Stop
+        }, HandoffBehavior.SnapshotAndReplace);
+    }
+
+    private void InteractiveCard_MouseEnter(object sender, MouseEventArgs e)
+    {
+        if (sender is FrameworkElement element)
+        {
+            AnimateInteractiveCard(element, 1.016, -3, 135);
+        }
+    }
+
+    private void InteractiveCard_MouseLeave(object sender, MouseEventArgs e)
+    {
+        if (sender is FrameworkElement element)
+        {
+            AnimateInteractiveCard(element, 1, 0, 170);
+        }
+    }
+
+    private static void AnimateInteractiveCard(FrameworkElement element, double scale, double offsetY, int durationMilliseconds)
+    {
+        if (element.RenderTransform is not TransformGroup group ||
+            group.Children.Count != 2 ||
+            group.Children[0] is not ScaleTransform ||
+            group.Children[1] is not TranslateTransform)
+        {
+            group = new TransformGroup();
+            group.Children.Add(new ScaleTransform(1, 1));
+            group.Children.Add(new TranslateTransform());
+            element.RenderTransform = group;
+            element.RenderTransformOrigin = new Point(0.5, 0.5);
+        }
+
+        var scaleTransform = (ScaleTransform)group.Children[0];
+        var translateTransform = (TranslateTransform)group.Children[1];
+        if (!SystemParameters.ClientAreaAnimation)
+        {
+            scaleTransform.ScaleX = scale;
+            scaleTransform.ScaleY = scale;
+            translateTransform.Y = offsetY;
+            return;
+        }
+
+        var duration = TimeSpan.FromMilliseconds(durationMilliseconds);
+        var easing = new QuadraticEase { EasingMode = EasingMode.EaseOut };
+        scaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, CreateMotionAnimation(scale, duration, easing), HandoffBehavior.SnapshotAndReplace);
+        scaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, CreateMotionAnimation(scale, duration, easing), HandoffBehavior.SnapshotAndReplace);
+        translateTransform.BeginAnimation(TranslateTransform.YProperty, CreateMotionAnimation(offsetY, duration, easing), HandoffBehavior.SnapshotAndReplace);
+    }
+
+    private static DoubleAnimation CreateMotionAnimation(double target, TimeSpan duration, IEasingFunction easing) => new(target, duration)
+    {
+        EasingFunction = easing,
+        FillBehavior = FillBehavior.HoldEnd
+    };
 
     /// <summary>存储页仅负责发现空间来源；用户点击后才切到文件工作台继续搜索或批处理。</summary>
     private async void SystemToolsView_FileWorkbenchRequested(object? sender, FileWorkbenchNavigationRequestedEventArgs e)
@@ -2574,10 +2685,76 @@ public partial class MainWindow : Window
 
     private void ShowToast(string message)
     {
+        _toastAnimationGeneration++;
         ToastText.Text = message;
         ToastBorder.Visibility = Visibility.Visible;
+        ToastBorder.Opacity = 1;
+        var translate = ToastBorder.RenderTransform as TranslateTransform ?? new TranslateTransform();
+        ToastBorder.RenderTransform = translate;
+        translate.Y = 0;
+
+        if (SystemParameters.ClientAreaAnimation)
+        {
+            var duration = TimeSpan.FromMilliseconds(170);
+            var easing = new CubicEase { EasingMode = EasingMode.EaseOut };
+            ToastBorder.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, duration)
+            {
+                EasingFunction = easing,
+                FillBehavior = FillBehavior.Stop
+            }, HandoffBehavior.SnapshotAndReplace);
+            translate.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(10, 0, duration)
+            {
+                EasingFunction = easing,
+                FillBehavior = FillBehavior.Stop
+            }, HandoffBehavior.SnapshotAndReplace);
+        }
+
         _toastTimer.Stop();
         _toastTimer.Start();
+    }
+
+    private void HideToast()
+    {
+        if (ToastBorder.Visibility != Visibility.Visible)
+        {
+            return;
+        }
+
+        var generation = ++_toastAnimationGeneration;
+        if (!SystemParameters.ClientAreaAnimation)
+        {
+            ToastBorder.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var translate = ToastBorder.RenderTransform as TranslateTransform ?? new TranslateTransform();
+        ToastBorder.RenderTransform = translate;
+        var duration = TimeSpan.FromMilliseconds(145);
+        var easing = new QuadraticEase { EasingMode = EasingMode.EaseIn };
+        var fade = new DoubleAnimation(0, duration)
+        {
+            EasingFunction = easing,
+            FillBehavior = FillBehavior.HoldEnd
+        };
+        fade.Completed += (_, _) =>
+        {
+            if (generation != _toastAnimationGeneration)
+            {
+                return;
+            }
+
+            ToastBorder.Visibility = Visibility.Collapsed;
+            ToastBorder.BeginAnimation(OpacityProperty, null);
+            ToastBorder.Opacity = 1;
+            translate.BeginAnimation(TranslateTransform.YProperty, null);
+            translate.Y = 0;
+        };
+        ToastBorder.BeginAnimation(OpacityProperty, fade, HandoffBehavior.SnapshotAndReplace);
+        translate.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(0, 6, duration)
+        {
+            EasingFunction = easing,
+            FillBehavior = FillBehavior.HoldEnd
+        }, HandoffBehavior.SnapshotAndReplace);
     }
 
 #if DEBUG
