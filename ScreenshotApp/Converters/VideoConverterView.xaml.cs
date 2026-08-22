@@ -96,6 +96,14 @@ public partial class VideoConverterView : UserControl
         }
     }
 
+    private void QualityMode_Checked(object sender, RoutedEventArgs e)
+    {
+        if (VideoQualityHintText is not null)
+        {
+            UpdateQualityHint();
+        }
+    }
+
     private void UpdateModeControls()
     {
         var mode = GetOperation();
@@ -112,7 +120,9 @@ public partial class VideoConverterView : UserControl
         }
 
         OutputFormatCombo.SelectedIndex = 0;
-        QualityCombo.IsEnabled = mode == VideoOperation.Convert;
+        QualitySettingsCard.Visibility = mode == VideoOperation.Convert
+            ? Visibility.Visible
+            : Visibility.Collapsed;
         VideoAdvancedExpander.Visibility = mode is VideoOperation.Convert or VideoOperation.Gif
             ? Visibility.Visible
             : Visibility.Collapsed;
@@ -124,6 +134,17 @@ public partial class VideoConverterView : UserControl
             VideoOperation.ExtractAudio => "仅保留音轨并输出为音频文件，不重新编码视频。",
             VideoOperation.Gif => "按时间范围、FPS 与输出宽度生成循环 GIF。",
             _ => "可通过质量、分辨率、编码格式与可选码率控制输出体积。"
+        };
+        UpdateQualityHint();
+    }
+
+    private void UpdateQualityHint()
+    {
+        VideoQualityHintText.Text = GetQualityMode() switch
+        {
+            "高质量" => "优先保留画面细节，输出文件通常更大。",
+            "小文件" => "优先减小文件体积，适合快速分享与传输。",
+            _ => "在画面质量与文件体积之间取得平衡。"
         };
     }
 
@@ -244,7 +265,7 @@ public partial class VideoConverterView : UserControl
     {
         var operation = GetOperation();
         var outputFormat = (OutputFormatCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "mp4";
-        var quality = (QualityCombo.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "标准";
+        var quality = GetQualityMode();
         var codec = (CodecCombo.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "H.264";
         var start = ParseOptionalTime(GifStartText.Text, "开始时间");
         var end = ParseOptionalTime(GifEndText.Text, "结束时间");
@@ -268,6 +289,10 @@ public partial class VideoConverterView : UserControl
     private VideoOperation GetOperation() => ExtractModeRadio?.IsChecked == true ? VideoOperation.ExtractAudio
         : GifModeRadio?.IsChecked == true ? VideoOperation.Gif
         : VideoOperation.Convert;
+
+    private string GetQualityMode() => HighQualityRadio?.IsChecked == true ? "高质量"
+        : SmallQualityRadio?.IsChecked == true ? "小文件"
+        : "标准";
 
     private static TimeSpan? ParseOptionalTime(string text, string label)
     {
