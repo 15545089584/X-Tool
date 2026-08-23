@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using System.Security;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
+using System.Windows.Media;
 
 namespace ScreenshotApp.SystemTools;
 
@@ -619,6 +620,7 @@ internal static class StartupManagementService
             toggleHint,
             !string.IsNullOrWhiteSpace(attention),
             attention,
+            StartupIconProvider.GetIcon(executablePath),
             descriptor);
     }
 
@@ -1039,6 +1041,7 @@ internal sealed record StartupEntry(
     string ToggleHint,
     bool RequiresAttention,
     string AttentionText,
+    ImageSource? Icon,
     StartupToggleDescriptor? ToggleDescriptor)
 {
     public int CategoryOrder => Category switch
@@ -1077,7 +1080,10 @@ internal sealed record StartupEntry(
     public string StatusAccent => IsEnabled ? IsRunning ? "#16A582" : "#4D7CFE" : "#8A9CAF";
     public string StatusBackground => IsEnabled ? IsRunning ? "#E2F6EF" : "#E4ECFF" : "#E8EEF3";
     public string PublisherText => IsMicrosoft ? $"{Publisher} · Microsoft" : Publisher;
-    public string ToggleActionText => IsEnabled ? "禁用" : "恢复";
+    public string ToggleActionText => CanToggle ? IsEnabled ? "关闭" : "开启" : IsEnabled ? "已开启 · 只读" : "已关闭 · 只读";
+    public string RunningAccent => IsRunning ? "#16B99B" : "#E16670";
+    public string RunningBackground => IsRunning ? "#E0F5EF" : "#FCE7EA";
+    public string RunningStateText => IsRunning ? "正在运行" : "当前未运行";
     public string ExecutablePathText => string.IsNullOrWhiteSpace(ExecutablePath) ? "未解析到独立可执行文件" : ExecutablePath;
     public string SearchText => $"{Name} {CategoryText} {Source} {Scope} {Trigger} {Command} {ExecutablePath} {Publisher} {SourceLocation} {Account}";
 }

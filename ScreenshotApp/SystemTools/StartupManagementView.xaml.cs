@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
-using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 
@@ -107,11 +106,6 @@ public partial class StartupManagementView : UserControl
         _visibleEntries.Clear();
         foreach (var entry in filtered) _visibleEntries.Add(entry);
         StartupEmptyState.Visibility = filtered.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
-        if (filtered.Length == 0)
-        {
-            StartupDetailsPanel.Visibility = Visibility.Collapsed;
-            StartupDetailsEmptyState.Visibility = Visibility.Visible;
-        }
     }
 
     private async void RefreshStartup_Click(object sender, RoutedEventArgs e) => await RefreshAsync();
@@ -131,21 +125,13 @@ public partial class StartupManagementView : UserControl
         if (IsLoaded) ApplyFilter();
     }
 
-    private void StartupListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        var selected = StartupListBox.SelectedItem as StartupEntry;
-        StartupDetailsPanel.DataContext = selected;
-        StartupDetailsPanel.Visibility = selected is null ? Visibility.Collapsed : Visibility.Visible;
-        StartupDetailsEmptyState.Visibility = selected is null ? Visibility.Visible : Visibility.Collapsed;
-    }
-
     private async void ToggleStartup_Click(object sender, RoutedEventArgs e)
     {
-        if (StartupDetailsPanel.DataContext is not StartupEntry entry || !entry.CanToggle) return;
-        var action = entry.IsEnabled ? "禁用" : "恢复";
+        if ((sender as FrameworkElement)?.DataContext is not StartupEntry entry || !entry.CanToggle) return;
+        var action = entry.IsEnabled ? "关闭" : "开启";
         var warning = entry.IsEnabled
-            ? $"确定禁用“{entry.Name}”吗？\n\n来源：{entry.Source}\n触发：{entry.Trigger}\n\nX-Tool 会保留可恢复配置，不会删除程序文件。"
-            : $"确定恢复“{entry.Name}”吗？\n\n它将在对应触发条件满足时再次运行。";
+            ? $"确定关闭“{entry.Name}”的自动启动吗？\n\n来源：{entry.Source}\n触发：{entry.Trigger}\n\nX-Tool 会保留可恢复配置，不会删除程序文件。"
+            : $"确定重新开启“{entry.Name}”的自动启动吗？\n\n它将在对应触发条件满足时再次运行。";
         if (MessageBox.Show(warning, $"确认{action}启动项", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
 
         StartupRefreshButton.IsEnabled = false;
@@ -160,33 +146,6 @@ public partial class StartupManagementView : UserControl
         {
             if (!_isScanning) StartupRefreshButton.IsEnabled = true;
         }
-    }
-
-    private void OpenStartupLocation_Click(object sender, RoutedEventArgs e)
-    {
-        if (StartupDetailsPanel.DataContext is not StartupEntry entry) return;
-        if (!string.IsNullOrWhiteSpace(entry.ExecutablePath) && File.Exists(entry.ExecutablePath))
-        {
-            if (!SystemToolsService.TryOpenProcessDirectory(entry.ExecutablePath, out var error))
-                MessageBox.Show(error, "无法打开位置", MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
-
-        if (Directory.Exists(entry.SourceLocation))
-        {
-            try
-            {
-                Process.Start(new ProcessStartInfo("explorer.exe", $"\"{entry.SourceLocation}\"") { UseShellExecute = true });
-                return;
-            }
-            catch (Exception exception)
-            {
-                MessageBox.Show(exception.Message, "无法打开位置", MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
-            }
-        }
-
-        MessageBox.Show($"该启动项没有可直接打开的文件位置。\n\n来源：{entry.SourceLocation}", "启动项位置", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     private void OpenWindowsStartupSettings_Click(object sender, RoutedEventArgs e)

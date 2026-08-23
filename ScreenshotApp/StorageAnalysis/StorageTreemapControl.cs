@@ -207,20 +207,20 @@ public sealed class StorageTreemapControl : FrameworkElement
         drawingContext.PushClip(new RectangleGeometry(new Rect(bounds.X + 7, bounds.Y + 6, Math.Max(0, bounds.Width - 14), Math.Max(0, bounds.Height - 12)), 7, 7));
 
         var pixelsPerDip = VisualTreeHelper.GetDpi(this).PixelsPerDip;
-        var titleSize = bounds.Width >= 150 && bounds.Height >= 74 ? 13d : 11d;
+        var titleSize = bounds.Width >= 150 && bounds.Height >= 74 ? 15d : 12.5d;
         var title = CreateText(visual.Item.Name, TitleTypeface, titleSize, Colors.White, pixelsPerDip, Math.Max(0, bounds.Width - 18));
         drawingContext.DrawText(title, new Point(bounds.X + 10, bounds.Y + 9));
 
         if (bounds.Width >= 86 && bounds.Height >= 52)
         {
-            var size = CreateText(visual.Item.SizeText, TitleTypeface, bounds.Height >= 86 ? 12 : 10, Color.FromArgb(238, 255, 255, 255), pixelsPerDip, Math.Max(0, bounds.Width - 18));
+            var size = CreateText(visual.Item.SizeText, TitleTypeface, bounds.Height >= 86 ? 13.5 : 11.5, Color.FromArgb(238, 255, 255, 255), pixelsPerDip, Math.Max(0, bounds.Width - 18));
             drawingContext.DrawText(size, new Point(bounds.X + 10, bounds.Y + 12 + title.Height));
         }
 
         if (bounds.Width >= 130 && bounds.Height >= 92)
         {
             var hint = visual.Item.IsDirectory ? $"{visual.Item.RatioText} · 单击进入" : visual.Item.RatioText;
-            var detail = CreateText(hint, BodyTypeface, 9.5, Color.FromArgb(205, 255, 255, 255), pixelsPerDip, Math.Max(0, bounds.Width - 18));
+            var detail = CreateText(hint, BodyTypeface, 10.5, Color.FromArgb(215, 255, 255, 255), pixelsPerDip, Math.Max(0, bounds.Width - 18));
             drawingContext.DrawText(detail, new Point(bounds.X + 10, bounds.Bottom - detail.Height - 9));
         }
 

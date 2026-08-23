@@ -17,7 +17,7 @@ public partial class StorageAnalysisView : UserControl
     private StorageAnalysisResult? _currentResult;
     private StorageTreemapItem? _selectedTreemapItem;
     private bool _isScanning;
-    private bool _showTreemap;
+    private StorageResultViewMode _viewMode = StorageResultViewMode.List;
 
     public StorageAnalysisView()
     {
@@ -83,7 +83,6 @@ public partial class StorageAnalysisView : UserControl
         _target = target;
         AnalysisTitleText.Text = $"{target.Title} 空间分析";
         AnalysisVolumeSummaryText.Text = $"{target.RootPath} · {target.CapacityText}";
-        CurrentAnalysisPathText.Text = target.RootPath;
         _directoryUsages.Clear();
         _largeFiles.Clear();
         AnalysisResultsPanel.Visibility = Visibility.Collapsed;
@@ -211,30 +210,36 @@ public partial class StorageAnalysisView : UserControl
 
     private void ListViewButton_Click(object sender, RoutedEventArgs e)
     {
-        _showTreemap = false;
+        _viewMode = StorageResultViewMode.List;
         UpdateViewMode();
     }
 
     private void TreemapViewButton_Click(object sender, RoutedEventArgs e)
     {
-        _showTreemap = true;
+        _viewMode = StorageResultViewMode.Treemap;
+        UpdateViewMode();
+    }
+
+    private void LargeFilesViewButton_Click(object sender, RoutedEventArgs e)
+    {
+        _viewMode = StorageResultViewMode.LargeFiles;
         UpdateViewMode();
     }
 
     private void UpdateViewMode()
     {
-        if (ListResultsPanel is null || TreemapResultsPanel is null) return;
-        ListResultsPanel.Visibility = _showTreemap ? Visibility.Collapsed : Visibility.Visible;
-        TreemapResultsPanel.Visibility = _showTreemap ? Visibility.Visible : Visibility.Collapsed;
-        SetModeButtonState(ListViewButton, !_showTreemap);
-        SetModeButtonState(TreemapViewButton, _showTreemap);
+        if (ListResultsPanel is null || TreemapResultsPanel is null || LargeFilesResultsPanel is null) return;
+        ListResultsPanel.Visibility = _viewMode == StorageResultViewMode.List ? Visibility.Visible : Visibility.Collapsed;
+        TreemapResultsPanel.Visibility = _viewMode == StorageResultViewMode.Treemap ? Visibility.Visible : Visibility.Collapsed;
+        LargeFilesResultsPanel.Visibility = _viewMode == StorageResultViewMode.LargeFiles ? Visibility.Visible : Visibility.Collapsed;
+        SetModeButtonState(ListViewButton, _viewMode == StorageResultViewMode.List);
+        SetModeButtonState(TreemapViewButton, _viewMode == StorageResultViewMode.Treemap);
+        SetModeButtonState(LargeFilesViewButton, _viewMode == StorageResultViewMode.LargeFiles);
     }
 
     private static void SetModeButtonState(Button button, bool active)
     {
-        button.Background = new SolidColorBrush(active ? Color.FromRgb(77, 124, 254) : Color.FromArgb(134, 255, 255, 255));
-        button.BorderBrush = new SolidColorBrush(active ? Color.FromRgb(118, 160, 255) : Color.FromRgb(166, 209, 232));
-        button.Foreground = active ? Brushes.White : new SolidColorBrush(Color.FromRgb(64, 95, 124));
+        button.Tag = active ? "Active" : "Inactive";
     }
 
     private void UpdateTreemap(StorageAnalysisResult result)
@@ -284,8 +289,7 @@ public partial class StorageAnalysisView : UserControl
         }
 
         TreemapControl.SetItems(items);
-        TreemapPathText.Text = result.Target.RootPath;
-        TreemapLayerSummaryText.Text = $"{items.Count(item => item.IsDirectory):N0} 个目录块 · {items.Count(item => !item.IsDirectory):N0} 个文件块 · 共 {result.ScannedBytesText}";
+        TreemapUpButton.Visibility = _treemapHistory.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         TreemapUpButton.IsEnabled = _treemapHistory.Count > 0;
         ShowTreemapDetails(null);
     }
@@ -401,6 +405,13 @@ public partial class StorageAnalysisView : UserControl
             FileWorkbenchRequested?.Invoke(this, new FileWorkbenchNavigationRequestedEventArgs(parent, Path.GetFileName(item.FullPath), item.FullPath));
         }
     }
+}
+
+internal enum StorageResultViewMode
+{
+    List,
+    Treemap,
+    LargeFiles
 }
 
 /// <summary>从存储分析跳转到文件工作台时保留目录与可选文件名，不直接修改任何文件。</summary>
