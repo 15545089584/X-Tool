@@ -4,7 +4,7 @@ using System.Windows.Controls;
 
 namespace ScreenshotApp.SystemTools;
 
-/// <summary>启动项页按需读取，不建立常驻监控；普通来源提供可恢复启停，高风险来源保持只读。</summary>
+/// <summary>启动应用页按需读取桌面与打包应用；服务、驱动、脚本和计划任务不进入应用列表。</summary>
 public partial class StartupManagementView : UserControl
 {
     private IReadOnlyList<StartupEntry> _allEntries = Array.Empty<StartupEntry>();
@@ -28,8 +28,8 @@ public partial class StartupManagementView : UserControl
         _isScanning = true;
         StartupRefreshButton.IsEnabled = false;
         StartupRefreshButtonText.Text = "扫描中…";
-        StartupSummaryText.Text = "正在读取 Windows 自动启动位置…";
-        StartupCoverageText.Text = "扫描按来源隔离；单个受保护位置失败不会影响其他结果。";
+        StartupSummaryText.Text = "正在读取 Windows 启动应用…";
+        StartupCoverageText.Text = "正在核对桌面应用、启动文件夹与打包应用 StartupTask。";
 
         var progress = new Progress<StartupScanProgress>(snapshot =>
         {
@@ -78,13 +78,13 @@ public partial class StartupManagementView : UserControl
 
     private void UpdateSummary(StartupDiscoveryResult result)
     {
-        LoginApplicationCountText.Text = result.Entries.Count(item => item.Category == StartupCategory.LoginApplication).ToString("N0");
-        BackgroundTaskCountText.Text = result.Entries.Count(item => item.Category == StartupCategory.BackgroundTask).ToString("N0");
-        ServiceCountText.Text = result.Entries.Count(item => item.Category == StartupCategory.Service).ToString("N0");
-        AdvancedCountText.Text = result.Entries.Count(item => item.Category == StartupCategory.Advanced).ToString("N0");
-        StartupSummaryText.Text = $"共发现 {result.Entries.Count:N0} 项 · 已启用 {result.Entries.Count(item => item.IsEnabled):N0} 项 · 第三方 {result.Entries.Count(item => !item.IsMicrosoft):N0} 项";
+        AllApplicationCountText.Text = result.Entries.Count.ToString("N0");
+        DesktopApplicationCountText.Text = result.Entries.Count(item => item.Category == StartupCategory.DesktopApplication).ToString("N0");
+        PackagedApplicationCountText.Text = result.Entries.Count(item => item.Category == StartupCategory.PackagedApplication).ToString("N0");
+        DisabledApplicationCountText.Text = result.Entries.Count(item => !item.IsEnabled).ToString("N0");
+        StartupSummaryText.Text = $"共发现 {result.Entries.Count:N0} 个启动应用 · 已开启 {result.Entries.Count(item => item.IsEnabled):N0} · 已关闭 {result.Entries.Count(item => !item.IsEnabled):N0}";
         StartupCoverageText.Text = result.Warnings.Count == 0
-            ? $"已完成主流与高级自动启动位置检查 · {result.CompletedAt:HH:mm:ss}。结果不等同于恶意软件扫描。"
+            ? $"已过滤脚本、失效命令、服务、驱动及计划任务 · {result.CompletedAt:HH:mm:ss}。未注册自启动的已安装应用不会出现在这里。"
             : $"已完成，但有 {result.Warnings.Count:N0} 类来源受权限或系统状态限制：{string.Join("；", result.Warnings.Take(2))}";
     }
 
@@ -95,7 +95,7 @@ public partial class StartupManagementView : UserControl
         var filtered = _allEntries.Where(item =>
             (category == "All" || string.Equals(item.Category.ToString(), category, StringComparison.OrdinalIgnoreCase)) &&
             (ThirdPartyOnlyCheckBox.IsChecked != true || !item.IsMicrosoft) &&
-            (AttentionOnlyCheckBox.IsChecked != true || item.RequiresAttention) &&
+            (DisabledOnlyCheckBox.IsChecked != true || !item.IsEnabled) &&
             (string.IsNullOrWhiteSpace(keyword) || item.SearchText.Contains(keyword, StringComparison.OrdinalIgnoreCase)))
             .ToArray();
 
@@ -126,7 +126,7 @@ public partial class StartupManagementView : UserControl
         if ((sender as FrameworkElement)?.DataContext is not StartupEntry entry || !entry.CanToggle) return;
         var action = entry.IsEnabled ? "关闭" : "开启";
         var warning = entry.IsEnabled
-            ? $"确定关闭“{entry.Name}”的自动启动吗？\n\n来源：{entry.Source}\n触发：{entry.Trigger}\n\nX-Tool 会保留可恢复配置，不会删除程序文件。"
+            ? $"确定关闭“{entry.Name}”的自动启动吗？\n\n来源：{entry.Source}\n触发：{entry.Trigger}\n\n只修改 Windows 的启用状态，不会删除程序文件或启动注册信息。"
             : $"确定重新开启“{entry.Name}”的自动启动吗？\n\n它将在对应触发条件满足时再次运行。";
         if (MessageBox.Show(warning, $"确认{action}启动项", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
 

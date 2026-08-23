@@ -8,17 +8,19 @@ using System.Security;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using System.Windows.Media;
+using System.Xml;
 
 namespace ScreenshotApp.SystemTools;
 
 /// <summary>
-/// 汇总 Windows 主流与高级自动启动位置。各来源失败时相互隔离，不因单项权限不足丢弃其他结果。
+/// 按 Windows“启动应用”口径汇总桌面应用与打包应用，不把服务、驱动、脚本等基础设施混入应用列表。
 /// </summary>
 internal static class StartupManagementService
 {
     private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
-    private const string RunOnceKeyPath = @"Software\Microsoft\Windows\CurrentVersion\RunOnce";
-    private const string PolicyRunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer\Run";
+    private const string StartupApprovedRoot = @"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved";
+    private const string PackagedStartupStateRoot = @"Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel\SystemAppData";
+    private const string PackageRepositoryRoot = @"SOFTWARE\Microsoft\Windows\CurrentVersion\AppModel\StateRepository\Cache\Package\Data";
     private static readonly string StateDirectory = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "X-Tool", "System");
     private static readonly string DisabledStorePath = Path.Combine(StateDirectory, "startup-disabled.json");
@@ -35,13 +37,10 @@ internal static class StartupManagementService
         RunningProcessNames.Value = CaptureRunningProcessNames();
         var providers = new (string Name, Action<List<StartupEntry>, CancellationToken> Scan)[]
         {
-            ("注册表登录项", ScanRegistryRunEntries),
-            ("启动文件夹", ScanStartupFolders),
-            ("计划任务", ScanScheduledTasks),
-            ("系统服务", ScanServices),
-            ("高级加载点", ScanAdvancedRegistryLocations),
-            ("WMI 永久订阅", ScanWmiSubscriptions),
-            ("X-Tool 可恢复项目", ScanDisabledEntries)
+            ("桌面启动应用", ScanRegistryRunEntries),
+            ("启动文件夹应用", ScanStartupFolders),
+            ("商店与打包应用", ScanPackagedStartupTasks),
+            ("X-Tool 旧版可恢复项目", ScanDisabledEntries)
         };
 
         try
@@ -93,6 +92,7 @@ internal static class StartupManagementService
             {
                 StartupToggleKind.RegistryRun => ToggleRegistryRun(entry, entry.ToggleDescriptor, enable),
                 StartupToggleKind.StartupFolder => ToggleStartupFolder(entry, entry.ToggleDescriptor, enable),
+                StartupToggleKind.StartupApproved => ToggleStartupApproved(entry.ToggleDescriptor, enable),
                 StartupToggleKind.ScheduledTask => ToggleScheduledTask(entry.ToggleDescriptor.TaskPath, enable),
                 _ => new StartupToggleResult(false, "该来源保持只读，不能由 X-Tool 修改。")
             };
@@ -106,12 +106,12 @@ internal static class StartupManagementService
     private static void ScanRegistryRunEntries(List<StartupEntry> output, CancellationToken cancellationToken)
     {
         foreach (var hive in new[] { RegistryHive.CurrentUser, RegistryHive.LocalMachine })
-        foreach (var view in new[] { RegistryView.Registry64, RegistryView.Registry32 })
+        foreach (var view in hive == RegistryHive.CurrentUser
+                     ? new[] { RegistryView.Registry64 }
+                     : new[] { RegistryView.Registry64, RegistryView.Registry32 })
         {
             cancellationToken.ThrowIfCancellationRequested();
-            ReadRegistryCommandValues(output, hive, view, RunKeyPath, "Run", isRunOnce: false, cancellationToken);
-            ReadRegistryCommandValues(output, hive, view, RunOnceKeyPath, "RunOnce", isRunOnce: true, cancellationToken);
-            ReadRegistryCommandValues(output, hive, view, PolicyRunKeyPath, "策略登录脚本", isRunOnce: false, cancellationToken, policyEntry: true);
+            ReadRegistryCommandValues(output, hive, view, RunKeyPath, "注册表启动应用", cancellationToken);
         }
     }
 
@@ -121,9 +121,7 @@ internal static class StartupManagementService
         RegistryView view,
         string keyPath,
         string sourceName,
-        bool isRunOnce,
-        CancellationToken cancellationToken,
-        bool policyEntry = false)
+        CancellationToken cancellationToken)
     {
         using var baseKey = RegistryKey.OpenBaseKey(hive, view);
         using var key = baseKey.OpenSubKey(keyPath, writable: false);
@@ -139,28 +137,31 @@ internal static class StartupManagementService
             var scope = hive == RegistryHive.CurrentUser ? "当前用户" : "所有用户";
             var sourceLocation = $"{HiveName(hive)}\\{keyPath} ({ViewName(view)})";
             var executablePath = ResolveExecutablePath(command);
+            if (!IsApplicationExecutable(executablePath)) continue;
             var identity = ReadIdentity(executablePath);
-            var canToggle = hive == RegistryHive.CurrentUser && !isRunOnce && !policyEntry;
+            var approvedKeyPath = $@"{StartupApprovedRoot}\{(view == RegistryView.Registry32 ? "Run32" : "Run")}";
+            var isEnabled = ReadStartupApprovedState(hive, approvedKeyPath, valueName, defaultEnabled: true);
+            var canToggle = hive == RegistryHive.CurrentUser;
             var descriptor = canToggle
-                ? new StartupToggleDescriptor(StartupToggleKind.RegistryRun, hive, view, keyPath, valueName, command, null, null)
+                ? new StartupToggleDescriptor(StartupToggleKind.StartupApproved, hive, RegistryView.Registry64, approvedKeyPath, valueName, command, null, null)
                 : null;
             output.Add(CreateEntry(
                 stableId: hive == RegistryHive.CurrentUser
                     ? $"registry:{hive}:{keyPath}:{valueName}"
                     : $"registry:{hive}:{view}:{keyPath}:{valueName}",
                 name: string.IsNullOrWhiteSpace(valueName) ? Path.GetFileNameWithoutExtension(executablePath) : valueName,
-                category: StartupCategory.LoginApplication,
+                category: StartupCategory.DesktopApplication,
                 source: sourceName,
                 scope: scope,
-                trigger: isRunOnce ? "下次登录一次" : "用户登录",
+                trigger: "用户登录",
                 command: command,
                 executablePath: executablePath,
                 sourceLocation: sourceLocation,
                 account: scope,
-                isEnabled: true,
+                isEnabled: isEnabled,
                 isRunning: IsExecutableRunning(executablePath),
                 canToggle: canToggle,
-                toggleHint: isRunOnce ? "RunOnce 通常用于完成安装或更新，X-Tool 只读展示。" : policyEntry ? "策略配置的登录项应由对应策略管理。" : canToggle ? "禁用时会保存原始注册表值，可随时恢复。" : "所有用户启动项需要管理员权限，首版保持只读。",
+                toggleHint: canToggle ? "滑动开关会更新 Windows 的启动应用启用状态，不删除注册表项或程序文件。" : "所有用户启动应用需要管理员权限，请在 Windows 启动设置中修改。",
                 identity: identity,
                 descriptor: descriptor));
         }
@@ -182,14 +183,19 @@ internal static class StartupManagementService
                 cancellationToken.ThrowIfCancellationRequested();
                 var targetPath = ResolveShortcutTarget(path);
                 var executablePath = string.IsNullOrWhiteSpace(targetPath) ? path : targetPath;
+                if (!IsApplicationExecutable(executablePath)) continue;
                 var identity = ReadIdentity(executablePath);
+                var approvedKeyPath = $@"{StartupApprovedRoot}\StartupFolder";
+                var approvedValueName = Path.GetFileName(path);
+                var approvalHive = folder.Scope == "当前用户" ? RegistryHive.CurrentUser : RegistryHive.LocalMachine;
+                var isEnabled = ReadStartupApprovedState(approvalHive, approvedKeyPath, approvedValueName, defaultEnabled: true);
                 var descriptor = folder.CanToggle
-                    ? new StartupToggleDescriptor(StartupToggleKind.StartupFolder, RegistryHive.CurrentUser, RegistryView.Default, null, null, null, path, null)
+                    ? new StartupToggleDescriptor(StartupToggleKind.StartupApproved, RegistryHive.CurrentUser, RegistryView.Registry64, approvedKeyPath, approvedValueName, path, path, null)
                     : null;
                 output.Add(CreateEntry(
                     stableId: $"startup-folder:{folder.Scope}:{path}",
                     name: Path.GetFileNameWithoutExtension(path),
-                    category: StartupCategory.LoginApplication,
+                    category: StartupCategory.DesktopApplication,
                     source: "启动文件夹",
                     scope: folder.Scope,
                     trigger: "用户登录",
@@ -197,13 +203,186 @@ internal static class StartupManagementService
                     executablePath: executablePath,
                     sourceLocation: folder.Path,
                     account: folder.Scope,
-                    isEnabled: true,
+                    isEnabled: isEnabled,
                     isRunning: IsExecutableRunning(executablePath),
                     canToggle: folder.CanToggle,
-                    toggleHint: folder.CanToggle ? "禁用时会移动到 X-Tool 恢复目录，不会删除原文件。" : "公共启动文件夹需要管理员权限，首版保持只读。",
+                    toggleHint: folder.CanToggle ? "滑动开关会更新 Windows 的启动文件夹应用状态，不移动或删除快捷方式。" : "公共启动文件夹应用需要管理员权限，请在 Windows 启动设置中修改。",
                     identity: identity,
                     descriptor: descriptor));
             }
+        }
+    }
+
+    private static void ScanPackagedStartupTasks(List<StartupEntry> output, CancellationToken cancellationToken)
+    {
+        using var stateBase = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Registry64);
+        using var stateRoot = stateBase.OpenSubKey(PackagedStartupStateRoot, writable: false);
+        if (stateRoot is null) return;
+        var packageFamilies = stateRoot.GetSubKeyNames().ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var packageLocations = ReadPackageInstallLocations(packageFamilies, cancellationToken);
+
+        foreach (var packageFamily in stateRoot.GetSubKeyNames())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!packageLocations.TryGetValue(packageFamily, out var installLocation)) continue;
+            var manifestPath = Path.Combine(installLocation, "AppxManifest.xml");
+            if (!File.Exists(manifestPath)) continue;
+
+            try
+            {
+                var manifest = new XmlDocument { XmlResolver = null };
+                manifest.Load(manifestPath);
+                var packageDisplayName = ReadManifestText(manifest.SelectSingleNode("/*[local-name()='Package']/*[local-name()='Properties']/*[local-name()='DisplayName']"));
+                var packageName = manifest.DocumentElement?.GetAttribute("Name") ?? PackageNameFromFamily(packageFamily);
+                var nodes = manifest.SelectNodes("//*[local-name()='Extension' and @Category='windows.startupTask']/*[local-name()='StartupTask']");
+                if (nodes is null) continue;
+
+                foreach (XmlNode node in nodes)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var taskId = node.Attributes?["TaskId"]?.Value?.Trim() ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(taskId)) continue;
+                    using var packageState = stateRoot.OpenSubKey(packageFamily, writable: false);
+                    using var taskState = packageState?.OpenSubKey(taskId, writable: false);
+                    var stateValue = taskState?.GetValue("State");
+                    var manifestEnabled = bool.TryParse(node.Attributes?["Enabled"]?.Value, out var enabledByManifest) && enabledByManifest;
+                    var isEnabled = stateValue is int state ? state == 2 : manifestEnabled;
+
+                    var application = FindAncestor(node, "Application");
+                    var applicationId = application?.Attributes?["Id"]?.Value?.Trim() ?? string.Empty;
+                    var relativeExecutable = application?.Attributes?["Executable"]?.Value?.Trim() ?? string.Empty;
+                    var executablePath = string.IsNullOrWhiteSpace(relativeExecutable)
+                        ? string.Empty
+                        : Path.GetFullPath(Path.Combine(installLocation, relativeExecutable));
+                    var identity = ReadIdentity(executablePath);
+                    var taskDisplayName = ReadManifestText(node);
+                    var rawName = FirstNonEmpty(
+                        IsResourceReference(taskDisplayName) ? string.Empty : taskDisplayName,
+                        IsResourceReference(packageDisplayName) ? string.Empty : packageDisplayName,
+                        identity.FileDescription,
+                        FriendlyPackageName(packageName));
+                    var command = !string.IsNullOrWhiteSpace(applicationId)
+                        ? $"shell:AppsFolder\\{packageFamily}!{applicationId}"
+                        : $"打包启动任务：{packageFamily} / {taskId}";
+
+                    output.Add(CreateEntry(
+                        stableId: $"packaged:{packageFamily}:{taskId}",
+                        name: rawName,
+                        category: StartupCategory.PackagedApplication,
+                        source: "商店与打包应用",
+                        scope: "当前用户",
+                        trigger: "用户登录",
+                        command: command,
+                        executablePath: executablePath,
+                        sourceLocation: $"{packageFamily}\\{taskId}",
+                        account: "当前用户",
+                        isEnabled: isEnabled,
+                        isRunning: IsExecutableRunning(executablePath),
+                        canToggle: false,
+                        toggleHint: "该应用使用 Windows 打包启动任务；状态由 Windows 管理，请点击上方“Windows 启动设置”修改。",
+                        identity: identity,
+                        descriptor: null));
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or XmlException)
+            {
+                // 单个包卸载、升级或受保护时忽略该包，其他启动应用继续扫描。
+            }
+        }
+    }
+
+    private static Dictionary<string, string> ReadPackageInstallLocations(
+        IReadOnlySet<string> requestedFamilies,
+        CancellationToken cancellationToken)
+    {
+        var locations = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        using var baseKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+        using var root = baseKey.OpenSubKey(PackageRepositoryRoot, writable: false);
+        if (root is null) return locations;
+
+        foreach (var subKeyName in root.GetSubKeyNames())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            using var packageKey = root.OpenSubKey(subKeyName, writable: false);
+            var fullName = packageKey?.GetValue("PackageFullName")?.ToString() ?? string.Empty;
+            var installLocation = packageKey?.GetValue("InstalledLocation")?.ToString() ?? string.Empty;
+            var packageFamily = PackageFamilyFromFullName(fullName);
+            if (!requestedFamilies.Contains(packageFamily) || string.IsNullOrWhiteSpace(installLocation) || !Directory.Exists(installLocation)) continue;
+            var manifestPath = Path.Combine(installLocation, "AppxManifest.xml");
+            if (!File.Exists(manifestPath)) continue;
+            try
+            {
+                // 同一包族还会注册语言、缩放等资源包；只有主包清单声明 startupTask。
+                if (!File.ReadAllText(manifestPath).Contains("windows.startupTask", StringComparison.OrdinalIgnoreCase)) continue;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                continue;
+            }
+            locations[packageFamily] = installLocation;
+        }
+        return locations;
+    }
+
+    private static string PackageFamilyFromFullName(string packageFullName)
+    {
+        var firstSeparator = packageFullName.IndexOf('_');
+        var publisherSeparator = packageFullName.LastIndexOf('_');
+        if (firstSeparator <= 0 || publisherSeparator <= firstSeparator || publisherSeparator + 1 >= packageFullName.Length) return string.Empty;
+        return $"{packageFullName[..firstSeparator]}_{packageFullName[(publisherSeparator + 1)..]}";
+    }
+
+    private static string PackageNameFromFamily(string packageFamily)
+    {
+        var separator = packageFamily.LastIndexOf('_');
+        return separator > 0 ? packageFamily[..separator] : packageFamily;
+    }
+
+    private static string FriendlyPackageName(string packageName)
+    {
+        var value = packageName;
+        var dot = value.LastIndexOf('.');
+        if (dot >= 0 && dot + 1 < value.Length) value = value[(dot + 1)..];
+        return value.Replace('-', ' ').Trim();
+    }
+
+    private static XmlNode? FindAncestor(XmlNode node, string localName)
+    {
+        for (var current = node.ParentNode; current is not null; current = current.ParentNode)
+        {
+            if (string.Equals(current.LocalName, localName, StringComparison.OrdinalIgnoreCase)) return current;
+        }
+        return null;
+    }
+
+    private static string ReadManifestText(XmlNode? node)
+    {
+        if (node is null) return string.Empty;
+        return FirstNonEmpty(node.Attributes?["DisplayName"]?.Value ?? string.Empty, node.InnerText).Trim();
+    }
+
+    private static bool IsResourceReference(string value) => value.StartsWith("ms-resource", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsApplicationExecutable(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return false;
+        var extension = Path.GetExtension(path);
+        return extension.Equals(".exe", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".com", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool ReadStartupApprovedState(RegistryHive hive, string keyPath, string valueName, bool defaultEnabled)
+    {
+        try
+        {
+            using var baseKey = RegistryKey.OpenBaseKey(hive, RegistryView.Registry64);
+            using var key = baseKey.OpenSubKey(keyPath, writable: false);
+            var bytes = key?.GetValue(valueName) as byte[];
+            return bytes is not { Length: > 0 } ? defaultEnabled : bytes[0] == 2;
+        }
+        catch (Exception exception) when (exception is UnauthorizedAccessException or SecurityException or IOException)
+        {
+            return defaultEnabled;
         }
     }
 
@@ -525,13 +704,14 @@ internal static class StartupManagementService
             var executablePath = disabled.Kind == StartupToggleKind.StartupFolder
                 ? ResolveShortcutTarget(disabled.BackupFilePath ?? string.Empty)
                 : ResolveExecutablePath(disabled.Command ?? string.Empty);
+            if (!IsApplicationExecutable(executablePath)) continue;
             var identity = ReadIdentity(executablePath);
             var descriptor = new StartupToggleDescriptor(disabled.Kind, disabled.Hive, disabled.View,
                 disabled.RegistryKeyPath, disabled.ValueName, disabled.Command, disabled.OriginalFilePath, null);
             output.Add(CreateEntry(
                 stableId: disabled.StableId,
                 name: disabled.DisplayName,
-                category: StartupCategory.LoginApplication,
+                category: StartupCategory.DesktopApplication,
                 source: disabled.Kind == StartupToggleKind.RegistryRun ? "Run（X-Tool 已禁用）" : "启动文件夹（X-Tool 已禁用）",
                 scope: "当前用户",
                 trigger: "用户登录",
@@ -595,7 +775,8 @@ internal static class StartupManagementService
             toggleHint,
             !string.IsNullOrWhiteSpace(attention),
             attention,
-            category is StartupCategory.LoginApplication or StartupCategory.BackgroundTask
+            category is StartupCategory.DesktopApplication or StartupCategory.PackagedApplication
+                or StartupCategory.LoginApplication or StartupCategory.BackgroundTask
                 ? StartupIconProvider.GetIcon(executablePath)
                 : null,
             descriptor);
@@ -644,6 +825,33 @@ internal static class StartupManagementService
             }
         }
         return new StartupToggleResult(true, "启动项已禁用并保存恢复快照。");
+    }
+
+    private static StartupToggleResult ToggleStartupApproved(StartupToggleDescriptor descriptor, bool enable)
+    {
+        if (string.IsNullOrWhiteSpace(descriptor.RegistryKeyPath) || string.IsNullOrWhiteSpace(descriptor.ValueName))
+            return new StartupToggleResult(false, "Windows 启动状态位置不完整，请刷新后重试。");
+
+        using var baseKey = RegistryKey.OpenBaseKey(descriptor.Hive, descriptor.View);
+        using var key = baseKey.CreateSubKey(descriptor.RegistryKeyPath, writable: true);
+        if (key is null) return new StartupToggleResult(false, "无法打开 Windows 启动应用状态位置。");
+
+        byte[] value;
+        if (enable)
+        {
+            value = new byte[12];
+            value[0] = 2;
+        }
+        else
+        {
+            value = new byte[12];
+            value[0] = 3;
+            BitConverter.GetBytes(DateTime.UtcNow.ToFileTimeUtc()).CopyTo(value, 4);
+        }
+        key.SetValue(descriptor.ValueName, value, RegistryValueKind.Binary);
+        return new StartupToggleResult(true, enable
+            ? "已允许该应用在登录时自动启动；程序文件和注册信息均未改动。"
+            : "已关闭该应用的登录自启动；程序文件和注册信息均已保留。");
     }
 
     private static StartupToggleResult ToggleStartupFolder(StartupEntry entry, StartupToggleDescriptor descriptor, bool enable)
@@ -997,6 +1205,8 @@ internal static class StartupManagementService
 
 internal enum StartupCategory
 {
+    DesktopApplication,
+    PackagedApplication,
     LoginApplication,
     BackgroundTask,
     Service,
@@ -1008,6 +1218,7 @@ internal enum StartupToggleKind
     None,
     RegistryRun,
     StartupFolder,
+    StartupApproved,
     ScheduledTask
 }
 
@@ -1061,13 +1272,17 @@ internal sealed record StartupEntry(
 {
     public int CategoryOrder => Category switch
     {
-        StartupCategory.LoginApplication => 0,
-        StartupCategory.BackgroundTask => 1,
-        StartupCategory.Service => 2,
-        _ => 3
+        StartupCategory.DesktopApplication => 0,
+        StartupCategory.PackagedApplication => 1,
+        StartupCategory.LoginApplication => 2,
+        StartupCategory.BackgroundTask => 3,
+        StartupCategory.Service => 4,
+        _ => 5
     };
     public string CategoryText => Category switch
     {
+        StartupCategory.DesktopApplication => "桌面应用",
+        StartupCategory.PackagedApplication => "商店与打包应用",
         StartupCategory.LoginApplication => "登录启动项",
         StartupCategory.BackgroundTask => "后台任务",
         StartupCategory.Service => "系统服务",
@@ -1075,6 +1290,8 @@ internal sealed record StartupEntry(
     };
     public string CategoryAccent => Category switch
     {
+        StartupCategory.DesktopApplication => "#4D7CFE",
+        StartupCategory.PackagedApplication => "#9B63D2",
         StartupCategory.LoginApplication => "#4D7CFE",
         StartupCategory.BackgroundTask => "#A66CE5",
         StartupCategory.Service => "#16B99B",
@@ -1082,6 +1299,8 @@ internal sealed record StartupEntry(
     };
     public string CategoryBackground => Category switch
     {
+        StartupCategory.DesktopApplication => "#DDE8FF",
+        StartupCategory.PackagedApplication => "#EDE2FA",
         StartupCategory.LoginApplication => "#DDE8FF",
         StartupCategory.BackgroundTask => "#EDE2FA",
         StartupCategory.Service => "#E0F5EF",
@@ -1097,6 +1316,8 @@ internal sealed record StartupEntry(
     public string RunningStateText => IsRunning ? "正在运行" : "当前未运行";
     public string FallbackIconText => RequiresAttention ? "?" : Category switch
     {
+        StartupCategory.DesktopApplication => "▶",
+        StartupCategory.PackagedApplication => "▣",
         StartupCategory.LoginApplication => "▶",
         StartupCategory.BackgroundTask => "◆",
         StartupCategory.Service => "⚙",
