@@ -39,7 +39,6 @@ internal static class StartupManagementService
             ("启动文件夹", ScanStartupFolders),
             ("计划任务", ScanScheduledTasks),
             ("系统服务", ScanServices),
-            ("启动驱动", ScanDrivers),
             ("高级加载点", ScanAdvancedRegistryLocations),
             ("WMI 永久订阅", ScanWmiSubscriptions),
             ("X-Tool 可恢复项目", ScanDisabledEntries)
@@ -421,43 +420,6 @@ internal static class StartupManagementService
                     identity: identity,
                     descriptor: null));
             }
-        }
-    }
-
-    private static void ScanDrivers(List<StartupEntry> output, CancellationToken cancellationToken)
-    {
-        using var root = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services", writable: false);
-        if (root is null) return;
-        foreach (var name in root.GetSubKeyNames())
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            using var key = root.OpenSubKey(name, writable: false);
-            if (key is null) continue;
-            var type = ConvertToInt32(key.GetValue("Type"), -1);
-            var start = ConvertToInt32(key.GetValue("Start"), -1);
-            var isDriver = (type & 0x1) != 0 || (type & 0x2) != 0;
-            if (!isDriver || start is < 0 or > 2) continue;
-            var rawPath = Convert.ToString(key.GetValue("ImagePath", string.Empty, RegistryValueOptions.DoNotExpandEnvironmentNames)) ?? string.Empty;
-            var executablePath = NormalizeDriverPath(rawPath);
-            var identity = ReadIdentity(executablePath);
-            var displayName = Convert.ToString(key.GetValue("DisplayName")) ?? name;
-            output.Add(CreateEntry(
-                stableId: $"driver:{name}",
-                name: displayName.StartsWith('@') ? name : displayName,
-                category: StartupCategory.Driver,
-                source: (type & 0x2) != 0 ? "文件系统驱动" : "内核驱动",
-                scope: "系统",
-                trigger: start switch { 0 => "Boot：引导加载", 1 => "System：内核初始化", _ => "Automatic：系统启动" },
-                command: rawPath,
-                executablePath: executablePath,
-                sourceLocation: $"HKLM\\SYSTEM\\CurrentControlSet\\Services\\{name}",
-                account: "内核",
-                isEnabled: true,
-                isRunning: false,
-                canToggle: false,
-                toggleHint: "启动驱动直接影响系统引导，X-Tool 只读展示。",
-                identity: identity,
-                descriptor: null));
         }
     }
 
@@ -928,18 +890,6 @@ internal static class StartupManagementService
         }
     }
 
-    private static string NormalizeDriverPath(string rawPath)
-    {
-        if (string.IsNullOrWhiteSpace(rawPath)) return string.Empty;
-        var expanded = Environment.ExpandEnvironmentVariables(rawPath.Trim().Trim('"'));
-        if (expanded.StartsWith(@"\SystemRoot\", StringComparison.OrdinalIgnoreCase))
-            expanded = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), expanded[12..]);
-        else if (expanded.StartsWith("System32\\", StringComparison.OrdinalIgnoreCase))
-            expanded = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), expanded);
-        try { return Path.GetFullPath(expanded); }
-        catch { return expanded; }
-    }
-
     private static bool IsExecutableRunning(string path)
     {
         if (string.IsNullOrWhiteSpace(path)) return false;
@@ -980,12 +930,6 @@ internal static class StartupManagementService
 
     private static bool IsMicrosoftPublisher(string publisher) => publisher.Contains("Microsoft", StringComparison.OrdinalIgnoreCase)
         || publisher.Contains("微软", StringComparison.OrdinalIgnoreCase);
-
-    private static int ConvertToInt32(object? value, int fallback)
-    {
-        try { return Convert.ToInt32(value); }
-        catch { return fallback; }
-    }
 
     private static string FirstNonEmpty(params string[] values) => values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
     private static string HiveName(RegistryHive hive) => hive == RegistryHive.CurrentUser ? "HKCU" : "HKLM";
@@ -1056,7 +1000,6 @@ internal enum StartupCategory
     LoginApplication,
     BackgroundTask,
     Service,
-    Driver,
     Advanced
 }
 
@@ -1121,15 +1064,13 @@ internal sealed record StartupEntry(
         StartupCategory.LoginApplication => 0,
         StartupCategory.BackgroundTask => 1,
         StartupCategory.Service => 2,
-        StartupCategory.Driver => 3,
-        _ => 4
+        _ => 3
     };
     public string CategoryText => Category switch
     {
-        StartupCategory.LoginApplication => "登录应用",
+        StartupCategory.LoginApplication => "登录启动项",
         StartupCategory.BackgroundTask => "后台任务",
         StartupCategory.Service => "系统服务",
-        StartupCategory.Driver => "启动驱动",
         _ => "高级加载点"
     };
     public string CategoryAccent => Category switch
@@ -1137,7 +1078,6 @@ internal sealed record StartupEntry(
         StartupCategory.LoginApplication => "#4D7CFE",
         StartupCategory.BackgroundTask => "#A66CE5",
         StartupCategory.Service => "#16B99B",
-        StartupCategory.Driver => "#4D9CB5",
         _ => "#F3A847"
     };
     public string CategoryBackground => Category switch
@@ -1145,7 +1085,6 @@ internal sealed record StartupEntry(
         StartupCategory.LoginApplication => "#DDE8FF",
         StartupCategory.BackgroundTask => "#EDE2FA",
         StartupCategory.Service => "#E0F5EF",
-        StartupCategory.Driver => "#E0EFF3",
         _ => "#FFF0D9"
     };
     public string StatusText => IsEnabled ? IsRunning ? "已启用 · 运行中" : "已启用" : "已禁用";
@@ -1161,7 +1100,6 @@ internal sealed record StartupEntry(
         StartupCategory.LoginApplication => "▶",
         StartupCategory.BackgroundTask => "◆",
         StartupCategory.Service => "⚙",
-        StartupCategory.Driver => "▣",
         _ => "◇"
     };
     public string ExecutablePathText => string.IsNullOrWhiteSpace(ExecutablePath) ? "未解析到独立可执行文件" : ExecutablePath;

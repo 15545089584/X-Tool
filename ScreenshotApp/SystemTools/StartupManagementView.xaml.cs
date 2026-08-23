@@ -81,7 +81,6 @@ public partial class StartupManagementView : UserControl
         LoginApplicationCountText.Text = result.Entries.Count(item => item.Category == StartupCategory.LoginApplication).ToString("N0");
         BackgroundTaskCountText.Text = result.Entries.Count(item => item.Category == StartupCategory.BackgroundTask).ToString("N0");
         ServiceCountText.Text = result.Entries.Count(item => item.Category == StartupCategory.Service).ToString("N0");
-        DriverCountText.Text = result.Entries.Count(item => item.Category == StartupCategory.Driver).ToString("N0");
         AdvancedCountText.Text = result.Entries.Count(item => item.Category == StartupCategory.Advanced).ToString("N0");
         StartupSummaryText.Text = $"共发现 {result.Entries.Count:N0} 项 · 已启用 {result.Entries.Count(item => item.IsEnabled):N0} 项 · 第三方 {result.Entries.Count(item => !item.IsMicrosoft):N0} 项";
         StartupCoverageText.Text = result.Warnings.Count == 0
