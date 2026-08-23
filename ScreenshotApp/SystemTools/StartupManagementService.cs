@@ -612,9 +612,10 @@ internal static class StartupManagementService
                 ? "未能解析独立可执行文件；它可能是 shell 命令、脚本或已经失效的配置"
                 : string.Empty;
         var publisher = FirstNonEmpty(identity.SignedPublisher, identity.CompanyName, "未读取到发布者");
+        var displayName = BuildDisplayName(name, executablePath, identity.FileDescription, unresolvedCommand);
         return new StartupEntry(
             stableId,
-            string.IsNullOrWhiteSpace(name) ? "未命名启动项" : name,
+            displayName,
             category,
             source,
             scope,
@@ -797,13 +798,16 @@ internal static class StartupManagementService
     private static FileIdentity ReadIdentity(string path, string fallbackPublisher = "")
     {
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
-            return new FileIdentity(string.Empty, fallbackPublisher, IsMicrosoftPublisher(fallbackPublisher));
+            return new FileIdentity(string.Empty, fallbackPublisher, string.Empty, IsMicrosoftPublisher(fallbackPublisher));
         var cacheKey = $"{path}\u001f{fallbackPublisher}";
         if (IdentityCache.Value?.TryGetValue(cacheKey, out var cached) == true) return cached;
         var company = string.Empty;
+        var fileDescription = string.Empty;
         try
         {
-            company = FileVersionInfo.GetVersionInfo(path).CompanyName?.Trim() ?? string.Empty;
+            var versionInfo = FileVersionInfo.GetVersionInfo(path);
+            company = versionInfo.CompanyName?.Trim() ?? string.Empty;
+            fileDescription = FirstNonEmpty(versionInfo.FileDescription ?? string.Empty, versionInfo.ProductName ?? string.Empty);
         }
         catch
         {
@@ -821,10 +825,36 @@ internal static class StartupManagementService
             // 未签名文件保持空发布者，不把它直接判定为恶意。
         }
         var publisher = FirstNonEmpty(signedPublisher, company, fallbackPublisher);
-        var identity = new FileIdentity(signedPublisher, company, IsMicrosoftPublisher(publisher) || IsWindowsPath(path));
+        var identity = new FileIdentity(signedPublisher, company, fileDescription, IsMicrosoftPublisher(publisher) || IsWindowsPath(path));
         var identityCache = IdentityCache.Value;
         if (identityCache is not null) identityCache[cacheKey] = identity;
         return identity;
+    }
+
+    private static string BuildDisplayName(string rawName, string executablePath, string fileDescription, bool unresolvedCommand)
+    {
+        var name = string.IsNullOrWhiteSpace(rawName) ? string.Empty : rawName.Trim();
+        if (unresolvedCommand)
+        {
+            var identifier = string.IsNullOrWhiteSpace(name) ? "未命名配置" : name;
+            return $"未识别项 · {identifier}";
+        }
+
+        if (!string.IsNullOrWhiteSpace(fileDescription) && LooksLikeTechnicalIdentifier(name))
+            return fileDescription.Trim();
+        if (!string.IsNullOrWhiteSpace(name)) return name;
+        if (!string.IsNullOrWhiteSpace(fileDescription)) return fileDescription.Trim();
+        return string.IsNullOrWhiteSpace(executablePath) ? "未命名启动项" : Path.GetFileNameWithoutExtension(executablePath);
+    }
+
+    private static bool LooksLikeTechnicalIdentifier(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return true;
+        if (Guid.TryParse(name.Trim('{', '}'), out _)) return true;
+        if (name.StartsWith("AF_", StringComparison.OrdinalIgnoreCase)) return true;
+        var lettersOrDigits = name.Count(char.IsLetterOrDigit);
+        var separators = name.Count(character => character is '_' or '-' or '{' or '}');
+        return name.Length >= 20 && separators >= 3 && lettersOrDigits + separators == name.Length;
     }
 
     private static string ResolveExecutablePath(string command)
@@ -1017,7 +1047,7 @@ internal static class StartupManagementService
     private static extern IntPtr LocalFree(IntPtr memory);
 
     private sealed record AdvancedRegistryLocation(RegistryHive Hive, RegistryView View, string KeyPath, string ValueName, string DisplayName, string Trigger);
-    private sealed record FileIdentity(string SignedPublisher, string CompanyName, bool IsMicrosoft);
+    private sealed record FileIdentity(string SignedPublisher, string CompanyName, string FileDescription, bool IsMicrosoft);
     private sealed record TaskAction(string Command, string DisplayText);
 }
 
@@ -1126,6 +1156,14 @@ internal sealed record StartupEntry(
     public string RunningAccent => IsRunning ? "#16B99B" : "#E16670";
     public string RunningBackground => IsRunning ? "#E0F5EF" : "#FCE7EA";
     public string RunningStateText => IsRunning ? "正在运行" : "当前未运行";
+    public string FallbackIconText => RequiresAttention ? "?" : Category switch
+    {
+        StartupCategory.LoginApplication => "▶",
+        StartupCategory.BackgroundTask => "◆",
+        StartupCategory.Service => "⚙",
+        StartupCategory.Driver => "▣",
+        _ => "◇"
+    };
     public string ExecutablePathText => string.IsNullOrWhiteSpace(ExecutablePath) ? "未解析到独立可执行文件" : ExecutablePath;
     public string SearchText => $"{Name} {CategoryText} {Source} {Scope} {Trigger} {Command} {ExecutablePath} {Publisher} {SourceLocation} {Account}";
 }
