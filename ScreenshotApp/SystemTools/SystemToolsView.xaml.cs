@@ -104,6 +104,7 @@ public partial class SystemToolsView : UserControl
             OverviewPanel,
             DriversPanel,
             StoragePanel,
+            StartupManagementView,
             EnvironmentPanel,
             DiagnosticsPanel);
         EnvironmentListBox.ItemsSource = _environmentVariables;
@@ -148,6 +149,7 @@ public partial class SystemToolsView : UserControl
         Unloaded += (_, _) =>
         {
             _portAutoRefreshTimer.Stop();
+            StartupManagementView.CancelActiveScan();
             _diskHistoryAutoCaptureTimer.Stop();
             StorageAnalysisView.CancelActiveScan();
             CancelActiveDiagnostics();
@@ -1056,6 +1058,10 @@ public partial class SystemToolsView : UserControl
         {
             CancelActiveDiagnostics();
         }
+        if (section != "Startup")
+        {
+            StartupManagementView.CancelActiveScan();
+        }
         FrameworkElement target = section switch
         {
             "Processes" => ProcessesPanel,
@@ -1064,6 +1070,7 @@ public partial class SystemToolsView : UserControl
             "Overview" => OverviewPanel,
             "Drivers" => DriversPanel,
             "Storage" => StoragePanel,
+            "Startup" => StartupManagementView,
             "Environment" => EnvironmentPanel,
             "Diagnostics" => DiagnosticsPanel,
             _ => PortsPanel
@@ -1080,10 +1087,11 @@ public partial class SystemToolsView : UserControl
             StartDiskHistoryAutoCapture();
             _ = RefreshStorageAsync();
         }
+        else if (section == "Startup") _ = StartupManagementView.RefreshAsync();
         else if (section == "Environment") RefreshEnvironment();
     }
 
-    /// <summary>资源管理保留观察与关联功能；系统工具承载设备、存储与环境变量功能。</summary>
+    /// <summary>资源管理保留观察与关联功能；系统工具承载设备、存储、启动项与环境变量功能。</summary>
     private void ConfigureModuleMode()
     {
         if (EnvironmentOnly)
@@ -1095,12 +1103,14 @@ public partial class SystemToolsView : UserControl
             OverviewTabButton.Visibility = Visibility.Visible;
             StorageTabButton.Visibility = Visibility.Visible;
             DriverTabButton.Visibility = Visibility.Visible;
+            StartupTabButton.Visibility = Visibility.Visible;
             DiagnosticsTabButton.Visibility = Visibility.Visible;
             Grid.SetColumn(OverviewTabButton, 0);
             Grid.SetColumn(StorageTabButton, 2);
             Grid.SetColumn(DriverTabButton, 4);
-            Grid.SetColumn(EnvironmentTabButton, 6);
-            Grid.SetColumn(DiagnosticsTabButton, 8);
+            Grid.SetColumn(StartupTabButton, 6);
+            Grid.SetColumn(EnvironmentTabButton, 8);
+            Grid.SetColumn(DiagnosticsTabButton, 10);
             AutoRefreshHostPanel.Visibility = Visibility.Collapsed;
             PortsPanel.Visibility = Visibility.Collapsed;
             ProcessesPanel.Visibility = Visibility.Collapsed;
@@ -1109,24 +1119,27 @@ public partial class SystemToolsView : UserControl
             EnvironmentPanel.Visibility = Visibility.Collapsed;
             StoragePanel.Visibility = Visibility.Collapsed;
             DriversPanel.Visibility = Visibility.Collapsed;
+            StartupManagementView.Visibility = Visibility.Collapsed;
             DiagnosticsPanel.Visibility = Visibility.Collapsed;
             StorageOverviewContentPanel.Visibility = Visibility.Visible;
             StorageAnalysisView.Visibility = Visibility.Collapsed;
             OverviewPanel.Visibility = Visibility.Visible;
             _tabMotion.SetCurrent(OverviewPanel);
             SetActiveTab("Overview");
-            SetPageHeading("系统工具", "查看设备信息、存储空间、环境变量与系统诊断；所有写入操作都会在执行前明确确认。");
+            SetPageHeading("系统工具", "查看设备、存储、启动项、环境变量与系统诊断；所有写入操作都会在执行前明确确认。");
             return;
         }
 
         OverviewTabButton.Visibility = Visibility.Collapsed;
         StorageTabButton.Visibility = Visibility.Collapsed;
         DriverTabButton.Visibility = Visibility.Collapsed;
+        StartupTabButton.Visibility = Visibility.Collapsed;
         EnvironmentTabButton.Visibility = Visibility.Collapsed;
         DiagnosticsTabButton.Visibility = Visibility.Collapsed;
         OverviewPanel.Visibility = Visibility.Collapsed;
         StoragePanel.Visibility = Visibility.Collapsed;
         DriversPanel.Visibility = Visibility.Collapsed;
+        StartupManagementView.Visibility = Visibility.Collapsed;
         DiagnosticsPanel.Visibility = Visibility.Collapsed;
         HideStorageAnalysis();
         AutoRefreshHostPanel.Visibility = Visibility.Visible;
@@ -1144,7 +1157,7 @@ public partial class SystemToolsView : UserControl
 
     private void SetActiveTab(string section)
     {
-        foreach (var (button, name) in new[] { (PortsTabButton, "Ports"), (ProcessesTabButton, "Processes"), (ServicesTabButton, "Services"), (RelationsTabButton, "Relations"), (OverviewTabButton, "Overview"), (StorageTabButton, "Storage"), (DriverTabButton, "Drivers"), (EnvironmentTabButton, "Environment"), (DiagnosticsTabButton, "Diagnostics") })
+        foreach (var (button, name) in new[] { (PortsTabButton, "Ports"), (ProcessesTabButton, "Processes"), (ServicesTabButton, "Services"), (RelationsTabButton, "Relations"), (OverviewTabButton, "Overview"), (StorageTabButton, "Storage"), (DriverTabButton, "Drivers"), (StartupTabButton, "Startup"), (EnvironmentTabButton, "Environment"), (DiagnosticsTabButton, "Diagnostics") })
         {
             var active = name == section;
             button.Background = new SolidColorBrush(active ? Color.FromRgb(77, 124, 254) : Color.FromArgb(134, 255, 255, 255));

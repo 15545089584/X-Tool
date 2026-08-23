@@ -529,7 +529,7 @@
                                         <StackPanel>
                                             <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#F0EAFF" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#7659B3" Text="&#xE950;" /></Border>
                                             <TextBlock Margin="0,11,0,0" FontSize="16" FontWeight="SemiBold" Text="系统工具" />
-                                            <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="设备、驱动、存储、环境变量与系统诊断" />
+                                            <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="设备、驱动、存储树状图、启动项、环境变量与系统诊断" />
                                         </StackPanel>
                                     </Button>
                                     <Button Height="148" Margin="8,8,8,0" Style="{StaticResource InteractiveActionCardStyle}" Tag="Shortcuts" Click="HomeNavigate_Click">

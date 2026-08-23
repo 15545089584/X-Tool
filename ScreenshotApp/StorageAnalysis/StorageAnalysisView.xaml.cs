@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 
 namespace ScreenshotApp.StorageAnalysis;
 
@@ -10,15 +11,22 @@ public partial class StorageAnalysisView : UserControl
 {
     private readonly ObservableCollection<StorageDirectoryUsage> _directoryUsages = new();
     private readonly ObservableCollection<StorageLargeFile> _largeFiles = new();
+    private readonly Stack<StorageAnalysisTarget> _treemapHistory = new();
     private CancellationTokenSource? _scanCancellation;
     private StorageAnalysisTarget? _target;
+    private StorageAnalysisResult? _currentResult;
+    private StorageTreemapItem? _selectedTreemapItem;
     private bool _isScanning;
+    private bool _showTreemap;
 
     public StorageAnalysisView()
     {
         InitializeComponent();
         DirectoryUsageItems.ItemsSource = _directoryUsages;
         LargeFilesListBox.ItemsSource = _largeFiles;
+        TreemapControl.ItemHovered += TreemapControl_ItemHovered;
+        TreemapControl.ItemInvoked += TreemapControl_ItemInvoked;
+        UpdateViewMode();
     }
 
     public event EventHandler? BackRequested;
@@ -26,9 +34,9 @@ public partial class StorageAnalysisView : UserControl
 
     public async Task StartAnalysisAsync(StorageAnalysisTarget target)
     {
+        _treemapHistory.Clear();
         _target = target;
-        AnalysisTitleText.Text = $"{target.Title} 空间分析";
-        AnalysisVolumeSummaryText.Text = $"{target.RootPath} · {target.CapacityText}";
+        _currentResult = null;
         await AnalyzeAsync(target, forceRefresh: false);
     }
 
@@ -48,8 +56,12 @@ public partial class StorageAnalysisView : UserControl
         _scanCancellation = null;
         _isScanning = false;
         _target = null;
+        _currentResult = null;
+        _selectedTreemapItem = null;
+        _treemapHistory.Clear();
         _directoryUsages.Clear();
         _largeFiles.Clear();
+        TreemapControl.SetItems(Array.Empty<StorageTreemapItem>());
         AnalysisResultsPanel.Visibility = Visibility.Collapsed;
         ScanProgressPanel.Visibility = Visibility.Visible;
         ScanProgressBar.IsIndeterminate = false;
@@ -68,6 +80,10 @@ public partial class StorageAnalysisView : UserControl
         _scanCancellation = new CancellationTokenSource();
         var cancellation = _scanCancellation;
         _isScanning = true;
+        _target = target;
+        AnalysisTitleText.Text = $"{target.Title} 空间分析";
+        AnalysisVolumeSummaryText.Text = $"{target.RootPath} · {target.CapacityText}";
+        CurrentAnalysisPathText.Text = target.RootPath;
         _directoryUsages.Clear();
         _largeFiles.Clear();
         AnalysisResultsPanel.Visibility = Visibility.Collapsed;
@@ -100,6 +116,8 @@ public partial class StorageAnalysisView : UserControl
 
             foreach (var usage in result.DirectoryUsages) _directoryUsages.Add(usage);
             foreach (var file in result.LargeFiles) _largeFiles.Add(file);
+            _currentResult = result;
+            UpdateTreemap(result);
             DirectoryUsageSummaryText.Text = $"{result.SummaryText} · 按已扫描文件的逻辑大小排序";
             ScannedBytesText.Text = result.ScannedBytesText;
             LargeFilesSummaryText.Text = result.LargeFiles.Count == 0 ? "未发现可读取的大文件" : "按文件大小降序；可交给文件工作台继续处理。";
@@ -189,6 +207,199 @@ public partial class StorageAnalysisView : UserControl
         }
 
         FileWorkbenchRequested?.Invoke(this, new FileWorkbenchNavigationRequestedEventArgs(file.ParentDirectory, file.FileName, file.FullPath));
+    }
+
+    private void ListViewButton_Click(object sender, RoutedEventArgs e)
+    {
+        _showTreemap = false;
+        UpdateViewMode();
+    }
+
+    private void TreemapViewButton_Click(object sender, RoutedEventArgs e)
+    {
+        _showTreemap = true;
+        UpdateViewMode();
+    }
+
+    private void UpdateViewMode()
+    {
+        if (ListResultsPanel is null || TreemapResultsPanel is null) return;
+        ListResultsPanel.Visibility = _showTreemap ? Visibility.Collapsed : Visibility.Visible;
+        TreemapResultsPanel.Visibility = _showTreemap ? Visibility.Visible : Visibility.Collapsed;
+        SetModeButtonState(ListViewButton, !_showTreemap);
+        SetModeButtonState(TreemapViewButton, _showTreemap);
+    }
+
+    private static void SetModeButtonState(Button button, bool active)
+    {
+        button.Background = new SolidColorBrush(active ? Color.FromRgb(77, 124, 254) : Color.FromArgb(134, 255, 255, 255));
+        button.BorderBrush = new SolidColorBrush(active ? Color.FromRgb(118, 160, 255) : Color.FromRgb(166, 209, 232));
+        button.Foreground = active ? Brushes.White : new SolidColorBrush(Color.FromRgb(64, 95, 124));
+    }
+
+    private void UpdateTreemap(StorageAnalysisResult result)
+    {
+        var total = Math.Max(0, result.ScannedBytes);
+        var items = new List<StorageTreemapItem>();
+        foreach (var usage in result.DirectoryUsages.Where(item => !item.IsRootFiles && item.LogicalBytes > 0))
+        {
+            items.Add(new StorageTreemapItem(
+                usage.Name,
+                usage.FullPath,
+                usage.LogicalBytes,
+                total <= 0 ? 0 : usage.LogicalBytes / (double)total,
+                usage.Accent,
+                IsDirectory: true));
+        }
+
+        var normalizedRoot = NormalizeDirectory(result.Target.RootPath);
+        var rootUsage = result.DirectoryUsages.FirstOrDefault(item => item.IsRootFiles);
+        var directLargeFiles = result.LargeFiles
+            .Where(file => string.Equals(NormalizeDirectory(file.ParentDirectory), normalizedRoot, StringComparison.OrdinalIgnoreCase))
+            .Where(file => total <= 0 || file.Size / (double)total >= 0.001)
+            .Take(18)
+            .ToArray();
+        foreach (var file in directLargeFiles)
+        {
+            items.Add(new StorageTreemapItem(
+                file.FileName,
+                file.FullPath,
+                file.Size,
+                total <= 0 ? 0 : file.Size / (double)total,
+                AccentForFile(file.FullPath),
+                IsDirectory: false));
+        }
+
+        var remainingRootFiles = Math.Max(0, (rootUsage?.LogicalBytes ?? 0) - directLargeFiles.Sum(file => file.Size));
+        if (remainingRootFiles > 0)
+        {
+            items.Add(new StorageTreemapItem(
+                "其他当前目录文件",
+                result.Target.RootPath,
+                remainingRootFiles,
+                total <= 0 ? 0 : remainingRootFiles / (double)total,
+                "#8298B5",
+                IsDirectory: false,
+                IsAggregate: true));
+        }
+
+        TreemapControl.SetItems(items);
+        TreemapPathText.Text = result.Target.RootPath;
+        TreemapLayerSummaryText.Text = $"{items.Count(item => item.IsDirectory):N0} 个目录块 · {items.Count(item => !item.IsDirectory):N0} 个文件块 · 共 {result.ScannedBytesText}";
+        TreemapUpButton.IsEnabled = _treemapHistory.Count > 0;
+        ShowTreemapDetails(null);
+    }
+
+    private static string AccentForFile(string path)
+    {
+        var extension = Path.GetExtension(path).ToLowerInvariant();
+        return extension switch
+        {
+            ".mp4" or ".mkv" or ".mov" or ".avi" or ".webm" => "#A66CE5",
+            ".jpg" or ".jpeg" or ".png" or ".gif" or ".webp" or ".bmp" => "#EF7EA8",
+            ".zip" or ".rar" or ".7z" or ".tar" or ".gz" => "#F3A847",
+            ".mp3" or ".wav" or ".flac" or ".m4a" or ".aac" => "#16B99B",
+            ".pdf" or ".doc" or ".docx" or ".xls" or ".xlsx" or ".ppt" or ".pptx" => "#E16670",
+            _ => "#4D9CB5"
+        };
+    }
+
+    private static string NormalizeDirectory(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return string.Empty;
+        try
+        {
+            return Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+        catch
+        {
+            return path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+    }
+
+    private void TreemapControl_ItemHovered(object? sender, StorageTreemapItemEventArgs e) => ShowTreemapDetails(e.Item);
+
+    private async void TreemapControl_ItemInvoked(object? sender, StorageTreemapItemEventArgs e)
+    {
+        ShowTreemapDetails(e.Item);
+        if (e.Item.IsDirectory)
+        {
+            await DrillIntoTreemapAsync(e.Item);
+        }
+    }
+
+    private void ShowTreemapDetails(StorageTreemapItem? item)
+    {
+        _selectedTreemapItem = item;
+        if (item is null)
+        {
+            TreemapDetailTypeText.Text = "空间树状图";
+            TreemapDetailNameText.Text = "悬停查看详情";
+            TreemapDetailSizeText.Text = "—";
+            TreemapDetailRatioText.Text = "选择任意色块查看占用比例";
+            TreemapDetailPathText.Text = "当前层级中的目录与文件会按面积显示。";
+            TreemapDetailHintText.Text = "目录可以继续钻取；文件操作统一交给文件工作台。";
+            TreemapDetailIconText.Text = "\uE8B7";
+            TreemapDrillButton.IsEnabled = false;
+            TreemapWorkbenchButton.IsEnabled = false;
+            return;
+        }
+
+        TreemapDetailTypeText.Text = item.TypeText;
+        TreemapDetailNameText.Text = item.Name;
+        TreemapDetailSizeText.Text = item.SizeText;
+        TreemapDetailRatioText.Text = item.RatioText;
+        TreemapDetailPathText.Text = item.FullPath;
+        TreemapDetailHintText.Text = item.IsDirectory
+            ? "单击色块或使用下方按钮进入此目录；下钻时仍会跳过链接和无权限位置。"
+            : item.IsAggregate
+                ? "该色块合并了未单独展示的小文件，以保证图形清晰和界面性能。"
+                : "可将此文件交给文件工作台查看，不会在树状图中直接删除。";
+        TreemapDetailIconText.Text = item.IsDirectory ? "\uE8B7" : "\uE8A5";
+        TreemapDrillButton.IsEnabled = item.IsDirectory && Directory.Exists(item.FullPath) && !_isScanning;
+        TreemapWorkbenchButton.IsEnabled = item.CanOpenInFileWorkbench;
+    }
+
+    private async void TreemapDrillButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedTreemapItem is { IsDirectory: true } item)
+        {
+            await DrillIntoTreemapAsync(item);
+        }
+    }
+
+    private async Task DrillIntoTreemapAsync(StorageTreemapItem item)
+    {
+        if (_isScanning || _target is null || !Directory.Exists(item.FullPath)) return;
+        var previous = _target;
+        _treemapHistory.Push(previous);
+        var title = Path.GetFileName(item.FullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        var target = new StorageAnalysisTarget(item.FullPath, string.IsNullOrWhiteSpace(title) ? item.FullPath : title, previous.TotalBytes, previous.FreeBytes);
+        await AnalyzeAsync(target, forceRefresh: false);
+    }
+
+    private async void TreemapUpButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isScanning || _treemapHistory.Count == 0) return;
+        var parent = _treemapHistory.Pop();
+        await AnalyzeAsync(parent, forceRefresh: false);
+    }
+
+    private void TreemapWorkbenchButton_Click(object sender, RoutedEventArgs e)
+    {
+        var item = _selectedTreemapItem;
+        if (item is null || !item.CanOpenInFileWorkbench) return;
+        if (item.IsDirectory)
+        {
+            FileWorkbenchRequested?.Invoke(this, new FileWorkbenchNavigationRequestedEventArgs(item.FullPath, searchKeyword: null));
+            return;
+        }
+
+        var parent = Path.GetDirectoryName(item.FullPath);
+        if (!string.IsNullOrWhiteSpace(parent) && Directory.Exists(parent))
+        {
+            FileWorkbenchRequested?.Invoke(this, new FileWorkbenchNavigationRequestedEventArgs(parent, Path.GetFileName(item.FullPath), item.FullPath));
+        }
     }
 }
 
