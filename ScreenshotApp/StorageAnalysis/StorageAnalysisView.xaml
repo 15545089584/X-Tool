@@ -42,10 +42,10 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="Root" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}" />
+                            <ContentPresenter x:Name="ModeContent" HorizontalAlignment="Center" VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}" />
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="Tag" Value="Active"><Setter TargetName="Root" Property="Background" Value="#4D7CFE" /><Setter TargetName="Root" Property="BorderBrush" Value="#76A0FF" /><Setter Property="Foreground" Value="White" /></Trigger>
+                            <Trigger Property="Tag" Value="Active"><Setter TargetName="Root" Property="Background" Value="#4D7CFE" /><Setter TargetName="Root" Property="BorderBrush" Value="#76A0FF" /><Setter Property="Foreground" Value="White" /><Setter TargetName="ModeContent" Property="TextElement.Foreground" Value="White" /></Trigger>
                             <MultiTrigger><MultiTrigger.Conditions><Condition Property="Tag" Value="Active" /><Condition Property="IsMouseOver" Value="True" /></MultiTrigger.Conditions><Setter TargetName="Root" Property="Background" Value="#3E70EE" /></MultiTrigger>
                             <MultiTrigger><MultiTrigger.Conditions><Condition Property="Tag" Value="Inactive" /><Condition Property="IsMouseOver" Value="True" /></MultiTrigger.Conditions><Setter TargetName="Root" Property="Background" Value="#DCEBFF" /><Setter TargetName="Root" Property="BorderBrush" Value="#72A1FE" /></MultiTrigger>
                             <Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.72" /></Trigger>
@@ -117,22 +117,24 @@
 
             <Grid x:Name="AnalysisResultsPanel" Grid.Row="6" Visibility="Collapsed">
                 <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" Foreground="#2E4B67" Text="空间分布" />
-                    <StackPanel Margin="12,0,0,0" Orientation="Horizontal">
+                <Grid>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" Foreground="#2E4B67" Text="空间分布" />
+                        <StackPanel Margin="12,0,0,0" Orientation="Horizontal">
                         <Button x:Name="ListViewButton" Width="88" Style="{StaticResource AnalysisModeButton}" Content="列表视图" Click="ListViewButton_Click" />
                         <Button x:Name="TreemapViewButton" Margin="7,0,0,0" Width="96" Style="{StaticResource AnalysisModeButton}" Content="空间树状图" Click="TreemapViewButton_Click" />
                         <Button x:Name="LargeFilesViewButton" Margin="7,0,0,0" Width="116" Style="{StaticResource AnalysisModeButton}" Content="大文件 Top 100" Click="LargeFilesViewButton_Click" />
+                        </StackPanel>
                     </StackPanel>
-                </StackPanel>
+                    <StackPanel x:Name="ListHeaderSummaryPanel" HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal">
+                        <TextBlock VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold" Foreground="#45627E" Text="一级目录占用" />
+                        <TextBlock x:Name="DirectoryUsageSummaryText" Margin="10,0,0,0" VerticalAlignment="Center" FontSize="9.5" Foreground="#728BA3" Text="按已扫描文件的逻辑大小排序" />
+                        <TextBlock x:Name="ScannedBytesText" Margin="14,0,0,0" VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold" Foreground="#4D7CFE" />
+                    </StackPanel>
+                </Grid>
 
                 <Grid x:Name="ListResultsPanel" Grid.Row="2">
-                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-                    <Grid>
-                        <StackPanel><TextBlock FontSize="16" FontWeight="SemiBold" Foreground="#2E4B67" Text="一级目录占用" /><TextBlock x:Name="DirectoryUsageSummaryText" Margin="0,3,0,0" FontSize="10" Foreground="#728BA3" Text="按已扫描文件的逻辑大小排序" /></StackPanel>
-                        <TextBlock x:Name="ScannedBytesText" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold" Foreground="#4D7CFE" />
-                    </Grid>
-                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                         <ItemsControl x:Name="DirectoryUsageItems">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
@@ -169,31 +171,14 @@
                     <TextBlock x:Name="AnalysisNoticeText" Grid.Row="4" FontSize="9.5" Foreground="#7890A6" TextWrapping="Wrap" />
                 </Grid>
 
-                <ScrollViewer x:Name="TreemapResultsPanel" Grid.Row="2" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                    <Grid MinHeight="520">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="14" /><ColumnDefinition Width="270" /></Grid.ColumnDefinitions>
-                        <Grid>
-                            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="460" /><RowDefinition Height="8" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                            <Button x:Name="TreemapUpButton" Width="106" Height="32" HorizontalAlignment="Left" Padding="0" Style="{StaticResource AnalysisButton}" Content="← 返回上一级" Click="TreemapUpButton_Click" Visibility="Collapsed" />
-                            <Border Grid.Row="2" Padding="6" Background="#4AFFFFFF" BorderBrush="#8AD3E7F6" BorderThickness="1" CornerRadius="18">
-                                <local:StorageTreemapControl x:Name="TreemapControl" />
-                            </Border>
-                            <StackPanel Grid.Row="4" Orientation="Horizontal"><TextBlock FontSize="9.5" Foreground="#7890A6" Text="面积代表逻辑大小；小项目会自动聚合。" /><TextBlock Margin="12,0,0,0" FontSize="9.5" Foreground="#4D7CFE" Text="单击目录继续深入" /></StackPanel>
-                        </Grid>
-
-                        <Border Grid.Column="2" MinHeight="500" Padding="16" Background="#64FFFFFF" BorderBrush="#8ED6E9F8" BorderThickness="1" CornerRadius="16">
-                            <Grid>
-                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="14" /><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                                <Grid><Border Width="48" Height="48" HorizontalAlignment="Left" Background="#DDEBFF" BorderBrush="#8AB5D2FF" BorderThickness="1" CornerRadius="15"><TextBlock x:Name="TreemapDetailIconText" HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="22" Foreground="#4D7CFE" Text="&#xE8B7;" /></Border><StackPanel Margin="60,2,0,0"><TextBlock x:Name="TreemapDetailTypeText" FontSize="10" Foreground="#7890A6" Text="空间树状图" /><TextBlock x:Name="TreemapDetailNameText" Margin="0,3,0,0" FontSize="15" FontWeight="SemiBold" Foreground="#2E4B67" Text="悬停查看详情" TextTrimming="CharacterEllipsis" /></StackPanel></Grid>
-                                <TextBlock x:Name="TreemapDetailSizeText" Grid.Row="2" FontSize="26" FontWeight="SemiBold" Foreground="#4D7CFE" Text="—" />
-                                <TextBlock x:Name="TreemapDetailRatioText" Grid.Row="4" FontSize="11" Foreground="#6683A0" Text="选择任意色块查看占用比例" />
-                                <Border Grid.Row="6" Padding="11" Background="#42E8F2FF" BorderBrush="#72CFE5F6" BorderThickness="1" CornerRadius="11"><StackPanel><TextBlock FontSize="9.5" Foreground="#7890A6" Text="完整路径" /><TextBlock x:Name="TreemapDetailPathText" Margin="0,5,0,0" FontSize="10.5" Foreground="#45627E" Text="当前层级中的目录与文件会按面积显示。" TextWrapping="Wrap" /></StackPanel></Border>
-                                <TextBlock x:Name="TreemapDetailHintText" Grid.Row="7" Margin="0,12,0,0" FontSize="10" Foreground="#728BA3" Text="目录可以继续钻取；文件操作统一交给文件工作台。" TextWrapping="Wrap" />
-                                <Grid Grid.Row="9"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="8" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><Button x:Name="TreemapDrillButton" Height="36" Padding="0" Style="{StaticResource AnalysisButton}" Content="深入目录" Click="TreemapDrillButton_Click" IsEnabled="False" /><Button x:Name="TreemapWorkbenchButton" Grid.Column="2" Height="36" Padding="0" Style="{StaticResource AnalysisPrimaryButton}" Click="TreemapWorkbenchButton_Click" IsEnabled="False"><TextBlock FontSize="10" FontWeight="SemiBold" Foreground="White" Text="交给工作台" /></Button></Grid>
-                            </Grid>
-                        </Border>
-                    </Grid>
-                </ScrollViewer>
+                <Grid x:Name="TreemapResultsPanel" Grid.Row="2" Visibility="Collapsed">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="*" /><RowDefinition Height="8" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                    <Button x:Name="TreemapUpButton" Width="106" Height="32" HorizontalAlignment="Left" Padding="0" Style="{StaticResource AnalysisButton}" Content="← 返回上一级" Click="TreemapUpButton_Click" Visibility="Collapsed" />
+                    <Border Grid.Row="2" MinHeight="300" Padding="6" Background="#4AFFFFFF" BorderBrush="#8AD3E7F6" BorderThickness="1" CornerRadius="18">
+                        <local:StorageTreemapControl x:Name="TreemapControl" />
+                    </Border>
+                    <StackPanel Grid.Row="4" Orientation="Horizontal"><TextBlock FontSize="9.5" Foreground="#7890A6" Text="面积代表逻辑大小；悬停查看完整信息，小项目会自动聚合。" /><TextBlock Margin="12,0,0,0" FontSize="9.5" Foreground="#4D7CFE" Text="单击目录继续深入，单击文件交给文件工作台" /></StackPanel>
+                </Grid>
             </Grid>
         </Grid>
     </Border>

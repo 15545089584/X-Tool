@@ -54,11 +54,10 @@
     </UserControl.Resources>
 
     <Grid Margin="44,42,24,38">
-        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="20" /><RowDefinition Height="42" /><RowDefinition Height="16" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="42" /><RowDefinition Height="16" /><RowDefinition Height="*" /></Grid.RowDefinitions>
         <Grid>
             <StackPanel>
                 <TextBlock FontSize="30" FontWeight="SemiBold" Text="网络工作台" />
-                <TextBlock Margin="0,8,0,0" FontSize="14" Foreground="#728195" Text="观察网络状态、诊断连接并管理代理方案；所有配置修改都会明确提示影响范围。" />
             </StackPanel>
             <Border HorizontalAlignment="Right" VerticalAlignment="Center" Padding="12,7" Background="#88FFFFFF" BorderBrush="#A8D6E9F8" BorderThickness="1" CornerRadius="12">
                 <StackPanel Orientation="Horizontal"><Ellipse x:Name="HeaderStatusDot" Width="9" Height="9" Fill="#61C995" /><TextBlock x:Name="HeaderStatusText" Margin="7,0,0,0" VerticalAlignment="Center" FontSize="12" Foreground="#496984" Text="正在检测…" /><CheckBox x:Name="AutoRefreshCheckBox" Margin="16,0,0,0" VerticalAlignment="Center" IsChecked="True" Content="实时刷新" Style="{StaticResource NetworkCheckBox}" Checked="AutoRefreshOption_Changed" Unchecked="AutoRefreshOption_Changed" /></StackPanel>

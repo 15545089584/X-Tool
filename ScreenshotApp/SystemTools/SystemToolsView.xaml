@@ -26,8 +26,8 @@
         <Style TargetType="MenuItem"><Style.Triggers><Trigger Property="Header" Value="定位到进程"><Setter Property="Visibility" Value="Collapsed" /></Trigger></Style.Triggers></Style>
     </UserControl.Resources>
     <Grid Margin="44,42,52,38">
-        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="20" /><RowDefinition Height="42" /><RowDefinition Height="16" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-        <StackPanel><TextBlock x:Name="PageTitleText" FontSize="30" FontWeight="SemiBold" Text="系统工具" /><TextBlock x:Name="PageSubtitleText" Margin="0,8,0,0" FontSize="14" Foreground="#728195" Text="查看设备信息、存储空间、环境变量与系统诊断；系统级操作会在执行时明确提示权限要求。" /></StackPanel>
+        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="42" /><RowDefinition Height="16" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+        <StackPanel><TextBlock x:Name="PageTitleText" FontSize="30" FontWeight="SemiBold" Text="系统工具" /><TextBlock x:Name="PageSubtitleText" Visibility="Collapsed" /></StackPanel>
         <Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition Width="116" /><ColumnDefinition Width="8" /><ColumnDefinition Width="116" /><ColumnDefinition Width="8" /><ColumnDefinition Width="116" /><ColumnDefinition Width="8" /><ColumnDefinition Width="116" /><ColumnDefinition Width="8" /><ColumnDefinition Width="116" /><ColumnDefinition Width="8" /><ColumnDefinition Width="116" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
             <Button x:Name="OverviewTabButton" Style="{StaticResource SystemTab}" Tag="Overview" Click="TabButton_Click" Visibility="Collapsed"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="设备信息" /></Button>
             <Button x:Name="PortsTabButton" Style="{StaticResource SystemTab}" Tag="Ports" Click="TabButton_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="端口查看器" /></Button>

@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
@@ -8,7 +7,6 @@ namespace ScreenshotApp.SystemTools;
 /// <summary>启动项页按需读取，不建立常驻监控；普通来源提供可恢复启停，高风险来源保持只读。</summary>
 public partial class StartupManagementView : UserControl
 {
-    private readonly ObservableCollection<StartupEntry> _visibleEntries = new();
     private IReadOnlyList<StartupEntry> _allEntries = Array.Empty<StartupEntry>();
     private CancellationTokenSource? _scanCancellation;
     private bool _isScanning;
@@ -16,7 +14,6 @@ public partial class StartupManagementView : UserControl
     public StartupManagementView()
     {
         InitializeComponent();
-        StartupListBox.ItemsSource = _visibleEntries;
         StartupCategoryComboBox.SelectedIndex = 0;
     }
 
@@ -103,8 +100,8 @@ public partial class StartupManagementView : UserControl
             (string.IsNullOrWhiteSpace(keyword) || item.SearchText.Contains(keyword, StringComparison.OrdinalIgnoreCase)))
             .ToArray();
 
-        _visibleEntries.Clear();
-        foreach (var entry in filtered) _visibleEntries.Add(entry);
+        // 一次替换数据源，避免 500 余项逐条通知 UI 并反复触发布局。
+        StartupListBox.ItemsSource = filtered;
         StartupEmptyState.Visibility = filtered.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 

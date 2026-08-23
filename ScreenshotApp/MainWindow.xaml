@@ -553,15 +553,13 @@
                             <Grid x:Name="ScreenWorkbenchView" Visibility="Collapsed" Margin="52,46,52,38">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="28" />
+                                    <RowDefinition Height="14" />
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="28" />
                                     <RowDefinition Height="*" />
                                 </Grid.RowDefinitions>
                                 <StackPanel>
                                     <TextBlock FontSize="30" FontWeight="SemiBold" Text="屏幕工作台" />
-                                    <TextBlock Margin="0,9,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}"
-                                               Text="集中完成截图、长截图、文字提取、翻译和屏幕录制" />
                                 </StackPanel>
                                 <Grid Grid.Row="2">
                                     <Grid.ColumnDefinitions>
@@ -610,10 +608,9 @@
 
                             <!-- 转换器使用独立的二级纵向导航；新增工具只需在导航区追加按钮。 -->
                             <Grid x:Name="ConverterWorkbenchView" Visibility="Collapsed" Margin="44,42,52,38">
-                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="24" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="14" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                                 <StackPanel>
                                     <TextBlock FontSize="30" FontWeight="SemiBold" Text="转换器工作台" />
-                                    <TextBlock Margin="0,9,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}" Text="将常用内容处理成适合保存、分享和继续使用的格式" />
                                 </StackPanel>
                                 <Grid Grid.Row="2">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="76" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
@@ -632,10 +629,9 @@
 
                             <!-- 图片处理专用页：参数区与文件队列分离，便于后续扩展预设、进度与批处理。 -->
                             <Grid x:Name="ImageConverterView" Visibility="Collapsed" Margin="44,42,52,38">
-                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="20" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                                 <StackPanel>
                                     <TextBlock FontSize="30" FontWeight="SemiBold" Text="转换器工作台" />
-                                    <TextBlock Margin="0,9,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}" Text="将常用内容处理成适合保存、分享和继续使用的格式" />
                                 </StackPanel>
                                 <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
                                     <Grid>
@@ -682,10 +678,9 @@
 
                             <!-- 音频处理页：文件队列、媒体信息、音质预设与高级参数由独立控件承载。 -->
                             <Grid x:Name="AudioConverterView" Visibility="Collapsed" Margin="44,42,52,38">
-                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="20" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                                 <StackPanel>
                                     <TextBlock FontSize="30" FontWeight="SemiBold" Text="转换器工作台" />
-                                    <TextBlock Margin="0,9,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}" Text="将常用内容处理成适合保存、分享和继续使用的格式" />
                                 </StackPanel>
                                 <Grid Grid.Row="2">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="76" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
@@ -696,10 +691,9 @@
 
                             <!-- 视频处理页：转换、压缩、提取音频和 GIF 共享同一异步任务链路。 -->
                             <Grid x:Name="VideoConverterView" Visibility="Collapsed" Margin="44,42,52,38">
-                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="20" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                                 <StackPanel>
                                     <TextBlock FontSize="30" FontWeight="SemiBold" Text="转换器工作台" />
-                                    <TextBlock Margin="0,9,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}" Text="将常用内容处理成适合保存、分享和继续使用的格式" />
                                 </StackPanel>
                                 <Grid Grid.Row="2">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="76" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
@@ -710,10 +704,9 @@
 
                             <!-- 转 PDF：图片由工具本地生成，办公文档按 Office、WPS、LibreOffice 顺序调用。 -->
                             <Grid x:Name="PdfConverterView" Visibility="Collapsed" Margin="44,42,52,38">
-                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="20" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                                 <StackPanel>
                                     <TextBlock FontSize="30" FontWeight="SemiBold" Text="转换器工作台" />
-                                    <TextBlock Margin="0,9,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}" Text="将常用内容处理成适合保存、分享和继续使用的格式" />
                                 </StackPanel>
                                 <Grid Grid.Row="2">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="76" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
@@ -724,10 +717,9 @@
 
                             <!-- 编码转换：所有编码、解析与生成均在本地执行。 -->
                             <Grid x:Name="EncodingConverterView" Visibility="Collapsed" Margin="44,42,52,38">
-                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="20" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                                 <StackPanel>
                                     <TextBlock FontSize="30" FontWeight="SemiBold" Text="转换器工作台" />
-                                    <TextBlock Margin="0,9,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}" Text="文本编码、JWT 解析、时间戳转换与 UUID 生成均在本地完成" />
                                 </StackPanel>
                                 <Grid Grid.Row="2">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="76" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
@@ -738,10 +730,9 @@
 
                             <!-- 二维码：生成与识别全部在本地完成，无网络依赖。 -->
                             <Grid x:Name="QrCodeConverterView" Visibility="Collapsed" Margin="44,42,52,38">
-                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="20" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                                 <StackPanel>
                                     <TextBlock FontSize="30" FontWeight="SemiBold" Text="转换器工作台" />
-                                    <TextBlock Margin="0,9,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}" Text="二维码生成、图片识别与本地历史记录" />
                                 </StackPanel>
                                 <Grid Grid.Row="2">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="76" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
@@ -754,7 +745,7 @@
                             <Grid x:Name="HistoryView" Visibility="Collapsed" Margin="58,32,48,38">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="16" />
+                                    <RowDefinition Height="10" />
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="16" />
                                     <RowDefinition Height="*" />
@@ -762,8 +753,6 @@
                                 <Grid>
                                     <StackPanel>
                                         <TextBlock FontSize="28" FontWeight="SemiBold" Text="剪贴板" />
-                                        <TextBlock Margin="0,8,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}"
-                                                   Text="屏幕工作台内容与外部复制内容都会在本机分类保存" />
                                     </StackPanel>
                                     <Button HorizontalAlignment="Right" VerticalAlignment="Center"
                                             Padding="16,9" Background="#AFFFFFFF"
@@ -958,12 +947,11 @@
                             <Grid x:Name="SettingsView" Visibility="Collapsed" Margin="58,44">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="28" />
+                                    <RowDefinition Height="14" />
                                     <RowDefinition Height="*" />
                                 </Grid.RowDefinitions>
                                 <StackPanel>
                                     <TextBlock FontSize="28" FontWeight="SemiBold" Text="设置" />
-                                    <TextBlock Margin="0,8,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}" Text="调整 X-Tool 的常用行为" />
                                 </StackPanel>
                                 <Border Grid.Row="2" Background="Transparent" BorderThickness="0">
                                     <ScrollViewer VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">

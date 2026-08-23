@@ -15,7 +15,6 @@ public partial class StorageAnalysisView : UserControl
     private CancellationTokenSource? _scanCancellation;
     private StorageAnalysisTarget? _target;
     private StorageAnalysisResult? _currentResult;
-    private StorageTreemapItem? _selectedTreemapItem;
     private bool _isScanning;
     private StorageResultViewMode _viewMode = StorageResultViewMode.List;
 
@@ -24,7 +23,6 @@ public partial class StorageAnalysisView : UserControl
         InitializeComponent();
         DirectoryUsageItems.ItemsSource = _directoryUsages;
         LargeFilesListBox.ItemsSource = _largeFiles;
-        TreemapControl.ItemHovered += TreemapControl_ItemHovered;
         TreemapControl.ItemInvoked += TreemapControl_ItemInvoked;
         UpdateViewMode();
     }
@@ -57,7 +55,6 @@ public partial class StorageAnalysisView : UserControl
         _isScanning = false;
         _target = null;
         _currentResult = null;
-        _selectedTreemapItem = null;
         _treemapHistory.Clear();
         _directoryUsages.Clear();
         _largeFiles.Clear();
@@ -232,6 +229,7 @@ public partial class StorageAnalysisView : UserControl
         ListResultsPanel.Visibility = _viewMode == StorageResultViewMode.List ? Visibility.Visible : Visibility.Collapsed;
         TreemapResultsPanel.Visibility = _viewMode == StorageResultViewMode.Treemap ? Visibility.Visible : Visibility.Collapsed;
         LargeFilesResultsPanel.Visibility = _viewMode == StorageResultViewMode.LargeFiles ? Visibility.Visible : Visibility.Collapsed;
+        ListHeaderSummaryPanel.Visibility = _viewMode == StorageResultViewMode.List ? Visibility.Visible : Visibility.Collapsed;
         SetModeButtonState(ListViewButton, _viewMode == StorageResultViewMode.List);
         SetModeButtonState(TreemapViewButton, _viewMode == StorageResultViewMode.Treemap);
         SetModeButtonState(LargeFilesViewButton, _viewMode == StorageResultViewMode.LargeFiles);
@@ -291,7 +289,6 @@ public partial class StorageAnalysisView : UserControl
         TreemapControl.SetItems(items);
         TreemapUpButton.Visibility = _treemapHistory.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         TreemapUpButton.IsEnabled = _treemapHistory.Count > 0;
-        ShowTreemapDetails(null);
     }
 
     private static string AccentForFile(string path)
@@ -321,54 +318,16 @@ public partial class StorageAnalysisView : UserControl
         }
     }
 
-    private void TreemapControl_ItemHovered(object? sender, StorageTreemapItemEventArgs e) => ShowTreemapDetails(e.Item);
-
     private async void TreemapControl_ItemInvoked(object? sender, StorageTreemapItemEventArgs e)
     {
-        ShowTreemapDetails(e.Item);
         if (e.Item.IsDirectory)
         {
             await DrillIntoTreemapAsync(e.Item);
-        }
-    }
-
-    private void ShowTreemapDetails(StorageTreemapItem? item)
-    {
-        _selectedTreemapItem = item;
-        if (item is null)
-        {
-            TreemapDetailTypeText.Text = "空间树状图";
-            TreemapDetailNameText.Text = "悬停查看详情";
-            TreemapDetailSizeText.Text = "—";
-            TreemapDetailRatioText.Text = "选择任意色块查看占用比例";
-            TreemapDetailPathText.Text = "当前层级中的目录与文件会按面积显示。";
-            TreemapDetailHintText.Text = "目录可以继续钻取；文件操作统一交给文件工作台。";
-            TreemapDetailIconText.Text = "\uE8B7";
-            TreemapDrillButton.IsEnabled = false;
-            TreemapWorkbenchButton.IsEnabled = false;
             return;
         }
-
-        TreemapDetailTypeText.Text = item.TypeText;
-        TreemapDetailNameText.Text = item.Name;
-        TreemapDetailSizeText.Text = item.SizeText;
-        TreemapDetailRatioText.Text = item.RatioText;
-        TreemapDetailPathText.Text = item.FullPath;
-        TreemapDetailHintText.Text = item.IsDirectory
-            ? "单击色块或使用下方按钮进入此目录；下钻时仍会跳过链接和无权限位置。"
-            : item.IsAggregate
-                ? "该色块合并了未单独展示的小文件，以保证图形清晰和界面性能。"
-                : "可将此文件交给文件工作台查看，不会在树状图中直接删除。";
-        TreemapDetailIconText.Text = item.IsDirectory ? "\uE8B7" : "\uE8A5";
-        TreemapDrillButton.IsEnabled = item.IsDirectory && Directory.Exists(item.FullPath) && !_isScanning;
-        TreemapWorkbenchButton.IsEnabled = item.CanOpenInFileWorkbench;
-    }
-
-    private async void TreemapDrillButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (_selectedTreemapItem is { IsDirectory: true } item)
+        if (e.Item.CanOpenInFileWorkbench)
         {
-            await DrillIntoTreemapAsync(item);
+            OpenTreemapItemInFileWorkbench(e.Item);
         }
     }
 
@@ -389,10 +348,9 @@ public partial class StorageAnalysisView : UserControl
         await AnalyzeAsync(parent, forceRefresh: false);
     }
 
-    private void TreemapWorkbenchButton_Click(object sender, RoutedEventArgs e)
+    private void OpenTreemapItemInFileWorkbench(StorageTreemapItem item)
     {
-        var item = _selectedTreemapItem;
-        if (item is null || !item.CanOpenInFileWorkbench) return;
+        if (!item.CanOpenInFileWorkbench) return;
         if (item.IsDirectory)
         {
             FileWorkbenchRequested?.Invoke(this, new FileWorkbenchNavigationRequestedEventArgs(item.FullPath, searchKeyword: null));

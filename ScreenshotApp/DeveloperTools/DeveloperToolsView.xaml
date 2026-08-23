@@ -195,7 +195,7 @@
     <Grid Margin="38,30,38,30">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="18" />
+            <RowDefinition Height="12" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="18" />
             <RowDefinition Height="*" />
@@ -204,8 +204,6 @@
         <Grid>
             <StackPanel>
                 <TextBlock FontSize="30" FontWeight="SemiBold" Text="开发环境中心" />
-                <TextBlock Margin="0,8,0,0" FontSize="13" Foreground="{StaticResource SecondaryTextBrush}"
-                           Text="识别本机实际生效的开发工具版本，定位冲突，并在确认后按需配置当前用户或系统环境。" />
             </StackPanel>
             <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal">
                 <StackPanel Margin="0,0,16,0" VerticalAlignment="Center">

@@ -1,8 +1,10 @@
 using System.Globalization;
 using System.IO;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Effects;
 
 namespace ScreenshotApp.StorageAnalysis;
 
@@ -16,6 +18,7 @@ public sealed class StorageTreemapControl : FrameworkElement
     private readonly List<TreemapVisual> _visuals = new();
     private IReadOnlyList<StorageTreemapItem> _items = Array.Empty<StorageTreemapItem>();
     private StorageTreemapItem? _hoveredItem;
+    private ToolTip? _openToolTip;
 
     public StorageTreemapControl()
     {
@@ -38,7 +41,7 @@ public sealed class StorageTreemapControl : FrameworkElement
             .Take(240)
             .ToArray();
         _hoveredItem = null;
-        ToolTip = null;
+        CloseToolTip();
         InvalidateVisual();
     }
 
@@ -79,7 +82,13 @@ public sealed class StorageTreemapControl : FrameworkElement
 
         _hoveredItem = hit;
         Cursor = hit is null ? Cursors.Arrow : Cursors.Hand;
-        ToolTip = hit is null ? null : $"{hit.Name}\n{hit.SizeText} · {hit.RatioText}\n{hit.FullPath}";
+        CloseToolTip();
+        if (hit is not null)
+        {
+            _openToolTip = CreateItemToolTip(hit);
+            _openToolTip.PlacementTarget = this;
+            _openToolTip.IsOpen = true;
+        }
         if (hit is not null) ItemHovered?.Invoke(this, new StorageTreemapItemEventArgs(hit));
         InvalidateVisual();
     }
@@ -89,8 +98,15 @@ public sealed class StorageTreemapControl : FrameworkElement
         base.OnMouseLeave(e);
         _hoveredItem = null;
         Cursor = Cursors.Arrow;
-        ToolTip = null;
+        CloseToolTip();
         InvalidateVisual();
+    }
+
+    private void CloseToolTip()
+    {
+        if (_openToolTip is null) return;
+        _openToolTip.IsOpen = false;
+        _openToolTip = null;
     }
 
     protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
@@ -207,24 +223,63 @@ public sealed class StorageTreemapControl : FrameworkElement
         drawingContext.PushClip(new RectangleGeometry(new Rect(bounds.X + 7, bounds.Y + 6, Math.Max(0, bounds.Width - 14), Math.Max(0, bounds.Height - 12)), 7, 7));
 
         var pixelsPerDip = VisualTreeHelper.GetDpi(this).PixelsPerDip;
-        var titleSize = bounds.Width >= 150 && bounds.Height >= 74 ? 15d : 12.5d;
+        var titleSize = bounds.Width >= 150 && bounds.Height >= 74 ? 17d : 14d;
         var title = CreateText(visual.Item.Name, TitleTypeface, titleSize, Colors.White, pixelsPerDip, Math.Max(0, bounds.Width - 18));
         drawingContext.DrawText(title, new Point(bounds.X + 10, bounds.Y + 9));
 
         if (bounds.Width >= 86 && bounds.Height >= 52)
         {
-            var size = CreateText(visual.Item.SizeText, TitleTypeface, bounds.Height >= 86 ? 13.5 : 11.5, Color.FromArgb(238, 255, 255, 255), pixelsPerDip, Math.Max(0, bounds.Width - 18));
+            var size = CreateText(visual.Item.SizeText, TitleTypeface, bounds.Height >= 86 ? 14.5 : 12.5, Color.FromArgb(238, 255, 255, 255), pixelsPerDip, Math.Max(0, bounds.Width - 18));
             drawingContext.DrawText(size, new Point(bounds.X + 10, bounds.Y + 12 + title.Height));
         }
 
         if (bounds.Width >= 130 && bounds.Height >= 92)
         {
             var hint = visual.Item.IsDirectory ? $"{visual.Item.RatioText} · 单击进入" : visual.Item.RatioText;
-            var detail = CreateText(hint, BodyTypeface, 10.5, Color.FromArgb(215, 255, 255, 255), pixelsPerDip, Math.Max(0, bounds.Width - 18));
+            var detail = CreateText(hint, BodyTypeface, 11.5, Color.FromArgb(225, 255, 255, 255), pixelsPerDip, Math.Max(0, bounds.Width - 18));
             drawingContext.DrawText(detail, new Point(bounds.X + 10, bounds.Bottom - detail.Height - 9));
         }
 
         drawingContext.Pop();
+    }
+
+    private static ToolTip CreateItemToolTip(StorageTreemapItem item)
+    {
+        var accent = new SolidColorBrush(ParseColor(item.Accent, Color.FromRgb(77, 124, 254)));
+        accent.Freeze();
+        var panel = new StackPanel();
+        var header = new Grid();
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(10) });
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        header.Children.Add(new Border { Width = 7, Height = 42, Background = accent, CornerRadius = new CornerRadius(4) });
+        var titlePanel = new StackPanel();
+        Grid.SetColumn(titlePanel, 2);
+        titlePanel.Children.Add(new TextBlock { Text = item.TypeText, FontSize = 10, Foreground = new SolidColorBrush(Color.FromRgb(111, 137, 160)) });
+        titlePanel.Children.Add(new TextBlock { Text = item.Name, Margin = new Thickness(0, 3, 0, 0), FontSize = 15, FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(Color.FromRgb(46, 75, 103)), TextTrimming = TextTrimming.CharacterEllipsis });
+        header.Children.Add(titlePanel);
+        panel.Children.Add(header);
+        panel.Children.Add(new TextBlock { Text = $"{item.SizeText}  ·  {item.RatioText}", Margin = new Thickness(0, 12, 0, 0), FontSize = 13, FontWeight = FontWeights.SemiBold, Foreground = accent });
+        panel.Children.Add(new TextBlock { Text = item.FullPath, Margin = new Thickness(0, 8, 0, 0), FontSize = 10.5, Foreground = new SolidColorBrush(Color.FromRgb(69, 98, 126)), TextWrapping = TextWrapping.Wrap, MaxWidth = 430 });
+        panel.Children.Add(new TextBlock
+        {
+            Text = item.IsDirectory ? "单击进入此目录" : item.IsAggregate ? "该色块合并了未单独展示的小文件" : "单击后在文件工作台中定位",
+            Margin = new Thickness(0, 8, 0, 0),
+            FontSize = 9.5,
+            Foreground = new SolidColorBrush(Color.FromRgb(120, 144, 166))
+        });
+        var card = new Border
+        {
+            Width = 470,
+            Padding = new Thickness(15),
+            Background = new SolidColorBrush(Color.FromArgb(246, 250, 253, 255)),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(190, 180, 210, 233)),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(15),
+            Child = panel,
+            Effect = new DropShadowEffect { BlurRadius = 20, ShadowDepth = 4, Direction = 270, Opacity = 0.2, Color = Color.FromRgb(61, 88, 114) }
+        };
+        return new ToolTip { Content = card, Placement = System.Windows.Controls.Primitives.PlacementMode.Mouse, HorizontalOffset = 14, VerticalOffset = 10, HasDropShadow = false };
     }
 
     private static FormattedText CreateText(string text, Typeface typeface, double size, Color color, double pixelsPerDip, double maxWidth)

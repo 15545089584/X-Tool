@@ -24,11 +24,15 @@ internal static class StartupManagementService
     private static readonly string DisabledStorePath = Path.Combine(StateDirectory, "startup-disabled.json");
     private static readonly string DisabledFilesDirectory = Path.Combine(StateDirectory, "StartupBackup");
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+    private static readonly AsyncLocal<Dictionary<string, FileIdentity>?> IdentityCache = new();
+    private static readonly AsyncLocal<HashSet<string>?> RunningProcessNames = new();
 
     internal static StartupDiscoveryResult Discover(IProgress<StartupScanProgress>? progress, CancellationToken cancellationToken)
     {
         var entries = new List<StartupEntry>();
         var warnings = new List<string>();
+        IdentityCache.Value = new Dictionary<string, FileIdentity>(StringComparer.OrdinalIgnoreCase);
+        RunningProcessNames.Value = CaptureRunningProcessNames();
         var providers = new (string Name, Action<List<StartupEntry>, CancellationToken> Scan)[]
         {
             ("注册表登录项", ScanRegistryRunEntries),
@@ -41,28 +45,36 @@ internal static class StartupManagementService
             ("X-Tool 可恢复项目", ScanDisabledEntries)
         };
 
-        foreach (var provider in providers)
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            progress?.Report(new StartupScanProgress(provider.Name, entries.Count));
-            try
+            foreach (var provider in providers)
             {
-                provider.Scan(entries, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                progress?.Report(new StartupScanProgress(provider.Name, entries.Count));
+                try
+                {
+                    provider.Scan(entries, cancellationToken);
+                }
+                catch (Exception exception) when (IsExpectedDiscoveryException(exception))
+                {
+                    warnings.Add($"{provider.Name}：{FriendlyException(exception)}");
+                }
             }
-            catch (Exception exception) when (IsExpectedDiscoveryException(exception))
-            {
-                warnings.Add($"{provider.Name}：{FriendlyException(exception)}");
-            }
-        }
 
-        var normalized = entries
-            .GroupBy(entry => entry.StableId, StringComparer.OrdinalIgnoreCase)
-            .Select(group => group.OrderByDescending(entry => entry.IsEnabled).First())
-            .OrderBy(entry => entry.CategoryOrder)
-            .ThenBy(entry => entry.Name, StringComparer.CurrentCultureIgnoreCase)
-            .ToArray();
-        progress?.Report(new StartupScanProgress("正在整理结果", normalized.Length));
-        return new StartupDiscoveryResult(normalized, warnings, DateTime.Now);
+            var normalized = entries
+                .GroupBy(entry => entry.StableId, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.OrderByDescending(entry => entry.IsEnabled).First())
+                .OrderBy(entry => entry.CategoryOrder)
+                .ThenBy(entry => entry.Name, StringComparer.CurrentCultureIgnoreCase)
+                .ToArray();
+            progress?.Report(new StartupScanProgress("正在整理结果", normalized.Length));
+            return new StartupDiscoveryResult(normalized, warnings, DateTime.Now);
+        }
+        finally
+        {
+            IdentityCache.Value = null;
+            RunningProcessNames.Value = null;
+        }
     }
 
     internal static Task<StartupToggleResult> ToggleAsync(StartupEntry entry, bool enable, CancellationToken cancellationToken) =>
@@ -620,7 +632,9 @@ internal static class StartupManagementService
             toggleHint,
             !string.IsNullOrWhiteSpace(attention),
             attention,
-            StartupIconProvider.GetIcon(executablePath),
+            category is StartupCategory.LoginApplication or StartupCategory.BackgroundTask
+                ? StartupIconProvider.GetIcon(executablePath)
+                : null,
             descriptor);
     }
 
@@ -784,6 +798,8 @@ internal static class StartupManagementService
     {
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
             return new FileIdentity(string.Empty, fallbackPublisher, IsMicrosoftPublisher(fallbackPublisher));
+        var cacheKey = $"{path}\u001f{fallbackPublisher}";
+        if (IdentityCache.Value?.TryGetValue(cacheKey, out var cached) == true) return cached;
         var company = string.Empty;
         try
         {
@@ -805,7 +821,10 @@ internal static class StartupManagementService
             // 未签名文件保持空发布者，不把它直接判定为恶意。
         }
         var publisher = FirstNonEmpty(signedPublisher, company, fallbackPublisher);
-        return new FileIdentity(signedPublisher, company, IsMicrosoftPublisher(publisher) || IsWindowsPath(path));
+        var identity = new FileIdentity(signedPublisher, company, IsMicrosoftPublisher(publisher) || IsWindowsPath(path));
+        var identityCache = IdentityCache.Value;
+        if (identityCache is not null) identityCache[cacheKey] = identity;
+        return identity;
     }
 
     private static string ResolveExecutablePath(string command)
@@ -896,8 +915,31 @@ internal static class StartupManagementService
         if (string.IsNullOrWhiteSpace(path)) return false;
         var name = Path.GetFileNameWithoutExtension(path);
         if (string.IsNullOrWhiteSpace(name)) return false;
-        try { return Process.GetProcessesByName(name).Length > 0; }
+        try { return RunningProcessNames.Value?.Contains(name) ?? Process.GetProcessesByName(name).Length > 0; }
         catch { return false; }
+    }
+
+    private static HashSet<string> CaptureRunningProcessNames()
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        Process[] processes;
+        try { processes = Process.GetProcesses(); }
+        catch { return names; }
+        foreach (var process in processes)
+        {
+            using (process)
+            {
+                try
+                {
+                    if (!string.IsNullOrWhiteSpace(process.ProcessName)) names.Add(process.ProcessName);
+                }
+                catch
+                {
+                    // 进程可能在枚举期间退出，忽略单项即可。
+                }
+            }
+        }
+        return names;
     }
 
     private static bool IsWindowsPath(string path)
