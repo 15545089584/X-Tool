@@ -13,6 +13,10 @@ namespace ScreenshotApp.StorageAnalysis;
 /// </summary>
 public sealed class StorageTreemapControl : FrameworkElement
 {
+    private const double VisualWeightExponent = 0.82;
+    private const double ToolTipWidth = 440;
+    private const double ToolTipEstimatedHeight = 155;
+    private const double ToolTipGap = 14;
     private static readonly Typeface TitleTypeface = new(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
     private static readonly Typeface BodyTypeface = new(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
     private readonly List<TreemapVisual> _visuals = new();
@@ -51,21 +55,17 @@ public sealed class StorageTreemapControl : FrameworkElement
         _visuals.Clear();
 
         var bounds = new Rect(0, 0, Math.Max(0, ActualWidth), Math.Max(0, ActualHeight));
-        var background = new LinearGradientBrush(
-            Color.FromArgb(42, 236, 246, 255),
-            Color.FromArgb(24, 255, 255, 255),
-            new Point(0, 0),
-            new Point(1, 1));
-        drawingContext.DrawRoundedRectangle(background, new Pen(new SolidColorBrush(Color.FromArgb(100, 198, 224, 242)), 1), bounds, 18, 18);
-
         if (_items.Count == 0 || bounds.Width < 40 || bounds.Height < 40)
         {
             DrawEmptyState(drawingContext, bounds);
             return;
         }
 
-        var content = new Rect(8, 8, Math.Max(0, bounds.Width - 16), Math.Max(0, bounds.Height - 16));
-        var weighted = _items.Select(item => new WeightedItem(item, item.Size)).ToArray();
+        var content = new Rect(4, 4, Math.Max(0, bounds.Width - 8), Math.Max(0, bounds.Height - 8));
+        // 视觉权重适度压缩极端差距，避免最大块吞占画布，同时悬浮信息仍显示真实大小与比例。
+        var weighted = _items
+            .Select(item => new WeightedItem(item, Math.Pow(Math.Max(1d, item.Size), VisualWeightExponent)))
+            .ToArray();
         LayoutBalanced(weighted, content, 0, weighted.Length, weighted.Sum(item => item.Weight), _visuals);
 
         foreach (var visual in _visuals)
@@ -77,7 +77,8 @@ public sealed class StorageTreemapControl : FrameworkElement
     protected override void OnMouseMove(MouseEventArgs e)
     {
         base.OnMouseMove(e);
-        var hit = HitTest(e.GetPosition(this));
+        var hitVisual = HitTestVisual(e.GetPosition(this));
+        var hit = hitVisual?.Item;
         if (ReferenceEquals(hit, _hoveredItem)) return;
 
         _hoveredItem = hit;
@@ -87,6 +88,7 @@ public sealed class StorageTreemapControl : FrameworkElement
         {
             _openToolTip = CreateItemToolTip(hit);
             _openToolTip.PlacementTarget = this;
+            PositionToolTip(_openToolTip, hitVisual!.Bounds);
             _openToolTip.IsOpen = true;
         }
         if (hit is not null) ItemHovered?.Invoke(this, new StorageTreemapItemEventArgs(hit));
@@ -129,11 +131,25 @@ public sealed class StorageTreemapControl : FrameworkElement
         }
     }
 
-    private StorageTreemapItem? HitTest(Point point) => _visuals
+    private TreemapVisual? HitTestVisual(Point point) => _visuals
         .Where(visual => visual.Bounds.Contains(point))
         .OrderBy(visual => visual.Bounds.Width * visual.Bounds.Height)
-        .Select(visual => visual.Item)
         .FirstOrDefault();
+
+    private StorageTreemapItem? HitTest(Point point) => HitTestVisual(point)?.Item;
+
+    private void PositionToolTip(ToolTip toolTip, Rect itemBounds)
+    {
+        var placeOnLeft = itemBounds.X + itemBounds.Width / 2d >= ActualWidth / 2d;
+        var desiredX = placeOnLeft
+            ? itemBounds.Left - ToolTipWidth - ToolTipGap
+            : itemBounds.Right + ToolTipGap;
+        var maximumX = Math.Max(8, ActualWidth - ToolTipWidth - 8);
+        toolTip.HorizontalOffset = Math.Clamp(desiredX, 8, maximumX);
+
+        var maximumY = Math.Max(8, ActualHeight - ToolTipEstimatedHeight - 8);
+        toolTip.VerticalOffset = Math.Clamp(itemBounds.Top + 6, 8, maximumY);
+    }
 
     private static void LayoutBalanced(
         IReadOnlyList<WeightedItem> items,
@@ -233,13 +249,6 @@ public sealed class StorageTreemapControl : FrameworkElement
             drawingContext.DrawText(size, new Point(bounds.X + 10, bounds.Y + 12 + title.Height));
         }
 
-        if (bounds.Width >= 130 && bounds.Height >= 92)
-        {
-            var hint = visual.Item.IsDirectory ? $"{visual.Item.RatioText} · 单击进入" : visual.Item.RatioText;
-            var detail = CreateText(hint, BodyTypeface, 11.5, Color.FromArgb(225, 255, 255, 255), pixelsPerDip, Math.Max(0, bounds.Width - 18));
-            drawingContext.DrawText(detail, new Point(bounds.X + 10, bounds.Bottom - detail.Height - 9));
-        }
-
         drawingContext.Pop();
     }
 
@@ -270,7 +279,7 @@ public sealed class StorageTreemapControl : FrameworkElement
         });
         var card = new Border
         {
-            Width = 470,
+            Width = ToolTipWidth,
             Padding = new Thickness(15),
             Background = new SolidColorBrush(Color.FromArgb(246, 250, 253, 255)),
             BorderBrush = new SolidColorBrush(Color.FromArgb(190, 180, 210, 233)),
@@ -279,7 +288,16 @@ public sealed class StorageTreemapControl : FrameworkElement
             Child = panel,
             Effect = new DropShadowEffect { BlurRadius = 20, ShadowDepth = 4, Direction = 270, Opacity = 0.2, Color = Color.FromRgb(61, 88, 114) }
         };
-        return new ToolTip { Content = card, Placement = System.Windows.Controls.Primitives.PlacementMode.Mouse, HorizontalOffset = 14, VerticalOffset = 10, HasDropShadow = false };
+        return new ToolTip
+        {
+            Content = card,
+            Placement = System.Windows.Controls.Primitives.PlacementMode.Relative,
+            Background = Brushes.Transparent,
+            BorderBrush = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Padding = new Thickness(0),
+            HasDropShadow = false
+        };
     }
 
     private static FormattedText CreateText(string text, Typeface typeface, double size, Color color, double pixelsPerDip, double maxWidth)

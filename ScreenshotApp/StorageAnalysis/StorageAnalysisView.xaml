@@ -38,14 +38,15 @@
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Foreground" Value="#405F7C" />
             <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="Root" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10">
-                            <ContentPresenter x:Name="ModeContent" HorizontalAlignment="Center" VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}" />
+                            <TextBlock x:Name="ModeContent" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{TemplateBinding Foreground}" Text="{TemplateBinding Content}" />
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="Tag" Value="Active"><Setter TargetName="Root" Property="Background" Value="#4D7CFE" /><Setter TargetName="Root" Property="BorderBrush" Value="#76A0FF" /><Setter Property="Foreground" Value="White" /><Setter TargetName="ModeContent" Property="TextElement.Foreground" Value="White" /></Trigger>
+                            <Trigger Property="Tag" Value="Active"><Setter TargetName="Root" Property="Background" Value="#4D7CFE" /><Setter TargetName="Root" Property="BorderBrush" Value="#76A0FF" /><Setter Property="Foreground" Value="White" /><Setter TargetName="ModeContent" Property="Foreground" Value="White" /></Trigger>
                             <MultiTrigger><MultiTrigger.Conditions><Condition Property="Tag" Value="Active" /><Condition Property="IsMouseOver" Value="True" /></MultiTrigger.Conditions><Setter TargetName="Root" Property="Background" Value="#3E70EE" /></MultiTrigger>
                             <MultiTrigger><MultiTrigger.Conditions><Condition Property="Tag" Value="Inactive" /><Condition Property="IsMouseOver" Value="True" /></MultiTrigger.Conditions><Setter TargetName="Root" Property="Background" Value="#DCEBFF" /><Setter TargetName="Root" Property="BorderBrush" Value="#72A1FE" /></MultiTrigger>
                             <Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.72" /></Trigger>
@@ -177,7 +178,7 @@
                     <Border Grid.Row="2" MinHeight="300" Padding="6" Background="#4AFFFFFF" BorderBrush="#8AD3E7F6" BorderThickness="1" CornerRadius="18">
                         <local:StorageTreemapControl x:Name="TreemapControl" />
                     </Border>
-                    <StackPanel Grid.Row="4" Orientation="Horizontal"><TextBlock FontSize="9.5" Foreground="#7890A6" Text="面积代表逻辑大小；悬停查看完整信息，小项目会自动聚合。" /><TextBlock Margin="12,0,0,0" FontSize="9.5" Foreground="#4D7CFE" Text="单击目录继续深入，单击文件交给文件工作台" /></StackPanel>
+                    <StackPanel Grid.Row="4" Orientation="Horizontal"><TextBlock FontSize="9.5" Foreground="#7890A6" Text="面积按逻辑大小进行视觉平衡；悬停查看精确占用，小项目会自动聚合。" /><TextBlock Margin="12,0,0,0" FontSize="9.5" Foreground="#4D7CFE" Text="单击目录继续深入，单击文件交给文件工作台" /></StackPanel>
                 </Grid>
             </Grid>
         </Grid>

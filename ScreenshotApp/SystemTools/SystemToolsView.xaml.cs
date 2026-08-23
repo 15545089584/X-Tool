@@ -1436,7 +1436,8 @@ public partial class SystemToolsView : UserControl
             return;
         }
 
-        var rootPath = Path.GetPathRoot(volume.DriveName);
+        // 卷名形如“C:”时属于驱动器相对路径，必须补上分隔符后再解析为绝对卷根目录。
+        var rootPath = Path.GetPathRoot(volume.DriveName + Path.DirectorySeparatorChar);
         if (string.IsNullOrWhiteSpace(rootPath) || !Directory.Exists(rootPath))
         {
             MessageBox.Show("所选本地卷当前不可用，请刷新存储信息后重试。", "无法分析本地卷", MessageBoxButton.OK, MessageBoxImage.Warning);
