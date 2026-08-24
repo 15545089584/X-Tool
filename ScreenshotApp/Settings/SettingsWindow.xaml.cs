@@ -20,6 +20,7 @@ public partial class SettingsWindow : Window
     private readonly Func<string, GlobalShortcut, string?> _applyShortcut;
     private readonly Func<bool, string> _applyVoiceInputEnabled;
     private readonly Action<int> _applyDesktopPetScale;
+    private readonly Func<bool, bool> _applyDesktopPetVisibility;
     private readonly Func<Task> _refreshHistory;
     private readonly Func<Task<(bool Success, string Message)>> _startNetworkTraffic;
     private readonly Action _stopNetworkTraffic;
@@ -39,6 +40,8 @@ public partial class SettingsWindow : Window
         Func<string, GlobalShortcut, string?> applyShortcut,
         Func<bool, string> applyVoiceInputEnabled,
         Action<int> applyDesktopPetScale,
+        bool desktopPetVisible,
+        Func<bool, bool> applyDesktopPetVisibility,
         Func<Task> refreshHistory,
         Func<Task<(bool Success, string Message)>> startNetworkTraffic,
         Action stopNetworkTraffic,
@@ -53,6 +56,7 @@ public partial class SettingsWindow : Window
         _applyShortcut = applyShortcut;
         _applyVoiceInputEnabled = applyVoiceInputEnabled;
         _applyDesktopPetScale = applyDesktopPetScale;
+        _applyDesktopPetVisibility = applyDesktopPetVisibility;
         _refreshHistory = refreshHistory;
         _startNetworkTraffic = startNetworkTraffic;
         _stopNetworkTraffic = stopNetworkTraffic;
@@ -62,6 +66,7 @@ public partial class SettingsWindow : Window
         VoiceInputEnabledCheckBox.IsChecked = preferences.VoiceInputEnabled;
         VoiceInputPasteAutomaticallyCheckBox.IsChecked = preferences.VoiceInputPasteAutomatically;
         VoiceInputModelStatusText.Text = voiceInputModelStatus;
+        DesktopPetVisibleCheckBox.IsChecked = desktopPetVisible;
         DesktopPetScaleSlider.Value = Math.Clamp(preferences.DesktopPetScalePercent, 60, 160);
         UpdateDesktopPetScaleText((int)Math.Round(DesktopPetScaleSlider.Value));
         UpdateShortcutButtons();
@@ -192,6 +197,21 @@ public partial class SettingsWindow : Window
             _preferences.Save();
         }
         _applyDesktopPetScale(scalePercent);
+    }
+
+    private void DesktopPetVisibleCheckBox_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_initialized)
+        {
+            return;
+        }
+
+        var requested = DesktopPetVisibleCheckBox.IsChecked == true;
+        var actual = _applyDesktopPetVisibility(requested);
+        DesktopPetVisibleCheckBox.IsChecked = actual;
+        _preferences.DesktopPetVisible = actual;
+        _preferences.Save();
+        SetFooterStatus(actual ? "桌面宠物已显示" : "桌面宠物已隐藏");
     }
 
     private void UpdateDesktopPetScaleText(int scalePercent)

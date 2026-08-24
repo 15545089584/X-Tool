@@ -18,7 +18,8 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
                         <Border x:Name="Root" Background="Transparent" BorderBrush="Transparent" BorderThickness="1" CornerRadius="13">
-                            <ContentPresenter Margin="{TemplateBinding Padding}" VerticalAlignment="Center" />
+                            <ContentPresenter Margin="{TemplateBinding Padding}" VerticalAlignment="Center"
+                                              TextElement.Foreground="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -33,6 +34,11 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+        </Style>
+
+        <Style x:Key="CategoryNavTextStyle" TargetType="TextBlock">
+            <Setter Property="Foreground"
+                    Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type RadioButton}}}" />
         </Style>
 
         <Style x:Key="SettingCardStyle" TargetType="Border">
@@ -145,12 +151,12 @@
                     <Grid.ColumnDefinitions><ColumnDefinition Width="214" /><ColumnDefinition Width="18" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                     <Border Padding="12" Background="#62FFFFFF" BorderBrush="#87FFFFFF" BorderThickness="1" CornerRadius="18">
                         <StackPanel>
-                            <RadioButton x:Name="GeneralCategoryNav" GroupName="SettingsCategories" Tag="General" IsChecked="True" Style="{StaticResource CategoryNavStyle}" Checked="CategoryNav_Checked"><StackPanel Orientation="Horizontal"><TextBlock Width="25" FontFamily="Segoe Fluent Icons" FontSize="16" Text="&#xE713;" /><TextBlock FontSize="14" Text="通用设置" /></StackPanel></RadioButton>
-                            <RadioButton x:Name="ScreenshotCategoryNav" GroupName="SettingsCategories" Tag="Screenshot" Style="{StaticResource CategoryNavStyle}" Checked="CategoryNav_Checked"><StackPanel Orientation="Horizontal"><TextBlock Width="25" FontFamily="Segoe Fluent Icons" FontSize="16" Text="&#xE7F4;" /><TextBlock FontSize="14" Text="截图设置" /></StackPanel></RadioButton>
-                            <RadioButton x:Name="ShortcutCategoryNav" GroupName="SettingsCategories" Tag="Shortcut" Style="{StaticResource CategoryNavStyle}" Checked="CategoryNav_Checked"><StackPanel Orientation="Horizontal"><TextBlock Width="25" FontFamily="Segoe Fluent Icons" FontSize="16" Text="&#xE765;" /><TextBlock FontSize="14" Text="快捷键设置" /></StackPanel></RadioButton>
-                            <RadioButton x:Name="DesktopPetCategoryNav" GroupName="SettingsCategories" Tag="DesktopPet" Style="{StaticResource CategoryNavStyle}" Checked="CategoryNav_Checked"><StackPanel Orientation="Horizontal"><TextBlock Width="25" FontFamily="Segoe Fluent Icons" FontSize="16" Text="&#xE74C;" /><TextBlock FontSize="14" Text="桌面宠物设置" /></StackPanel></RadioButton>
-                            <RadioButton x:Name="ReadWriteCategoryNav" GroupName="SettingsCategories" Tag="ReadWrite" Style="{StaticResource CategoryNavStyle}" Checked="CategoryNav_Checked"><StackPanel Orientation="Horizontal"><TextBlock Width="25" FontFamily="Segoe Fluent Icons" FontSize="16" Text="&#xE8C1;" /><TextBlock FontSize="14" Text="读写设置" /></StackPanel></RadioButton>
-                            <RadioButton x:Name="NetworkTrafficCategoryNav" GroupName="SettingsCategories" Tag="NetworkTraffic" Style="{StaticResource CategoryNavStyle}" Checked="CategoryNav_Checked"><StackPanel Orientation="Horizontal"><TextBlock Width="25" FontFamily="Segoe Fluent Icons" FontSize="16" Text="&#xE968;" /><TextBlock FontSize="14" Text="网络流量自动获取" /></StackPanel></RadioButton>
+                            <RadioButton x:Name="GeneralCategoryNav" GroupName="SettingsCategories" Tag="General" IsChecked="True" Style="{StaticResource CategoryNavStyle}" Checked="CategoryNav_Checked"><StackPanel Orientation="Horizontal"><TextBlock Width="25" FontFamily="Segoe Fluent Icons" FontSize="16" Style="{StaticResource CategoryNavTextStyle}" Text="&#xE713;" /><TextBlock FontSize="14" Style="{StaticResource CategoryNavTextStyle}" Text="通用" /></StackPanel></RadioButton>
+                            <RadioButton x:Name="ScreenshotCategoryNav" GroupName="SettingsCategories" Tag="Screenshot" Style="{StaticResource CategoryNavStyle}" Checked="CategoryNav_Checked"><StackPanel Orientation="Horizontal"><TextBlock Width="25" FontFamily="Segoe Fluent Icons" FontSize="16" Style="{StaticResource CategoryNavTextStyle}" Text="&#xE7F4;" /><TextBlock FontSize="14" Style="{StaticResource CategoryNavTextStyle}" Text="截图" /></StackPanel></RadioButton>
+                            <RadioButton x:Name="ShortcutCategoryNav" GroupName="SettingsCategories" Tag="Shortcut" Style="{StaticResource CategoryNavStyle}" Checked="CategoryNav_Checked"><StackPanel Orientation="Horizontal"><TextBlock Width="25" FontFamily="Segoe Fluent Icons" FontSize="16" Style="{StaticResource CategoryNavTextStyle}" Text="&#xE765;" /><TextBlock FontSize="14" Style="{StaticResource CategoryNavTextStyle}" Text="快捷键" /></StackPanel></RadioButton>
+                            <RadioButton x:Name="DesktopPetCategoryNav" GroupName="SettingsCategories" Tag="DesktopPet" Style="{StaticResource CategoryNavStyle}" Checked="CategoryNav_Checked"><StackPanel Orientation="Horizontal"><TextBlock Width="25" FontFamily="Segoe Fluent Icons" FontSize="16" Style="{StaticResource CategoryNavTextStyle}" Text="&#xE74C;" /><TextBlock FontSize="14" Style="{StaticResource CategoryNavTextStyle}" Text="桌面宠物" /></StackPanel></RadioButton>
+                            <RadioButton x:Name="ReadWriteCategoryNav" GroupName="SettingsCategories" Tag="ReadWrite" Style="{StaticResource CategoryNavStyle}" Checked="CategoryNav_Checked"><StackPanel Orientation="Horizontal"><TextBlock Width="25" FontFamily="Segoe Fluent Icons" FontSize="16" Style="{StaticResource CategoryNavTextStyle}" Text="&#xE8C1;" /><TextBlock FontSize="14" Style="{StaticResource CategoryNavTextStyle}" Text="读写" /></StackPanel></RadioButton>
+                            <RadioButton x:Name="NetworkTrafficCategoryNav" GroupName="SettingsCategories" Tag="NetworkTraffic" Style="{StaticResource CategoryNavStyle}" Checked="CategoryNav_Checked"><StackPanel Orientation="Horizontal"><TextBlock Width="25" FontFamily="Segoe Fluent Icons" FontSize="16" Style="{StaticResource CategoryNavTextStyle}" Text="&#xE968;" /><TextBlock FontSize="14" Style="{StaticResource CategoryNavTextStyle}" Text="网络流量自动获取" /></StackPanel></RadioButton>
                         </StackPanel>
                     </Border>
 
@@ -210,6 +216,7 @@
 
                                 <ScrollViewer x:Name="DesktopPetSettingsPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                                     <StackPanel Margin="0,2,8,0">
+                                        <Border Style="{StaticResource SettingCardStyle}"><Grid Height="82" Margin="20,0"><StackPanel VerticalAlignment="Center"><TextBlock FontSize="15" Foreground="#304A63" Text="显示桌面宠物" /><TextBlock Margin="0,5,0,0" FontSize="11" Foreground="#74899E" Text="控制桌面宠物是否显示；关闭后下次启动仍保持隐藏" /></StackPanel><CheckBox x:Name="DesktopPetVisibleCheckBox" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource SettingToggleStyle}" Click="DesktopPetVisibleCheckBox_Click" /></Grid></Border>
                                         <Border Style="{StaticResource SettingCardStyle}" Padding="22,20">
                                             <StackPanel>
                                                 <Grid><StackPanel><TextBlock FontSize="16" Foreground="#304A63" Text="桌面宠物大小" /><TextBlock Margin="0,5,0,0" FontSize="11" Foreground="#74899E" Text="调整后立即生效，并保持角色底部锚点与屏幕贴边位置" /></StackPanel><TextBlock x:Name="DesktopPetScaleValueText" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" Foreground="#4D7CFE" Text="100% · 288 DIP" /></Grid>

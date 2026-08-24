@@ -384,6 +384,7 @@ public partial class MainWindow : Window
         var voiceModelStatus = _voiceInputService.IsModelAvailable
             ? "标准中文离线模型已就绪"
             : "本地模型缺失，请修复或重新安装 X-Tool";
+        var app = Application.Current as App;
         return new SettingsWindow(
             _preferences,
             _screenshotShortcut,
@@ -400,6 +401,8 @@ public partial class MainWindow : Window
                     app.UpdateDesktopPetScale(scalePercent);
                 }
             },
+            app?.IsDesktopPetVisible == true,
+            visible => app?.SetDesktopPetVisible(visible) == true,
             RefreshHistoryAsync,
             () => NetworkWorkbenchView.StartPersistentTrafficAsync(),
             NetworkWorkbenchView.StopTrafficMonitoring,

@@ -93,7 +93,10 @@ public partial class App : System.Windows.Application
 #endif
 
         mainWindow.Show();
-        Dispatcher.BeginInvoke(ShowDesktopPet, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+        if (AppPreferences.Load().DesktopPetVisible)
+        {
+            Dispatcher.BeginInvoke(ShowDesktopPet, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+        }
     }
 
     internal void ShowMainWindow()
@@ -219,16 +222,7 @@ public partial class App : System.Windows.Application
 
     private void ToggleDesktopPet()
     {
-        if (_desktopPetWindow?.IsVisible == true)
-        {
-            _desktopPetWindow.Hide();
-        }
-        else
-        {
-            ShowDesktopPet();
-        }
-
-        UpdateDesktopPetMenuItem();
+        SetDesktopPetVisible(!IsDesktopPetVisible);
     }
 
     private void ShowDesktopPet()
@@ -238,7 +232,13 @@ public partial class App : System.Windows.Application
             try
             {
                 _desktopPetWindow = new DesktopPetWindow(AppPreferences.Load().DesktopPetScalePercent);
-                _desktopPetWindow.PetVisibilityChanged += (_, _) => UpdateDesktopPetMenuItem();
+                _desktopPetWindow.PetVisibilityChanged += (_, _) =>
+                {
+                    if (!IsExitRequested)
+                    {
+                        PersistDesktopPetVisibility();
+                    }
+                };
             }
             catch (Exception exception)
             {
@@ -266,6 +266,31 @@ public partial class App : System.Windows.Application
 
     internal void UpdateDesktopPetScale(int scalePercent) =>
         _desktopPetWindow?.SetScalePercent(scalePercent);
+
+    internal bool IsDesktopPetVisible => _desktopPetWindow?.IsVisible == true;
+
+    internal bool SetDesktopPetVisible(bool visible)
+    {
+        if (visible)
+        {
+            ShowDesktopPet();
+        }
+        else
+        {
+            _desktopPetWindow?.Hide();
+        }
+
+        PersistDesktopPetVisibility();
+        return IsDesktopPetVisible;
+    }
+
+    private void PersistDesktopPetVisibility()
+    {
+        var preferences = AppPreferences.Load();
+        preferences.DesktopPetVisible = IsDesktopPetVisible;
+        preferences.Save();
+        UpdateDesktopPetMenuItem();
+    }
 
     private async Task RunDesktopPetValidationAndExitAsync(
         DesktopPetWindow validationWindow,
