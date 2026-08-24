@@ -6,6 +6,7 @@ using Forms = System.Windows.Forms;
 using ScreenshotApp.SystemTools;
 using ScreenshotApp.NetworkWorkbench;
 using ScreenshotApp.Translation;
+using ScreenshotApp.DesktopPet;
 
 namespace ScreenshotApp;
 
@@ -18,6 +19,8 @@ public partial class App : System.Windows.Application
     private Icon? _trayDrawingIcon;
     private bool _trayHintShown;
     private SingleInstanceCoordinator? _singleInstanceCoordinator;
+    private DesktopPetWindow? _desktopPetWindow;
+    private Forms.ToolStripMenuItem? _desktopPetMenuItem;
 
     internal bool IsExitRequested { get; private set; }
 
@@ -35,6 +38,19 @@ public partial class App : System.Windows.Application
         if (e.Args.Length == 2 && string.Equals(e.Args[0], "--network-etw-helper", StringComparison.Ordinal))
         {
             Shutdown(NetworkEtwTrafficHelper.Run(e.Args[1]));
+            return;
+        }
+
+        const string desktopPetValidationPrefix = "--desktop-pet-validation=";
+        var desktopPetValidationArgument = e.Args.FirstOrDefault(argument =>
+            argument.StartsWith(desktopPetValidationPrefix, StringComparison.OrdinalIgnoreCase));
+        if (desktopPetValidationArgument is not null)
+        {
+            var outputDirectory = desktopPetValidationArgument[desktopPetValidationPrefix.Length..].Trim('"');
+            var validationWindow = new DesktopPetWindow();
+            MainWindow = validationWindow;
+            validationWindow.Show();
+            _ = RunDesktopPetValidationAndExitAsync(validationWindow, outputDirectory);
             return;
         }
 
@@ -63,6 +79,7 @@ public partial class App : System.Windows.Application
 #endif
 
         mainWindow.Show();
+        Dispatcher.BeginInvoke(ShowDesktopPet, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
     }
 
     internal void ShowMainWindow()
@@ -102,6 +119,11 @@ public partial class App : System.Windows.Application
     internal void ExitApplication()
     {
         IsExitRequested = true;
+        if (_desktopPetWindow is not null)
+        {
+            _desktopPetWindow.Close();
+            _desktopPetWindow = null;
+        }
         if (MainWindow is MainWindow mainWindow)
         {
             mainWindow.Close();
@@ -136,6 +158,8 @@ public partial class App : System.Windows.Application
         _trayDrawingIcon = null;
         _singleInstanceCoordinator?.Dispose();
         _singleInstanceCoordinator = null;
+        _desktopPetWindow = null;
+        _desktopPetMenuItem = null;
         TranslationEngineProvider.Dispose();
         base.OnExit(e);
     }
@@ -152,6 +176,12 @@ public partial class App : System.Windows.Application
 
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add("打开主界面", null, (_, _) => Dispatcher.Invoke(ShowMainWindow));
+        _desktopPetMenuItem = new Forms.ToolStripMenuItem("显示桌面宠物")
+        {
+            Checked = true
+        };
+        _desktopPetMenuItem.Click += (_, _) => Dispatcher.Invoke(ToggleDesktopPet);
+        menu.Items.Add(_desktopPetMenuItem);
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("截图", null, (_, _) => Dispatcher.Invoke(mainWindow.BeginRegionCapture));
         menu.Items.Add(new Forms.ToolStripSeparator());
@@ -171,5 +201,76 @@ public partial class App : System.Windows.Application
             _trayBalloonAction = null;
             action?.Invoke();
         };
+    }
+
+    private void ToggleDesktopPet()
+    {
+        if (_desktopPetWindow?.IsVisible == true)
+        {
+            _desktopPetWindow.Hide();
+        }
+        else
+        {
+            ShowDesktopPet();
+        }
+
+        UpdateDesktopPetMenuItem();
+    }
+
+    private void ShowDesktopPet()
+    {
+        if (_desktopPetWindow is null)
+        {
+            try
+            {
+                _desktopPetWindow = new DesktopPetWindow();
+                _desktopPetWindow.PetVisibilityChanged += (_, _) => UpdateDesktopPetMenuItem();
+            }
+            catch (Exception exception)
+            {
+                System.Diagnostics.Debug.WriteLine($"桌面宠物创建失败：{exception}");
+                UpdateDesktopPetMenuItem();
+                return;
+            }
+        }
+
+        _desktopPetWindow.Show();
+        UpdateDesktopPetMenuItem();
+    }
+
+    private void UpdateDesktopPetMenuItem()
+    {
+        if (_desktopPetMenuItem is null)
+        {
+            return;
+        }
+
+        var isVisible = _desktopPetWindow?.IsVisible == true;
+        _desktopPetMenuItem.Checked = isVisible;
+        _desktopPetMenuItem.Text = isVisible ? "隐藏桌面宠物" : "显示桌面宠物";
+    }
+
+    private async Task RunDesktopPetValidationAndExitAsync(
+        DesktopPetWindow validationWindow,
+        string outputDirectory)
+    {
+        var exitCode = 0;
+        try
+        {
+            await DesktopPetValidationRunner.RunAsync(validationWindow, outputDirectory);
+        }
+        catch (Exception exception)
+        {
+            exitCode = 10;
+            Directory.CreateDirectory(outputDirectory);
+            await File.WriteAllTextAsync(
+                Path.Combine(outputDirectory, "desktop-pet-validation-error.txt"),
+                exception.ToString());
+        }
+        finally
+        {
+            validationWindow.Close();
+            Shutdown(exitCode);
+        }
     }
 }

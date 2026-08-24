@@ -71,6 +71,15 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- 桌面宠物使用独立 PNG 帧资源，按需解码并冻结后交给 WPF 播放。 -->
+    <None Remove="Assets\DesktopPet\**\*" />
+    <Content Include="Assets\DesktopPet\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>assets\desktop-pet\%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- 随程序发布经校验的 FFmpeg 命令行引擎；运行时优先从 tools\ffmpeg 查找。 -->
     <Content Include="tools\ffmpeg\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

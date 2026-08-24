@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "canvasWidth": 512,
+  "canvasHeight": 512,
+  "displaySize": 288,
+  "maxCachedStates": 2,
+  "anchor": {
+    "x": 256,
+    "y": 508
+  },
+  "states": [
+    {
+      "id": "state-01",
+      "displayName": "状态 1 · 轻动作",
+      "frameDirectory": "state-01/frames",
+      "frameCount": 80,
+      "fps": 20,
+      "durationMs": 4000,
+      "loop": true,
+      "sourceSha256": "756A65140B171DCE6A6A7B572851E831708289EE63D78B0973CCA23C5495E92A"
+    },
+    {
+      "id": "state-06",
+      "displayName": "状态 6 · 手臂动作",
+      "frameDirectory": "state-06/frames",
+      "frameCount": 43,
+      "fps": 20,
+      "durationMs": 2150,
+      "loop": true,
+      "sourceSha256": "0A46BA2A6794DEB348FF76C10B6F72BFDFAB0654F7A96D0B7EF8CA2AE7E06395"
+    }
+  ]
+}

@@ -15,6 +15,7 @@ using ScreenshotApp.Converters;
 using ScreenshotApp.StorageAnalysis;
 using ScreenshotApp.NetworkWorkbench;
 using ScreenshotApp.SystemTools;
+using ScreenshotApp.DesktopPet;
 using Microsoft.Data.Sqlite;
 
 const int Width = 720;
@@ -128,6 +129,89 @@ if (args.Length >= 1 && args[0] == "--storage-analysis")
     foreach (var usage in result.DirectoryUsages.Take(8))
         Console.WriteLine($"  {usage.Name} | {usage.SizeText} | 文件 {usage.FilesScanned:N0} | 目录 {usage.DirectoriesScanned:N0}");
     return result.FilesScanned > 0 && result.DirectoryUsages.Count > 0 && result.LargeFiles.Count > 0 ? 0 : 3;
+}
+
+if (args.Length >= 1 && args[0] == "--desktop-pet-smoke")
+{
+    var assetRoot = args.Length >= 2
+        ? Path.GetFullPath(args[1])
+        : Path.Combine(AppContext.BaseDirectory, "assets", "desktop-pet");
+    try
+    {
+        var catalog = DesktopPetAnimationCatalog.Load(assetRoot);
+        var state01 = catalog.GetState("state-01");
+        var state06 = catalog.GetState("state-06");
+        var manifestPassed = catalog.CanvasWidth == 512 && catalog.CanvasHeight == 512 &&
+                             catalog.Anchor == new DesktopPetAnchor(256, 508) &&
+                             state01.FramePaths.Count == 80 && state01.Fps == 20 &&
+                             state06.FramePaths.Count == 43 && state06.Fps == 20;
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        var process = System.Diagnostics.Process.GetCurrentProcess();
+        process.Refresh();
+        var memoryBefore = process.PrivateMemorySize64;
+
+        var loadWatch = System.Diagnostics.Stopwatch.StartNew();
+        var state01Frames = DesktopPetAnimationPlayer.LoadFrames(
+            state01, catalog.DisplaySize, CancellationToken.None);
+        loadWatch.Stop();
+        process.Refresh();
+        var memoryAfterState01 = process.PrivateMemorySize64;
+        var state01LoadMilliseconds = loadWatch.Elapsed.TotalMilliseconds;
+
+        loadWatch.Restart();
+        var state06Frames = DesktopPetAnimationPlayer.LoadFrames(
+            state06, catalog.DisplaySize, CancellationToken.None);
+        loadWatch.Stop();
+        process.Refresh();
+        var memoryAfterState06 = process.PrivateMemorySize64;
+        var state06LoadMilliseconds = loadWatch.Elapsed.TotalMilliseconds;
+
+        var decodedBytes01 = DesktopPetAnimationPlayer.CalculateDecodedBytes(state01Frames);
+        var decodedBytes06 = DesktopPetAnimationPlayer.CalculateDecodedBytes(state06Frames);
+        var framePassed = state01Frames.Count == 80 && state06Frames.Count == 43 &&
+                          state01Frames.All(frame => frame.IsFrozen && frame.PixelWidth == catalog.DisplaySize) &&
+                          state06Frames.All(frame => frame.IsFrozen && frame.PixelWidth == catalog.DisplaySize);
+
+        var playbackPassed =
+            DesktopPetPlaybackMath.GetFrameIndex(TimeSpan.Zero, 20, 80, loop: true) == 0 &&
+            DesktopPetPlaybackMath.GetFrameIndex(TimeSpan.FromMilliseconds(49), 20, 80, loop: true) == 0 &&
+            DesktopPetPlaybackMath.GetFrameIndex(TimeSpan.FromMilliseconds(50), 20, 80, loop: true) == 1 &&
+            DesktopPetPlaybackMath.GetFrameIndex(TimeSpan.FromSeconds(4), 20, 80, loop: true) == 0 &&
+            DesktopPetPlaybackMath.GetFrameIndex(TimeSpan.FromMilliseconds(2150), 20, 43, loop: true) == 0;
+
+        var workArea = new Rect(0, 0, 1920, 1040);
+        var right = DesktopPetPlacement.SnapToNearestEdge(new Rect(1600, 300, 288, 288), workArea, 12);
+        var bottom = DesktopPetPlacement.SnapToNearestEdge(new Rect(800, 720, 288, 288), workArea, 12);
+        var secondaryArea = new Rect(-1920, 0, 1920, 1040);
+        var secondaryLeft = DesktopPetPlacement.SnapToNearestEdge(
+            new Rect(-1880, 280, 288, 288), secondaryArea, 12);
+        var placementPassed = right == new System.Windows.Point(1620, 300) &&
+                              bottom == new System.Windows.Point(800, 740) &&
+                              secondaryLeft == new System.Windows.Point(-1908, 280);
+
+        var passed = manifestPassed && framePassed && playbackPassed && placementPassed;
+        Console.WriteLine($"桌面宠物清单 | {(manifestPassed ? "通过" : "失败")} | " +
+                          $"状态1 {state01.FramePaths.Count} 帧 | 状态6 {state06.FramePaths.Count} 帧 | " +
+                          $"锚点 ({catalog.Anchor.X}, {catalog.Anchor.Y})");
+        Console.WriteLine($"桌面宠物帧解码 | {(framePassed ? "通过" : "失败")} | " +
+                          $"状态1 {decodedBytes01 / 1024d / 1024d:F2} MiB / {state01LoadMilliseconds:F0} ms | " +
+                          $"状态6 {decodedBytes06 / 1024d / 1024d:F2} MiB / {state06LoadMilliseconds:F0} ms");
+        Console.WriteLine($"桌面宠物时序与贴边 | {(playbackPassed && placementPassed ? "通过" : "失败")} | " +
+                          $"20 FPS 循环边界 {(playbackPassed ? "正确" : "错误")} | " +
+                          $"主副屏工作区贴边 {(placementPassed ? "正确" : "错误")}");
+        Console.WriteLine($"桌面宠物进程私有内存 | 基线 {memoryBefore / 1024d / 1024d:F1} MiB | " +
+                          $"状态1后 {memoryAfterState01 / 1024d / 1024d:F1} MiB | " +
+                          $"两状态后 {memoryAfterState06 / 1024d / 1024d:F1} MiB");
+        return passed ? 0 : 8;
+    }
+    catch (Exception exception)
+    {
+        Console.Error.WriteLine($"桌面宠物回归失败：{exception}");
+        return 9;
+    }
 }
 
 if (args.Length >= 1 && args[0] == "--storage-analysis-native-smoke")
