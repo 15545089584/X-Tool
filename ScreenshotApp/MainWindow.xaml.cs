@@ -71,6 +71,8 @@ public partial class MainWindow : Window
     private string _voiceInputTranslatedText = string.Empty;
     private string _currentPage = "Home";
     private FrameworkElement? _visiblePageView;
+    private SettingsWindow? _settingsWindow;
+    private bool _suppressMainNavigation;
     private int _pageTransitionGeneration;
     private int _toastAnimationGeneration;
     private GlobalShortcut _screenshotShortcut;
@@ -338,12 +340,111 @@ public partial class MainWindow : Window
 
     private void NavButton_Checked(object sender, RoutedEventArgs e)
     {
-        if (!IsLoaded || sender is not RadioButton radioButton)
+        if (!IsLoaded || _suppressMainNavigation || sender is not RadioButton radioButton)
         {
             return;
         }
 
-        NavigateToPage(radioButton.Tag?.ToString() ?? "Home");
+        var page = radioButton.Tag?.ToString() ?? "Home";
+        if (page == "Settings")
+        {
+            OpenSettingsWindow();
+            return;
+        }
+
+        NavigateToPage(page);
+    }
+
+    private void OpenSettingsWindow()
+    {
+        if (_settingsWindow is { IsVisible: true })
+        {
+            _settingsWindow.Activate();
+            return;
+        }
+
+        var window = CreateSettingsWindow();
+        _settingsWindow = window;
+        try
+        {
+            window.ShowDialog();
+        }
+        finally
+        {
+            _settingsWindow = null;
+            SynchronizeLegacySettingsControls();
+            RestoreCurrentNavigationSelection();
+        }
+    }
+
+    internal SettingsWindow CreateSettingsWindowForValidation() => CreateSettingsWindow();
+
+    private SettingsWindow CreateSettingsWindow()
+    {
+        var voiceModelStatus = _voiceInputService.IsModelAvailable
+            ? "标准中文离线模型已就绪"
+            : "本地模型缺失，请修复或重新安装 X-Tool";
+        return new SettingsWindow(
+            _preferences,
+            _screenshotShortcut,
+            _fullScreenShortcut,
+            _clipboardShortcut,
+            _voiceInputShortcut,
+            ApplyShortcutRequested,
+            ApplyVoiceInputEnabledSetting,
+            scalePercent =>
+            {
+                DesktopPetScaleSlider.Value = scalePercent;
+                if (Application.Current is App app)
+                {
+                    app.UpdateDesktopPetScale(scalePercent);
+                }
+            },
+            RefreshHistoryAsync,
+            () => NetworkWorkbenchView.StartPersistentTrafficAsync(),
+            NetworkWorkbenchView.StopTrafficMonitoring,
+            voiceModelStatus)
+        {
+            Owner = this
+        };
+    }
+
+    private void SynchronizeLegacySettingsControls()
+    {
+        StartWithWindowsCheckBox.IsChecked = AutoStartService.IsEnabled();
+        StickerTopmostCheckBox.IsChecked = _preferences.StickerTopmost;
+        VoiceInputEnabledCheckBox.IsChecked = _preferences.VoiceInputEnabled;
+        VoiceInputPasteAutomaticallyCheckBox.IsChecked = _preferences.VoiceInputPasteAutomatically;
+        DesktopPetScaleSlider.Value = Math.Clamp(_preferences.DesktopPetScalePercent, 60, 160);
+        UpdateDesktopPetScaleText((int)Math.Round(DesktopPetScaleSlider.Value));
+        UpdateStorageLocationText();
+        UpdateSettingsShortcutSummary();
+        _ = RefreshNetworkEtwAuthorizationStateAsync();
+    }
+
+    private void RestoreCurrentNavigationSelection()
+    {
+        var navigation = _currentPage switch
+        {
+            "ScreenWorkbench" or "History" => ScreenWorkbenchNav,
+            "ConverterWorkbench" or "ImageConverter" or "AudioConverter" or "VideoConverter" or
+                "PdfConverter" or "EncodingConverter" or "QrCodeConverter" => ConverterWorkbenchNav,
+            "FileWorkbench" => FileWorkbenchNav,
+            "NetworkWorkbench" => NetworkWorkbenchNav,
+            "ResourceManagement" => ResourceManagementNav,
+            "SystemTools" => SystemToolsNav,
+            "DeveloperTools" => DeveloperToolsNav,
+            _ => HomeNav
+        };
+        _suppressMainNavigation = true;
+        try
+        {
+            navigation.IsChecked = true;
+        }
+        finally
+        {
+            _suppressMainNavigation = false;
+        }
     }
 
     private void NavigateToPage(string page)
@@ -421,7 +522,6 @@ public partial class MainWindow : Window
         "SystemTools" => SystemToolsView,
         "DeveloperTools" => DeveloperToolsView,
         "History" => HistoryView,
-        "Settings" => SettingsView,
         _ => null
     };
 
@@ -441,8 +541,7 @@ public partial class MainWindow : Window
         ResourceManagementView,
         SystemToolsView,
         DeveloperToolsView,
-        HistoryView,
-        SettingsView
+        HistoryView
     ];
 
     private static int GetPageOrder(string page) => page switch
@@ -462,7 +561,6 @@ public partial class MainWindow : Window
         "ResourceManagement" => 50,
         "SystemTools" => 60,
         "DeveloperTools" => 70,
-        "Settings" => 80,
         _ => 0
     };
 
@@ -2208,7 +2306,14 @@ public partial class MainWindow : Window
 
     private void VoiceInputEnabledCheckBox_Click(object sender, RoutedEventArgs e)
     {
-        _preferences.VoiceInputEnabled = VoiceInputEnabledCheckBox.IsChecked == true;
+        var message = ApplyVoiceInputEnabledSetting(VoiceInputEnabledCheckBox.IsChecked == true);
+        VoiceInputEnabledCheckBox.IsChecked = _preferences.VoiceInputEnabled;
+        ShowToast(message);
+    }
+
+    private string ApplyVoiceInputEnabledSetting(bool enabled)
+    {
+        _preferences.VoiceInputEnabled = enabled;
         _preferences.Save();
         if (!_preferences.VoiceInputEnabled)
         {
@@ -2221,14 +2326,14 @@ public partial class MainWindow : Window
                 NativeMethods.UnregisterHotKey(_windowSource.Handle, NativeMethods.VoiceHotKeyId);
             }
             _voiceInputHotKeyRegistered = false;
-            return;
+            return "本地语音输入已关闭";
         }
 
         if (_windowSource is not null)
         {
             RegisterVoiceInputHotKey(_windowSource.Handle);
         }
-        ShowToast(_voiceInputHotKeyRegistered ? "本地语音输入已开启" : "快捷键被其他程序占用");
+        return _voiceInputHotKeyRegistered ? "本地语音输入已开启" : "快捷键被其他程序占用";
     }
 
     private void VoiceInputPasteAutomaticallyCheckBox_Click(object sender, RoutedEventArgs e)
@@ -2273,8 +2378,8 @@ public partial class MainWindow : Window
                 OpenShortcutSettings();
                 return;
             case "Settings":
-                SettingsNav.IsChecked = true;
-                break;
+                OpenSettingsWindow();
+                return;
             default:
                 return;
         }

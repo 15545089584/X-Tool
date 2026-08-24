@@ -55,6 +55,19 @@ public partial class App : System.Windows.Application
             return;
         }
 
+        const string settingsWindowValidationPrefix = "--settings-window-validation=";
+        var settingsWindowValidationArgument = e.Args.FirstOrDefault(argument =>
+            argument.StartsWith(settingsWindowValidationPrefix, StringComparison.OrdinalIgnoreCase));
+        if (settingsWindowValidationArgument is not null)
+        {
+            var outputDirectory = settingsWindowValidationArgument[settingsWindowValidationPrefix.Length..].Trim('"');
+            var validationMainWindow = new MainWindow();
+            MainWindow = validationMainWindow;
+            validationMainWindow.Show();
+            _ = RunSettingsWindowValidationAndExitAsync(validationMainWindow, outputDirectory);
+            return;
+        }
+
         _singleInstanceCoordinator = new SingleInstanceCoordinator(
             SingleInstanceMutexName,
             ActivationEventName,
@@ -275,6 +288,68 @@ public partial class App : System.Windows.Application
         {
             validationWindow.Close();
             Shutdown(exitCode);
+        }
+    }
+
+    private async Task RunSettingsWindowValidationAndExitAsync(
+        MainWindow validationMainWindow,
+        string outputDirectory)
+    {
+        var exitCode = 0;
+        SettingsWindow? settingsWindow = null;
+        try
+        {
+            Directory.CreateDirectory(outputDirectory);
+            await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            settingsWindow = validationMainWindow.CreateSettingsWindowForValidation();
+            settingsWindow.Show();
+            await Task.Delay(350);
+
+            var captures = new List<object>();
+            foreach (var category in SettingsWindow.ValidationCategories)
+            {
+                settingsWindow.SelectCategoryForValidation(category);
+                await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Render);
+                await Task.Delay(100);
+                var fileName = $"settings-{category.ToLowerInvariant()}.png";
+                settingsWindow.CaptureForValidation(Path.Combine(outputDirectory, fileName));
+                captures.Add(new
+                {
+                    category,
+                    fileName,
+                    width = settingsWindow.ActualWidth,
+                    height = settingsWindow.ActualHeight
+                });
+            }
+
+            var result = new
+            {
+                succeeded = true,
+                windowWidth = settingsWindow.ActualWidth,
+                windowHeight = settingsWindow.ActualHeight,
+                captures
+            };
+            await File.WriteAllTextAsync(
+                Path.Combine(outputDirectory, "settings-window-validation.json"),
+                System.Text.Json.JsonSerializer.Serialize(
+                    result,
+                    new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+        }
+        catch (Exception exception)
+        {
+            exitCode = 11;
+            Directory.CreateDirectory(outputDirectory);
+            await File.WriteAllTextAsync(
+                Path.Combine(outputDirectory, "settings-window-validation-error.txt"),
+                exception.ToString());
+        }
+        finally
+        {
+            settingsWindow?.Close();
+            IsExitRequested = true;
+            validationMainWindow.Close();
+            Shutdown(exitCode);
+            Environment.Exit(exitCode);
         }
     }
 }
