@@ -26,6 +26,9 @@ public sealed class AppPreferences
 
     public bool StickerTopmost { get; set; } = true;
 
+    /// <summary>桌面宠物相对于 288 DIP 基准尺寸的缩放百分比。</summary>
+    public int DesktopPetScalePercent { get; set; } = 100;
+
     public bool VoiceInputEnabled { get; set; } = true;
 
     public bool VoiceInputPasteAutomatically { get; set; } = true;
@@ -53,8 +56,10 @@ public sealed class AppPreferences
                 return new AppPreferences();
             }
 
-            return JsonSerializer.Deserialize<AppPreferences>(File.ReadAllText(PreferencesFilePath))
-                ?? new AppPreferences();
+            var preferences = JsonSerializer.Deserialize<AppPreferences>(File.ReadAllText(PreferencesFilePath))
+                              ?? new AppPreferences();
+            preferences.DesktopPetScalePercent = Math.Clamp(preferences.DesktopPetScalePercent, 60, 160);
+            return preferences;
         }
         catch
         {

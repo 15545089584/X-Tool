@@ -115,6 +115,8 @@ public partial class MainWindow : Window
         _ = GlobalShortcut.TryParse(_preferences.ClipboardShortcut, GlobalShortcut.ClipboardDefault, out _clipboardShortcut);
         _ = GlobalShortcut.TryParse(_preferences.VoiceInputShortcut, GlobalShortcut.VoiceDefault, out _voiceInputShortcut);
         StickerTopmostCheckBox.IsChecked = _preferences.StickerTopmost;
+        DesktopPetScaleSlider.Value = Math.Clamp(_preferences.DesktopPetScalePercent, 60, 160);
+        UpdateDesktopPetScaleText((int)Math.Round(DesktopPetScaleSlider.Value));
         StartWithWindowsCheckBox.IsChecked = AutoStartService.IsEnabled();
         _preferences.StartWithWindows = StartWithWindowsCheckBox.IsChecked == true;
         VoiceInputEnabledCheckBox.IsChecked = _preferences.VoiceInputEnabled;
@@ -1322,6 +1324,40 @@ public partial class MainWindow : Window
     {
         _preferences.StickerTopmost = StickerTopmostCheckBox.IsChecked == true;
         _preferences.Save();
+    }
+
+    private void DesktopPetScaleSlider_ValueChanged(
+        object sender,
+        RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (DesktopPetScaleSlider is null || DesktopPetScaleValueText is null)
+        {
+            return;
+        }
+
+        var scalePercent = Math.Clamp((int)Math.Round(e.NewValue / 5d) * 5, 60, 160);
+        UpdateDesktopPetScaleText(scalePercent);
+        if (_preferences.DesktopPetScalePercent != scalePercent)
+        {
+            _preferences.DesktopPetScalePercent = scalePercent;
+            _preferences.Save();
+        }
+
+        if (Application.Current is App app)
+        {
+            app.UpdateDesktopPetScale(scalePercent);
+        }
+    }
+
+    private void UpdateDesktopPetScaleText(int scalePercent)
+    {
+        if (DesktopPetScaleValueText is null)
+        {
+            return;
+        }
+
+        var displayPixels = (int)Math.Round(288 * scalePercent / 100d);
+        DesktopPetScaleValueText.Text = $"{scalePercent}% · {displayPixels} DIP";
     }
 
     private void StartWithWindowsCheckBox_Click(object sender, RoutedEventArgs e)

@@ -7,6 +7,7 @@ using ScreenshotApp.SystemTools;
 using ScreenshotApp.NetworkWorkbench;
 using ScreenshotApp.Translation;
 using ScreenshotApp.DesktopPet;
+using ScreenshotApp.Settings;
 
 namespace ScreenshotApp;
 
@@ -223,7 +224,7 @@ public partial class App : System.Windows.Application
         {
             try
             {
-                _desktopPetWindow = new DesktopPetWindow();
+                _desktopPetWindow = new DesktopPetWindow(AppPreferences.Load().DesktopPetScalePercent);
                 _desktopPetWindow.PetVisibilityChanged += (_, _) => UpdateDesktopPetMenuItem();
             }
             catch (Exception exception)
@@ -249,6 +250,9 @@ public partial class App : System.Windows.Application
         _desktopPetMenuItem.Checked = isVisible;
         _desktopPetMenuItem.Text = isVisible ? "隐藏桌面宠物" : "显示桌面宠物";
     }
+
+    internal void UpdateDesktopPetScale(int scalePercent) =>
+        _desktopPetWindow?.SetScalePercent(scalePercent);
 
     private async Task RunDesktopPetValidationAndExitAsync(
         DesktopPetWindow validationWindow,

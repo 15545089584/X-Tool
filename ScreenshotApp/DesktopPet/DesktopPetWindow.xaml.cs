@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using Microsoft.Win32;
@@ -11,18 +12,26 @@ public partial class DesktopPetWindow : Window
     private const double EdgeMargin = 12;
     private readonly DesktopPetAnimationCatalog _catalog;
     private readonly DesktopPetAnimationPlayer _player;
+    private CancellationTokenSource? _resizeDecodeCancellation;
+    private int _scalePercent;
     private bool _initialized;
     private bool _closed;
 
-    internal DesktopPetWindow()
+    internal DesktopPetWindow(int initialScalePercent = 100)
     {
         InitializeComponent();
         _catalog = DesktopPetAnimationCatalog.LoadDefault();
-        Width = _catalog.DisplaySize;
-        Height = _catalog.DisplaySize;
-        PetImage.Width = _catalog.DisplaySize;
-        PetImage.Height = _catalog.DisplaySize;
-        _player = new DesktopPetAnimationPlayer(PetImage, _catalog);
+        _scalePercent = Math.Clamp(initialScalePercent, 60, 160);
+        var initialSize = CalculateDisplaySize(_scalePercent);
+        Width = initialSize;
+        Height = initialSize;
+        PetImage.Width = initialSize;
+        PetImage.Height = initialSize;
+        _player = new DesktopPetAnimationPlayer(
+            PetImage,
+            _catalog,
+            Math.Min(_catalog.CanvasWidth, (int)Math.Ceiling(initialSize)));
+        BuildAnimationStateMenu();
         _player.StateChanged += Player_StateChanged;
         Loaded += DesktopPetWindow_Loaded;
         IsVisibleChanged += DesktopPetWindow_IsVisibleChanged;
@@ -37,10 +46,37 @@ public partial class DesktopPetWindow : Window
 
     internal long CachedDecodedBytes => _player.CachedDecodedBytes;
 
+    internal IReadOnlyList<string> StateIds => _catalog.States.Select(state => state.Id).ToArray();
+
+    internal int ScalePercent => _scalePercent;
+
     internal Task SwitchStateForValidationAsync(string stateId, CancellationToken cancellationToken) =>
         _player.SwitchStateAsync(stateId, cancellationToken);
 
     internal Rect GetCurrentWorkingAreaForValidation() => GetCurrentWorkingArea();
+
+    internal async Task SetScalePercentForValidationAsync(
+        int scalePercent,
+        CancellationToken cancellationToken)
+    {
+        ApplyScalePercent(scalePercent);
+        await _player.SetDecodePixelWidthAsync(
+            Math.Min(_catalog.CanvasWidth, (int)Math.Ceiling(CalculateDisplaySize(_scalePercent))),
+            cancellationToken);
+    }
+
+    internal void SetScalePercent(int scalePercent)
+    {
+        if (!ApplyScalePercent(scalePercent))
+        {
+            return;
+        }
+
+        _resizeDecodeCancellation?.Cancel();
+        _resizeDecodeCancellation?.Dispose();
+        _resizeDecodeCancellation = new CancellationTokenSource();
+        _ = RefreshDecodedFramesAfterResizeAsync(_resizeDecodeCancellation.Token);
+    }
 
     internal void SnapToNearestEdge()
     {
@@ -67,6 +103,9 @@ public partial class DesktopPetWindow : Window
         }
 
         _closed = true;
+        _resizeDecodeCancellation?.Cancel();
+        _resizeDecodeCancellation?.Dispose();
+        _resizeDecodeCancellation = null;
         SystemEvents.DisplaySettingsChanged -= SystemEvents_DisplaySettingsChanged;
         _player.StateChanged -= Player_StateChanged;
         _player.Dispose();
@@ -134,17 +173,21 @@ public partial class DesktopPetWindow : Window
             return;
         }
 
-        var nextState = _player.CurrentStateId?.Equals("state-01", StringComparison.OrdinalIgnoreCase) == true
-            ? "state-06"
-            : "state-01";
+        var currentIndex = _catalog.States
+            .Select((state, index) => (state, index))
+            .FirstOrDefault(item => item.state.Id.Equals(_player.CurrentStateId, StringComparison.OrdinalIgnoreCase))
+            .index;
+        var nextState = _catalog.States[(currentIndex + 1) % _catalog.States.Count].Id;
         await SwitchStateSafelyAsync(nextState);
     }
 
-    private async void State01MenuItem_Click(object sender, RoutedEventArgs e) =>
-        await SwitchStateSafelyAsync("state-01");
-
-    private async void State06MenuItem_Click(object sender, RoutedEventArgs e) =>
-        await SwitchStateSafelyAsync("state-06");
+    private async void AnimationStateMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem { Tag: string stateId })
+        {
+            await SwitchStateSafelyAsync(stateId);
+        }
+    }
 
     private void SnapToEdgeMenuItem_Click(object sender, RoutedEventArgs e) => SnapToNearestEdge();
 
@@ -168,10 +211,81 @@ public partial class DesktopPetWindow : Window
 
     private void Player_StateChanged(object? sender, DesktopPetStateChangedEventArgs e)
     {
-        State01MenuItem.IsChecked = e.State.Id.Equals("state-01", StringComparison.OrdinalIgnoreCase);
-        State06MenuItem.IsChecked = e.State.Id.Equals("state-06", StringComparison.OrdinalIgnoreCase);
+        foreach (var menuItem in AnimationStateMenu.Items.OfType<MenuItem>())
+        {
+            menuItem.IsChecked = menuItem.Tag is string stateId &&
+                                 stateId.Equals(e.State.Id, StringComparison.OrdinalIgnoreCase);
+        }
         ToolTip = $"{e.State.DisplayName} · 左键单击切换，拖动后自动贴边，右键查看更多";
     }
+
+    private void BuildAnimationStateMenu()
+    {
+        AnimationStateMenu.Items.Clear();
+        foreach (var state in _catalog.States)
+        {
+            var item = new MenuItem
+            {
+                Header = state.DisplayName,
+                Tag = state.Id,
+                IsCheckable = true
+            };
+            item.Click += AnimationStateMenuItem_Click;
+            AnimationStateMenu.Items.Add(item);
+        }
+    }
+
+    private bool ApplyScalePercent(int scalePercent)
+    {
+        var normalizedScale = Math.Clamp(scalePercent, 60, 160);
+        if (normalizedScale == _scalePercent && IsLoaded)
+        {
+            return false;
+        }
+
+        var oldWidth = ActualWidth > 0 ? ActualWidth : Width;
+        var oldHeight = ActualHeight > 0 ? ActualHeight : Height;
+        var anchorX = Left + oldWidth * _catalog.Anchor.X / _catalog.CanvasWidth;
+        var anchorY = Top + oldHeight * _catalog.Anchor.Y / _catalog.CanvasHeight;
+        _scalePercent = normalizedScale;
+        var newSize = CalculateDisplaySize(normalizedScale);
+        Width = newSize;
+        Height = newSize;
+        PetImage.Width = newSize;
+        PetImage.Height = newSize;
+
+        if (IsLoaded)
+        {
+            Left = anchorX - newSize * _catalog.Anchor.X / _catalog.CanvasWidth;
+            Top = anchorY - newSize * _catalog.Anchor.Y / _catalog.CanvasHeight;
+            Dispatcher.BeginInvoke(SnapToNearestEdge);
+        }
+
+        return true;
+    }
+
+    private async Task RefreshDecodedFramesAfterResizeAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(260, cancellationToken);
+            var decodeWidth = Math.Min(
+                _catalog.CanvasWidth,
+                (int)Math.Ceiling(CalculateDisplaySize(_scalePercent)));
+            await _player.SetDecodePixelWidthAsync(decodeWidth, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            // 连续拖动滑块时只处理最后一次尺寸。
+        }
+        catch (Exception exception)
+        {
+            System.Diagnostics.Debug.WriteLine($"桌面宠物尺寸资源刷新失败：{exception}");
+        }
+    }
+
+    private double CalculateDisplaySize(int scalePercent) =>
+        _catalog.DisplaySize * scalePercent / 100d;
 
     private void PlaceAtBottomRight()
     {

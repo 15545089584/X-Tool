@@ -1014,6 +1014,30 @@
                                                       Style="{StaticResource SettingToggleStyle}" Click="StickerTopmostCheckBox_Click" />
                                         </Grid>
                                         </Border>
+                                        <Border Style="{StaticResource SettingCardStyle}">
+                                        <Grid Height="96" Margin="20,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="290" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel VerticalAlignment="Center">
+                                                <TextBlock FontSize="15" Text="桌面宠物大小" />
+                                                <TextBlock Margin="0,5,16,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="调整后立即生效，并保持角色底部锚点与屏幕贴边位置" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                <Grid>
+                                                    <TextBlock FontSize="11" Foreground="#7890A6" Text="较小" />
+                                                    <TextBlock x:Name="DesktopPetScaleValueText" HorizontalAlignment="Center" FontSize="12" FontWeight="SemiBold" Foreground="#4D7CFE" Text="100% · 288 DIP" />
+                                                    <TextBlock HorizontalAlignment="Right" FontSize="11" Foreground="#7890A6" Text="较大" />
+                                                </Grid>
+                                                <Slider x:Name="DesktopPetScaleSlider"
+                                                        Style="{StaticResource ConverterSliderStyle}"
+                                                        Minimum="60" Maximum="160" Value="100"
+                                                        TickFrequency="5" IsSnapToTickEnabled="True"
+                                                        ValueChanged="DesktopPetScaleSlider_ValueChanged" />
+                                            </StackPanel>
+                                        </Grid>
+                                        </Border>
                                         <Border Cursor="Hand" MouseLeftButtonDown="OpenShortcutSettings_Click">
                                             <Border.Style>
                                                 <Style TargetType="Border" BasedOn="{StaticResource SettingCardStyle}">

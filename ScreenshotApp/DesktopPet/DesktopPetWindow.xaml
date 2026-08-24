@@ -11,8 +11,7 @@
           MouseLeftButtonDown="PetSurface_MouseLeftButtonDown">
         <Grid.ContextMenu>
             <ContextMenu>
-                <MenuItem x:Name="State01MenuItem" Header="状态 1 · 轻动作" Click="State01MenuItem_Click" />
-                <MenuItem x:Name="State06MenuItem" Header="状态 6 · 手臂动作" Click="State06MenuItem_Click" />
+                <MenuItem x:Name="AnimationStateMenu" Header="动画状态" />
                 <Separator />
                 <MenuItem Header="贴近屏幕边缘" Click="SnapToEdgeMenuItem_Click" />
                 <MenuItem Header="隐藏桌面宠物" Click="HidePetMenuItem_Click" />

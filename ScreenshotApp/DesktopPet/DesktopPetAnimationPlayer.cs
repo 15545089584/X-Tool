@@ -8,6 +8,7 @@ namespace ScreenshotApp.DesktopPet;
 
 internal sealed class DesktopPetAnimationPlayer : IDisposable
 {
+    private const long MaximumDecodedCacheBytes = 112L * 1024 * 1024;
     private readonly Image _target;
     private readonly DesktopPetAnimationCatalog _catalog;
     private readonly DispatcherTimer _timer;
@@ -15,15 +16,24 @@ internal sealed class DesktopPetAnimationPlayer : IDisposable
     private readonly Dictionary<string, CachedAnimation> _cache = new(StringComparer.OrdinalIgnoreCase);
     private CancellationTokenSource? _switchCancellation;
     private long _cacheSequence;
+    private int _decodePixelWidth;
     private CachedAnimation? _current;
+    private string? _selectedStateId;
     private int _lastFrameIndex = -1;
     private bool _isPlaying;
     private bool _disposed;
 
-    internal DesktopPetAnimationPlayer(Image target, DesktopPetAnimationCatalog catalog)
+    internal DesktopPetAnimationPlayer(
+        Image target,
+        DesktopPetAnimationCatalog catalog,
+        int? initialDecodePixelWidth = null)
     {
         _target = target;
         _catalog = catalog;
+        _decodePixelWidth = Math.Clamp(
+            initialDecodePixelWidth ?? catalog.DisplaySize,
+            64,
+            catalog.CanvasWidth);
         _timer = new DispatcherTimer(DispatcherPriority.Render)
         {
             Interval = TimeSpan.FromMilliseconds(16)
@@ -33,7 +43,7 @@ internal sealed class DesktopPetAnimationPlayer : IDisposable
 
     internal event EventHandler<DesktopPetStateChangedEventArgs>? StateChanged;
 
-    internal string? CurrentStateId => _current?.State.Id;
+    internal string? CurrentStateId => _selectedStateId;
 
     internal int CurrentFrameIndex => _lastFrameIndex;
 
@@ -56,7 +66,7 @@ internal sealed class DesktopPetAnimationPlayer : IDisposable
         if (!_cache.TryGetValue(state.Id, out var animation))
         {
             var frames = await Task.Run(
-                () => LoadFrames(state, _catalog.DisplaySize, token),
+                () => LoadFrames(state, _decodePixelWidth, token),
                 token);
             token.ThrowIfCancellationRequested();
             animation = new CachedAnimation(state, frames, CalculateDecodedBytes(frames), ++_cacheSequence);
@@ -69,6 +79,7 @@ internal sealed class DesktopPetAnimationPlayer : IDisposable
         }
 
         _current = animation;
+        _selectedStateId = state.Id;
         _clock.Restart();
         _lastFrameIndex = 0;
         _target.Source = animation.Frames[0];
@@ -78,6 +89,27 @@ internal sealed class DesktopPetAnimationPlayer : IDisposable
         }
 
         StateChanged?.Invoke(this, new DesktopPetStateChangedEventArgs(state, animation.DecodedBytes));
+    }
+
+    internal async Task SetDecodePixelWidthAsync(
+        int decodePixelWidth,
+        CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var normalizedWidth = Math.Clamp(decodePixelWidth, 64, _catalog.CanvasWidth);
+        if (normalizedWidth == _decodePixelWidth)
+        {
+            return;
+        }
+
+        var selectedStateId = _selectedStateId;
+        _decodePixelWidth = normalizedWidth;
+        _cache.Clear();
+        _current = null;
+        if (!string.IsNullOrWhiteSpace(selectedStateId))
+        {
+            await SwitchStateAsync(selectedStateId, cancellationToken);
+        }
     }
 
     internal void Play()
@@ -158,6 +190,7 @@ internal sealed class DesktopPetAnimationPlayer : IDisposable
         _target.Source = null;
         _cache.Clear();
         _current = null;
+        _selectedStateId = null;
     }
 
     private void Timer_Tick(object? sender, EventArgs e)
@@ -183,11 +216,11 @@ internal sealed class DesktopPetAnimationPlayer : IDisposable
 
     private void TrimCache(string incomingStateId)
     {
-        while (_cache.Count > _catalog.MaxCachedStates)
+        while (_cache.Count > 1 &&
+               (_cache.Count > _catalog.MaxCachedStates || CachedDecodedBytes > MaximumDecodedCacheBytes))
         {
             var removable = _cache.Values
-                .Where(item => !item.State.Id.Equals(incomingStateId, StringComparison.OrdinalIgnoreCase) &&
-                               !item.State.Id.Equals(_current?.State.Id, StringComparison.OrdinalIgnoreCase))
+                .Where(item => !item.State.Id.Equals(incomingStateId, StringComparison.OrdinalIgnoreCase))
                 .OrderBy(item => item.LastAccess)
                 .FirstOrDefault();
             if (removable is null)
