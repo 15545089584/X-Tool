@@ -34,5 +34,8 @@ ScreenshotApp/Models/VoiceInput/sensevoice.tar.bz2
 *.tmp
 *.log
 
-# 协作中心已从主线移除；本机遗留的 Android 构建缓存不再纳入当前产品。
-AndroidApp/
+# Android 协作端源码纳入主线；仅忽略本机构建缓存和产物。
+AndroidApp/.gradle/
+AndroidApp/.kotlin/
+AndroidApp/**/build/
+AndroidApp/local.properties

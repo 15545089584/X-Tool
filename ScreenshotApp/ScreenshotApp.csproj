@@ -71,6 +71,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- 手机浏览器配对页作为兜底入口；原生 Android 客户端使用同一会话协议。 -->
+    <EmbeddedResource Include="Collaboration\CollaborationPage.html" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- 桌面宠物使用独立 PNG 帧资源，按需解码并冻结后交给 WPF 播放。 -->
     <None Remove="Assets\DesktopPet\**\*" />
     <Content Include="Assets\DesktopPet\**\*">

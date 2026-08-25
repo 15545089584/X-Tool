@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using ScreenshotApp.Collaboration;
 using ScreenshotApp.NetworkWorkbench;
 using ScreenshotApp.Shortcuts;
 using Forms = System.Windows.Forms;
@@ -14,7 +15,7 @@ namespace ScreenshotApp.Settings;
 public partial class SettingsWindow : Window
 {
     internal static IReadOnlyList<string> ValidationCategories { get; } =
-        ["General", "Screenshot", "Shortcut", "DesktopPet", "ReadWrite", "NetworkTraffic"];
+        ["General", "Screenshot", "Shortcut", "DesktopPet", "ReadWrite", "NetworkTraffic", "Connection"];
 
     private readonly AppPreferences _preferences;
     private readonly Func<string, GlobalShortcut, string?> _applyShortcut;
@@ -67,6 +68,7 @@ public partial class SettingsWindow : Window
         VoiceInputPasteAutomaticallyCheckBox.IsChecked = preferences.VoiceInputPasteAutomatically;
         VoiceInputModelStatusText.Text = voiceInputModelStatus;
         DesktopPetVisibleCheckBox.IsChecked = desktopPetVisible;
+        CollaborationAutoReconnectCheckBox.IsChecked = preferences.CollaborationAutoReconnect;
         DesktopPetScaleSlider.Value = Math.Clamp(preferences.DesktopPetScalePercent, 60, 160);
         UpdateDesktopPetScaleText((int)Math.Round(DesktopPetScaleSlider.Value));
         UpdateShortcutButtons();
@@ -85,12 +87,15 @@ public partial class SettingsWindow : Window
             "DesktopPet" => DesktopPetCategoryNav,
             "ReadWrite" => ReadWriteCategoryNav,
             "NetworkTraffic" => NetworkTrafficCategoryNav,
+            "Connection" => ConnectionCategoryNav,
             _ => GeneralCategoryNav
         };
         navigation.IsChecked = true;
         ShowCategory(category);
         UpdateLayout();
     }
+
+    internal void SelectCategory(string category) => SelectCategoryForValidation(category);
 
     internal void CaptureForValidation(string outputPath)
     {
@@ -135,6 +140,7 @@ public partial class SettingsWindow : Window
         DesktopPetSettingsPanel.Visibility = Visibility.Collapsed;
         ReadWriteSettingsPanel.Visibility = Visibility.Collapsed;
         NetworkTrafficSettingsPanel.Visibility = Visibility.Collapsed;
+        ConnectionSettingsPanel.Visibility = Visibility.Collapsed;
 
         var (title, description, panel) = category switch
         {
@@ -143,6 +149,7 @@ public partial class SettingsWindow : Window
             "DesktopPet" => ("桌面宠物设置", "调整桌面宠物的显示尺寸", DesktopPetSettingsPanel),
             "ReadWrite" => ("读写设置", "管理本地语音输入与识别结果写入行为", ReadWriteSettingsPanel),
             "NetworkTraffic" => ("网络流量自动获取", "管理 ETW 辅助任务的授权和自动连接", NetworkTrafficSettingsPanel),
+            "Connection" => ("连接", "管理手机自动重连、局域网发现与文件收发位置", ConnectionSettingsPanel),
             _ => ("通用设置", "管理应用启动与基础行为", GeneralSettingsPanel)
         };
         CategoryTitleText.Text = title;
@@ -242,6 +249,20 @@ public partial class SettingsWindow : Window
         _preferences.VoiceInputPasteAutomatically = VoiceInputPasteAutomaticallyCheckBox.IsChecked == true;
         _preferences.Save();
         SetFooterStatus(_preferences.VoiceInputPasteAutomatically ? "识别后将自动粘贴" : "识别后仅复制到剪贴板");
+    }
+
+    private void CollaborationAutoReconnectCheckBox_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_initialized) return;
+        _preferences.CollaborationAutoReconnect = CollaborationAutoReconnectCheckBox.IsChecked == true;
+        _preferences.Save();
+        if (Application.Current?.MainWindow is MainWindow mainWindow)
+        {
+            mainWindow.ApplyCollaborationAutoReconnect(_preferences.CollaborationAutoReconnect);
+        }
+        SetFooterStatus(_preferences.CollaborationAutoReconnect
+            ? "已开启已信任手机自动连接"
+            : "已关闭自动连接；仍可手动扫码连接");
     }
 
     private void ShortcutButton_Click(object sender, RoutedEventArgs e)
@@ -344,6 +365,8 @@ public partial class SettingsWindow : Window
         "翻译" => _preferences.TranslationDirectory,
         "屏幕录制" => _preferences.RecordingDirectory,
         "外部复制" => _preferences.ClipboardDirectory,
+        "协作接收" => _preferences.CollaborationIncomingDirectory,
+        "协作发送" => _preferences.CollaborationOutgoingDirectory,
         _ => string.Empty
     };
 
@@ -356,6 +379,16 @@ public partial class SettingsWindow : Window
         else if (category == "翻译") _preferences.TranslationDirectory = fullPath;
         else if (category == "屏幕录制") _preferences.RecordingDirectory = fullPath;
         else if (category == "外部复制") _preferences.ClipboardDirectory = fullPath;
+        else if (category == "协作接收")
+        {
+            _preferences.CollaborationIncomingDirectory = fullPath;
+            CollaborationService.Instance.IncomingDirectory = fullPath;
+        }
+        else if (category == "协作发送")
+        {
+            _preferences.CollaborationOutgoingDirectory = fullPath;
+            CollaborationService.Instance.OutgoingDirectory = fullPath;
+        }
     }
 
     private void UpdateStorageLocationText()
@@ -366,6 +399,8 @@ public partial class SettingsWindow : Window
         TranslationStoragePathText.Text = _preferences.TranslationDirectory;
         RecordingStoragePathText.Text = _preferences.RecordingDirectory;
         ClipboardStoragePathText.Text = _preferences.ClipboardDirectory;
+        CollaborationIncomingPathText.Text = _preferences.CollaborationIncomingDirectory;
+        CollaborationOutgoingPathText.Text = _preferences.CollaborationOutgoingDirectory;
     }
 
     private async Task RefreshNetworkAuthorizationStateAsync()

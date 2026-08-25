@@ -13,6 +13,7 @@ using Microsoft.Win32;
 using Forms = System.Windows.Forms;
 using ScreenshotApp.Capture;
 using ScreenshotApp.ClipboardUi;
+using ScreenshotApp.Collaboration;
 using ScreenshotApp.Converters;
 using ScreenshotApp.History;
 using ScreenshotApp.Recording;
@@ -80,12 +81,20 @@ public partial class MainWindow : Window
     private GlobalShortcut _fullScreenShortcut;
     private GlobalShortcut _clipboardShortcut;
     private GlobalShortcut _voiceInputShortcut;
+    private readonly HashSet<string> _notifiedCollaborationTransfers = new(StringComparer.Ordinal);
 
     public MainWindow()
     {
         InitializeComponent();
         _visiblePageView = HomeView;
         _historyStore = new ScreenshotHistoryStore(_preferences);
+        CollaborationService.Instance.IncomingDirectory = _preferences.CollaborationIncomingDirectory;
+        CollaborationService.Instance.OutgoingDirectory = _preferences.CollaborationOutgoingDirectory;
+        CollaborationService.Instance.AutoReconnectAllowed = _preferences.CollaborationAutoReconnect;
+        CollaborationView.Configure(_preferences.CollaborationAutoReconnect);
+        CollaborationView.ConnectionSettingsRequested += () => OpenSettingsWindow("Connection");
+        CollaborationService.Instance.FileReceived += CollaborationService_FileReceived;
+        CollaborationService.Instance.TransferProgressChanged += CollaborationService_TransferProgressChanged;
         QrCodeConverterViewHost.HistoryStore = _historyStore;
         ClipboardService.TextRecordRequested += async content =>
         {
@@ -222,6 +231,14 @@ public partial class MainWindow : Window
         NormalizeImageConverterLabels(this);
         await RefreshHistoryAsync();
         await RefreshNetworkEtwAuthorizationStateAsync();
+        try
+        {
+            CollaborationService.Instance.Start();
+        }
+        catch (Exception exception)
+        {
+            ShowToast($"协作连接服务启动失败：{exception.GetBaseException().Message}");
+        }
         if (_preferences.NetworkEtwAutoStart && await Task.Run(NetworkEtwAutoStartService.IsRegistered))
         {
             // 恢复原有后台连接时序，避免主窗口加载被 ETW 管道等待阻塞。
@@ -357,7 +374,7 @@ public partial class MainWindow : Window
         NavigateToPage(page);
     }
 
-    private void OpenSettingsWindow()
+    private void OpenSettingsWindow(string category = "General")
     {
         if (_settingsWindow is { IsVisible: true })
         {
@@ -366,6 +383,7 @@ public partial class MainWindow : Window
         }
 
         var window = CreateSettingsWindow();
+        window.SelectCategory(category);
         _settingsWindow = window;
         try
         {
@@ -425,6 +443,14 @@ public partial class MainWindow : Window
         UpdateStorageLocationText();
         UpdateSettingsShortcutSummary();
         _ = RefreshNetworkEtwAuthorizationStateAsync();
+        CollaborationView.Configure(_preferences.CollaborationAutoReconnect);
+    }
+
+    internal void ApplyCollaborationAutoReconnect(bool enabled)
+    {
+        _preferences.CollaborationAutoReconnect = enabled;
+        CollaborationService.Instance.AutoReconnectAllowed = enabled;
+        CollaborationView.Configure(enabled);
     }
 
     private void RestoreCurrentNavigationSelection()
@@ -439,6 +465,7 @@ public partial class MainWindow : Window
             "ResourceManagement" => ResourceManagementNav,
             "SystemTools" => SystemToolsNav,
             "DeveloperTools" => DeveloperToolsNav,
+            "Collaboration" => CollaborationNav,
             _ => HomeNav
         };
         _suppressMainNavigation = true;
@@ -526,6 +553,7 @@ public partial class MainWindow : Window
         "ResourceManagement" => ResourceManagementView,
         "SystemTools" => SystemToolsView,
         "DeveloperTools" => DeveloperToolsView,
+        "Collaboration" => CollaborationView,
         "History" => HistoryView,
         _ => null
     };
@@ -546,6 +574,7 @@ public partial class MainWindow : Window
         ResourceManagementView,
         SystemToolsView,
         DeveloperToolsView,
+        CollaborationView,
         HistoryView
     ];
 
@@ -566,6 +595,7 @@ public partial class MainWindow : Window
         "ResourceManagement" => 50,
         "SystemTools" => 60,
         "DeveloperTools" => 70,
+        "Collaboration" => 80,
         _ => 0
     };
 
@@ -647,6 +677,9 @@ public partial class MainWindow : Window
 
     private void MainWindow_Closed(object? sender, EventArgs e)
     {
+        CollaborationService.Instance.Stop();
+        CollaborationService.Instance.FileReceived -= CollaborationService_FileReceived;
+        CollaborationService.Instance.TransferProgressChanged -= CollaborationService_TransferProgressChanged;
         if (_windowSource is null)
         {
             return;
@@ -679,6 +712,51 @@ public partial class MainWindow : Window
         _windowSource = null;
         _voiceInputService.Dispose();
     }
+
+    private void CollaborationService_FileReceived(string name, long size)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (Application.Current is not App app) return;
+            var directory = CollaborationService.Instance.IncomingDirectory;
+            app.ShowTrayBalloon("手机文件已接收", $"{name}（{FormatCollaborationSize(size)}）已保存，点击打开目录", () =>
+            {
+                try
+                {
+                    Process.Start(new ProcessStartInfo("explorer.exe", $"\"{directory}\"") { UseShellExecute = true });
+                }
+                catch
+                {
+                    // 通知点击打开失败时不影响已完成传输。
+                }
+            });
+        });
+    }
+
+    private void CollaborationService_TransferProgressChanged(CollaborationTransferProgress progress)
+    {
+        if (progress.State != "Completed") return;
+        lock (_notifiedCollaborationTransfers)
+        {
+            if (!_notifiedCollaborationTransfers.Add(progress.TransferId)) return;
+        }
+        if (progress.Direction == "Receive") return; // 接收完成由 FileReceived 提供可点击目录通知。
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (Application.Current is App app)
+            {
+                app.ShowTrayBalloon("文件已发送到手机", $"{progress.FileName} 已传输完成");
+            }
+        });
+    }
+
+    private static string FormatCollaborationSize(long bytes) => bytes switch
+    {
+        >= 1024L * 1024 * 1024 => $"{bytes / 1024d / 1024 / 1024:0.00} GB",
+        >= 1024L * 1024 => $"{bytes / 1024d / 1024:0.0} MB",
+        >= 1024L => $"{bytes / 1024d:0.0} KB",
+        _ => $"{Math.Max(0, bytes)} B"
+    };
 
     private void MainWindow_Closing(object? sender, CancelEventArgs e)
     {
