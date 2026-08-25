@@ -73,6 +73,7 @@ public partial class MainWindow : Window
     private FrameworkElement? _visiblePageView;
     private SettingsWindow? _settingsWindow;
     private bool _suppressMainNavigation;
+    private bool _settingsControlsInitialized;
     private int _pageTransitionGeneration;
     private int _toastAnimationGeneration;
     private GlobalShortcut _screenshotShortcut;
@@ -123,6 +124,7 @@ public partial class MainWindow : Window
         _preferences.StartWithWindows = StartWithWindowsCheckBox.IsChecked == true;
         VoiceInputEnabledCheckBox.IsChecked = _preferences.VoiceInputEnabled;
         VoiceInputPasteAutomaticallyCheckBox.IsChecked = _preferences.VoiceInputPasteAutomatically;
+        _settingsControlsInitialized = true;
         VoiceInputModelStatusText.Text = _voiceInputService.IsModelAvailable
             ? "标准中文离线模型已就绪"
             : "本地模型缺失，请修复或重新安装 X-Tool";
@@ -1431,7 +1433,7 @@ public partial class MainWindow : Window
         object sender,
         RoutedPropertyChangedEventArgs<double> e)
     {
-        if (DesktopPetScaleSlider is null || DesktopPetScaleValueText is null)
+        if (!_settingsControlsInitialized || DesktopPetScaleSlider is null || DesktopPetScaleValueText is null)
         {
             return;
         }

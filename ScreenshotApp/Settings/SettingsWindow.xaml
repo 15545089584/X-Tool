@@ -102,6 +102,90 @@
             </Setter>
         </Style>
 
+        <Style x:Key="SettingsCloseButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="38" />
+            <Setter Property="Height" Value="38" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="#72FFFFFF" />
+            <Setter Property="BorderBrush" Value="#82C8DCEC" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="#536C83" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="12">
+                            <Grid Width="14" Height="14" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Path Data="M 2,2 L 12,12 M 12,2 L 2,12"
+                                      Stroke="{TemplateBinding Foreground}" StrokeThickness="1.7"
+                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="#D6EDF6FD" />
+                                <Setter TargetName="Root" Property="BorderBrush" Value="#95AACCE6" />
+                                <Setter Property="Foreground" Value="#294A68" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Root" Property="Opacity" Value="0.68" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SettingsScrollThumbStyle" TargetType="primitives:Thumb">
+            <Setter Property="MinHeight" Value="38" />
+            <Setter Property="Margin" Value="2,1" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="primitives:Thumb">
+                        <Border x:Name="ThumbBody" Background="#7197BFE0" CornerRadius="4" />
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ThumbBody" Property="Background" Value="#A06E9FD0" />
+                            </Trigger>
+                            <Trigger Property="IsDragging" Value="True">
+                                <Setter TargetName="ThumbBody" Property="Background" Value="#C0588FC7" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ScrollBar">
+            <Setter Property="Width" Value="10" />
+            <Setter Property="Margin" Value="3,2,0,2" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Grid Width="10" Background="Transparent">
+                            <Border Width="6" HorizontalAlignment="Center" Background="#268AA8C1" CornerRadius="3" />
+                            <primitives:Track x:Name="PART_Track" IsDirectionReversed="True">
+                                <primitives:Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="{x:Static ScrollBar.PageUpCommand}"
+                                                  Background="Transparent" BorderThickness="0" Opacity="0" />
+                                </primitives:Track.DecreaseRepeatButton>
+                                <primitives:Track.Thumb>
+                                    <primitives:Thumb Style="{StaticResource SettingsScrollThumbStyle}" />
+                                </primitives:Track.Thumb>
+                                <primitives:Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="{x:Static ScrollBar.PageDownCommand}"
+                                                  Background="Transparent" BorderThickness="0" Opacity="0" />
+                                </primitives:Track.IncreaseRepeatButton>
+                            </primitives:Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="ShortcutValueButtonStyle" TargetType="Button" BasedOn="{StaticResource GlassButtonStyle}">
             <Setter Property="MinWidth" Value="164" />
             <Setter Property="Height" Value="40" />
@@ -144,7 +228,10 @@
                         <TextBlock FontSize="25" FontWeight="SemiBold" Foreground="#23384D" Text="设置" />
                         <TextBlock Margin="0,4,0,0" FontSize="11" Foreground="#70869B" Text="按类别管理 X-Tool 的常用行为" />
                     </StackPanel>
-                    <Button Width="36" Height="36" Padding="0" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource GlassButtonStyle}" FontSize="18" Content="×" Click="CloseButton_Click" />
+                    <Button HorizontalAlignment="Right" VerticalAlignment="Center"
+                            Style="{StaticResource SettingsCloseButtonStyle}"
+                            ToolTip="关闭设置" AutomationProperties.Name="关闭设置"
+                            Click="CloseButton_Click" />
                 </Grid>
 
                 <Grid Grid.Row="1">
