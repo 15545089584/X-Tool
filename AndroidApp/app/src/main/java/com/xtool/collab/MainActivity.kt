@@ -11,6 +11,8 @@ import android.database.Cursor
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
+import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -80,6 +82,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestNotificationPermission()
+        TransferRuntime.initialize(applicationContext)
         val session = SessionStore(applicationContext)
         if (session.autoConnectEnabled && session.token.isNotBlank()) {
             runCatching { SyncForegroundService.start(this, automatic = true) }
@@ -104,6 +107,7 @@ private val Ink = Color(0xFF29445F)
 private val Muted = Color(0xFF72889D)
 private val Mint = Color(0xFF20B58B)
 private val SoftBackground = Color(0xFFF0F6FB)
+private const val ProgressNotificationIntervalMilliseconds = 750L
 
 @Composable
 private fun CollaborationApp(session: SessionStore) {
@@ -328,6 +332,24 @@ private fun HomeScreen(session: SessionStore) {
                 }
             }
         }
+        Spacer(Modifier.height(12.dp))
+        Card(colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.84f)), shape = RoundedCornerShape(22.dp)) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("电脑文件接收位置", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Ink)
+                    Text("Download/XTool", Modifier.padding(top = 3.dp), color = Muted, fontSize = 10.sp)
+                }
+                OutlinedButton(
+                    onClick = { openReceiveDirectory(context) },
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("打开位置", color = Blue, fontSize = 12.sp)
+                }
+            }
+        }
         Spacer(Modifier.height(16.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("传输动态", Modifier.weight(1f), fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Ink)
@@ -390,6 +412,8 @@ private suspend fun uploadUri(context: Context, session: SessionStore, uri: Uri,
     }
     val transferId = UUID.randomUUID().toString().replace("-", "")
     report("正在发送 $name")
+    ensureTransferNotificationChannel(context)
+    var lastProgressNotificationAt = 0L
     val ok = withContext(Dispatchers.IO) {
         runCatching {
             CollabApi(session.host).uploadFileStreaming(
@@ -402,7 +426,11 @@ private suspend fun uploadUri(context: Context, session: SessionStore, uri: Uri,
                 TransferRuntime.updateTransfer(MobileTransfer(
                     transferId, name, "手机 → 电脑", done, total, "transferring", "正在发送"
                 ))
-                showUploadProgress(context, transferId, name, done, total)
+                val now = SystemClock.elapsedRealtime()
+                if (done >= total || now - lastProgressNotificationAt >= ProgressNotificationIntervalMilliseconds) {
+                    lastProgressNotificationAt = now
+                    showUploadProgress(context, transferId, name, done, total)
+                }
             }
         }.getOrDefault(false)
     }
@@ -428,9 +456,36 @@ private fun openTransfer(context: Context, transfer: MobileTransfer) {
     }
 }
 
+private fun openReceiveDirectory(context: Context) {
+    val directoryUri = DocumentsContract.buildDocumentUri(
+        "com.android.externalstorage.documents",
+        "primary:Download/XTool"
+    )
+    val directIntent = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(directoryUri, DocumentsContract.Document.MIME_TYPE_DIR)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    if (runCatching { context.startActivity(directIntent) }.isSuccess) {
+        return
+    }
+
+    val fallbackIntent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+        putExtra(DocumentsContract.EXTRA_INITIAL_URI, directoryUri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    runCatching { context.startActivity(fallbackIntent) }.onFailure {
+        Toast.makeText(context, "无法打开 Download/XTool，请从文件管理器进入下载目录", Toast.LENGTH_LONG).show()
+    }
+}
+
+private fun ensureTransferNotificationChannel(context: Context) {
+    context.getSystemService(NotificationManager::class.java).createNotificationChannel(
+        NotificationChannel("collab_file", "X-Tool 文件传输", NotificationManager.IMPORTANCE_DEFAULT)
+    )
+}
+
 private fun showUploadProgress(context: Context, id: String, name: String, done: Long, total: Long) {
     val manager = context.getSystemService(NotificationManager::class.java)
-    manager.createNotificationChannel(NotificationChannel("collab_file", "X-Tool 文件传输", NotificationManager.IMPORTANCE_DEFAULT))
     val percent = if (total > 0) ((done * 100 / total).coerceIn(0, 100)).toInt() else 0
     manager.notify(id.hashCode(), NotificationCompat.Builder(context, "collab_file")
         .setSmallIcon(android.R.drawable.stat_sys_upload)

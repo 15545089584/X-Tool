@@ -8,7 +8,12 @@
         ShowInTaskbar="False" ShowActivated="False" Topmost="True"
         WindowStartupLocation="Manual">
     <Grid x:Name="PetSurface" Background="Transparent"
-          MouseLeftButtonDown="PetSurface_MouseLeftButtonDown">
+          AllowDrop="True"
+          MouseLeftButtonDown="PetSurface_MouseLeftButtonDown"
+          DragEnter="PetSurface_DragEnter"
+          DragOver="PetSurface_DragOver"
+          DragLeave="PetSurface_DragLeave"
+          Drop="PetSurface_Drop">
         <Grid.ContextMenu>
             <ContextMenu>
                 <MenuItem x:Name="AnimationStateMenu" Header="动画状态" />

@@ -722,6 +722,7 @@ public partial class MainWindow : Window
         Dispatcher.BeginInvoke(() =>
         {
             if (Application.Current is not App app) return;
+            if (app.ShouldUseDesktopPetTransferBubbles) return;
             app.ShowTrayBalloon("手机文件已接收", $"{name}（{FormatCollaborationSize(size)}）已保存，点击打开文件", () =>
             {
                 try
@@ -770,6 +771,7 @@ public partial class MainWindow : Window
         {
             if (Application.Current is App app)
             {
+                if (app.ShouldUseDesktopPetTransferBubbles) return;
                 app.ShowTrayBalloon("文件已发送到手机", $"{progress.FileName} 已传输完成");
             }
         });

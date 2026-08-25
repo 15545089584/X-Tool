@@ -13,6 +13,7 @@ import android.media.ToneGenerator
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
+import android.os.SystemClock
 import android.provider.MediaStore
 import android.webkit.MimeTypeMap
 import androidx.core.app.NotificationCompat
@@ -25,11 +26,20 @@ import com.xtool.collab.data.TransferRuntime
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.BufferedOutputStream
+import java.io.FileOutputStream
+import java.io.OutputStream
+import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
+import java.util.concurrent.ConcurrentHashMap
 import java.util.UUID
 
 /** 常驻数据同步服务：恢复可信连接、接收电脑文件并提供双端进度。 */
@@ -39,6 +49,15 @@ class SyncForegroundService : Service() {
         private const val FileChannelId = "collab_file"
         private const val NotificationId = 1001
         private const val ExtraAutomatic = "automatic"
+        private const val MediaStoreBufferBytes = 2 * 1024 * 1024
+        private const val ParallelDownloadThresholdBytes = 16L * 1024 * 1024
+        private const val ParallelSegmentCount = 4
+        private const val ProgressUiIntervalMilliseconds = 125L
+        private const val ProgressNotificationIntervalMilliseconds = 750L
+        private const val FailedTransferRetryDelayMilliseconds = 60_000L
+        private const val ActiveTransferPreferencesName = "xtool_active_transfer"
+        private const val ActiveTransferIdKey = "transfer_id"
+        private const val ActiveTransferNameKey = "file_name"
 
         fun start(context: Context, automatic: Boolean = true) {
             context.startForegroundService(
@@ -56,9 +75,15 @@ class SyncForegroundService : Service() {
     private var automaticMode = true
     private var loopStarted = false
     private var wasConnected = false
+    private val failedTransferRetryAfter = ConcurrentHashMap<String, Long>()
+    private val interruptedDownloadNames = ConcurrentHashMap.newKeySet<String>()
+    private val activeTransferPreferences by lazy {
+        getSharedPreferences(ActiveTransferPreferencesName, Context.MODE_PRIVATE)
+    }
 
     override fun onCreate() {
         super.onCreate()
+        TransferRuntime.initialize(applicationContext)
         session = SessionStore(applicationContext)
         createNotificationChannels()
         startForeground(NotificationId, buildConnectionNotification("正在查找已信任电脑"))
@@ -68,7 +93,13 @@ class SyncForegroundService : Service() {
         automaticMode = intent?.getBooleanExtra(ExtraAutomatic, true) ?: true
         if (!loopStarted) {
             loopStarted = true
-            scope.launch { connectionLoop() }
+            scope.launch {
+                activeTransferPreferences.getString(ActiveTransferNameKey, null)
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let(interruptedDownloadNames::add)
+                interruptedDownloadNames.addAll(cleanupStalePendingDownloads())
+                connectionLoop()
+            }
         }
         return START_STICKY
     }
@@ -142,9 +173,69 @@ class SyncForegroundService : Service() {
         }
         for (file in files) {
             val transferId = file.id.ifBlank { UUID.randomUUID().toString().replace("-", "") }
-            val uri = downloadToMediaStore(host, token, transferId, file)
-            if (uri != null) notifyFileReceived(file.name, uri)
+            if (interruptedDownloadNames.contains(file.name)) {
+                val discarded = withContext(Dispatchers.IO) {
+                    CollabApi(host).cancelOutgoingDownload(token, transferId, file.name, discard = true)
+                }
+                if (!discarded) continue
+                interruptedDownloadNames.remove(file.name)
+                clearActiveDownload(file.name)
+                TransferRuntime.updateTransfer(MobileTransfer(
+                    transferId, file.name, "电脑 → 手机", 0, file.size, "failed", "上次传输已取消"
+                ))
+                continue
+            }
+            val now = SystemClock.elapsedRealtime()
+            if ((failedTransferRetryAfter[transferId] ?: 0L) > now) continue
+            rememberActiveDownload(transferId, file.name)
+            val uri = try {
+                downloadToMediaStore(host, token, transferId, file)
+            } finally {
+                clearActiveDownload(file.name)
+            }
+            if (uri != null) {
+                failedTransferRetryAfter.remove(transferId)
+                notifyFileReceived(file.name, uri)
+            } else {
+                failedTransferRetryAfter[transferId] = now + FailedTransferRetryDelayMilliseconds
+            }
         }
+    }
+
+    private fun rememberActiveDownload(transferId: String, fileName: String) {
+        activeTransferPreferences.edit()
+            .putString(ActiveTransferIdKey, transferId)
+            .putString(ActiveTransferNameKey, fileName)
+            .commit()
+    }
+
+    private fun clearActiveDownload(fileName: String) {
+        if (activeTransferPreferences.getString(ActiveTransferNameKey, null) != fileName) return
+        activeTransferPreferences.edit()
+            .remove(ActiveTransferIdKey)
+            .remove(ActiveTransferNameKey)
+            .apply()
+    }
+
+    /** 清理上次进程异常结束后仍处于 pending 状态的 X-Tool 半成品。 */
+    private suspend fun cleanupStalePendingDownloads(): Set<String> = withContext(Dispatchers.IO) {
+        if (Build.VERSION.SDK_INT < 29) return@withContext emptySet()
+        val interruptedNames = linkedSetOf<String>()
+        runCatching {
+            val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+            val projection = arrayOf(MediaStore.Downloads._ID, MediaStore.Downloads.DISPLAY_NAME)
+            val selection = "${MediaStore.Downloads.RELATIVE_PATH} LIKE ? AND ${MediaStore.Downloads.IS_PENDING} = 1"
+            contentResolver.query(collection, projection, selection, arrayOf("Download/XTool%"), null)?.use { cursor ->
+                val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Downloads._ID)
+                val nameColumn = cursor.getColumnIndexOrThrow(MediaStore.Downloads.DISPLAY_NAME)
+                while (cursor.moveToNext()) {
+                    cursor.getString(nameColumn)?.takeIf { it.isNotBlank() }?.let(interruptedNames::add)
+                    val staleUri = Uri.withAppendedPath(collection, cursor.getLong(idColumn).toString())
+                    runCatching { contentResolver.delete(staleUri, null, null) }
+                }
+            }
+        }
+        interruptedNames
     }
 
     private suspend fun downloadToMediaStore(host: String, token: String, transferId: String, file: RemoteFile): Uri? {
@@ -162,16 +253,11 @@ class SyncForegroundService : Service() {
                 }
                 val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return@withContext null
                 createdUri = uri
-                val output = contentResolver.openOutputStream(uri) ?: run {
-                    contentResolver.delete(uri, null, null)
-                    createdUri = null
-                    return@withContext null
-                }
-                val ok = CollabApi(host).downloadFileStreaming(token, transferId, file, { output }) { done, total ->
-                    TransferRuntime.updateTransfer(MobileTransfer(
-                        transferId, file.name, "电脑 → 手机", done, total, "transferring", "正在接收"
-                    ))
-                    notifyTransferProgress(transferId, file.name, done, total)
+                val api = CollabApi(host)
+                val ok = if (file.size >= ParallelDownloadThresholdBytes) {
+                    downloadParallelToMediaStore(api, token, transferId, file, uri)
+                } else {
+                    downloadSingleToMediaStore(api, token, transferId, file, uri)
                 }
                 if (!ok) {
                     contentResolver.delete(uri, null, null)
@@ -200,6 +286,139 @@ class SyncForegroundService : Service() {
                     transferId, file.name, "电脑 → 手机", 0, file.size, "failed", "接收中断"
                 ))
                 null
+            }
+        }
+    }
+
+    private suspend fun downloadSingleToMediaStore(
+        api: CollabApi,
+        token: String,
+        transferId: String,
+        file: RemoteFile,
+        uri: Uri
+    ): Boolean {
+        var lastProgressNotificationAt = 0L
+        return api.downloadFileStreaming(
+            token = token,
+            transferId = transferId,
+            file = file,
+            openOutput = {
+                val rawOutput = contentResolver.openOutputStream(uri) ?: error("无法创建接收文件")
+                BufferedOutputStream(rawOutput, MediaStoreBufferBytes)
+            },
+            onProgress = { done, total ->
+                TransferRuntime.updateTransfer(MobileTransfer(
+                    transferId, file.name, "电脑 → 手机", done, total, "transferring", "正在接收"
+                ))
+                val now = SystemClock.elapsedRealtime()
+                if (done >= total || now - lastProgressNotificationAt >= ProgressNotificationIntervalMilliseconds) {
+                    lastProgressNotificationAt = now
+                    notifyTransferProgress(transferId, file.name, done, total)
+                }
+            }
+        )
+    }
+
+    private suspend fun downloadParallelToMediaStore(
+        api: CollabApi,
+        token: String,
+        transferId: String,
+        file: RemoteFile,
+        uri: Uri
+    ): Boolean {
+        val segmentProgress = LongArray(ParallelSegmentCount)
+        val progressSync = Any()
+        var lastUiProgressAt = 0L
+        var lastProgressNotificationAt = 0L
+        return try {
+            val descriptor = contentResolver.openFileDescriptor(uri, "rw") ?: error("无法打开接收文件")
+            descriptor.use {
+                FileOutputStream(descriptor.fileDescriptor).use { fileOutput ->
+                    val channel = fileOutput.channel
+                    channel.truncate(0)
+                    val segmentsSucceeded = coroutineScope {
+                        (0 until ParallelSegmentCount).map { index ->
+                            async(Dispatchers.IO) {
+                                val offset = file.size * index / ParallelSegmentCount
+                                val end = file.size * (index + 1) / ParallelSegmentCount
+                                val length = end - offset
+                                api.downloadFileStreaming(
+                                    token = token,
+                                    transferId = transferId,
+                                    file = file,
+                                    offset = offset,
+                                    requestedLength = length,
+                                    parallelSegment = true,
+                                    openOutput = { PositionedChannelOutputStream(channel, offset) },
+                                    onProgress = { done, _ ->
+                                        var aggregate = 0L
+                                        var publishUi = false
+                                        var publishNotification = false
+                                        synchronized(progressSync) {
+                                            segmentProgress[index] = done
+                                            aggregate = segmentProgress.sum()
+                                            val now = SystemClock.elapsedRealtime()
+                                            if (aggregate >= file.size || now - lastUiProgressAt >= ProgressUiIntervalMilliseconds) {
+                                                lastUiProgressAt = now
+                                                publishUi = true
+                                            }
+                                            if (aggregate >= file.size ||
+                                                now - lastProgressNotificationAt >= ProgressNotificationIntervalMilliseconds) {
+                                                lastProgressNotificationAt = now
+                                                publishNotification = true
+                                            }
+                                        }
+                                        if (publishUi) {
+                                            TransferRuntime.updateTransfer(MobileTransfer(
+                                                transferId, file.name, "电脑 → 手机", aggregate, file.size,
+                                                "transferring", "正在并行接收"
+                                            ))
+                                        }
+                                        if (publishNotification) {
+                                            notifyTransferProgress(transferId, file.name, aggregate, file.size)
+                                        }
+                                    }
+                                )
+                            }
+                        }.awaitAll().all { it }
+                    }
+                    if (segmentsSucceeded) {
+                        channel.force(false)
+                    }
+                    segmentsSucceeded
+                }
+            }.let { segmentsSucceeded ->
+                if (!segmentsSucceeded) {
+                    api.cancelOutgoingDownload(token, transferId, file.name)
+                    false
+                } else {
+                    api.completeOutgoingDownload(token, transferId, file.name)
+                }
+            }
+        } catch (_: Exception) {
+            api.cancelOutgoingDownload(token, transferId, file.name)
+            false
+        }
+    }
+
+    /** 各分段共享同一文件通道，以显式位置写入避免 MediaStore 多描述符争用。 */
+    private class PositionedChannelOutputStream(
+        private val channel: FileChannel,
+        startOffset: Long
+    ) : OutputStream() {
+        private var position = startOffset
+
+        override fun write(value: Int) {
+            val oneByte = byteArrayOf(value.toByte())
+            write(oneByte, 0, 1)
+        }
+
+        override fun write(buffer: ByteArray, offset: Int, length: Int) {
+            val bytes = ByteBuffer.wrap(buffer, offset, length)
+            while (bytes.hasRemaining()) {
+                val written = channel.write(bytes, position)
+                if (written <= 0) error("接收文件写入中断")
+                position += written
             }
         }
     }

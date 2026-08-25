@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Net;
@@ -28,6 +29,9 @@ public sealed record CollaborationTransferProgress(
     public double Percentage => TotalBytes <= 0 ? 0 : Math.Clamp(TransferredBytes * 100d / TotalBytes, 0, 100);
 }
 
+/// <summary>已加入电脑发送队列的文件及其传输标识。</summary>
+public sealed record CollaborationQueuedTransfer(string TransferId, string QueuePath, string FileName);
+
 /// <summary>已信任设备的持久会话。令牌只保存在本机与对应手机，不向局域网广播。</summary>
 internal sealed record CollaborationTrustedDevice(string DeviceId, string Token, DateTime ExpiresAt, string DeviceName);
 internal sealed record CollaborationConnectedDevice(string DeviceName, string IpAddress);
@@ -39,13 +43,16 @@ internal sealed record CollaborationQueuedFile(string FileName, string TransferI
 public sealed class CollaborationService
 {
     public const int DefaultPort = 18120;
+    public const long MaxTransferFileBytes = 5L * 1024 * 1024 * 1024;
     private const int MaxRequestHeaderBytes = 8192;
     // 文件上传采用流式落盘；手机上传单文件上限 5 GB，剪贴板仍使用更严格的独立上限。
-    private const long MaxRequestBodyBytes = 5L * 1024 * 1024 * 1024;
+    private const long MaxRequestBodyBytes = MaxTransferFileBytes;
     private const int MaxClipboardBodyBytes = 16 * 1024 * 1024;
     private const int MaxClipboardTextBodyBytes = 1024 * 1024;
     private const long MaxClipboardImagePixels = 16_000_000;
-    private const int MaxConcurrentClients = 4;
+    private const int MaxConcurrentClients = 8;
+    private const int TransferBufferBytes = 1024 * 1024;
+    private const int TransferProgressIntervalMilliseconds = 125;
     private const long MaxIncomingDirectoryBytes = 10L * 1024 * 1024 * 1024;
     private const long MinimumFreeSpaceBytes = 1024L * 1024 * 1024;
     private const int ClipboardHistoryCount = 20;
@@ -65,12 +72,20 @@ public sealed class CollaborationService
     private readonly ConcurrentDictionary<string, string> _deviceSessions = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, string> _outgoingTransferIds = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, string> _transferOpenPaths = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, ParallelDownloadProgress> _parallelDownloadProgress = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, PairAttemptInfo> _pairAttempts = new(StringComparer.OrdinalIgnoreCase);
     private readonly SemaphoreSlim _clientGate = new(MaxConcurrentClients, MaxConcurrentClients);
     private readonly SemaphoreSlim _uploadGate = new(1, 1);
     private readonly object _pairAttemptSync = new();
     private readonly object _outgoingQueueSync = new();
     private sealed record PairAttemptInfo(int Failures, DateTime BlockedUntil, DateTime LastAttempt);
+    private sealed class ParallelDownloadProgress(long totalBytes)
+    {
+        internal object SyncRoot { get; } = new();
+        internal Dictionary<long, long> SegmentBytes { get; } = new();
+        internal long TotalBytes { get; } = totalBytes;
+        internal long LastReportAtMilliseconds { get; set; }
+    }
     private TcpListener? _listener;
     private UdpClient? _discoveryListener;
     private CancellationTokenSource? _acceptCts;
@@ -260,33 +275,62 @@ public sealed class CollaborationService
     /// <summary>把电脑文件复制到一次性发送队列；手机拉取完成后队列副本会自动删除。</summary>
     public async Task<string> QueueOutgoingFileAsync(string sourcePath, CancellationToken cancellationToken = default)
     {
+        var queued = await QueueOutgoingTransferAsync(sourcePath, transferId: null, cancellationToken);
+        return queued.QueuePath;
+    }
+
+    /// <summary>把电脑文件加入发送队列，并返回可供调用方追踪的传输标识。</summary>
+    public async Task<CollaborationQueuedTransfer> QueueOutgoingTransferAsync(
+        string sourcePath,
+        string? transferId,
+        CancellationToken cancellationToken = default)
+    {
         if (!File.Exists(sourcePath)) throw new FileNotFoundException("待发送文件不存在。", sourcePath);
         Directory.CreateDirectory(OutgoingDirectory);
         var info = new FileInfo(sourcePath);
-        var target = CreateUniqueTarget(OutgoingDirectory, SanitizeFileName(info.Name));
-        var transferId = Guid.NewGuid().ToString("N");
-        _transferOpenPaths[transferId] = Path.GetFullPath(sourcePath);
-        ReportTransfer(transferId, info.Name, "Send", 0, info.Length, "Preparing", "正在加入发送队列");
-        await using var input = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read,
-            128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
-        await using var output = new FileStream(target, FileMode.CreateNew, FileAccess.Write, FileShare.None,
-            128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
-        var buffer = new byte[128 * 1024];
-        long copied = 0;
-        while (true)
+        if (info.Length > MaxTransferFileBytes)
         {
-            var read = await input.ReadAsync(buffer.AsMemory(), cancellationToken);
-            if (read == 0) break;
-            await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
-            copied += read;
-            ReportTransfer(transferId, info.Name, "Send", copied, info.Length, "Preparing", "正在加入发送队列");
+            throw new InvalidOperationException("单文件不能超过 5 GB。");
         }
-        await output.FlushAsync(cancellationToken);
+        var target = CreateUniqueTarget(OutgoingDirectory, SanitizeFileName(info.Name));
+        var normalizedTransferId = NormalizeTransferId(transferId);
+        _transferOpenPaths[normalizedTransferId] = Path.GetFullPath(sourcePath);
+        ReportTransfer(normalizedTransferId, info.Name, "Send", 0, info.Length, "Preparing", "正在加入发送队列");
+        try
+        {
+            await using var input = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read,
+                TransferBufferBytes, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            await using var output = new FileStream(target, FileMode.CreateNew, FileAccess.Write, FileShare.None,
+                TransferBufferBytes, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            var buffer = new byte[TransferBufferBytes];
+            var progressClock = Stopwatch.StartNew();
+            long lastProgressReportAt = 0;
+            long copied = 0;
+            while (true)
+            {
+                var read = await input.ReadAsync(buffer.AsMemory(), cancellationToken);
+                if (read == 0) break;
+                await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+                copied += read;
+                if (ShouldReportTransferProgress(progressClock, ref lastProgressReportAt, copied, info.Length))
+                {
+                    ReportTransfer(normalizedTransferId, info.Name, "Send", copied, info.Length, "Preparing", "正在加入发送队列");
+                }
+            }
+            await output.FlushAsync(cancellationToken);
+        }
+        catch
+        {
+            _transferOpenPaths.TryRemove(normalizedTransferId, out _);
+            try { if (File.Exists(target)) File.Delete(target); } catch { }
+            ReportTransfer(normalizedTransferId, info.Name, "Send", 0, info.Length, "Failed", "加入发送队列失败");
+            throw;
+        }
         var queuedName = Path.GetFileName(target);
-        _outgoingTransferIds[queuedName] = transferId;
+        _outgoingTransferIds[queuedName] = normalizedTransferId;
         SaveOutgoingQueue();
-        ReportTransfer(transferId, queuedName, "Send", info.Length, info.Length, "Queued", "等待手机接收");
-        return target;
+        ReportTransfer(normalizedTransferId, queuedName, "Send", info.Length, info.Length, "Queued", "等待手机接收");
+        return new CollaborationQueuedTransfer(normalizedTransferId, target, queuedName);
     }
 
     /// <summary>获取完成项对应的本机文件；发送项指向原文件，接收项指向接收目录中的文件。</summary>
@@ -413,6 +457,16 @@ public sealed class CollaborationService
             catch
             {
                 continue;
+            }
+            try
+            {
+                client.NoDelay = true;
+                client.SendBufferSize = TransferBufferBytes;
+                client.ReceiveBufferSize = TransferBufferBytes;
+            }
+            catch (SocketException)
+            {
+                // 个别系统不允许放大套接字缓冲时继续使用系统默认值。
             }
             if (!_clientGate.Wait(0))
             {
@@ -587,9 +641,11 @@ public sealed class CollaborationService
                 try
                 {
                     await using var output = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None,
-                        128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+                        TransferBufferBytes, FileOptions.Asynchronous | FileOptions.SequentialScan);
                     if (copied > 0) await output.WriteAsync(existing.AsMemory(bodyStart, copied));
-                    var transferBuffer = new byte[128 * 1024];
+                    var transferBuffer = new byte[TransferBufferBytes];
+                    var progressClock = Stopwatch.StartNew();
+                    long lastProgressReportAt = 0;
                     long received = copied;
                     ReportTransfer(transferId, transferName, "Receive", received, length, "Transferring", "正在接收手机文件");
                     var bodyDeadline = CreateBodyDeadline(length, isFileUpload: true);
@@ -604,7 +660,10 @@ public sealed class CollaborationService
                         if (chunk <= 0) throw new EndOfStreamException("文件上传在完成前中断。");
                         await output.WriteAsync(transferBuffer.AsMemory(0, chunk));
                         received += chunk;
-                        ReportTransfer(transferId, transferName, "Receive", received, length, "Transferring", "正在接收手机文件");
+                        if (ShouldReportTransferProgress(progressClock, ref lastProgressReportAt, received, length))
+                        {
+                            ReportTransfer(transferId, transferName, "Receive", received, length, "Transferring", "正在接收手机文件");
+                        }
                     }
                     await output.FlushAsync();
                     return new HttpRequest(method, path, query, headers, null, temporaryPath, length, uploadSlotOwned);
@@ -855,6 +914,56 @@ public sealed class CollaborationService
                 return false;
             }
 
+            if (path == "/api/files/complete" && request.Method == "GET")
+            {
+                var name = SanitizeFileName(query.GetValueOrDefault("name"));
+                var transferId = query.GetValueOrDefault("id") ?? string.Empty;
+                var filePath = ResolveSafeChildPath(OutgoingDirectory, name);
+                if (filePath is null || !File.Exists(filePath) ||
+                    !_outgoingTransferIds.TryGetValue(name, out var queuedTransferId) ||
+                    !string.Equals(queuedTransferId, transferId, StringComparison.Ordinal))
+                {
+                    await WriteJsonAsync(stream, 404, new { error = "待完成文件不存在或传输标识不匹配" }, serviceToken);
+                    return false;
+                }
+
+                var fileInfo = new FileInfo(filePath);
+                _parallelDownloadProgress.TryRemove(transferId, out _);
+                ReportTransfer(transferId, fileInfo.Name, "Send", fileInfo.Length, fileInfo.Length, "Completed", "手机已接收");
+                try { File.Delete(filePath); } catch { }
+                _outgoingTransferIds.TryRemove(fileInfo.Name, out _);
+                SaveOutgoingQueue();
+                await WriteJsonAsync(stream, 200, new { ok = true }, serviceToken);
+                return false;
+            }
+
+            if (path == "/api/files/cancel" && request.Method == "GET")
+            {
+                var name = SanitizeFileName(query.GetValueOrDefault("name"));
+                var transferId = query.GetValueOrDefault("id") ?? string.Empty;
+                var discard = query.GetValueOrDefault("discard") == "1";
+                if (_outgoingTransferIds.TryGetValue(name, out var queuedTransferId) &&
+                    string.Equals(queuedTransferId, transferId, StringComparison.Ordinal))
+                {
+                    var filePath = ResolveSafeChildPath(OutgoingDirectory, name);
+                    var total = filePath is not null && File.Exists(filePath) ? new FileInfo(filePath).Length : 0;
+                    _parallelDownloadProgress.TryRemove(transferId, out _);
+                    ReportTransfer(transferId, name, "Send", 0, total, "Failed",
+                        discard ? "已取消发送" : "手机接收中断，可重新发送");
+                    if (discard)
+                    {
+                        if (filePath is not null)
+                        {
+                            try { File.Delete(filePath); } catch { }
+                        }
+                        _outgoingTransferIds.TryRemove(name, out _);
+                        SaveOutgoingQueue();
+                    }
+                }
+                await WriteJsonAsync(stream, 200, new { ok = true }, serviceToken);
+                return false;
+            }
+
             if (path == "/api/files/download" && request.Method == "GET")
             {
                 var dir = query.GetValueOrDefault("dir") == "outgoing" ? OutgoingDirectory : IncomingDirectory;
@@ -866,10 +975,37 @@ public sealed class CollaborationService
                     await WriteJsonAsync(stream, 404, new { error = "文件不存在" }, serviceToken);
                     return false;
                 }
-                var transferId = NormalizeTransferId(query.GetValueOrDefault("id"));
+                var requestedTransferId = query.GetValueOrDefault("id") ?? string.Empty;
+                var transferId = NormalizeTransferId(requestedTransferId);
                 var fileInfo = new FileInfo(filePath);
-                await WriteFileAsync(stream, filePath, transferId, serviceToken);
-                ReportTransfer(transferId, fileInfo.Name, "Send", fileInfo.Length, fileInfo.Length, "Completed", "手机已接收");
+                var isParallelSegment = query.GetValueOrDefault("parallel") == "1";
+                if (isParallelSegment)
+                {
+                    if (dir != OutgoingDirectory ||
+                        !_outgoingTransferIds.TryGetValue(fileInfo.Name, out var queuedTransferId) ||
+                        !string.Equals(queuedTransferId, requestedTransferId, StringComparison.Ordinal) ||
+                        !long.TryParse(query.GetValueOrDefault("offset"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var offset) ||
+                        !long.TryParse(query.GetValueOrDefault("length"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var segmentLength) ||
+                        offset < 0 || segmentLength <= 0 || offset >= fileInfo.Length)
+                    {
+                        await WriteJsonAsync(stream, 400, new { error = "分段参数无效" }, serviceToken);
+                        return false;
+                    }
+
+                    await WriteFileRangeAsync(stream, filePath, transferId, offset, segmentLength, serviceToken);
+                    return false;
+                }
+
+                try
+                {
+                    await WriteFileAsync(stream, filePath, transferId, serviceToken);
+                    ReportTransfer(transferId, fileInfo.Name, "Send", fileInfo.Length, fileInfo.Length, "Completed", "手机已接收");
+                }
+                catch
+                {
+                    ReportTransfer(transferId, fileInfo.Name, "Send", 0, fileInfo.Length, "Failed", "发送到手机失败");
+                    throw;
+                }
                 try { File.Delete(filePath); } catch { }
                 _outgoingTransferIds.TryRemove(fileInfo.Name, out _);
                 SaveOutgoingQueue();
@@ -1405,25 +1541,102 @@ public sealed class CollaborationService
     private async Task WriteFileAsync(NetworkStream stream, string filePath, string transferId, CancellationToken cancellationToken)
     {
         await using var file = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read,
-            128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            TransferBufferBytes, FileOptions.Asynchronous | FileOptions.SequentialScan);
         var head = $"HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {file.Length}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n";
         var headBytes = Encoding.UTF8.GetBytes(head);
         using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutSource.CancelAfter(TimeSpan.FromMinutes(30));
         await stream.WriteAsync(headBytes.AsMemory(), timeoutSource.Token);
-        var buffer = new byte[128 * 1024];
+        var buffer = new byte[TransferBufferBytes];
+        var progressClock = Stopwatch.StartNew();
+        long lastProgressReportAt = 0;
         long sent = 0;
         ReportTransfer(transferId, Path.GetFileName(filePath), "Send", 0, file.Length, "Transferring", "正在发送到手机");
         while (true)
         {
             var read = await file.ReadAsync(buffer.AsMemory(), timeoutSource.Token);
             if (read == 0) break;
-            using var writeTimeout = CancellationTokenSource.CreateLinkedTokenSource(timeoutSource.Token);
-            writeTimeout.CancelAfter(TimeSpan.FromSeconds(30));
-            await stream.WriteAsync(buffer.AsMemory(0, read), writeTimeout.Token);
+            await stream.WriteAsync(buffer.AsMemory(0, read), timeoutSource.Token);
             sent += read;
-            ReportTransfer(transferId, Path.GetFileName(filePath), "Send", sent, file.Length, "Transferring", "正在发送到手机");
+            if (ShouldReportTransferProgress(progressClock, ref lastProgressReportAt, sent, file.Length))
+            {
+                ReportTransfer(transferId, Path.GetFileName(filePath), "Send", sent, file.Length, "Transferring", "正在发送到手机");
+            }
         }
         await stream.FlushAsync(timeoutSource.Token);
+    }
+
+    private async Task WriteFileRangeAsync(
+        NetworkStream stream,
+        string filePath,
+        string transferId,
+        long offset,
+        long requestedLength,
+        CancellationToken cancellationToken)
+    {
+        await using var file = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read,
+            TransferBufferBytes, FileOptions.Asynchronous | FileOptions.RandomAccess);
+        var segmentLength = Math.Min(requestedLength, file.Length - offset);
+        file.Position = offset;
+        var head = $"HTTP/1.1 206 Partial Content\r\nContent-Type: application/octet-stream\r\nContent-Length: {segmentLength}\r\nContent-Range: bytes {offset}-{offset + segmentLength - 1}/{file.Length}\r\nAccept-Ranges: bytes\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n";
+        var headBytes = Encoding.ASCII.GetBytes(head);
+        using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutSource.CancelAfter(TimeSpan.FromMinutes(30));
+        await stream.WriteAsync(headBytes.AsMemory(), timeoutSource.Token);
+
+        var buffer = new byte[TransferBufferBytes];
+        long sent = 0;
+        ReportParallelDownloadProgress(transferId, Path.GetFileName(filePath), offset, sent, file.Length);
+        while (sent < segmentLength)
+        {
+            var readLength = (int)Math.Min(buffer.Length, segmentLength - sent);
+            var read = await file.ReadAsync(buffer.AsMemory(0, readLength), timeoutSource.Token);
+            if (read == 0) throw new EndOfStreamException("分段文件在发送完成前结束。");
+            await stream.WriteAsync(buffer.AsMemory(0, read), timeoutSource.Token);
+            sent += read;
+            ReportParallelDownloadProgress(transferId, Path.GetFileName(filePath), offset, sent, file.Length);
+        }
+        await stream.FlushAsync(timeoutSource.Token);
+    }
+
+    private void ReportParallelDownloadProgress(
+        string transferId,
+        string fileName,
+        long segmentOffset,
+        long segmentTransferred,
+        long total)
+    {
+        var state = _parallelDownloadProgress.GetOrAdd(transferId, _ => new ParallelDownloadProgress(total));
+        long aggregate;
+        lock (state.SyncRoot)
+        {
+            state.SegmentBytes[segmentOffset] = segmentTransferred;
+            aggregate = Math.Min(state.TotalBytes, state.SegmentBytes.Values.Sum());
+            var now = Environment.TickCount64;
+            if (aggregate < state.TotalBytes &&
+                now - state.LastReportAtMilliseconds < TransferProgressIntervalMilliseconds)
+            {
+                return;
+            }
+            state.LastReportAtMilliseconds = now;
+        }
+
+        ReportTransfer(transferId, fileName, "Send", aggregate, total, "Transferring", "正在并行发送到手机");
+    }
+
+    private static bool ShouldReportTransferProgress(
+        Stopwatch clock,
+        ref long lastReportAtMilliseconds,
+        long transferred,
+        long total)
+    {
+        var elapsed = clock.ElapsedMilliseconds;
+        if (transferred < total && elapsed - lastReportAtMilliseconds < TransferProgressIntervalMilliseconds)
+        {
+            return false;
+        }
+
+        lastReportAtMilliseconds = elapsed;
+        return true;
     }
 }

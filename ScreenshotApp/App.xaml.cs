@@ -269,6 +269,9 @@ public partial class App : System.Windows.Application
 
     internal bool IsDesktopPetVisible => _desktopPetWindow?.IsVisible == true;
 
+    internal bool ShouldUseDesktopPetTransferBubbles =>
+        IsDesktopPetVisible && AppPreferences.Load().DesktopPetTakesOverTransferNotifications;
+
     internal bool SetDesktopPetVisible(bool visible)
     {
         if (visible)

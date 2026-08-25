@@ -68,6 +68,7 @@ public partial class SettingsWindow : Window
         VoiceInputPasteAutomaticallyCheckBox.IsChecked = preferences.VoiceInputPasteAutomatically;
         VoiceInputModelStatusText.Text = voiceInputModelStatus;
         DesktopPetVisibleCheckBox.IsChecked = desktopPetVisible;
+        DesktopPetTransferNotificationsCheckBox.IsChecked = preferences.DesktopPetTakesOverTransferNotifications;
         CollaborationAutoReconnectCheckBox.IsChecked = preferences.CollaborationAutoReconnect;
         DesktopPetScaleSlider.Value = Math.Clamp(preferences.DesktopPetScalePercent, 60, 160);
         UpdateDesktopPetScaleText((int)Math.Round(DesktopPetScaleSlider.Value));
@@ -219,6 +220,21 @@ public partial class SettingsWindow : Window
         _preferences.DesktopPetVisible = actual;
         _preferences.Save();
         SetFooterStatus(actual ? "桌面宠物已显示" : "桌面宠物已隐藏");
+    }
+
+    private void DesktopPetTransferNotificationsCheckBox_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_initialized)
+        {
+            return;
+        }
+
+        _preferences.DesktopPetTakesOverTransferNotifications =
+            DesktopPetTransferNotificationsCheckBox.IsChecked == true;
+        _preferences.Save();
+        SetFooterStatus(_preferences.DesktopPetTakesOverTransferNotifications
+            ? "宠物显示时将由彩虹气泡接管文件传输通知"
+            : "文件传输完成后将继续使用 Windows 通知");
     }
 
     private void UpdateDesktopPetScaleText(int scalePercent)

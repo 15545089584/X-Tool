@@ -47,6 +47,9 @@ public sealed class AppPreferences
     /// <summary>是否显示桌面宠物；关闭后下次启动仍保持隐藏。</summary>
     public bool DesktopPetVisible { get; set; } = true;
 
+    /// <summary>宠物可见时是否由头顶彩虹气泡接管文件传输系统通知。</summary>
+    public bool DesktopPetTakesOverTransferNotifications { get; set; } = true;
+
     public bool VoiceInputEnabled { get; set; } = true;
 
     public bool VoiceInputPasteAutomatically { get; set; } = true;
