@@ -75,16 +75,20 @@ public partial class CollaborationView : UserControl
             HeaderStatusText.Text = "连接服务未启动";
             HeaderStatusDot.Fill = new SolidColorBrush(Color.FromRgb(224, 91, 103));
             ConnectionLineText.Text = "当前不可连接";
+            LocalIpText.Text = "地址不可用";
+            DeviceIpText.Text = "未连接";
             return;
         }
 
         var count = _service.SessionCount;
-        var names = _service.ConnectedDeviceNames;
-        EndpointText.Text = $"{Environment.MachineName} · {_service.LocalIpAddress}:{_service.Port} · 自动发现端口 {_service.Port + 1}";
+        var connectedDevice = _service.ConnectedDevices.FirstOrDefault();
+        EndpointText.Text = $"{Environment.MachineName} · 文件端口 {_service.Port} · 自动发现端口 {_service.Port + 1}";
+        LocalIpText.Text = _service.LocalIpAddress ?? "地址待确认";
         HeaderStatusDot.Fill = new SolidColorBrush(count > 0 ? Color.FromRgb(31, 184, 143) : Color.FromRgb(77, 124, 254));
         HeaderStatusText.Text = count > 0 ? $"已连接 {count} 台设备" : "等待同一局域网设备";
         ConnectionLineText.Text = count > 0 ? "安全会话已连接" : _autoReconnectEnabled ? "已开启自动重连" : "等待扫码连接";
-        DeviceNameText.Text = names.FirstOrDefault() ?? "等待手机";
+        DeviceNameText.Text = connectedDevice?.DeviceName ?? "Vivo X300 PRO";
+        DeviceIpText.Text = connectedDevice?.IpAddress ?? "等待连接";
         DeviceHintText.Text = count > 0
             ? "可开始双向传输"
             : _autoReconnectEnabled ? "已信任设备会自动连接" : "请扫描右侧配对码";
@@ -166,12 +170,33 @@ public partial class CollaborationView : UserControl
 
     private void SetDropHighlight(bool active)
     {
-        DropZone.BorderBrush = new SolidColorBrush(active ? Color.FromRgb(77, 124, 254) : Color.FromRgb(146, 191, 221));
-        DropZone.BorderThickness = new Thickness(active ? 2 : 1);
+        DropZoneOutline.Stroke = new SolidColorBrush(active ? Color.FromRgb(77, 124, 254) : Color.FromRgb(103, 155, 213));
+        DropZoneOutline.StrokeThickness = active ? 3.2 : 2.4;
+        DropZoneOutline.Fill = new SolidColorBrush(active
+            ? Color.FromArgb(50, 77, 124, 254)
+            : Color.FromArgb(42, 255, 255, 255));
+        DropZoneOutline.Effect = active
+            ? new System.Windows.Media.Effects.DropShadowEffect
+            {
+                Color = Color.FromRgb(77, 124, 254),
+                BlurRadius = 34,
+                ShadowDepth = 0,
+                Opacity = 0.72
+            }
+            : null;
+        DropGlyph.Effect = active
+            ? new System.Windows.Media.Effects.DropShadowEffect
+            {
+                Color = Color.FromRgb(92, 145, 255),
+                BlurRadius = 24,
+                ShadowDepth = 0,
+                Opacity = 0.6
+            }
+            : null;
         DropGlyph.RenderTransformOrigin = new Point(0.5, 0.5);
         DropGlyph.RenderTransform = new ScaleTransform(active ? 1.08 : 1, active ? 1.08 : 1);
         DropTitleText.Text = active ? "松手加入发送队列" : "把内容交给 X-Tool";
-        DropHintText.Text = active ? "原文件会保留在当前位置" : "支持多选，单文件最大 1 GB";
+        DropHintText.Text = active ? "原文件会保留在当前位置" : "支持多选，单文件最大 5 GB";
     }
 
     private async Task QueueFilesAsync(IEnumerable<string> paths)

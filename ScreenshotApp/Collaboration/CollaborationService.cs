@@ -30,6 +30,7 @@ public sealed record CollaborationTransferProgress(
 
 /// <summary>已信任设备的持久会话。令牌只保存在本机与对应手机，不向局域网广播。</summary>
 internal sealed record CollaborationTrustedDevice(string DeviceId, string Token, DateTime ExpiresAt, string DeviceName);
+internal sealed record CollaborationConnectedDevice(string DeviceName, string IpAddress);
 
 /// <summary>电脑端一次性发送队列清单；只有明确加入清单的文件才会被手机拉取。</summary>
 internal sealed record CollaborationQueuedFile(string FileName, string TransferId, DateTime QueuedAt);
@@ -39,8 +40,8 @@ public sealed class CollaborationService
 {
     public const int DefaultPort = 18120;
     private const int MaxRequestHeaderBytes = 8192;
-    // 请求体上限：剪贴板文本与文件上传共用；手机上传单文件上限 1 GB，超出会拒绝连接。
-    private const int MaxRequestBodyBytes = 1024 * 1024 * 1024;
+    // 文件上传采用流式落盘；手机上传单文件上限 5 GB，剪贴板仍使用更严格的独立上限。
+    private const long MaxRequestBodyBytes = 5L * 1024 * 1024 * 1024;
     private const int MaxClipboardBodyBytes = 16 * 1024 * 1024;
     private const int MaxClipboardTextBodyBytes = 1024 * 1024;
     private const long MaxClipboardImagePixels = 16_000_000;
@@ -54,7 +55,12 @@ public sealed class CollaborationService
 
     private readonly object _sync = new();
     private readonly List<CollaborationClipboardEntry> _clipboardHistory = new();
-    private sealed record SessionInfo(DateTime Expires, DateTime LastSeen, string DeviceId, string DeviceName);
+    private sealed record SessionInfo(
+        DateTime Expires,
+        DateTime LastSeen,
+        string DeviceId,
+        string DeviceName,
+        string RemoteIpAddress);
     private readonly ConcurrentDictionary<string, SessionInfo> _sessions = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, string> _deviceSessions = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, string> _outgoingTransferIds = new(StringComparer.OrdinalIgnoreCase);
@@ -227,6 +233,22 @@ public sealed class CollaborationService
                 .Where(session => session.LastSeen >= cutoff && !string.IsNullOrWhiteSpace(session.DeviceId))
                 .Select(session => string.IsNullOrWhiteSpace(session.DeviceName) ? "已配对手机" : session.DeviceName)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+    }
+
+    /// <summary>最近 30 秒内保持会话的已配对设备，用于在连接示意图中展示名称和局域网地址。</summary>
+    internal IReadOnlyList<CollaborationConnectedDevice> ConnectedDevices
+    {
+        get
+        {
+            var cutoff = DateTime.UtcNow.AddSeconds(-30);
+            return _sessions.Values
+                .Where(session => session.LastSeen >= cutoff && !string.IsNullOrWhiteSpace(session.DeviceId))
+                .Select(session => new CollaborationConnectedDevice(
+                    NormalizeDeviceDisplayName(session.DeviceName),
+                    string.IsNullOrWhiteSpace(session.RemoteIpAddress) ? "地址待确认" : session.RemoteIpAddress))
+                .Distinct()
                 .ToArray();
         }
     }
@@ -499,7 +521,7 @@ public sealed class CollaborationService
         byte[]? body = null;
         if (headers.TryGetValue("Content-Length", out var lengthText))
         {
-            if (!int.TryParse(lengthText, out var length) || length < 0 || length > MaxRequestBodyBytes)
+            if (!long.TryParse(lengthText, out var length) || length < 0 || length > MaxRequestBodyBytes)
             {
                 return null;
             }
@@ -524,7 +546,7 @@ public sealed class CollaborationService
             var total = (int)headerBytes.Length - headerEnd - 4;
             var bodyStart = headerEnd + 4;
             var existing = headerBytes.ToArray();
-            var copied = Math.Min(Math.Max(0, total), length);
+            var copied = (int)Math.Min(Math.Max(0, total), length);
             if (isFileUpload)
             {
                 await _uploadGate.WaitAsync(serviceToken);
@@ -552,15 +574,16 @@ public sealed class CollaborationService
                         128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
                     if (copied > 0) await output.WriteAsync(existing.AsMemory(bodyStart, copied));
                     var transferBuffer = new byte[128 * 1024];
-                    var received = copied;
+                    long received = copied;
                     ReportTransfer(transferId, transferName, "Receive", received, length, "Transferring", "正在接收手机文件");
                     var bodyDeadline = CreateBodyDeadline(length, isFileUpload: true);
                     while (received < length)
                     {
                         var timeLeft = bodyDeadline - DateTime.UtcNow;
                         if (timeLeft <= TimeSpan.Zero) throw new TimeoutException("文件上传超过允许时限。");
+                        var nextReadLength = (int)Math.Min(transferBuffer.Length, length - received);
                         var chunk = await ReadWithIdleTimeoutAsync(stream,
-                            transferBuffer.AsMemory(0, Math.Min(transferBuffer.Length, length - received)),
+                            transferBuffer.AsMemory(0, nextReadLength),
                             MinTimeout(TimeSpan.FromSeconds(30), timeLeft), serviceToken);
                         if (chunk <= 0) throw new EndOfStreamException("文件上传在完成前中断。");
                         await output.WriteAsync(transferBuffer.AsMemory(0, chunk));
@@ -579,14 +602,15 @@ public sealed class CollaborationService
                 }
             }
 
-            body = new byte[length];
+            var bufferedLength = checked((int)length);
+            body = new byte[bufferedLength];
             if (copied > 0) Array.Copy(existing, bodyStart, body, 0, copied);
             var clipboardDeadline = CreateBodyDeadline(length, isFileUpload: false);
             while (copied < length)
             {
                 var timeLeft = clipboardDeadline - DateTime.UtcNow;
                 if (timeLeft <= TimeSpan.Zero) return null;
-                var chunk = await ReadWithIdleTimeoutAsync(stream, body.AsMemory(copied, length - copied),
+                var chunk = await ReadWithIdleTimeoutAsync(stream, body.AsMemory(copied, bufferedLength - copied),
                     MinTimeout(TimeSpan.FromSeconds(15), timeLeft), serviceToken);
                 if (chunk <= 0) return null;
                 copied += chunk;
@@ -612,7 +636,7 @@ public sealed class CollaborationService
                     return false;
                 }
                 var token = Guid.NewGuid().ToString("N");
-                RegisterSession(token, query.GetValueOrDefault("device"), query.GetValueOrDefault("name"));
+                RegisterSession(token, query.GetValueOrDefault("device"), query.GetValueOrDefault("name"), remoteEndpoint);
                 var html = (_pageHtml ?? string.Empty)
                     .Replace("__TOKEN__", token)
                     .Replace("__HOST__", $"http://{LocalIpAddress}:{Port}");
@@ -629,7 +653,7 @@ public sealed class CollaborationService
                     return false;
                 }
                 var token = Guid.NewGuid().ToString("N");
-                RegisterSession(token, query.GetValueOrDefault("device"), query.GetValueOrDefault("name"));
+                RegisterSession(token, query.GetValueOrDefault("device"), query.GetValueOrDefault("name"), remoteEndpoint);
                 await WriteJsonAsync(stream, 200, new
                 {
                     ok = true,
@@ -648,7 +672,7 @@ public sealed class CollaborationService
                 return false;
             }
 
-            if (!IsValidSession(query.GetValueOrDefault("t")))
+            if (!IsValidSession(query.GetValueOrDefault("t"), remoteEndpoint))
             {
                 await WriteJsonAsync(stream, 401, new { error = "未授权或会话已过期" }, serviceToken);
                 return false;
@@ -873,7 +897,7 @@ public sealed class CollaborationService
         });
     }
 
-    private bool IsValidSession(string? token)
+    private bool IsValidSession(string? token, IPEndPoint? remoteEndpoint = null)
     {
         if (string.IsNullOrWhiteSpace(token))
         {
@@ -885,7 +909,8 @@ public sealed class CollaborationService
             _sessions[token] = info with
             {
                 LastSeen = now,
-                Expires = now.AddDays(SessionLifetimeDays)
+                Expires = now.AddDays(SessionLifetimeDays),
+                RemoteIpAddress = NormalizeRemoteIp(remoteEndpoint) ?? info.RemoteIpAddress
             };
             return true;
         }
@@ -897,12 +922,16 @@ public sealed class CollaborationService
         token is { Length: 32 } && token.All(Uri.IsHexDigit);
 
     /// <summary>注册配对会话；带设备 ID 时同一设备重复配对替换旧会话，不重复计数。</summary>
-    private void RegisterSession(string token, string? deviceId, string? deviceName)
+    private void RegisterSession(string token, string? deviceId, string? deviceName, IPEndPoint? remoteEndpoint)
     {
         var normalizedDeviceId = string.IsNullOrWhiteSpace(deviceId) ? string.Empty : deviceId.Trim();
-        var normalizedDeviceName = string.IsNullOrWhiteSpace(deviceName) ? "已配对手机" : deviceName.Trim();
+        var normalizedDeviceName = NormalizeDeviceDisplayName(deviceName);
         _sessions[token] = new SessionInfo(
-            DateTime.UtcNow.AddDays(SessionLifetimeDays), DateTime.UtcNow, normalizedDeviceId, normalizedDeviceName);
+            DateTime.UtcNow.AddDays(SessionLifetimeDays),
+            DateTime.UtcNow,
+            normalizedDeviceId,
+            normalizedDeviceName,
+            NormalizeRemoteIp(remoteEndpoint) ?? string.Empty);
         if (string.IsNullOrWhiteSpace(deviceId))
         {
             return;
@@ -920,6 +949,25 @@ public sealed class CollaborationService
         value is { Length: >= 8 and <= 64 } && value.All(ch => char.IsLetterOrDigit(ch) || ch is '-' or '_')
             ? value
             : Guid.NewGuid().ToString("N");
+
+    private static string NormalizeDeviceDisplayName(string? value)
+    {
+        var name = string.IsNullOrWhiteSpace(value) ? "已配对手机" : value.Replace('+', ' ').Trim();
+        if (name.Contains("V2502A", StringComparison.OrdinalIgnoreCase)) return "Vivo X300 PRO";
+        if (name.StartsWith("vivo ", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Vivo " + name[5..].Trim();
+        }
+        return name;
+    }
+
+    private static string? NormalizeRemoteIp(IPEndPoint? endpoint)
+    {
+        if (endpoint == null) return null;
+        var address = endpoint.Address;
+        if (address.IsIPv4MappedToIPv6) address = address.MapToIPv4();
+        return address.ToString();
+    }
 
     private static Dictionary<string, string> ParseQuery(string query)
     {
@@ -1023,7 +1071,7 @@ public sealed class CollaborationService
         }
     }
 
-    private static DateTime CreateBodyDeadline(int length, bool isFileUpload)
+    private static DateTime CreateBodyDeadline(long length, bool isFileUpload)
     {
         // 上传按最低 256 KiB/s 计算总时限；短剪贴板请求最多允许 30 秒。
         var seconds = isFileUpload
@@ -1115,7 +1163,8 @@ public sealed class CollaborationService
                     record.ExpiresAt,
                     DateTime.MinValue,
                     record.DeviceId,
-                    string.IsNullOrWhiteSpace(record.DeviceName) ? "已配对手机" : record.DeviceName);
+                    NormalizeDeviceDisplayName(record.DeviceName),
+                    string.Empty);
                 _deviceSessions[record.DeviceId] = record.Token;
             }
         }

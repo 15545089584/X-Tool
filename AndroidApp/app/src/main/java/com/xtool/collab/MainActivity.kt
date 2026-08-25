@@ -142,7 +142,7 @@ private fun PairScreen(session: SessionStore, onPaired: () -> Unit) {
         connecting = true
         scope.launch {
             val result = withContext(Dispatchers.IO) {
-                CollabApi(normalizedHost).pair(pin, session.deviceId, "${Build.MANUFACTURER} ${Build.MODEL}")
+                CollabApi(normalizedHost).pair(pin, session.deviceId, currentDeviceName())
             }
             connecting = false
             if (result.token == null) {
@@ -212,6 +212,15 @@ private fun PairScreen(session: SessionStore, onPaired: () -> Unit) {
             }
         }
     }
+}
+
+private fun currentDeviceName(): String {
+    val manufacturer = Build.MANUFACTURER.trim()
+    val model = Build.MODEL.trim()
+    if (model.equals("V2502A", ignoreCase = true)) return "Vivo X300 PRO"
+    if (model.startsWith(manufacturer, ignoreCase = true)) return model
+    val brand = manufacturer.replaceFirstChar { character -> character.uppercase() }
+    return "$brand $model".trim()
 }
 
 @Composable
@@ -350,8 +359,8 @@ private suspend fun uploadUri(context: Context, session: SessionStore, uri: Uri,
     val resolver = context.contentResolver
     val name = queryDisplayName(resolver, uri)
     val size = querySize(resolver, uri)
-    if (size <= 0 || size > 1024L * 1024 * 1024) {
-        report("$name 无法读取或超过 1 GB")
+    if (size <= 0 || size > 5L * 1024 * 1024 * 1024) {
+        report("$name 无法读取或超过 5 GB")
         return
     }
     val transferId = UUID.randomUUID().toString().replace("-", "")

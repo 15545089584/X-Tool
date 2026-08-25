@@ -12,6 +12,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import android.provider.MediaStore
+import android.webkit.MimeTypeMap
 import androidx.core.app.NotificationCompat
 import com.xtool.collab.MainActivity
 import com.xtool.collab.data.CollabApi
@@ -142,15 +143,22 @@ class SyncForegroundService : Service() {
 
     private suspend fun downloadToMediaStore(host: String, token: String, transferId: String, file: RemoteFile): Uri? {
         return withContext(Dispatchers.IO) {
+            var createdUri: Uri? = null
             try {
+                val mimeType = mimeTypeFor(file.name)
                 val values = ContentValues().apply {
                     put(MediaStore.Downloads.DISPLAY_NAME, file.name)
-                    put(MediaStore.Downloads.MIME_TYPE, "application/octet-stream")
-                    if (Build.VERSION.SDK_INT >= 29) put(MediaStore.Downloads.RELATIVE_PATH, "Download/XTool")
+                    put(MediaStore.Downloads.MIME_TYPE, mimeType)
+                    if (Build.VERSION.SDK_INT >= 29) {
+                        put(MediaStore.Downloads.RELATIVE_PATH, "Download/XTool")
+                        put(MediaStore.Downloads.IS_PENDING, 1)
+                    }
                 }
                 val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return@withContext null
+                createdUri = uri
                 val output = contentResolver.openOutputStream(uri) ?: run {
                     contentResolver.delete(uri, null, null)
+                    createdUri = null
                     return@withContext null
                 }
                 val ok = CollabApi(host).downloadFileStreaming(token, transferId, file, { output }) { done, total ->
@@ -161,17 +169,26 @@ class SyncForegroundService : Service() {
                 }
                 if (!ok) {
                     contentResolver.delete(uri, null, null)
+                    createdUri = null
                     TransferRuntime.updateTransfer(MobileTransfer(
                         transferId, file.name, "电脑 → 手机", 0, file.size, "failed", "接收失败"
                     ))
                     return@withContext null
                 }
+                if (Build.VERSION.SDK_INT >= 29) {
+                    contentResolver.update(uri, ContentValues().apply {
+                        put(MediaStore.Downloads.IS_PENDING, 0)
+                        put(MediaStore.Downloads.MIME_TYPE, mimeType)
+                    }, null, null)
+                }
                 TransferRuntime.updateTransfer(MobileTransfer(
                     transferId, file.name, "电脑 → 手机", file.size, file.size, "completed", "已保存到 Download/XTool"
                 ))
                 getSystemService(NotificationManager::class.java).cancel(progressNotificationId(transferId))
+                createdUri = null
                 uri
             } catch (_: Exception) {
+                createdUri?.let { runCatching { contentResolver.delete(it, null, null) } }
                 TransferRuntime.updateTransfer(MobileTransfer(
                     transferId, file.name, "电脑 → 手机", 0, file.size, "failed", "接收中断"
                 ))
@@ -194,10 +211,15 @@ class SyncForegroundService : Service() {
     }
 
     private fun notifyFileReceived(name: String, uri: Uri) {
+        val mimeType = mimeTypeFor(name)
+        val openIntent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, mimeType)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
         val pending = PendingIntent.getActivity(
             this,
             name.hashCode(),
-            Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
+            openIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val notification = NotificationCompat.Builder(this, FileChannelId)
@@ -208,6 +230,20 @@ class SyncForegroundService : Service() {
             .setAutoCancel(true)
             .build()
         getSystemService(NotificationManager::class.java).notify(name.hashCode(), notification)
+    }
+
+    /** 根据扩展名向系统登记真实媒体类型，避免图片被文本查看器误打开。 */
+    private fun mimeTypeFor(name: String): String {
+        val extension = name.substringAfterLast('.', "").lowercase()
+        if (extension.isBlank()) return "application/octet-stream"
+        return MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
+            ?: when (extension) {
+                "heic", "heif" -> "image/heic"
+                "svg" -> "image/svg+xml"
+                "md", "markdown" -> "text/markdown"
+                "json" -> "application/json"
+                else -> "application/octet-stream"
+            }
     }
 
     private fun progressNotificationId(transferId: String) = 3000 + (transferId.hashCode() and 0x0FFF)
