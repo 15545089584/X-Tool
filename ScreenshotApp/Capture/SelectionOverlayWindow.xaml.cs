@@ -6,9 +6,11 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using ScreenshotApp.Converters;
 using ScreenshotApp.Ocr;
 using ScreenshotApp.Translation;
 using ScreenshotApp.History;
+using ScreenshotApp.Recording;
 using ScreenshotApp.Sticker;
 using ScreenshotApp.ClipboardUi;
 
@@ -35,18 +37,28 @@ public partial class SelectionOverlayWindow : Window
     private AnnotationShape _selectedShape = AnnotationShape.Rectangle;
     private List<Point>? _workingPoints;
     private bool _ocrInProgress;
+    private bool _qrScanInProgress;
     private bool _translationInProgress;
     private ResizeHandle? _activeResizeHandle;
     private Rect _resizeStartSelection;
     private Point _resizeStartPoint;
-    private bool? _toolbarBelowSelection;
-    private bool _toolbarPositioned;
+    private ToolbarPlacement? _toolbarPlacement;
     private bool _recordSystemAudio;
     private bool _recordMicrophone;
+    private ScreenRecordingMode _recordingMode = ScreenRecordingMode.Mp4;
     private bool _isSynchronizingAnnotationThickness;
+    private double _surfaceWidth;
+    private double _surfaceHeight;
+    private Size? _actionToolbarSize;
+    private Size? _penOptionsPanelSize;
+    private Size? _shapeOptionsPanelSize;
+    private Size? _recordingOptionsPanelSize;
 
     private const double MinimumSelectionSize = 16;
     private const double ResizeHandleSize = 14;
+    private const double ToolbarSelectionGap = 10;
+    private const double ToolbarScreenMargin = 8;
+    private const double ToolbarPlacementHysteresis = 12;
 
     public SelectionOverlayWindow(CaptureFrame frame, SelectionPurpose purpose = SelectionPurpose.Screenshot)
     {
@@ -56,6 +68,7 @@ public partial class SelectionOverlayWindow : Window
         InitializeComponent();
         ScreenshotImage.Source = frame.Bitmap;
         UpdateAnnotationToolStates();
+        UpdateShapeOptionStates();
         UpdateColorStates();
         UpdateThicknessStates();
 
@@ -87,6 +100,8 @@ public partial class SelectionOverlayWindow : Window
 
     public bool RecordMicrophone { get; private set; }
 
+    public ScreenRecordingMode RecordingMode { get; private set; } = ScreenRecordingMode.Mp4;
+
     /// <summary>
     /// OCR、翻译完成后把文本交由主窗口写入统一历史记录。
     /// </summary>
@@ -108,6 +123,7 @@ public partial class SelectionOverlayWindow : Window
 
     private void Window_Loaded(object sender, RoutedEventArgs e)
     {
+        RememberSurfaceSize();
         Activate();
         Keyboard.Focus(CaptureSurface);
         UpdateSelectionVisuals(new Rect());
@@ -139,8 +155,7 @@ public partial class SelectionOverlayWindow : Window
         _dragStart = position;
         _selection = new Rect(position, position);
         _isDragging = true;
-        _toolbarBelowSelection = null;
-        _toolbarPositioned = false;
+        _toolbarPlacement = null;
         ResetAnnotations();
         ActionToolbar.Visibility = Visibility.Collapsed;
         RecordingOptionsPanel.Visibility = Visibility.Collapsed;
@@ -259,6 +274,17 @@ public partial class SelectionOverlayWindow : Window
         PositionRecordingOptionsPanel();
     }
 
+    private void RecordingModeButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: string modeText } &&
+            Enum.TryParse<ScreenRecordingMode>(modeText, out var mode))
+        {
+            _recordingMode = mode;
+            UpdateRecordingOptionStates();
+            PositionRecordingOptionsPanel();
+        }
+    }
+
     private void StickerToolButton_Click(object sender, RoutedEventArgs e)
     {
         if (_selection.IsEmpty)
@@ -301,6 +327,7 @@ public partial class SelectionOverlayWindow : Window
 
         RecordSystemAudio = _recordSystemAudio;
         RecordMicrophone = _recordMicrophone;
+        RecordingMode = _recordingMode;
         IsScreenRecordingRequested = true;
         SetActiveAnnotationTool(ScreenshotAnnotationTool.None);
         ConfirmSelection(useForScreenRecording: true);
@@ -310,10 +337,18 @@ public partial class SelectionOverlayWindow : Window
     {
         SystemAudioOptionText.Text = _recordSystemAudio ? "电脑声音：开" : "电脑声音：关";
         MicrophoneOptionText.Text = _recordMicrophone ? "麦克风：开" : "麦克风：关";
-        SystemAudioOptionButton.Background = _recordSystemAudio ? new SolidColorBrush(Color.FromRgb(224, 238, 255)) : new SolidColorBrush(Color.FromRgb(247, 250, 253));
-        SystemAudioOptionButton.BorderBrush = _recordSystemAudio ? new SolidColorBrush(Color.FromRgb(88, 149, 255)) : new SolidColorBrush(Color.FromRgb(215, 225, 236));
-        MicrophoneOptionButton.Background = _recordMicrophone ? new SolidColorBrush(Color.FromRgb(224, 238, 255)) : new SolidColorBrush(Color.FromRgb(247, 250, 253));
-        MicrophoneOptionButton.BorderBrush = _recordMicrophone ? new SolidColorBrush(Color.FromRgb(88, 149, 255)) : new SolidColorBrush(Color.FromRgb(215, 225, 236));
+        var isGif = _recordingMode == ScreenRecordingMode.Gif;
+        SystemAudioOptionButton.IsEnabled = !isGif;
+        MicrophoneOptionButton.IsEnabled = !isGif;
+        SystemAudioOptionButton.Background = _recordSystemAudio && !isGif ? new SolidColorBrush(Color.FromRgb(224, 238, 255)) : new SolidColorBrush(Color.FromRgb(247, 250, 253));
+        SystemAudioOptionButton.BorderBrush = _recordSystemAudio && !isGif ? new SolidColorBrush(Color.FromRgb(88, 149, 255)) : new SolidColorBrush(Color.FromRgb(215, 225, 236));
+        MicrophoneOptionButton.Background = _recordMicrophone && !isGif ? new SolidColorBrush(Color.FromRgb(224, 238, 255)) : new SolidColorBrush(Color.FromRgb(247, 250, 253));
+        MicrophoneOptionButton.BorderBrush = _recordMicrophone && !isGif ? new SolidColorBrush(Color.FromRgb(88, 149, 255)) : new SolidColorBrush(Color.FromRgb(215, 225, 236));
+        Mp4RecordingModeButton.Background = !isGif ? new SolidColorBrush(Color.FromRgb(224, 238, 255)) : new SolidColorBrush(Color.FromRgb(247, 250, 253));
+        Mp4RecordingModeButton.BorderBrush = !isGif ? new SolidColorBrush(Color.FromRgb(88, 149, 255)) : new SolidColorBrush(Color.FromRgb(215, 225, 236));
+        GifRecordingModeButton.Background = isGif ? new SolidColorBrush(Color.FromRgb(224, 238, 255)) : new SolidColorBrush(Color.FromRgb(247, 250, 253));
+        GifRecordingModeButton.BorderBrush = isGif ? new SolidColorBrush(Color.FromRgb(88, 149, 255)) : new SolidColorBrush(Color.FromRgb(215, 225, 236));
+        RecordingModeHintText.Text = isGif ? "GIF · 12 FPS · 最长 10 秒 · 无声音" : "MP4 · 可选声音";
     }
 
     private void PenToolButton_Click(object sender, RoutedEventArgs e)
@@ -324,6 +359,10 @@ public partial class SelectionOverlayWindow : Window
 
     private void ShapeToolButton_Click(object sender, RoutedEventArgs e)
     {
+        // 点击主按钮即进入形状标注，并把矩形作为每次打开菜单时的默认形状。
+        _selectedShape = AnnotationShape.Rectangle;
+        SetActiveAnnotationTool(ScreenshotAnnotationTool.Shape);
+        UpdateShapeOptionStates();
         PenOptionsPanel.Visibility = Visibility.Collapsed;
         ToggleToolPanel(ShapeOptionsPanel, ShapeToolButton);
     }
@@ -346,6 +385,7 @@ public partial class SelectionOverlayWindow : Window
 
         _selectedShape = shape;
         SetActiveAnnotationTool(ScreenshotAnnotationTool.Shape);
+        UpdateShapeOptionStates();
     }
 
     private async void OcrToolButton_Click(object sender, RoutedEventArgs e)
@@ -387,6 +427,10 @@ public partial class SelectionOverlayWindow : Window
                 _selection.Height);
             var resultWindow = new OcrResultWindow(result, selectionScreenBounds) { Owner = this };
             resultWindow.ShowDialog();
+            if (resultWindow.ExitCaptureRequested)
+            {
+                Close();
+            }
         }
         catch (Exception exception)
         {
@@ -403,6 +447,50 @@ public partial class SelectionOverlayWindow : Window
             OcrToolButtonText.Text = "提取文字";
             OcrToolButton.IsEnabled = true;
             _ocrInProgress = false;
+        }
+    }
+
+    private async void QrToolButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_qrScanInProgress || _selection.IsEmpty)
+        {
+            return;
+        }
+
+        _qrScanInProgress = true;
+        QrToolButton.IsEnabled = false;
+        QrToolButtonText.Text = "识别中…";
+        var previousHint = HintText.Text;
+        HintText.Text = "正在识别框选区域内的二维码…";
+        SetActiveAnnotationTool(ScreenshotAnnotationTool.None);
+        try
+        {
+            var bitmap = CreateSelectionBitmap(includeAnnotations: false);
+            var frozen = QrCodeService.FreezeForCrossThread(bitmap);
+            var results = await Task.Run(() => QrCodeService.Decode(frozen));
+            var selectionScreenBounds = new Rect(
+                Left + _selection.Left,
+                Top + _selection.Top,
+                _selection.Width,
+                _selection.Height);
+            var resultWindow = new QrScanResultWindow(results, selectionScreenBounds) { Owner = this };
+            resultWindow.ShowDialog();
+            if (resultWindow.ExitCaptureRequested)
+            {
+                // 用户已跳转到外部链接，自动结束截图流程，避免停留在截图界面造成卡死错觉。
+                Close();
+            }
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(this, $"二维码识别失败：{exception.Message}", "二维码识别", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        finally
+        {
+            HintText.Text = previousHint;
+            QrToolButtonText.Text = "二维码";
+            QrToolButton.IsEnabled = true;
+            _qrScanInProgress = false;
         }
     }
 
@@ -453,12 +541,17 @@ public partial class SelectionOverlayWindow : Window
             var engine = TranslationEngineProvider.Default;
             if (!engine.IsReady)
             {
-                new TranslationResultWindow(
+                var translationWindow = new TranslationResultWindow(
                     sourceText,
                     null,
                     engine.UnavailableReason,
                     null,
-                    selectionScreenBounds) { Owner = this }.ShowDialog();
+                    selectionScreenBounds) { Owner = this };
+                translationWindow.ShowDialog();
+                if (translationWindow.ExitCaptureRequested)
+                {
+                    Close();
+                }
                 return;
             }
 
@@ -472,14 +565,19 @@ public partial class SelectionOverlayWindow : Window
                 HistoryTextCreated?.Invoke(this, new HistoryTextContent(HistoryEntryKind.Translation, historyContent));
             }
 
-            new TranslationResultWindow(
+            var translationResultWindow = new TranslationResultWindow(
                 translation.SourceText,
                 translation.TranslatedText,
                 null,
                 editedSource => engine.TranslateAsync(
                     new TranslationRequest(TranslationTextPreprocessor.Normalize(editedSource)),
                     CancellationToken.None),
-                selectionScreenBounds) { Owner = this }.ShowDialog();
+                selectionScreenBounds) { Owner = this };
+            translationResultWindow.ShowDialog();
+            if (translationResultWindow.ExitCaptureRequested)
+            {
+                Close();
+            }
         }
         catch (Exception exception)
         {
@@ -569,20 +667,88 @@ public partial class SelectionOverlayWindow : Window
         }
         if (!shouldShow)
         {
+            panel.Visibility = Visibility.Collapsed;
             return;
         }
 
         panel.Visibility = Visibility.Visible;
-        panel.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        var point = anchor.TransformToAncestor(CaptureSurface).Transform(new Point(0, 0));
-        var x = Math.Clamp(point.X, 8, Math.Max(8, CaptureSurface.ActualWidth - panel.DesiredSize.Width - 8));
-        var y = point.Y + anchor.ActualHeight + 8;
-        if (y + panel.DesiredSize.Height > CaptureSurface.ActualHeight - 8)
-        {
-            y = Math.Max(8, point.Y - panel.DesiredSize.Height - 8);
-        }
+        PositionToolPanel(panel, anchor);
+    }
+
+    private void PositionToolPanel(Border panel, FrameworkElement anchor)
+    {
+        var surfaceSize = GetStableSurfaceSize();
+        // 面板是覆盖层 Grid 的子项。反复在 Visibility 切换后重新测量它，
+        // WPF 可能会把当前布局约束写回 DesiredSize，第二次打开便会错误地
+        // 变成接近整个覆盖层的尺寸。第一次显示时缓存自然尺寸，后续只使用
+        // 这个稳定值进行定位，避免菜单在正确位置和左上方之间循环跳动。
+        var panelSize = GetStableToolPanelSize(panel);
+        // 工具栏和面板是同一个 Grid 的兄弟节点。直接跨过 Grid 做坐标变换时，
+        // 面板刚从 Collapsed 切换为 Visible 的布局帧可能仍未提交，纵坐标会短暂变成 0，
+        // 于是菜单被夹到左上角。工具栏位置由我们自己用 Margin 固定，锚点只需在工具栏
+        // 内部转换，再叠加工具栏的稳定边距即可避免依赖未提交的父级布局。
+        var anchorInToolbar = anchor.TransformToAncestor(ActionToolbar).Transform(new Point(0, 0));
+        var point = new Point(
+            ActionToolbar.Margin.Left + anchorInToolbar.X,
+            ActionToolbar.Margin.Top + anchorInToolbar.Y);
+        var panelWidth = panelSize.Width;
+        var panelHeight = panelSize.Height;
+        var x = Math.Clamp(
+            point.X,
+            ToolbarScreenMargin,
+            Math.Max(ToolbarScreenMargin, surfaceSize.Width - panelWidth - ToolbarScreenMargin));
+        var belowY = point.Y + anchor.ActualHeight + ToolbarSelectionGap;
+        var aboveY = point.Y - panelHeight - ToolbarSelectionGap;
+        var maximumY = Math.Max(
+            ToolbarScreenMargin,
+            surfaceSize.Height - panelHeight - ToolbarScreenMargin);
+        var y = belowY + panelHeight <= surfaceSize.Height - ToolbarScreenMargin
+            ? belowY
+            : aboveY >= ToolbarScreenMargin
+                ? aboveY
+                : Math.Clamp(belowY, ToolbarScreenMargin, maximumY);
 
         panel.Margin = new Thickness(x, y, 0, 0);
+    }
+
+    private Size GetStableToolPanelSize(Border panel)
+    {
+        var cached = panel == PenOptionsPanel
+            ? _penOptionsPanelSize
+            : _shapeOptionsPanelSize;
+        if (cached is { Width: > 1, Height: > 1 })
+        {
+            return cached.Value;
+        }
+
+        Size measured;
+        if (panel.Child is FrameworkElement content)
+        {
+            // 只测量固定宽度的内容，不让父级覆盖层的瞬时约束参与计算。
+            content.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            measured = new Size(
+                content.DesiredSize.Width + panel.Padding.Left + panel.Padding.Right + panel.BorderThickness.Left + panel.BorderThickness.Right,
+                content.DesiredSize.Height + panel.Padding.Top + panel.Padding.Bottom + panel.BorderThickness.Top + panel.BorderThickness.Bottom);
+        }
+        else
+        {
+            panel.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            measured = panel.DesiredSize;
+        }
+
+        measured = new Size(
+            Math.Max(1, measured.Width),
+            Math.Max(1, measured.Height));
+        if (panel == PenOptionsPanel)
+        {
+            _penOptionsPanelSize = measured;
+        }
+        else
+        {
+            _shapeOptionsPanelSize = measured;
+        }
+
+        return measured;
     }
 
     private void HideToolPanels()
@@ -595,9 +761,13 @@ public partial class SelectionOverlayWindow : Window
     {
         Shape shape = _selectedShape switch
         {
+            AnnotationShape.RoundedRectangle => new Rectangle { RadiusX = 12, RadiusY = 12 },
             AnnotationShape.Ellipse => new Ellipse(),
             AnnotationShape.Diamond => new Polygon(),
             AnnotationShape.Triangle => new Polygon(),
+            AnnotationShape.Pentagon => new Polygon(),
+            AnnotationShape.Hexagon => new Polygon(),
+            AnnotationShape.Star => new Polygon(),
             _ => new Rectangle { RadiusX = 2, RadiusY = 2 }
         };
         shape.Stroke = stroke;
@@ -611,21 +781,23 @@ public partial class SelectionOverlayWindow : Window
     {
         shape.Width = bounds.Width;
         shape.Height = bounds.Height;
+        if (shape is Rectangle rectangle && _selectedShape == AnnotationShape.RoundedRectangle)
+        {
+            var radius = Math.Max(4, Math.Min(bounds.Width, bounds.Height) * 0.18);
+            rectangle.RadiusX = radius;
+            rectangle.RadiusY = radius;
+            return;
+        }
+
         if (shape is not Polygon polygon)
         {
             return;
         }
 
-        polygon.Points = _selectedShape == AnnotationShape.Diamond
-            ? new PointCollection
-            {
-                new Point(bounds.Width / 2, 0), new Point(bounds.Width, bounds.Height / 2),
-                new Point(bounds.Width / 2, bounds.Height), new Point(0, bounds.Height / 2)
-            }
-            : new PointCollection
-            {
-                new Point(bounds.Width / 2, 0), new Point(bounds.Width, bounds.Height), new Point(0, bounds.Height)
-            };
+        polygon.Points = new PointCollection(
+            AnnotationShapeGeometry.GetPolygonPoints(
+                _selectedShape,
+                new Rect(0, 0, bounds.Width, bounds.Height)));
     }
 
     private void UpdateWorkingLine(Point surfacePoint)
@@ -715,6 +887,8 @@ public partial class SelectionOverlayWindow : Window
             return;
         }
 
+        // 菜单只负责选择参数；真正开始落笔后收起，避免面板挡住选区或参与后续定位。
+        HideToolPanels();
         _isDrawingAnnotation = true;
         _annotationStart = ToSelectionPoint(surfacePoint);
         var stroke = CreateAnnotationBrush();
@@ -790,8 +964,9 @@ public partial class SelectionOverlayWindow : Window
         var top = _resizeStartSelection.Top;
         var right = _resizeStartSelection.Right;
         var bottom = _resizeStartSelection.Bottom;
-        var surfaceWidth = CaptureSurface.ActualWidth;
-        var surfaceHeight = CaptureSurface.ActualHeight;
+        var surfaceSize = GetStableSurfaceSize();
+        var surfaceWidth = surfaceSize.Width;
+        var surfaceHeight = surfaceSize.Height;
 
         if (handle is ResizeHandle.Left or ResizeHandle.TopLeft or ResizeHandle.BottomLeft)
         {
@@ -947,7 +1122,8 @@ public partial class SelectionOverlayWindow : Window
 
     private void ConfirmSelection(bool useForScrollCapture = false, bool useForScreenRecording = false)
     {
-        if (_selection.IsEmpty || CaptureSurface.ActualWidth <= 0 || CaptureSurface.ActualHeight <= 0)
+        var surfaceSize = GetStableSurfaceSize();
+        if (_selection.IsEmpty || surfaceSize.Width <= 0 || surfaceSize.Height <= 0)
         {
             return;
         }
@@ -989,8 +1165,9 @@ public partial class SelectionOverlayWindow : Window
 
     private Int32Rect GetSelectionPixelBounds()
     {
-        var scaleX = _frame.Bitmap.PixelWidth / CaptureSurface.ActualWidth;
-        var scaleY = _frame.Bitmap.PixelHeight / CaptureSurface.ActualHeight;
+        var surfaceSize = GetStableSurfaceSize();
+        var scaleX = _frame.Bitmap.PixelWidth / surfaceSize.Width;
+        var scaleY = _frame.Bitmap.PixelHeight / surfaceSize.Height;
         var x = Math.Clamp((int)Math.Round(_selection.X * scaleX), 0, _frame.Bitmap.PixelWidth - 1);
         var y = Math.Clamp((int)Math.Round(_selection.Y * scaleY), 0, _frame.Bitmap.PixelHeight - 1);
         var right = Math.Clamp((int)Math.Round(_selection.Right * scaleX), x + 1, _frame.Bitmap.PixelWidth);
@@ -1007,8 +1184,13 @@ public partial class SelectionOverlayWindow : Window
 
     private void UpdateSelectionVisuals(Rect selection)
     {
-        var width = Math.Max(0, CaptureSurface.ActualWidth);
-        var height = Math.Max(0, CaptureSurface.ActualHeight);
+        var surfaceSize = GetStableSurfaceSize();
+        var width = Math.Max(0, surfaceSize.Width);
+        var height = Math.Max(0, surfaceSize.Height);
+        if (!selection.IsEmpty && (width <= 0 || height <= 0))
+        {
+            return;
+        }
 
         if (selection.IsEmpty || selection.Width < 1 || selection.Height < 1)
         {
@@ -1023,8 +1205,7 @@ public partial class SelectionOverlayWindow : Window
             RecordingOptionsPanel.Visibility = Visibility.Collapsed;
             HideToolPanels();
             AnnotationCanvas.Visibility = Visibility.Collapsed;
-            _toolbarBelowSelection = null;
-            _toolbarPositioned = false;
+            _toolbarPlacement = null;
             return;
         }
 
@@ -1136,122 +1317,187 @@ public partial class SelectionOverlayWindow : Window
 
     private void PositionToolbar()
     {
-        ActionToolbar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        var toolbarWidth = ActionToolbar.DesiredSize.Width;
-        var toolbarHeight = ActionToolbar.DesiredSize.Height;
-        if (_toolbarPositioned && !ToolbarIntersectsSelection(toolbarWidth, toolbarHeight))
+        var toolbarSize = GetStableToolbarSize();
+        var toolbarWidth = toolbarSize.Width;
+        var toolbarHeight = toolbarSize.Height;
+        var surfaceSize = GetStableSurfaceSize();
+        if (surfaceSize.Width <= 0 || surfaceSize.Height <= 0 || toolbarWidth <= 1 || toolbarHeight <= 1)
         {
             return;
         }
 
-        var x = Math.Clamp(_selection.Right - toolbarWidth, 8, Math.Max(8, CaptureSurface.ActualWidth - toolbarWidth - 8));
-        var preferredBelow = _selection.Bottom + 10;
-        var preferredAbove = _selection.Top - toolbarHeight - 10;
-        var surfaceHeight = CaptureSurface.ActualHeight;
+        // 工具栏优先贴着选区下边界居中，空间不足时仍由边界约束保持在屏幕内。
+        var x = Math.Clamp(
+            _selection.Left + (_selection.Width - toolbarWidth) / 2,
+            ToolbarScreenMargin,
+            Math.Max(ToolbarScreenMargin, surfaceSize.Width - toolbarWidth - ToolbarScreenMargin));
+        var surfaceHeight = surfaceSize.Height;
 
-        // 常规情况下与选区保留 10 像素间距；向下扩展选区后，
-        // 若下方空间不足，允许紧贴上边放置，绝不能再把工具栏夹回选区内部。
-        var belowY = preferredBelow + toolbarHeight <= surfaceHeight - 8
-            ? preferredBelow
-            : _selection.Bottom + toolbarHeight <= surfaceHeight
-                ? _selection.Bottom
-                : double.NaN;
-        var aboveY = preferredAbove >= 8
-            ? preferredAbove
-            : _selection.Top >= toolbarHeight
-                ? _selection.Top - toolbarHeight
-                : double.NaN;
-        var canPlaceBelow = !double.IsNaN(belowY);
-        var canPlaceAbove = !double.IsNaN(aboveY);
+        // 优先跟随选区下边界。下方放不下时放到选区上边界之外；
+        // 选区同时触及上下边界、两侧都没有完整空间时，固定在屏幕下边界上方。
+        var belowY = _selection.Bottom + ToolbarSelectionGap;
+        var aboveY = _selection.Top - toolbarHeight - ToolbarSelectionGap;
+        var canPlaceBelow = belowY + toolbarHeight <= surfaceHeight - ToolbarScreenMargin;
+        var canPlaceAbove = aboveY >= ToolbarScreenMargin;
+        var belowWithHysteresis = belowY + toolbarHeight <=
+                                  surfaceHeight - ToolbarScreenMargin - ToolbarPlacementHysteresis;
 
-        // 首次确定位置后保持在同一侧，避免拖动选区经过临界点时反复跳动。
-        _toolbarBelowSelection ??= canPlaceBelow || !canPlaceAbove;
-        if (_toolbarBelowSelection == true && !canPlaceBelow && canPlaceAbove)
+        if (!_toolbarPlacement.HasValue)
         {
-            _toolbarBelowSelection = false;
+            _toolbarPlacement = canPlaceBelow
+                ? ToolbarPlacement.BelowSelection
+                : canPlaceAbove
+                    ? ToolbarPlacement.AboveSelection
+                    : ToolbarPlacement.ScreenBottomFallback;
         }
-        else if (_toolbarBelowSelection == false && !canPlaceAbove && canPlaceBelow)
+        else if (_toolbarPlacement == ToolbarPlacement.BelowSelection && !canPlaceBelow)
         {
-            _toolbarBelowSelection = true;
+            _toolbarPlacement = canPlaceAbove
+                ? ToolbarPlacement.AboveSelection
+                : ToolbarPlacement.ScreenBottomFallback;
+        }
+        else if (_toolbarPlacement == ToolbarPlacement.AboveSelection)
+        {
+            if (belowWithHysteresis)
+            {
+                _toolbarPlacement = ToolbarPlacement.BelowSelection;
+            }
+            else if (!canPlaceAbove && !canPlaceBelow)
+            {
+                _toolbarPlacement = ToolbarPlacement.ScreenBottomFallback;
+            }
+        }
+        else if (_toolbarPlacement == ToolbarPlacement.ScreenBottomFallback)
+        {
+            if (belowWithHysteresis)
+            {
+                _toolbarPlacement = ToolbarPlacement.BelowSelection;
+            }
+            else if (canPlaceAbove)
+            {
+                _toolbarPlacement = ToolbarPlacement.AboveSelection;
+            }
         }
 
-        double y;
-        if (_toolbarBelowSelection == true && canPlaceBelow)
+        var maximumY = Math.Max(
+            ToolbarScreenMargin,
+            surfaceHeight - toolbarHeight - ToolbarScreenMargin);
+        var y = _toolbarPlacement switch
         {
-            y = belowY;
-        }
-        else if (_toolbarBelowSelection == false && canPlaceAbove)
-        {
-            y = aboveY;
-        }
-        else
-        {
-            // 选区占满几乎整个屏幕时上下两侧都无法完整容纳工具栏，
-            // 选择与选区交叠面积更小的一侧作为最后兜底。
-            var maximumY = Math.Max(0, surfaceHeight - toolbarHeight);
-            var fallbackBelow = Math.Clamp(_selection.Bottom, 0, maximumY);
-            var fallbackAbove = Math.Clamp(_selection.Top - toolbarHeight, 0, maximumY);
-            y = GetToolbarSelectionIntersectionArea(x, fallbackBelow, toolbarWidth, toolbarHeight)
-                <= GetToolbarSelectionIntersectionArea(x, fallbackAbove, toolbarWidth, toolbarHeight)
-                ? fallbackBelow
-                : fallbackAbove;
-        }
+            ToolbarPlacement.BelowSelection => Math.Clamp(belowY, ToolbarScreenMargin, maximumY),
+            ToolbarPlacement.AboveSelection => Math.Clamp(aboveY, ToolbarScreenMargin, maximumY),
+            _ => maximumY
+        };
 
         ActionToolbar.Margin = new Thickness(x, y, 0, 0);
         if (RecordingOptionsPanel.Visibility == Visibility.Visible)
         {
             PositionRecordingOptionsPanel();
         }
-        _toolbarPositioned = true;
+        if (PenOptionsPanel.Visibility == Visibility.Visible)
+        {
+            PositionToolPanel(PenOptionsPanel, PenToolButton);
+        }
+        else if (ShapeOptionsPanel.Visibility == Visibility.Visible)
+        {
+            PositionToolPanel(ShapeOptionsPanel, ShapeToolButton);
+        }
+    }
+
+    private Size GetStableToolbarSize()
+    {
+        if (_actionToolbarSize is { Width: > 1, Height: > 1 } cached)
+        {
+            return cached;
+        }
+
+        ActionToolbar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var measured = ActionToolbar.DesiredSize;
+        if (measured.Width <= 1 || measured.Height <= 1 ||
+            double.IsNaN(measured.Width) || double.IsNaN(measured.Height) ||
+            double.IsInfinity(measured.Width) || double.IsInfinity(measured.Height))
+        {
+            return measured;
+        }
+
+        _actionToolbarSize = measured;
+        return measured;
     }
 
     private void PositionRecordingOptionsPanel()
     {
-        RecordingOptionsPanel.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        ActionToolbar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-
-        var panelWidth = RecordingOptionsPanel.DesiredSize.Width;
-        var panelHeight = RecordingOptionsPanel.DesiredSize.Height;
+        var panelSize = GetStableRecordingOptionsPanelSize();
+        var toolbarSize = GetStableToolbarSize();
+        var panelWidth = panelSize.Width;
+        var panelHeight = panelSize.Height;
+        var surfaceSize = GetStableSurfaceSize();
         var toolbarTop = ActionToolbar.Margin.Top;
-        var toolbarHeight = ActionToolbar.DesiredSize.Height;
-        var x = Math.Clamp(ActionToolbar.Margin.Left, 8, Math.Max(8, CaptureSurface.ActualWidth - panelWidth - 8));
+        var toolbarHeight = toolbarSize.Height;
+        var x = Math.Clamp(ActionToolbar.Margin.Left, 8, Math.Max(8, surfaceSize.Width - panelWidth - 8));
         var belowY = toolbarTop + toolbarHeight + 8;
         var aboveY = toolbarTop - panelHeight - 8;
         var panelRect = new Rect(x, belowY, panelWidth, panelHeight);
 
         // 默认在工具栏下方；若会遮挡选区或超出屏幕，才切换到工具栏上方。
         var y = belowY;
-        if (belowY + panelHeight > CaptureSurface.ActualHeight - 8 || panelRect.IntersectsWith(_selection))
+        if (belowY + panelHeight > surfaceSize.Height - 8 || panelRect.IntersectsWith(_selection))
         {
-            y = aboveY >= 8 ? aboveY : Math.Clamp(belowY, 8, Math.Max(8, CaptureSurface.ActualHeight - panelHeight - 8));
+            y = aboveY >= 8 ? aboveY : Math.Clamp(belowY, 8, Math.Max(8, surfaceSize.Height - panelHeight - 8));
         }
 
         RecordingOptionsPanel.Margin = new Thickness(x, y, 0, 0);
     }
 
-    private bool ToolbarIntersectsSelection(double toolbarWidth, double toolbarHeight)
+    private Size GetStableRecordingOptionsPanelSize()
     {
-        var toolbarBounds = new Rect(
-            ActionToolbar.Margin.Left,
-            ActionToolbar.Margin.Top,
-            toolbarWidth,
-            toolbarHeight);
-        var protectedSelection = _selection;
-        protectedSelection.Inflate(4, 4);
-        return toolbarBounds.IntersectsWith(protectedSelection);
-    }
+        if (_recordingOptionsPanelSize is { Width: > 1, Height: > 1 } cached)
+        {
+            return cached;
+        }
 
-    private double GetToolbarSelectionIntersectionArea(double x, double y, double width, double height)
-    {
-        var intersection = Rect.Intersect(new Rect(x, y, width, height), _selection);
-        return intersection.IsEmpty ? 0 : intersection.Width * intersection.Height;
+        var content = RecordingOptionsPanel.Child as FrameworkElement;
+        if (content is null)
+        {
+            RecordingOptionsPanel.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            _recordingOptionsPanelSize = RecordingOptionsPanel.DesiredSize;
+            return RecordingOptionsPanel.DesiredSize;
+        }
+
+        // 只测量面板自己的内容，避免切换 GIF 模式时把覆盖层的瞬时布局约束写回 DesiredSize。
+        content.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var measured = new Size(
+            content.DesiredSize.Width + RecordingOptionsPanel.Padding.Left + RecordingOptionsPanel.Padding.Right + RecordingOptionsPanel.BorderThickness.Left + RecordingOptionsPanel.BorderThickness.Right,
+            content.DesiredSize.Height + RecordingOptionsPanel.Padding.Top + RecordingOptionsPanel.Padding.Bottom + RecordingOptionsPanel.BorderThickness.Top + RecordingOptionsPanel.BorderThickness.Bottom);
+        _recordingOptionsPanelSize = new Size(Math.Max(1, measured.Width), Math.Max(1, measured.Height));
+        return _recordingOptionsPanelSize.Value;
     }
 
     private Point ClampToSurface(Point point)
     {
+        var surfaceSize = GetStableSurfaceSize();
         return new Point(
-            Math.Clamp(point.X, 0, Math.Max(0, CaptureSurface.ActualWidth)),
-            Math.Clamp(point.Y, 0, Math.Max(0, CaptureSurface.ActualHeight)));
+            Math.Clamp(point.X, 0, Math.Max(0, surfaceSize.Width)),
+            Math.Clamp(point.Y, 0, Math.Max(0, surfaceSize.Height)));
+    }
+
+    private void RememberSurfaceSize()
+    {
+        if (CaptureSurface.ActualWidth > 1 && CaptureSurface.ActualHeight > 1)
+        {
+            _surfaceWidth = CaptureSurface.ActualWidth;
+            _surfaceHeight = CaptureSurface.ActualHeight;
+        }
+    }
+
+    private Size GetStableSurfaceSize()
+    {
+        if (_surfaceWidth > 1 && _surfaceHeight > 1)
+        {
+            return new Size(_surfaceWidth, _surfaceHeight);
+        }
+
+        RememberSurfaceSize();
+        return new Size(_surfaceWidth, _surfaceHeight);
     }
 
     private static Rect Normalize(Point start, Point end)
@@ -1273,6 +1519,13 @@ public partial class SelectionOverlayWindow : Window
         Bottom,
         BottomLeft,
         Left
+    }
+
+    private enum ToolbarPlacement
+    {
+        BelowSelection,
+        AboveSelection,
+        ScreenBottomFallback
     }
 
     private void SetActiveAnnotationTool(ScreenshotAnnotationTool tool)
@@ -1318,10 +1571,41 @@ public partial class SelectionOverlayWindow : Window
         SetButtonSelected(ColorPickerToolButton, _activeAnnotationTool == ScreenshotAnnotationTool.ColorPicker);
     }
 
+    private void UpdateShapeOptionStates()
+    {
+        foreach (var button in FindVisualChildren<Button>(ShapeOptionsPanel))
+        {
+            if (button.Tag is string shapeText &&
+                Enum.TryParse<AnnotationShape>(shapeText, out var shape))
+            {
+                SetButtonSelected(button, shape == _selectedShape);
+            }
+        }
+    }
+
+    private static IEnumerable<T> FindVisualChildren<T>(DependencyObject root)
+        where T : DependencyObject
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
+        {
+            var child = VisualTreeHelper.GetChild(root, index);
+            if (child is T match)
+            {
+                yield return match;
+            }
+
+            foreach (var descendant in FindVisualChildren<T>(child))
+            {
+                yield return descendant;
+            }
+        }
+    }
+
     private ScreenColorSampler.ColorSample UpdateColorPicker(Point surfacePoint)
     {
-        var scaleX = _colorBuffer.PixelWidth / CaptureSurface.ActualWidth;
-        var scaleY = _colorBuffer.PixelHeight / CaptureSurface.ActualHeight;
+        var surfaceSize = GetStableSurfaceSize();
+        var scaleX = _colorBuffer.PixelWidth / surfaceSize.Width;
+        var scaleY = _colorBuffer.PixelHeight / surfaceSize.Height;
         var pixelX = (int)Math.Floor(surfacePoint.X * scaleX);
         var pixelY = (int)Math.Floor(surfacePoint.Y * scaleY);
         var sample = _colorBuffer.Sample(pixelX, pixelY);
@@ -1340,11 +1624,12 @@ public partial class SelectionOverlayWindow : Window
         ColorPickerPanel.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         var panelWidth = ColorPickerPanel.DesiredSize.Width;
         var panelHeight = ColorPickerPanel.DesiredSize.Height;
+        var surfaceSize = GetStableSurfaceSize();
         var circleCenterOffset = 70d;
         var x = surfacePoint.X - panelWidth / 2;
         var y = surfacePoint.Y - circleCenterOffset;
-        x = Math.Clamp(x, 8, Math.Max(8, CaptureSurface.ActualWidth - panelWidth - 8));
-        y = Math.Clamp(y, 8, Math.Max(8, CaptureSurface.ActualHeight - panelHeight - 8));
+        x = Math.Clamp(x, 8, Math.Max(8, surfaceSize.Width - panelWidth - 8));
+        y = Math.Clamp(y, 8, Math.Max(8, surfaceSize.Height - panelHeight - 8));
 
         Canvas.SetLeft(ColorPickerPanel, x);
         Canvas.SetTop(ColorPickerPanel, y);

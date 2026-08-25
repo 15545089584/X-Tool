@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.IO;
+using System.IO.Enumeration;
 using System.Security;
+using System.Collections.Concurrent;
 
 namespace ScreenshotApp.StorageAnalysis;
 
@@ -11,61 +13,72 @@ namespace ScreenshotApp.StorageAnalysis;
 internal static class StorageAnalysisService
 {
     internal const int DefaultLargeFileLimit = 100;
+    private static readonly TimeSpan ResultCacheLifetime = TimeSpan.FromMinutes(3);
+    private static readonly ConcurrentDictionary<string, CachedStorageAnalysis> ResultCache = new(StringComparer.OrdinalIgnoreCase);
 
     internal static StorageAnalysisResult Analyze(
         StorageAnalysisTarget target,
         int largeFileLimit,
         IProgress<StorageScanProgress>? progress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool forceRefresh = false,
+        bool allowEverything = true)
     {
         if (string.IsNullOrWhiteSpace(target.RootPath) || !Directory.Exists(target.RootPath))
         {
             throw new DirectoryNotFoundException("所选本地卷已不可用，请返回存储概览后刷新。");
         }
 
-        var normalizedRoot = Path.GetPathRoot(Path.GetFullPath(target.RootPath));
+        var normalizedRoot = Path.GetFullPath(target.RootPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
         if (string.IsNullOrWhiteSpace(normalizedRoot) || !Directory.Exists(normalizedRoot))
         {
             throw new IOException("无法读取所选本地卷的根目录。");
         }
 
+        if (!forceRefresh && ResultCache.TryGetValue(normalizedRoot, out var cached) &&
+            DateTime.Now - cached.CachedAt <= ResultCacheLifetime)
+        {
+            progress?.Report(new StorageScanProgress(cached.Result.FilesScanned, cached.Result.DirectoriesScanned,
+                cached.Result.SkippedEntries, "正在读取最近一次分析结果…", "缓存结果"));
+            return cached.Result with { IsCached = true };
+        }
+
+        var volumeRoot = Path.GetPathRoot(normalizedRoot);
+        if (allowEverything && string.Equals(normalizedRoot, volumeRoot, StringComparison.OrdinalIgnoreCase) &&
+            EverythingStorageIndexClient.TryAnalyze(normalizedRoot, largeFileLimit, progress, cancellationToken, out var indexed) &&
+            indexed is not null && HasPlausibleIndexCoverage(target, indexed))
+        {
+            var indexedResult = BuildIndexedResult(target, indexed);
+            ResultCache[normalizedRoot] = new CachedStorageAnalysis(indexedResult, DateTime.Now);
+            return indexedResult;
+        }
+
         var state = new ScanState(Math.Clamp(largeFileLimit, 1, 500), progress);
-        var usages = new List<MutableDirectoryUsage>();
+        var usages = new ConcurrentBag<MutableDirectoryUsage>();
         var rootFiles = new MutableDirectoryUsage("根目录文件", normalizedRoot, isRootFiles: true);
+        var topDirectories = new List<(string Path, string Name)>();
 
         try
         {
-            foreach (var entryPath in Directory.EnumerateFileSystemEntries(normalizedRoot))
+            foreach (var entry in EnumerateEntries(normalizedRoot))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                state.SetCurrentPath(entryPath);
-                try
-                {
-                    var attributes = File.GetAttributes(entryPath);
-                    if ((attributes & FileAttributes.ReparsePoint) != 0)
-                    {
-                        state.RecordSkipped(rootFiles);
-                        continue;
-                    }
-
-                    if ((attributes & FileAttributes.Directory) != 0)
-                    {
-                        var name = Path.GetFileName(entryPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-                        var usage = new MutableDirectoryUsage(string.IsNullOrWhiteSpace(name) ? entryPath : name, entryPath, isRootFiles: false);
-                        ScanDirectory(entryPath, usage, state, cancellationToken);
-                        if (usage.LogicalBytes > 0 || usage.SkippedEntries > 0)
-                        {
-                            usages.Add(usage);
-                        }
-                    }
-                    else
-                    {
-                        ScanFile(entryPath, rootFiles, state, cancellationToken);
-                    }
-                }
-                catch (Exception exception) when (IsExpectedFileSystemException(exception))
+                state.SetCurrentPath(entry.Path);
+                if ((entry.Attributes & FileAttributes.ReparsePoint) != 0)
                 {
                     state.RecordSkipped(rootFiles);
+                    continue;
+                }
+
+                if ((entry.Attributes & FileAttributes.Directory) != 0)
+                {
+                    var name = Path.GetFileName(entry.Path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                    topDirectories.Add((entry.Path, string.IsNullOrWhiteSpace(name) ? entry.Path : name));
+                }
+                else
+                {
+                    ScanFile(entry, rootFiles, state, cancellationToken);
                 }
             }
         }
@@ -73,6 +86,19 @@ internal static class StorageAnalysisService
         {
             state.RecordSkipped(rootFiles);
         }
+
+        var parallelOptions = new ParallelOptions
+        {
+            CancellationToken = cancellationToken,
+            // 机械盘和实时防护场景中过多随机元数据请求反而会变慢，因此只做温和并行。
+            MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount / 2, 2, 4)
+        };
+        Parallel.ForEach(topDirectories, parallelOptions, directory =>
+        {
+            var usage = new MutableDirectoryUsage(directory.Name, directory.Path, isRootFiles: false);
+            ScanDirectory(directory.Path, usage, state, cancellationToken);
+            if (usage.LogicalBytes > 0 || usage.SkippedEntries > 0) usages.Add(usage);
+        });
 
         cancellationToken.ThrowIfCancellationRequested();
         if (rootFiles.LogicalBytes > 0 || rootFiles.SkippedEntries > 0)
@@ -90,7 +116,7 @@ internal static class StorageAnalysisService
         var completedAt = DateTime.Now;
         state.Report(force: true);
 
-        return new StorageAnalysisResult(
+        var result = new StorageAnalysisResult(
             target,
             directoryUsages,
             largeFiles,
@@ -98,7 +124,11 @@ internal static class StorageAnalysisService
             state.DirectoriesScanned,
             state.SkippedEntries,
             totalScannedBytes,
-            completedAt);
+            completedAt,
+            "优化原生扫描",
+            false);
+        ResultCache[normalizedRoot] = new CachedStorageAnalysis(result, DateTime.Now);
+        return result;
     }
 
     private static void ScanDirectory(
@@ -118,41 +148,25 @@ internal static class StorageAnalysisService
 
             try
             {
-                var attributes = File.GetAttributes(directoryPath);
-                if ((attributes & FileAttributes.ReparsePoint) != 0)
-                {
-                    state.RecordSkipped(usage);
-                    continue;
-                }
-
                 usage.DirectoriesScanned++;
-                state.DirectoriesScanned++;
-                foreach (var entryPath in Directory.EnumerateFileSystemEntries(directoryPath))
+                state.RecordDirectory();
+                foreach (var entry in EnumerateEntries(directoryPath))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    state.SetCurrentPath(entryPath);
-
-                    try
-                    {
-                        var entryAttributes = File.GetAttributes(entryPath);
-                        if ((entryAttributes & FileAttributes.ReparsePoint) != 0)
-                        {
-                            state.RecordSkipped(usage);
-                            continue;
-                        }
-
-                        if ((entryAttributes & FileAttributes.Directory) != 0)
-                        {
-                            pendingDirectories.Push(entryPath);
-                        }
-                        else
-                        {
-                            ScanFile(entryPath, usage, state, cancellationToken);
-                        }
-                    }
-                    catch (Exception exception) when (IsExpectedFileSystemException(exception))
+                    state.SetCurrentPath(entry.Path);
+                    if ((entry.Attributes & FileAttributes.ReparsePoint) != 0)
                     {
                         state.RecordSkipped(usage);
+                        continue;
+                    }
+
+                    if ((entry.Attributes & FileAttributes.Directory) != 0)
+                    {
+                        pendingDirectories.Push(entry.Path);
+                    }
+                    else
+                    {
+                        ScanFile(entry, usage, state, cancellationToken);
                     }
                 }
             }
@@ -164,18 +178,51 @@ internal static class StorageAnalysisService
     }
 
     private static void ScanFile(
-        string filePath,
+        NativeFileSystemEntry file,
         MutableDirectoryUsage usage,
         ScanState state,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var info = new FileInfo(filePath);
-        var length = Math.Max(0, info.Length);
+        var length = Math.Max(0, file.Length);
         usage.LogicalBytes += length;
         usage.FilesScanned++;
-        state.FilesScanned++;
-        state.AddLargeFile(filePath, length);
+        state.RecordFile(file.Path, length);
+    }
+
+    private static IEnumerable<NativeFileSystemEntry> EnumerateEntries(string directoryPath)
+    {
+        var options = new EnumerationOptions
+        {
+            RecurseSubdirectories = false,
+            IgnoreInaccessible = false,
+            ReturnSpecialDirectories = false,
+            AttributesToSkip = 0
+        };
+        return new FileSystemEnumerable<NativeFileSystemEntry>(directoryPath,
+            (ref FileSystemEntry entry) => new NativeFileSystemEntry(entry.ToFullPath(), entry.Attributes, entry.Length), options);
+    }
+
+    private static StorageAnalysisResult BuildIndexedResult(StorageAnalysisTarget target, EverythingStorageAnalysis indexed)
+    {
+        var usages = indexed.DirectoryUsages
+            .OrderByDescending(item => item.Bytes)
+            .ThenBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+            .Select((item, index) => new StorageDirectoryUsage(
+                item.Name, item.FullPath, item.Bytes, item.Files, item.Directories, 0,
+                indexed.TotalBytes <= 0 ? 0 : Math.Clamp(item.Bytes / (double)indexed.TotalBytes, 0, 1),
+                MutableDirectoryUsage.AccentAt(index), item.IsRootFiles))
+            .ToArray();
+        return new StorageAnalysisResult(target, usages, indexed.LargeFiles,
+            indexed.FilesScanned, indexed.DirectoriesScanned, 0, indexed.TotalBytes,
+            DateTime.Now, "Everything 索引", false);
+    }
+
+    private static bool HasPlausibleIndexCoverage(StorageAnalysisTarget target, EverythingStorageAnalysis indexed)
+    {
+        var usedBytes = Math.Max(0, target.TotalBytes - target.FreeBytes);
+        // 空卷允许返回空索引；非空卷若索引只覆盖很小一部分，说明存在排除规则或索引尚未就绪。
+        return usedBytes == 0 || indexed.TotalBytes >= usedBytes * 0.60;
     }
 
     private static bool IsExpectedFileSystemException(Exception exception) => exception is UnauthorizedAccessException
@@ -187,6 +234,7 @@ internal static class StorageAnalysisService
     private sealed class MutableDirectoryUsage
     {
         private static readonly string[] AccentPalette = { "#4D7CFE", "#16B99B", "#A66CE5", "#F3A847", "#4D9CB5", "#E16670" };
+        public static string AccentAt(int index) => AccentPalette[index % AccentPalette.Length];
 
         public MutableDirectoryUsage(string name, string fullPath, bool isRootFiles)
         {
@@ -211,7 +259,7 @@ internal static class StorageAnalysisService
             DirectoriesScanned,
             SkippedEntries,
             totalScannedBytes <= 0 ? 0 : Math.Clamp(LogicalBytes / (double)totalScannedBytes, 0, 1),
-            AccentPalette[index % AccentPalette.Length],
+            AccentAt(index),
             IsRootFiles);
     }
 
@@ -229,62 +277,80 @@ internal static class StorageAnalysisService
             _progress = progress;
         }
 
-        public long FilesScanned { get; set; }
-        public long DirectoriesScanned { get; set; }
-        public long SkippedEntries { get; private set; }
+        private long _filesScanned;
+        private long _directoriesScanned;
+        private long _skippedEntries;
+        private readonly object _largeFilesSync = new();
+        private readonly object _progressSync = new();
+
+        public long FilesScanned => Interlocked.Read(ref _filesScanned);
+        public long DirectoriesScanned
+        {
+            get => Interlocked.Read(ref _directoriesScanned);
+            set => Interlocked.Exchange(ref _directoriesScanned, value);
+        }
+        public long SkippedEntries => Interlocked.Read(ref _skippedEntries);
 
         public void SetCurrentPath(string path)
         {
-            _currentPath = path;
+            lock (_progressSync) _currentPath = path;
             Report(force: false);
         }
 
         public void RecordSkipped(MutableDirectoryUsage usage)
         {
             usage.SkippedEntries++;
-            SkippedEntries++;
+            Interlocked.Increment(ref _skippedEntries);
             Report(force: false);
         }
 
-        public void AddLargeFile(string path, long size)
+        public void RecordFile(string path, long size)
         {
+            Interlocked.Increment(ref _filesScanned);
             if (size <= 0)
             {
                 Report(force: false);
                 return;
             }
 
-            var entry = new StorageLargeFile(path, size);
-            if (_largeFiles.Count < _largeFileLimit)
+            lock (_largeFilesSync)
             {
-                _largeFiles.Enqueue(entry, size);
-            }
-            else if (_largeFiles.TryPeek(out _, out var smallestSize) && size > smallestSize)
-            {
-                _largeFiles.Dequeue();
-                _largeFiles.Enqueue(entry, size);
+                var entry = new StorageLargeFile(path, size);
+                if (_largeFiles.Count < _largeFileLimit)
+                    _largeFiles.Enqueue(entry, size);
+                else if (_largeFiles.TryPeek(out _, out var smallestSize) && size > smallestSize)
+                {
+                    _largeFiles.Dequeue();
+                    _largeFiles.Enqueue(entry, size);
+                }
             }
 
             Report(force: false);
         }
 
-        public IReadOnlyList<StorageLargeFile> GetLargeFiles() => _largeFiles.UnorderedItems
-            .Select(item => item.Element)
-            .OrderByDescending(item => item.Size)
-            .ThenBy(item => item.FullPath, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        public void RecordDirectory() => Interlocked.Increment(ref _directoriesScanned);
+
+        public IReadOnlyList<StorageLargeFile> GetLargeFiles()
+        {
+            lock (_largeFilesSync)
+                return _largeFiles.UnorderedItems.Select(item => item.Element)
+                    .OrderByDescending(item => item.Size).ThenBy(item => item.FullPath, StringComparer.OrdinalIgnoreCase).ToArray();
+        }
 
         public void Report(bool force)
         {
-            if (_progress is null || (!force && _progressStopwatch.Elapsed < TimeSpan.FromMilliseconds(220)))
+            if (_progress is null) return;
+            lock (_progressSync)
             {
-                return;
+                if (!force && _progressStopwatch.Elapsed < TimeSpan.FromMilliseconds(220)) return;
+                _progressStopwatch.Restart();
+                _progress.Report(new StorageScanProgress(FilesScanned, DirectoriesScanned, SkippedEntries, _currentPath, "优化原生扫描"));
             }
-
-            _progressStopwatch.Restart();
-            _progress.Report(new StorageScanProgress(FilesScanned, DirectoriesScanned, SkippedEntries, _currentPath));
         }
     }
+
+    private sealed record CachedStorageAnalysis(StorageAnalysisResult Result, DateTime CachedAt);
+    private readonly record struct NativeFileSystemEntry(string Path, FileAttributes Attributes, long Length);
 }
 
 public sealed record StorageAnalysisTarget(string RootPath, string Title, long TotalBytes, long FreeBytes)
@@ -292,7 +358,7 @@ public sealed record StorageAnalysisTarget(string RootPath, string Title, long T
     public string CapacityText => $"{StorageAnalysisDisplay.FormatCapacity(TotalBytes)} 容量 · {StorageAnalysisDisplay.FormatCapacity(FreeBytes)} 可用";
 }
 
-public sealed record StorageScanProgress(long FilesScanned, long DirectoriesScanned, long SkippedEntries, string CurrentPath)
+public sealed record StorageScanProgress(long FilesScanned, long DirectoriesScanned, long SkippedEntries, string CurrentPath, string SourceText)
 {
     public string SummaryText => $"已扫描 {FilesScanned:N0} 个文件 · {DirectoriesScanned:N0} 个目录 · 跳过 {SkippedEntries:N0} 项";
 }
@@ -305,12 +371,16 @@ public sealed record StorageAnalysisResult(
     long DirectoriesScanned,
     long SkippedEntries,
     long ScannedBytes,
-    DateTime CompletedAt)
+    DateTime CompletedAt,
+    string SourceText,
+    bool IsCached)
 {
     public string ScannedBytesText => StorageAnalysisDisplay.FormatCapacity(ScannedBytes);
-    public string SummaryText => $"已扫描 {FilesScanned:N0} 个文件 · {DirectoriesScanned:N0} 个目录 · 跳过 {SkippedEntries:N0} 项 · 完成于 {CompletedAt:HH:mm:ss}";
+    public string SummaryText => $"{SourceText}{(IsCached ? " · 缓存" : string.Empty)} · 已扫描 {FilesScanned:N0} 个文件 · {DirectoriesScanned:N0} 个目录 · 跳过 {SkippedEntries:N0} 项 · 完成于 {CompletedAt:HH:mm:ss}";
     public string NoticeText => SkippedEntries == 0
-        ? "显示的是已扫描文件的逻辑大小；文件系统保留空间、硬链接、压缩和稀疏文件可能使其与卷已用空间不同。"
+        ? SourceText.StartsWith("Everything", StringComparison.Ordinal)
+            ? "结果来自本机已有 Everything 索引；索引排除规则可能影响统计范围。显示的是文件逻辑大小，不代表磁盘实际分配空间。"
+            : "显示的是已扫描文件的逻辑大小；文件系统保留空间、硬链接、压缩和稀疏文件可能使其与卷已用空间不同。"
         : $"有 {SkippedEntries:N0} 项因权限、链接或扫描期间变动未计入；文件逻辑大小可能与卷已用空间不同。";
 }
 

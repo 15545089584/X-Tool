@@ -195,7 +195,7 @@
     <Grid Margin="38,30,38,30">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="18" />
+            <RowDefinition Height="12" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="18" />
             <RowDefinition Height="*" />
@@ -204,8 +204,6 @@
         <Grid>
             <StackPanel>
                 <TextBlock FontSize="30" FontWeight="SemiBold" Text="开发环境中心" />
-                <TextBlock Margin="0,8,0,0" FontSize="13" Foreground="{StaticResource SecondaryTextBrush}"
-                           Text="识别本机实际生效的开发工具版本，定位冲突，并在确认后按需配置当前用户或系统环境。" />
             </StackPanel>
             <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal">
                 <StackPanel Margin="0,0,16,0" VerticalAlignment="Center">
@@ -264,7 +262,9 @@
                                     <Grid>
                                         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                                         <Grid>
-                                            <Border Width="38" Height="38" HorizontalAlignment="Left" Background="{Binding IconBackground}" CornerRadius="10"><TextBlock FontFamily="Segoe Fluent Icons" FontSize="18" Foreground="{Binding IconForeground}" Text="{Binding IconGlyph}" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border>
+                                            <Border Width="38" Height="38" HorizontalAlignment="Left" Background="{Binding IconBackground}" CornerRadius="10">
+                                                <Image Width="27" Height="27" Source="{Binding IconSource}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
+                                            </Border>
                                             <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource DeveloperStatusButtonStyle}"
                                                     Background="{Binding StatusBackground}" Foreground="{Binding StatusForeground}" Content="{Binding StatusText}"
                                                     IsEnabled="{Binding CanConfigureFromStatus}" CommandParameter="{Binding}" Click="ConfigureToolchain_Click" />
@@ -293,7 +293,9 @@
                                 <StackPanel>
                                     <Grid>
                                         <StackPanel Orientation="Horizontal">
-                                            <Border Width="40" Height="40" Background="{Binding IconBackground}" CornerRadius="11"><TextBlock FontFamily="Segoe Fluent Icons" FontSize="19" Foreground="{Binding IconForeground}" Text="{Binding IconGlyph}" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border>
+                                            <Border Width="40" Height="40" Background="{Binding IconBackground}" CornerRadius="11">
+                                                <Image Width="29" Height="29" Source="{Binding IconSource}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
+                                            </Border>
                                             <StackPanel Margin="13,0,0,0" VerticalAlignment="Center"><TextBlock FontSize="16" FontWeight="SemiBold" Text="{Binding DisplayName}" /><TextBlock Margin="0,3,0,0" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}" Text="{Binding Description}" /></StackPanel>
                                         </StackPanel>
                                         <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal">

@@ -6,6 +6,7 @@
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:primitives="clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework"
         xmlns:converters="clr-namespace:ScreenshotApp.Converters"
+        xmlns:collaboration="clr-namespace:ScreenshotApp.Collaboration"
         xmlns:fileWorkbench="clr-namespace:ScreenshotApp.FileWorkbench"
         xmlns:systemTools="clr-namespace:ScreenshotApp.SystemTools"
         xmlns:networkWorkbench="clr-namespace:ScreenshotApp.NetworkWorkbench"
@@ -158,6 +159,12 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+        </Style>
+
+        <!-- 入口能力卡只做轻微上浮与缩放，避免大幅位移破坏毛玻璃页面的稳定感。 -->
+        <Style x:Key="InteractiveActionCardStyle" TargetType="Button" BasedOn="{StaticResource ActionCardStyle}">
+            <EventSetter Event="MouseEnter" Handler="InteractiveCard_MouseEnter" />
+            <EventSetter Event="MouseLeave" Handler="InteractiveCard_MouseLeave" />
         </Style>
 
         <!-- 转换器页面使用更明确的操作层级，不与屏幕工作台复用能力卡布局。 -->
@@ -342,11 +349,12 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <StackPanel>
-                    <Grid Width="72" Height="72" HorizontalAlignment="Left" Margin="-3,0,0,0">
-                        <Image Width="68" Height="68" Stretch="Uniform" SnapsToDevicePixels="True"
+                <StackPanel Margin="4,0,0,0">
+                    <Grid Width="72" Height="72" HorizontalAlignment="Left">
+                        <Image Width="84" Height="84" Margin="-6" Stretch="Uniform" SnapsToDevicePixels="True"
+                               RenderOptions.BitmapScalingMode="HighQuality"
                                AutomationProperties.Name="X-Tool"
-                               Source="/Assets/XToolMark.png" />
+                               Source="/Assets/XToolLogo.png" />
                     </Grid>
                     <TextBlock Margin="0,12,0,0" FontSize="20" FontWeight="SemiBold" Text="X-Tool" />
                     <TextBlock Margin="0,4,0,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="桌面效率工具箱" />
@@ -428,6 +436,15 @@
                             <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" FontSize="15" Text="开发者工具" />
                         </StackPanel>
                     </RadioButton>
+                    <RadioButton x:Name="CollaborationNav" GroupName="Navigation" Style="{StaticResource NavItemStyle}"
+                                 Tag="Collaboration" Checked="NavButton_Checked">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Width="34" Height="34" Background="#F7F8FA" CornerRadius="9">
+                                <TextBlock Style="{StaticResource IconTextStyle}" FontSize="17" Text="&#xE753;" Foreground="#626971" />
+                            </Border>
+                            <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" FontSize="15" Text="协作中心" />
+                        </StackPanel>
+                    </RadioButton>
                     </StackPanel>
                 </ScrollViewer>
 
@@ -483,56 +500,56 @@
                                 </Grid>
 
                                 <primitives:UniformGrid Grid.Row="4" Rows="2" Columns="4">
-                                    <Button Height="148" Margin="0,0,8,8" Style="{StaticResource ActionCardStyle}" Click="NavigateToWorkbench_Click">
+                                    <Button Height="148" Margin="0,0,8,8" Style="{StaticResource InteractiveActionCardStyle}" Click="NavigateToWorkbench_Click">
                                         <StackPanel>
                                             <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#E6F0FF" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#2D7DFF" Text="&#xE7F4;" /></Border>
                                             <TextBlock Margin="0,11,0,0" FontSize="16" FontWeight="SemiBold" Text="屏幕工作台" />
                                             <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="截图、长截图、标注、OCR、翻译、录像与剪贴板" />
                                         </StackPanel>
                                     </Button>
-                                    <Button Height="148" Margin="8,0,8,8" Style="{StaticResource ActionCardStyle}" Click="NavigateToConverterWorkbench_Click">
+                                    <Button Height="148" Margin="8,0,8,8" Style="{StaticResource InteractiveActionCardStyle}" Click="NavigateToConverterWorkbench_Click">
                                         <StackPanel>
                                             <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#FFF2D9" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#E6A326" Text="&#xE8A7;" /></Border>
                                             <TextBlock Margin="0,11,0,0" FontSize="16" FontWeight="SemiBold" Text="转换器工作台" />
                                             <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="图片、音频、视频、PDF 与编码转换" />
                                         </StackPanel>
                                     </Button>
-                                    <Button Height="148" Margin="8,0,8,8" Style="{StaticResource ActionCardStyle}" Tag="FileWorkbench" Click="HomeNavigate_Click">
+                                    <Button Height="148" Margin="8,0,8,8" Style="{StaticResource InteractiveActionCardStyle}" Tag="FileWorkbench" Click="HomeNavigate_Click">
                                         <StackPanel>
                                             <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#EAF6E9" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#42A26A" Text="&#xE8B7;" /></Border>
                                             <TextBlock Margin="0,11,0,0" FontSize="16" FontWeight="SemiBold" Text="文件工作台" />
                                             <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="Windows Search、完整扫描、重复文件与批处理" />
                                         </StackPanel>
                                     </Button>
-                                    <Button Height="148" Margin="8,0,0,8" Style="{StaticResource ActionCardStyle}" Tag="NetworkWorkbench" Click="HomeNavigate_Click">
+                                    <Button Height="148" Margin="8,0,0,8" Style="{StaticResource InteractiveActionCardStyle}" Tag="NetworkWorkbench" Click="HomeNavigate_Click">
                                         <StackPanel>
                                             <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#E5F5FF" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#338BC4" Text="&#xE774;" /></Border>
                                             <TextBlock Margin="0,11,0,0" FontSize="16" FontWeight="SemiBold" Text="网络工作台" />
                                             <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="状态监测、连接诊断、Wi-Fi、代理 DNS 与网络方案" />
                                         </StackPanel>
                                     </Button>
-                                    <Button Height="148" Margin="0,8,8,0" Style="{StaticResource ActionCardStyle}" Tag="ResourceManagement" Click="HomeNavigate_Click">
+                                    <Button Height="148" Margin="0,8,8,0" Style="{StaticResource InteractiveActionCardStyle}" Tag="ResourceManagement" Click="HomeNavigate_Click">
                                         <StackPanel>
                                             <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#EAF0F7" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#657B94" Text="&#xE9D2;" /></Border>
                                             <TextBlock Margin="0,11,0,0" FontSize="16" FontWeight="SemiBold" Text="资源管理" />
                                             <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="端口、进程、服务与运行关系一站查看" />
                                         </StackPanel>
                                     </Button>
-                                    <Button Height="148" Margin="8,8,8,0" Style="{StaticResource ActionCardStyle}" Tag="SystemTools" Click="HomeNavigate_Click">
+                                    <Button Height="148" Margin="8,8,8,0" Style="{StaticResource InteractiveActionCardStyle}" Tag="SystemTools" Click="HomeNavigate_Click">
                                         <StackPanel>
                                             <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#F0EAFF" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#7659B3" Text="&#xE950;" /></Border>
                                             <TextBlock Margin="0,11,0,0" FontSize="16" FontWeight="SemiBold" Text="系统工具" />
-                                            <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="设备、驱动、存储、环境变量与系统诊断" />
+                                            <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="设备、驱动、存储树状图、启动项、环境变量与系统诊断" />
                                         </StackPanel>
                                     </Button>
-                                    <Button Height="148" Margin="8,8,8,0" Style="{StaticResource ActionCardStyle}" Tag="Shortcuts" Click="HomeNavigate_Click">
+                                    <Button Height="148" Margin="8,8,8,0" Style="{StaticResource InteractiveActionCardStyle}" Tag="Shortcuts" Click="HomeNavigate_Click">
                                         <StackPanel>
                                             <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#F4E8FF" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#9A58C7" Text="&#xE765;" /></Border>
                                             <TextBlock Margin="0,11,0,0" FontSize="16" FontWeight="SemiBold" Text="快捷键" />
-                                            <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="统一管理截图、剪贴板与本地语音输入热键" />
+                                            <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="统一管理区域截图、全屏截图、剪贴板与本地语音输入热键" />
                                         </StackPanel>
                                     </Button>
-                                    <Button Height="148" Margin="8,8,0,0" Style="{StaticResource ActionCardStyle}" Tag="DeveloperTools" Click="HomeNavigate_Click">
+                                    <Button Height="148" Margin="8,8,0,0" Style="{StaticResource InteractiveActionCardStyle}" Tag="DeveloperTools" Click="HomeNavigate_Click">
                                         <StackPanel>
                                             <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#E4F2FF" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#4384C8" Text="&#xE943;" /></Border>
                                             <TextBlock Margin="0,11,0,0" FontSize="16" FontWeight="SemiBold" Text="开发者工具" />
@@ -546,15 +563,13 @@
                             <Grid x:Name="ScreenWorkbenchView" Visibility="Collapsed" Margin="52,46,52,38">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="28" />
+                                    <RowDefinition Height="14" />
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="28" />
                                     <RowDefinition Height="*" />
                                 </Grid.RowDefinitions>
                                 <StackPanel>
                                     <TextBlock FontSize="30" FontWeight="SemiBold" Text="屏幕工作台" />
-                                    <TextBlock Margin="0,9,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}"
-                                               Text="集中完成截图、长截图、文字提取、翻译和屏幕录制" />
                                 </StackPanel>
                                 <Grid Grid.Row="2">
                                     <Grid.ColumnDefinitions>
@@ -564,21 +579,21 @@
                                         <ColumnDefinition Width="16" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <Button Grid.Column="0" Style="{StaticResource ActionCardStyle}" Tag="截图" Click="CaptureAction_Click">
+                                    <Button Grid.Column="0" Style="{StaticResource InteractiveActionCardStyle}" Tag="截图" Click="CaptureAction_Click">
                                         <StackPanel>
                                             <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#E6F0FF" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#2D7DFF" Text="&#xE722;" /></Border>
                                             <TextBlock Margin="0,18,0,0" FontSize="17" FontWeight="SemiBold" Text="开始截图" />
                                             <TextBlock x:Name="HomeScreenshotShortcutText" Margin="0,6,0,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" />
                                         </StackPanel>
                                     </Button>
-                                    <Button Grid.Column="2" Style="{StaticResource ActionCardStyle}" Tag="长截图" Click="CaptureAction_Click">
+                                    <Button Grid.Column="2" Style="{StaticResource InteractiveActionCardStyle}" Tag="长截图" Click="CaptureAction_Click">
                                         <StackPanel>
                                             <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#EAF6E9" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#42A26A" Text="&#xE70D;" /></Border>
                                             <TextBlock Margin="0,18,0,0" FontSize="17" FontWeight="SemiBold" Text="长截图" />
                                             <TextBlock Margin="0,6,0,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="框选后手动滚动采集" />
                                         </StackPanel>
                                     </Button>
-                                    <Button Grid.Column="4" Style="{StaticResource ActionCardStyle}" Click="ShowHistory_Click">
+                                    <Button Grid.Column="4" Style="{StaticResource InteractiveActionCardStyle}" Click="ShowHistory_Click">
                                         <StackPanel>
                                             <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#FFF2D9" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#D89623" Text="&#xE81C;" /></Border>
                                             <TextBlock Margin="0,18,0,0" FontSize="17" FontWeight="SemiBold" Text="剪贴板" />
@@ -603,10 +618,9 @@
 
                             <!-- 转换器使用独立的二级纵向导航；新增工具只需在导航区追加按钮。 -->
                             <Grid x:Name="ConverterWorkbenchView" Visibility="Collapsed" Margin="44,42,52,38">
-                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="24" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="14" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                                 <StackPanel>
                                     <TextBlock FontSize="30" FontWeight="SemiBold" Text="转换器工作台" />
-                                    <TextBlock Margin="0,9,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}" Text="将常用内容处理成适合保存、分享和继续使用的格式" />
                                 </StackPanel>
                                 <Grid Grid.Row="2">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="76" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
@@ -625,10 +639,9 @@
 
                             <!-- 图片处理专用页：参数区与文件队列分离，便于后续扩展预设、进度与批处理。 -->
                             <Grid x:Name="ImageConverterView" Visibility="Collapsed" Margin="44,42,52,38">
-                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="20" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                                 <StackPanel>
                                     <TextBlock FontSize="30" FontWeight="SemiBold" Text="转换器工作台" />
-                                    <TextBlock Margin="0,9,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}" Text="将常用内容处理成适合保存、分享和继续使用的格式" />
                                 </StackPanel>
                                 <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
                                     <Grid>
@@ -675,10 +688,9 @@
 
                             <!-- 音频处理页：文件队列、媒体信息、音质预设与高级参数由独立控件承载。 -->
                             <Grid x:Name="AudioConverterView" Visibility="Collapsed" Margin="44,42,52,38">
-                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="20" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                                 <StackPanel>
                                     <TextBlock FontSize="30" FontWeight="SemiBold" Text="转换器工作台" />
-                                    <TextBlock Margin="0,9,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}" Text="将常用内容处理成适合保存、分享和继续使用的格式" />
                                 </StackPanel>
                                 <Grid Grid.Row="2">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="76" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
@@ -689,10 +701,9 @@
 
                             <!-- 视频处理页：转换、压缩、提取音频和 GIF 共享同一异步任务链路。 -->
                             <Grid x:Name="VideoConverterView" Visibility="Collapsed" Margin="44,42,52,38">
-                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="20" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                                 <StackPanel>
                                     <TextBlock FontSize="30" FontWeight="SemiBold" Text="转换器工作台" />
-                                    <TextBlock Margin="0,9,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}" Text="将常用内容处理成适合保存、分享和继续使用的格式" />
                                 </StackPanel>
                                 <Grid Grid.Row="2">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="76" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
@@ -703,10 +714,9 @@
 
                             <!-- 转 PDF：图片由工具本地生成，办公文档按 Office、WPS、LibreOffice 顺序调用。 -->
                             <Grid x:Name="PdfConverterView" Visibility="Collapsed" Margin="44,42,52,38">
-                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="20" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                                 <StackPanel>
                                     <TextBlock FontSize="30" FontWeight="SemiBold" Text="转换器工作台" />
-                                    <TextBlock Margin="0,9,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}" Text="将常用内容处理成适合保存、分享和继续使用的格式" />
                                 </StackPanel>
                                 <Grid Grid.Row="2">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="76" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
@@ -717,10 +727,9 @@
 
                             <!-- 编码转换：所有编码、解析与生成均在本地执行。 -->
                             <Grid x:Name="EncodingConverterView" Visibility="Collapsed" Margin="44,42,52,38">
-                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="20" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                                 <StackPanel>
                                     <TextBlock FontSize="30" FontWeight="SemiBold" Text="转换器工作台" />
-                                    <TextBlock Margin="0,9,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}" Text="文本编码、JWT 解析、时间戳转换与 UUID 生成均在本地完成" />
                                 </StackPanel>
                                 <Grid Grid.Row="2">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="76" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
@@ -729,11 +738,24 @@
                                 </Grid>
                             </Grid>
 
+                            <!-- 二维码：生成与识别全部在本地完成，无网络依赖。 -->
+                            <Grid x:Name="QrCodeConverterView" Visibility="Collapsed" Margin="44,42,52,38">
+                                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                <StackPanel>
+                                    <TextBlock FontSize="30" FontWeight="SemiBold" Text="转换器工作台" />
+                                </StackPanel>
+                                <Grid Grid.Row="2">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="76" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                    <converters:ConverterToolRail SelectedTool="QrCode" ToolRequested="ConverterToolRail_ToolRequested" />
+                                    <converters:QrCodeConverterView x:Name="QrCodeConverterViewHost" Grid.Column="2" />
+                                </Grid>
+                            </Grid>
+
                             <!-- 统一剪贴板页：屏幕工作台内容与外部复制内容统一回看。 -->
                             <Grid x:Name="HistoryView" Visibility="Collapsed" Margin="58,32,48,38">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="16" />
+                                    <RowDefinition Height="10" />
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="16" />
                                     <RowDefinition Height="*" />
@@ -741,8 +763,6 @@
                                 <Grid>
                                     <StackPanel>
                                         <TextBlock FontSize="28" FontWeight="SemiBold" Text="剪贴板" />
-                                        <TextBlock Margin="0,8,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}"
-                                                   Text="屏幕工作台内容与外部复制内容都会在本机分类保存" />
                                     </StackPanel>
                                     <Button HorizontalAlignment="Right" VerticalAlignment="Center"
                                             Padding="16,9" Background="#AFFFFFFF"
@@ -933,17 +953,16 @@
                             <systemTools:SystemToolsView x:Name="ResourceManagementView" Visibility="Collapsed" />
                             <systemTools:SystemToolsView x:Name="SystemToolsView" EnvironmentOnly="True" Visibility="Collapsed" />
                             <developerTools:DeveloperToolsView x:Name="DeveloperToolsView" Visibility="Collapsed" />
-
+                            <collaboration:CollaborationView x:Name="CollaborationView" Visibility="Collapsed" />
                             <!-- 设置页 -->
                             <Grid x:Name="SettingsView" Visibility="Collapsed" Margin="58,44">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="28" />
+                                    <RowDefinition Height="14" />
                                     <RowDefinition Height="*" />
                                 </Grid.RowDefinitions>
                                 <StackPanel>
                                     <TextBlock FontSize="28" FontWeight="SemiBold" Text="设置" />
-                                    <TextBlock Margin="0,8,0,0" FontSize="14" Foreground="{StaticResource SecondaryTextBrush}" Text="调整 X-Tool 的常用行为" />
                                 </StackPanel>
                                 <Border Grid.Row="2" Background="Transparent" BorderThickness="0">
                                     <ScrollViewer VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
@@ -964,6 +983,16 @@
                                                 <TextBlock Margin="0,5,0,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="登录当前 Windows 账户后自动启动 X-Tool" />
                                             </StackPanel>
                                             <CheckBox x:Name="StartWithWindowsCheckBox" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource SettingToggleStyle}" Click="StartWithWindowsCheckBox_Click" />
+                                        </Grid>
+                                        </Border>
+                                        <Border Style="{StaticResource SettingCardStyle}">
+                                        <Grid Height="94" Margin="20,0">
+                                            <StackPanel VerticalAlignment="Center">
+                                                <TextBlock FontSize="15" Text="网络流量自动获取" />
+                                                <TextBlock Margin="0,5,0,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="一次授权后注册独立 ETW 辅助任务；主程序仍保持普通权限" TextWrapping="Wrap" />
+                                                <TextBlock x:Name="NetworkEtwAuthorizationStatusText" Margin="0,4,0,0" FontSize="10" Foreground="#5E819F" Text="尚未授权网络流量自动获取" />
+                                            </StackPanel>
+                                            <Button x:Name="NetworkEtwAuthorizationButton" Width="152" Height="32" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource StorageLocationButtonStyle}" Content="授权并自动获取" Click="NetworkEtwAuthorizationButton_Click" />
                                         </Grid>
                                         </Border>
                                         <Border Style="{StaticResource SettingCardStyle}">
@@ -994,6 +1023,30 @@
                                             </StackPanel>
                                             <CheckBox x:Name="StickerTopmostCheckBox" HorizontalAlignment="Right" VerticalAlignment="Center"
                                                       Style="{StaticResource SettingToggleStyle}" Click="StickerTopmostCheckBox_Click" />
+                                        </Grid>
+                                        </Border>
+                                        <Border Style="{StaticResource SettingCardStyle}">
+                                        <Grid Height="96" Margin="20,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="290" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel VerticalAlignment="Center">
+                                                <TextBlock FontSize="15" Text="桌面宠物大小" />
+                                                <TextBlock Margin="0,5,16,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" Text="调整后立即生效，并保持角色底部锚点与屏幕贴边位置" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                <Grid>
+                                                    <TextBlock FontSize="11" Foreground="#7890A6" Text="较小" />
+                                                    <TextBlock x:Name="DesktopPetScaleValueText" HorizontalAlignment="Center" FontSize="12" FontWeight="SemiBold" Foreground="#4D7CFE" Text="100% · 288 DIP" />
+                                                    <TextBlock HorizontalAlignment="Right" FontSize="11" Foreground="#7890A6" Text="较大" />
+                                                </Grid>
+                                                <Slider x:Name="DesktopPetScaleSlider"
+                                                        Style="{StaticResource ConverterSliderStyle}"
+                                                        Minimum="60" Maximum="160" Value="100"
+                                                        TickFrequency="5" IsSnapToTickEnabled="True"
+                                                        ValueChanged="DesktopPetScaleSlider_ValueChanged" />
+                                            </StackPanel>
                                         </Grid>
                                         </Border>
                                         <Border Cursor="Hand" MouseLeftButtonDown="OpenShortcutSettings_Click">

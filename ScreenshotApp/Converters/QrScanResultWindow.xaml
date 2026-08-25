@@ -1,0 +1,75 @@
+<Window x:Class="ScreenshotApp.Converters.QrScanResultWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="二维码识别" Width="420" Height="460" MinWidth="340" MinHeight="320"
+        MaxWidth="640" MaxHeight="720" WindowStyle="None" ResizeMode="CanResizeWithGrip"
+        WindowStartupLocation="Manual" ShowInTaskbar="False" Topmost="True"
+        AllowsTransparency="True" Background="Transparent" UseLayoutRounding="True">
+    <Window.Resources>
+        <Style x:Key="HeaderButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="40" /><Setter Property="Height" Value="34" />
+            <Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="#596575" /><Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="Background" Background="{TemplateBinding Background}" CornerRadius="7"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" /></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Background" Property="Background" Value="#E8EEF6" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+        </Style>
+        <Style x:Key="QrGlassScrollBar" TargetType="ScrollBar"><Setter Property="Width" Value="9" /><Setter Property="Margin" Value="3,7,3,7" /><Setter Property="Background" Value="#38D3E5F5" /><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ScrollBar"><Border Background="{TemplateBinding Background}" CornerRadius="5" Padding="2"><Track x:Name="PART_Track" IsDirectionReversed="True"><Track.DecreaseRepeatButton><RepeatButton Command="ScrollBar.PageUpCommand" Background="Transparent" BorderThickness="0" /></Track.DecreaseRepeatButton><Track.Thumb><Thumb Background="#89A9C7E5" Cursor="Hand"><Thumb.Template><ControlTemplate TargetType="Thumb"><Border x:Name="ThumbRoot" Background="{TemplateBinding Background}" CornerRadius="4" /><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ThumbRoot" Property="Background" Value="#C14D7CFE" /></Trigger><Trigger Property="IsDragging" Value="True"><Setter TargetName="ThumbRoot" Property="Background" Value="#E54D7CFE" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Thumb.Template></Thumb></Track.Thumb><Track.IncreaseRepeatButton><RepeatButton Command="ScrollBar.PageDownCommand" Background="Transparent" BorderThickness="0" /></Track.IncreaseRepeatButton></Track></Border></ControlTemplate></Setter.Value></Setter></Style>
+        <Style x:Key="ResultButton" TargetType="Button">
+            <Setter Property="Height" Value="40" /><Setter Property="MinWidth" Value="104" /><Setter Property="Padding" Value="22,0" />
+            <Setter Property="Background" Value="#A8FFFFFF" /><Setter Property="BorderBrush" Value="#9FD0E7F8" />
+            <Setter Property="BorderThickness" Value="1" /><Setter Property="Foreground" Value="#42617D" />
+            <Setter Property="FontWeight" Value="SemiBold" /><Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="Root" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="12"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}" /></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Background" Value="#DCEBFAFF" /></Trigger><Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.78" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+        </Style>
+        <Style x:Key="ResultActionButton" TargetType="Button" BasedOn="{StaticResource ResultButton}">
+            <Setter Property="Background" Value="#4D7CFE" /><Setter Property="BorderBrush" Value="#8AAEFF" /><Setter Property="Foreground" Value="White" />
+        </Style>
+    </Window.Resources>
+    <Border Margin="10" Padding="18" Background="#EFF7FC" BorderBrush="#CFE4F1" BorderThickness="1" CornerRadius="16">
+        <Border.Effect><DropShadowEffect BlurRadius="22" ShadowDepth="6" Direction="270" Opacity="0.28" Color="#253B56" /></Border.Effect>
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="12" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Grid>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="15" Foreground="#2BA08F" Text="&#xED14;" />
+                    <TextBlock VerticalAlignment="Center" FontSize="18" FontWeight="SemiBold" Foreground="#304E69" Text="二维码识别" />
+                </StackPanel>
+                <Button HorizontalAlignment="Right" Style="{StaticResource HeaderButtonStyle}" Click="CloseButton_Click" ToolTip="关闭">
+                    <TextBlock FontSize="17" Text="×" />
+                </Button>
+            </Grid>
+            <Border Grid.Row="2" Padding="6" Background="#70FFFFFF" BorderBrush="#9BCDE4F5" BorderThickness="1" CornerRadius="14">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <ScrollViewer.Resources><Style TargetType="ScrollBar" BasedOn="{StaticResource QrGlassScrollBar}" /></ScrollViewer.Resources>
+                    <ItemsControl x:Name="ResultList">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Margin="0,0,0,12" Padding="18" Background="#F8FCFF" BorderBrush="#C6E1F1" BorderThickness="1" CornerRadius="14">
+                                    <Grid>
+                                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="14" /><RowDefinition Height="Auto" /><RowDefinition Height="16" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                                        <Border Padding="10,4" CornerRadius="9" HorizontalAlignment="Left" Background="{Binding BadgeBackground}">
+                                            <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{Binding BadgeForeground}" Text="{Binding CategoryText}" />
+                                        </Border>
+                                        <Border Grid.Row="2" Padding="14" Background="#EFF5FB" BorderBrush="#D3E4F1" BorderThickness="1" CornerRadius="10">
+                                            <TextBlock FontSize="14" Foreground="#405F7C" TextWrapping="Wrap" Text="{Binding Content}" />
+                                        </Border>
+                                        <StackPanel Grid.Row="4" Orientation="Horizontal">
+                                            <Button Style="{StaticResource ResultButton}" Tag="{Binding}" Click="CopyResult_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="复制内容" /></Button>
+                                            <Button Style="{StaticResource ResultActionButton}" Margin="10,0,0,0" Tag="{Binding}" Click="OpenResult_Click" Visibility="{Binding OpenVisibility}"><TextBlock Foreground="White" Text="打开链接" /></Button>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Border>
+            <TextBlock x:Name="EmptyText" Grid.Row="2" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="14" Foreground="#8A9AAC" Text="未识别到二维码" Visibility="Collapsed" />
+            <TextBlock x:Name="SummaryText" Grid.Row="3" Margin="4,10,4,0" FontSize="11" Foreground="#7A93AC" TextWrapping="Wrap" />
+        </Grid>
+    </Border>
+</Window>

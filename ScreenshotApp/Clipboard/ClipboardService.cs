@@ -10,33 +10,64 @@ internal static class ClipboardService
 {
     internal const string InternalFormat = "X-Tool.InternalClipboard";
 
-    internal static void SetText(string content)
+    /// <summary>用户主动“复制内容”时触发，由主窗口写入剪贴板历史，浮窗立即可见。</summary>
+    internal static event Action<string>? TextRecordRequested;
+
+    internal static event Action<BitmapSource>? ImageRecordRequested;
+
+    internal static void SetText(string content, bool recordToHistory = false)
     {
         var data = new Forms.DataObject();
         data.SetText(content, Forms.TextDataFormat.UnicodeText);
         data.SetData(Forms.DataFormats.Text, true, content);
         data.SetData(InternalFormat, true);
         SetDataObjectWithShortRetry(data);
+        if (recordToHistory)
+        {
+            TextRecordRequested?.Invoke(content);
+        }
     }
 
-    internal static void SetImage(BitmapSource image)
+    internal static void SetImage(BitmapSource image, bool recordToHistory = false)
     {
-        using var pngStream = new MemoryStream();
-        var encoder = new PngBitmapEncoder();
-        encoder.Frames.Add(BitmapFrame.Create(image));
-        encoder.Save(pngStream);
-        pngStream.Position = 0;
-
-        using var bitmap = new System.Drawing.Bitmap(pngStream);
-        var data = new Forms.DataObject();
-        data.SetImage(new System.Drawing.Bitmap(bitmap));
+        // WPF 原生图片数据对象可直接提供 BitmapSource，避免先编码 PNG、
+        // 再解码成 GDI 位图的双重转换，长截图写入剪贴板会明显更快。
+        var data = new System.Windows.DataObject();
+        data.SetImage(image);
         data.SetData(InternalFormat, true);
-        SetDataObjectWithShortRetry(data);
+        SetWpfDataObjectWithShortRetry(data);
+        if (recordToHistory)
+        {
+            ImageRecordRequested?.Invoke(image);
+        }
     }
 
     private static void SetDataObjectWithShortRetry(Forms.DataObject data)
     {
         // WinForms 原生提供受控重试，仍写入同一个 Windows 系统剪贴板。
         Forms.Clipboard.SetDataObject(data, true, 3, 25);
+    }
+
+    private static void SetWpfDataObjectWithShortRetry(System.Windows.DataObject data)
+    {
+        Exception? lastError = null;
+        for (var attempt = 0; attempt < 4; attempt++)
+        {
+            try
+            {
+                System.Windows.Clipboard.SetDataObject(data, true);
+                return;
+            }
+            catch (Exception exception)
+            {
+                lastError = exception;
+                if (attempt < 3)
+                {
+                    Thread.Sleep(25);
+                }
+            }
+        }
+
+        throw new InvalidOperationException("剪贴板暂时被其他程序占用。", lastError);
     }
 }

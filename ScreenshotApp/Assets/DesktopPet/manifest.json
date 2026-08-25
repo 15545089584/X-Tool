@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "canvasWidth": 512,
+  "canvasHeight": 512,
+  "displaySize": 288,
+  "maxCachedStates": 2,
+  "anchor": {
+    "x": 256,
+    "y": 508
+  },
+  "states": [
+    {
+      "id": "state-01",
+      "displayName": "状态 1",
+      "frameDirectory": "state-01/frames",
+      "frameCount": 80,
+      "fps": 20,
+      "durationMs": 4000,
+      "loop": true,
+      "sourceSha256": "756A65140B171DCE6A6A7B572851E831708289EE63D78B0973CCA23C5495E92A"
+    },
+    {
+      "id": "state-02",
+      "displayName": "状态 2",
+      "frameDirectory": "state-02/frames",
+      "frameCount": 107,
+      "fps": 20,
+      "durationMs": 5350,
+      "loop": true,
+      "sourceSha256": "0927252E28224D3883B7489E8356666D6206EB6783FF3AE3D7C9C63C6530F498"
+    },
+    {
+      "id": "state-03",
+      "displayName": "状态 3",
+      "frameDirectory": "state-03/frames",
+      "frameCount": 107,
+      "fps": 20,
+      "durationMs": 5350,
+      "loop": true,
+      "sourceSha256": "D70BBD98A964D92C6B1EA5B82734E5E475706FF1F880D9A6AF01937A2C4610FB"
+    },
+    {
+      "id": "state-04",
+      "displayName": "状态 4",
+      "frameDirectory": "state-04/frames",
+      "frameCount": 22,
+      "fps": 20,
+      "durationMs": 1100,
+      "loop": true,
+      "sourceSha256": "A8B24FFD05A40DD0151C78485BBAD2C3D481E6397FE8D2444EEFDED13AB84EEC"
+    },
+    {
+      "id": "state-05",
+      "displayName": "状态 5",
+      "frameDirectory": "state-05/frames",
+      "frameCount": 40,
+      "fps": 20,
+      "durationMs": 2000,
+      "loop": true,
+      "sourceSha256": "70839FB1F279CE21741E027220AF18DE7AB101B5C75BBF764DE66BF3B2449BDB"
+    },
+    {
+      "id": "state-06",
+      "displayName": "状态 6",
+      "frameDirectory": "state-06/frames",
+      "frameCount": 43,
+      "fps": 20,
+      "durationMs": 2150,
+      "loop": true,
+      "sourceSha256": "0A46BA2A6794DEB348FF76C10B6F72BFDFAB0654F7A96D0B7EF8CA2AE7E06395"
+    }
+  ]
+}

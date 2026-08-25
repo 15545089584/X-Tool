@@ -63,18 +63,21 @@ public sealed class ScreenshotHistoryStore
         });
     }
 
-    public Task<IReadOnlyList<ScreenshotHistoryItem>> LoadAsync(int maximumCount = 160)
+    public Task<IReadOnlyList<ScreenshotHistoryItem>> LoadAsync(int maximumCount = 160, bool imagesOnly = false)
     {
         return Task.Run<IReadOnlyList<ScreenshotHistoryItem>>(() =>
         {
             var items = new List<ScreenshotHistoryItem>();
             var loadedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            LoadImageEntries(items, _preferences.ScreenshotDirectory, HistoryEntryKind.Screenshot, loadedFiles, detectLongCapture: true);
-            LoadImageEntries(items, _preferences.LongScreenshotDirectory, HistoryEntryKind.LongScreenshot, loadedFiles);
-            LoadTextEntries(items, _preferences.TextExtractionDirectory, HistoryEntryKind.TextExtraction, "文字提取", loadedFiles);
-            LoadTextEntries(items, _preferences.TranslationDirectory, HistoryEntryKind.Translation, "翻译", loadedFiles);
-            LoadRecordingEntries(items, _preferences.RecordingDirectory);
-            LoadExternalClipboardEntries(items, _preferences.ClipboardDirectory, loadedFiles);
+            LoadImageEntries(items, _preferences.ScreenshotDirectory, HistoryEntryKind.Screenshot, loadedFiles, detectLongCapture: true, newestOnly: imagesOnly ? 80 : null);
+            LoadImageEntries(items, _preferences.LongScreenshotDirectory, HistoryEntryKind.LongScreenshot, loadedFiles, newestOnly: imagesOnly ? 80 : null);
+            if (!imagesOnly)
+            {
+                LoadTextEntries(items, _preferences.TextExtractionDirectory, HistoryEntryKind.TextExtraction, "文字提取", loadedFiles);
+                LoadTextEntries(items, _preferences.TranslationDirectory, HistoryEntryKind.Translation, "翻译", loadedFiles);
+            }
+            LoadRecordingEntries(items, _preferences.RecordingDirectory, newestOnly: imagesOnly ? 40 : null);
+            LoadExternalClipboardEntries(items, _preferences.ClipboardDirectory, loadedFiles, imagesOnly: imagesOnly);
             return items
                 .OrderByDescending(item => item.CapturedAt)
                 .Take(maximumCount)
@@ -87,10 +90,19 @@ public sealed class ScreenshotHistoryStore
         string directory,
         HistoryEntryKind expectedKind,
         ISet<string> loadedFiles,
-        bool detectLongCapture = false)
+        bool detectLongCapture = false,
+        int? newestOnly = null)
     {
         Directory.CreateDirectory(directory);
-        foreach (var filePath in Directory.EnumerateFiles(directory, "*.png", SearchOption.TopDirectoryOnly))
+        var files = Directory.EnumerateFiles(directory, "*.png", SearchOption.TopDirectoryOnly);
+        if (newestOnly.HasValue)
+        {
+            // 仅图片模式只取最近文件，避免为历史全量解码缩略图。
+            files = files
+                .OrderByDescending(file => File.GetLastWriteTimeUtc(file))
+                .Take(newestOnly.Value);
+        }
+        foreach (var filePath in files)
         {
             try
             {
@@ -149,28 +161,37 @@ public sealed class ScreenshotHistoryStore
         }
     }
 
-    private static void LoadRecordingEntries(ICollection<ScreenshotHistoryItem> items, string directory)
+    private static void LoadRecordingEntries(ICollection<ScreenshotHistoryItem> items, string directory, int? newestOnly = null)
     {
         Directory.CreateDirectory(directory);
-        foreach (var filePath in Directory.EnumerateFiles(directory, "*.mp4", SearchOption.TopDirectoryOnly))
+        var files = Directory.EnumerateFiles(directory, "*.mp4", SearchOption.TopDirectoryOnly)
+            .Concat(Directory.EnumerateFiles(directory, "*.gif", SearchOption.TopDirectoryOnly));
+        if (newestOnly.HasValue)
+        {
+            files = files
+                .OrderByDescending(file => File.GetLastWriteTimeUtc(file))
+                .Take(newestOnly.Value);
+        }
+        foreach (var filePath in files)
         {
             try
             {
                 var fileInfo = new FileInfo(filePath);
                 var timestamp = fileInfo.LastWriteTime;
+                var isGif = fileInfo.Extension.Equals(".gif", StringComparison.OrdinalIgnoreCase);
                 var coverPath = Path.Combine(
                     directory,
                     "Covers",
                     $"{Path.GetFileNameWithoutExtension(filePath)}.png");
                 items.Add(new ScreenshotHistoryItem(
                     HistoryEntryKind.ScreenRecording,
-                    "屏幕录制",
+                    isGif ? "GIF 动图" : "屏幕录制",
                     filePath,
                     fileInfo.Name,
                     timestamp,
                     timestamp.ToString("yyyy-MM-dd  HH:mm:ss"),
-                    $"{Math.Max(1, fileInfo.Length / 1024d / 1024d):0.0} MB · MP4",
-                    "点击即可播放这段屏幕录制",
+                    $"{Math.Max(1, fileInfo.Length / 1024d / 1024d):0.0} MB · {(isGif ? "GIF" : "MP4")}",
+                    isGif ? "点击即可打开这段 GIF 动图" : "点击即可播放这段屏幕录制",
                     File.Exists(coverPath) ? LoadThumbnail(coverPath) : null));
             }
             catch
@@ -183,10 +204,14 @@ public sealed class ScreenshotHistoryStore
     private static void LoadExternalClipboardEntries(
         ICollection<ScreenshotHistoryItem> items,
         string directory,
-        ISet<string> loadedFiles)
+        ISet<string> loadedFiles,
+        bool imagesOnly = false)
     {
-        LoadImageEntries(items, directory, HistoryEntryKind.ExternalClipboard, loadedFiles);
-        LoadTextEntries(items, directory, HistoryEntryKind.ExternalClipboard, "外部复制", loadedFiles);
+        LoadImageEntries(items, directory, HistoryEntryKind.ExternalClipboard, loadedFiles, newestOnly: imagesOnly ? 80 : null);
+        if (!imagesOnly)
+        {
+            LoadTextEntries(items, directory, HistoryEntryKind.ExternalClipboard, "外部复制", loadedFiles);
+        }
     }
 
     private static ScreenshotHistoryItem CreateImageItem(string filePath, HistoryEntryKind kind)
@@ -221,6 +246,27 @@ public sealed class ScreenshotHistoryStore
             $"{pixelWidth} × {pixelHeight}",
             string.Empty,
             thumbnail);
+    }
+
+    /// <summary>外部剪贴板保存完成后立即构造历史条目，避免等待全量扫描才出现在剪贴板浮窗。</summary>
+    public ScreenshotHistoryItem CreateClipboardItem(string savedPath, bool isText)
+    {
+        if (isText)
+        {
+            var content = File.ReadAllText(savedPath, Encoding.UTF8);
+            var timestamp = File.GetLastWriteTime(savedPath);
+            return new ScreenshotHistoryItem(
+                HistoryEntryKind.ExternalClipboard,
+                "外部复制",
+                savedPath,
+                Path.GetFileName(savedPath),
+                timestamp,
+                timestamp.ToString("yyyy-MM-dd  HH:mm:ss"),
+                $"{content.Count(character => !char.IsWhiteSpace(character)):N0} 个字符",
+                CreatePreview(content),
+                null);
+        }
+        return CreateImageItem(savedPath, HistoryEntryKind.ExternalClipboard);
     }
 
     private static BitmapSource LoadThumbnail(string filePath)

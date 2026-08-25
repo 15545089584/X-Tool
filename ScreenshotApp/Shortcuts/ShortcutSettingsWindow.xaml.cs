@@ -10,6 +10,7 @@ namespace ScreenshotApp.Shortcuts;
 public partial class ShortcutSettingsWindow : Window
 {
     private GlobalShortcut _screenshotShortcut;
+    private GlobalShortcut _fullScreenShortcut;
     private GlobalShortcut _clipboardShortcut;
     private GlobalShortcut _voiceInputShortcut;
     private string? _editingTarget;
@@ -17,10 +18,15 @@ public partial class ShortcutSettingsWindow : Window
     /// <summary>由主窗口注入；返回 null 表示应用成功，否则返回失败原因。</summary>
     internal Func<string, GlobalShortcut, string?>? ApplyShortcutRequested { get; set; }
 
-    internal ShortcutSettingsWindow(GlobalShortcut screenshot, GlobalShortcut clipboard, GlobalShortcut voice)
+    internal ShortcutSettingsWindow(
+        GlobalShortcut screenshot,
+        GlobalShortcut fullScreen,
+        GlobalShortcut clipboard,
+        GlobalShortcut voice)
     {
         InitializeComponent();
         _screenshotShortcut = screenshot;
+        _fullScreenShortcut = fullScreen;
         _clipboardShortcut = clipboard;
         _voiceInputShortcut = voice;
         UpdateButtons();
@@ -35,7 +41,7 @@ public partial class ShortcutSettingsWindow : Window
 
         _editingTarget = target;
         button.Content = "请按下快捷键…";
-        ShortcutCaptureStatusText.Text = "正在监听。按 Esc 取消；右 Alt 仅可用于本地语音输入。";
+        ShortcutCaptureStatusText.Text = "正在监听。按 Esc 取消；右 Ctrl 单键用于全屏截图，右 Alt 单键用于本地语音输入。";
         button.Focus();
     }
 
@@ -58,7 +64,9 @@ public partial class ShortcutSettingsWindow : Window
 
         var candidate = key == Key.RightAlt && _editingTarget == "Voice"
             ? GlobalShortcut.VoiceDefault
-            : GlobalShortcut.FromKey(key, Keyboard.Modifiers);
+            : key == Key.RightCtrl && _editingTarget == "FullScreen"
+                ? GlobalShortcut.FullScreenDefault
+                : GlobalShortcut.FromKey(key, Keyboard.Modifiers);
 
         var error = ApplyShortcutRequested?.Invoke(_editingTarget, candidate);
         if (error is null)
@@ -78,6 +86,7 @@ public partial class ShortcutSettingsWindow : Window
     private void SetShortcut(string target, GlobalShortcut shortcut)
     {
         if (target == "Screenshot") _screenshotShortcut = shortcut;
+        else if (target == "FullScreen") _fullScreenShortcut = shortcut;
         else if (target == "Clipboard") _clipboardShortcut = shortcut;
         else _voiceInputShortcut = shortcut;
     }
@@ -85,6 +94,7 @@ public partial class ShortcutSettingsWindow : Window
     private void UpdateButtons()
     {
         ScreenshotShortcutButton.Content = _screenshotShortcut.DisplayText;
+        FullScreenShortcutButton.Content = _fullScreenShortcut.DisplayText;
         ClipboardShortcutButton.Content = _clipboardShortcut.DisplayText;
         VoiceShortcutButton.Content = _voiceInputShortcut.DisplayText;
     }

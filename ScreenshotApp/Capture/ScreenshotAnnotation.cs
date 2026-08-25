@@ -15,9 +15,13 @@ internal enum ScreenshotAnnotationTool
 internal enum AnnotationShape
 {
     Rectangle,
+    RoundedRectangle,
     Ellipse,
     Diamond,
     Triangle,
+    Pentagon,
+    Hexagon,
+    Star,
     Arrow,
     Line
 }
@@ -41,6 +45,69 @@ internal sealed record LineScreenshotAnnotation(
     Point End,
     Color Color,
     double Thickness) : ScreenshotAnnotation(Color, Thickness);
+
+/// <summary>
+/// 提供实时预览和最终截图共用的多边形几何，避免两套绘制规则出现偏差。
+/// </summary>
+internal static class AnnotationShapeGeometry
+{
+    internal static IReadOnlyList<Point> GetPolygonPoints(AnnotationShape shape, Rect bounds)
+    {
+        return shape switch
+        {
+            AnnotationShape.Diamond => new[]
+            {
+                new Point(bounds.Left + bounds.Width / 2, bounds.Top),
+                new Point(bounds.Right, bounds.Top + bounds.Height / 2),
+                new Point(bounds.Left + bounds.Width / 2, bounds.Bottom),
+                new Point(bounds.Left, bounds.Top + bounds.Height / 2)
+            },
+            AnnotationShape.Triangle => new[]
+            {
+                new Point(bounds.Left + bounds.Width / 2, bounds.Top),
+                new Point(bounds.Right, bounds.Bottom),
+                new Point(bounds.Left, bounds.Bottom)
+            },
+            AnnotationShape.Pentagon => CreateRegularPolygon(bounds, 5),
+            AnnotationShape.Hexagon => CreateRegularPolygon(bounds, 6),
+            AnnotationShape.Star => CreateStar(bounds),
+            _ => Array.Empty<Point>()
+        };
+    }
+
+    private static IReadOnlyList<Point> CreateRegularPolygon(Rect bounds, int sides)
+    {
+        var center = new Point(bounds.Left + bounds.Width / 2, bounds.Top + bounds.Height / 2);
+        var radiusX = bounds.Width / 2;
+        var radiusY = bounds.Height / 2;
+        return Enumerable.Range(0, sides)
+            .Select(index =>
+            {
+                var angle = -Math.PI / 2 + index * Math.PI * 2 / sides;
+                return new Point(
+                    center.X + Math.Cos(angle) * radiusX,
+                    center.Y + Math.Sin(angle) * radiusY);
+            })
+            .ToArray();
+    }
+
+    private static IReadOnlyList<Point> CreateStar(Rect bounds)
+    {
+        var center = new Point(bounds.Left + bounds.Width / 2, bounds.Top + bounds.Height / 2);
+        var radiusX = bounds.Width / 2;
+        var radiusY = bounds.Height / 2;
+        return Enumerable.Range(0, 10)
+            .Select(index =>
+            {
+                var angle = -Math.PI / 2 + index * Math.PI / 5;
+                var radius = index % 2 == 0 ? 1 : 0.44;
+                return new Point(
+                    center.X + Math.Cos(angle) * radiusX * radius,
+                    center.Y + Math.Sin(angle) * radiusY * radius);
+            })
+            .ToArray();
+    }
+}
 
 /// <summary>
 /// 将选区内的矢量标注按原图像素比例绘制到最终截图。
@@ -149,25 +216,19 @@ internal static class ScreenshotAnnotationRenderer
             case AnnotationShape.Rectangle:
                 drawing.DrawRoundedRectangle(null, pen, bounds, 2 * scaleX, 2 * scaleY);
                 break;
+            case AnnotationShape.RoundedRectangle:
+                var radius = Math.Max(4, Math.Min(bounds.Width, bounds.Height) * 0.18);
+                drawing.DrawRoundedRectangle(null, pen, bounds, radius, radius);
+                break;
             case AnnotationShape.Ellipse:
                 drawing.DrawEllipse(null, pen, new Point(bounds.Left + bounds.Width / 2, bounds.Top + bounds.Height / 2), bounds.Width / 2, bounds.Height / 2);
                 break;
             case AnnotationShape.Diamond:
-                DrawPolygon(drawing, pen, new[]
-                {
-                    new Point(bounds.Left + bounds.Width / 2, bounds.Top),
-                    new Point(bounds.Right, bounds.Top + bounds.Height / 2),
-                    new Point(bounds.Left + bounds.Width / 2, bounds.Bottom),
-                    new Point(bounds.Left, bounds.Top + bounds.Height / 2)
-                });
-                break;
             case AnnotationShape.Triangle:
-                DrawPolygon(drawing, pen, new[]
-                {
-                    new Point(bounds.Left + bounds.Width / 2, bounds.Top),
-                    new Point(bounds.Right, bounds.Bottom),
-                    new Point(bounds.Left, bounds.Bottom)
-                });
+            case AnnotationShape.Pentagon:
+            case AnnotationShape.Hexagon:
+            case AnnotationShape.Star:
+                DrawPolygon(drawing, pen, AnnotationShapeGeometry.GetPolygonPoints(shape.Shape, bounds));
                 break;
         }
     }

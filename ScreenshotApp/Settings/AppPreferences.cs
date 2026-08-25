@@ -24,7 +24,31 @@ public sealed class AppPreferences
 
     public string ClipboardDirectory { get; set; } = @"E:\截影\Clipboard";
 
+    public string CollaborationIncomingDirectory { get; set; } = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "X-Tool",
+        "Transfer",
+        "Incoming");
+
+    public string CollaborationOutgoingDirectory { get; set; } = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "X-Tool",
+        "Transfer",
+        "Outgoing");
+
+    /// <summary>已配对手机在同一局域网重新出现时是否允许自动恢复连接。</summary>
+    public bool CollaborationAutoReconnect { get; set; } = true;
+
     public bool StickerTopmost { get; set; } = true;
+
+    /// <summary>桌面宠物相对于 288 DIP 基准尺寸的缩放百分比。</summary>
+    public int DesktopPetScalePercent { get; set; } = 100;
+
+    /// <summary>是否显示桌面宠物；关闭后下次启动仍保持隐藏。</summary>
+    public bool DesktopPetVisible { get; set; } = true;
+
+    /// <summary>宠物可见时是否由头顶彩虹气泡接管文件传输系统通知。</summary>
+    public bool DesktopPetTakesOverTransferNotifications { get; set; } = true;
 
     public bool VoiceInputEnabled { get; set; } = true;
 
@@ -33,7 +57,12 @@ public sealed class AppPreferences
     /// <summary>是否在当前 Windows 用户登录后自动启动 X-Tool。</summary>
     public bool StartWithWindows { get; set; }
 
+    /// <summary>是否使用一次授权注册的独立 ETW 辅助计划任务。</summary>
+    public bool NetworkEtwAutoStart { get; set; }
+
     public string ScreenshotShortcut { get; set; } = "Ctrl+Shift+A";
+
+    public string FullScreenShortcut { get; set; } = "RightCtrl";
 
     public string ClipboardShortcut { get; set; } = "Ctrl+Shift+V";
 
@@ -48,8 +77,10 @@ public sealed class AppPreferences
                 return new AppPreferences();
             }
 
-            return JsonSerializer.Deserialize<AppPreferences>(File.ReadAllText(PreferencesFilePath))
-                ?? new AppPreferences();
+            var preferences = JsonSerializer.Deserialize<AppPreferences>(File.ReadAllText(PreferencesFilePath))
+                              ?? new AppPreferences();
+            preferences.DesktopPetScalePercent = Math.Clamp(preferences.DesktopPetScalePercent, 60, 160);
+            return preferences;
         }
         catch
         {

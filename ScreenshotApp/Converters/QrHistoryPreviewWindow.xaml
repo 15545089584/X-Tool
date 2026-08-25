@@ -1,0 +1,87 @@
+<Window x:Class="ScreenshotApp.Converters.QrHistoryPreviewWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="二维码预览" Width="420" Height="580" WindowStartupLocation="CenterOwner"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent" ResizeMode="NoResize" ShowInTaskbar="False">
+    <Window.Resources>
+        <Style x:Key="QrGlassScrollBar" TargetType="ScrollBar"><Setter Property="Width" Value="9" /><Setter Property="Margin" Value="3,7,3,7" /><Setter Property="Background" Value="#38D3E5F5" /><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ScrollBar"><Border Background="{TemplateBinding Background}" CornerRadius="5" Padding="2"><Track x:Name="PART_Track" IsDirectionReversed="True"><Track.DecreaseRepeatButton><RepeatButton Command="ScrollBar.PageUpCommand" Background="Transparent" BorderThickness="0" /></Track.DecreaseRepeatButton><Track.Thumb><Thumb Background="#89A9C7E5" Cursor="Hand"><Thumb.Template><ControlTemplate TargetType="Thumb"><Border x:Name="ThumbRoot" Background="{TemplateBinding Background}" CornerRadius="4" /><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ThumbRoot" Property="Background" Value="#C14D7CFE" /></Trigger><Trigger Property="IsDragging" Value="True"><Setter TargetName="ThumbRoot" Property="Background" Value="#E54D7CFE" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Thumb.Template></Thumb></Track.Thumb><Track.IncreaseRepeatButton><RepeatButton Command="ScrollBar.PageDownCommand" Background="Transparent" BorderThickness="0" /></Track.IncreaseRepeatButton></Track></Border></ControlTemplate></Setter.Value></Setter></Style>
+        <Style x:Key="GlassButton" TargetType="Button">
+            <Setter Property="Height" Value="40" />
+            <Setter Property="MinWidth" Value="96" />
+            <Setter Property="Padding" Value="20,0" />
+            <Setter Property="Background" Value="#92FFFFFF" />
+            <Setter Property="BorderBrush" Value="#B1CFE5F5" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="#405F7C" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="12">
+                            <Border.Effect><DropShadowEffect BlurRadius="10" ShadowDepth="2" Direction="270" Opacity="0.10" Color="#3D566F" /></Border.Effect>
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.84" /></Trigger>
+                            <Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.70" /></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="GlassActionButton" TargetType="Button" BasedOn="{StaticResource GlassButton}">
+            <Setter Property="Background" Value="#4D7CFE" />
+            <Setter Property="BorderBrush" Value="#8AAEFF" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+    </Window.Resources>
+    <Border Margin="12" Padding="22" Background="#EFF7FC" BorderBrush="#CFE4F1" BorderThickness="1" CornerRadius="18">
+        <Border.Effect><DropShadowEffect BlurRadius="24" ShadowDepth="8" Direction="270" Opacity="0.25" Color="#253B56" /></Border.Effect>
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="10" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="14" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="14" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="16" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Grid>
+                <TextBlock x:Name="TitleText" FontSize="20" FontWeight="SemiBold" Foreground="#263747" Text="二维码预览" />
+                <Button HorizontalAlignment="Right" VerticalAlignment="Top" Width="32" Height="32" Padding="0"
+                        Background="#66FFFFFF" BorderBrush="#A7CEE6F5" BorderThickness="1" Foreground="#607C96"
+                        FontSize="16" Content="×" Cursor="Hand" Click="CloseButton_Click" ToolTip="关闭" />
+            </Grid>
+            <StackPanel Grid.Row="2" Orientation="Horizontal">
+                <Border x:Name="BadgeHost" Padding="10,4" CornerRadius="9" VerticalAlignment="Center">
+                    <TextBlock x:Name="BadgeText" FontSize="11" FontWeight="SemiBold" />
+                </Border>
+                <TextBlock x:Name="TimeText" Margin="12,0,0,0" VerticalAlignment="Center" FontSize="11" Foreground="#7A93AC" />
+                <TextBlock x:Name="KindText" Margin="10,0,0,0" VerticalAlignment="Center" FontSize="11" Foreground="#8A9AAC" />
+            </StackPanel>
+            <Border Grid.Row="4" Background="White" BorderBrush="#D8E7F4" BorderThickness="1" CornerRadius="14">
+                <Grid>
+                    <Image x:Name="QrImage" MaxWidth="340" MaxHeight="340" Stretch="Uniform" RenderOptions.BitmapScalingMode="NearestNeighbor" />
+                    <TextBlock x:Name="EmptyText" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="13" Foreground="#9AADBF" Text="无法显示二维码" Visibility="Collapsed" />
+                </Grid>
+            </Border>
+            <StackPanel Grid.Row="6">
+                <TextBlock x:Name="InfoText" FontSize="12" Foreground="#63809C" />
+                <Border Margin="0,10,0,0" Padding="12" Background="#BFFFFFFF" BorderBrush="#A9D7EAF8" BorderThickness="1" CornerRadius="10">
+                    <ScrollViewer MaxHeight="110" VerticalScrollBarVisibility="Auto">
+                        <ScrollViewer.Resources><Style TargetType="ScrollBar" BasedOn="{StaticResource QrGlassScrollBar}" /></ScrollViewer.Resources>
+                        <TextBlock x:Name="ContentText" FontSize="12" Foreground="#405F7C" TextWrapping="Wrap" />
+                    </ScrollViewer>
+                </Border>
+            </StackPanel>
+            <StackPanel Grid.Row="8" Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Style="{StaticResource GlassActionButton}" Click="CopyQr_Click"><TextBlock Foreground="White" Text="复制二维码" /></Button>
+                <Button Margin="12,0,0,0" Style="{StaticResource GlassButton}" Click="CopyContent_Click"><TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Text="复制内容" /></Button>
+                <Button Margin="12,0,0,0" Style="{StaticResource GlassActionButton}" Click="CloseButton_Click"><TextBlock Foreground="White" Text="关闭" /></Button>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

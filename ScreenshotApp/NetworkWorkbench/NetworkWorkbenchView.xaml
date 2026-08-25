@@ -54,11 +54,10 @@
     </UserControl.Resources>
 
     <Grid Margin="44,42,24,38">
-        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="20" /><RowDefinition Height="42" /><RowDefinition Height="16" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="42" /><RowDefinition Height="16" /><RowDefinition Height="*" /></Grid.RowDefinitions>
         <Grid>
             <StackPanel>
                 <TextBlock FontSize="30" FontWeight="SemiBold" Text="网络工作台" />
-                <TextBlock Margin="0,8,0,0" FontSize="14" Foreground="#728195" Text="观察网络状态、诊断连接并管理代理方案；所有配置修改都会明确提示影响范围。" />
             </StackPanel>
             <Border HorizontalAlignment="Right" VerticalAlignment="Center" Padding="12,7" Background="#88FFFFFF" BorderBrush="#A8D6E9F8" BorderThickness="1" CornerRadius="12">
                 <StackPanel Orientation="Horizontal"><Ellipse x:Name="HeaderStatusDot" Width="9" Height="9" Fill="#61C995" /><TextBlock x:Name="HeaderStatusText" Margin="7,0,0,0" VerticalAlignment="Center" FontSize="12" Foreground="#496984" Text="正在检测…" /><CheckBox x:Name="AutoRefreshCheckBox" Margin="16,0,0,0" VerticalAlignment="Center" IsChecked="True" Content="实时刷新" Style="{StaticResource NetworkCheckBox}" Checked="AutoRefreshOption_Changed" Unchecked="AutoRefreshOption_Changed" /></StackPanel>
@@ -67,13 +66,14 @@
 
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="104" /><ColumnDefinition Width="8" /><ColumnDefinition Width="120" /><ColumnDefinition Width="8" /><ColumnDefinition Width="116" /><ColumnDefinition Width="8" /><ColumnDefinition Width="90" /><ColumnDefinition Width="8" /><ColumnDefinition Width="104" /><ColumnDefinition Width="*" />
+                <ColumnDefinition Width="104" /><ColumnDefinition Width="8" /><ColumnDefinition Width="120" /><ColumnDefinition Width="8" /><ColumnDefinition Width="116" /><ColumnDefinition Width="8" /><ColumnDefinition Width="90" /><ColumnDefinition Width="8" /><ColumnDefinition Width="104" /><ColumnDefinition Width="8" /><ColumnDefinition Width="110" /><ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <Button x:Name="OverviewTabButton" Style="{StaticResource NetworkTab}" Tag="Overview" Click="TabButton_Click" Content="网络总览" />
             <Button x:Name="NetworkInterfacesTabButton" Grid.Column="2" Style="{StaticResource NetworkTab}" Tag="NetworkInterfaces" Click="TabButton_Click" Content="网卡与路由" />
             <Button x:Name="ProxyTabButton" Grid.Column="4" Style="{StaticResource NetworkTab}" Tag="Proxy" Click="TabButton_Click" Content="代理与 DNS" />
             <Button x:Name="WifiTabButton" Grid.Column="6" Style="{StaticResource NetworkTab}" Tag="Wifi" Click="TabButton_Click" Content="Wi-Fi" />
             <Button x:Name="ProfilesTabButton" Grid.Column="8" Style="{StaticResource NetworkTab}" Tag="Profiles" Click="TabButton_Click" Content="网络方案" />
+            <Button x:Name="TrafficStatsTabButton" Grid.Column="10" Style="{StaticResource NetworkTab}" Tag="TrafficStats" Click="TabButton_Click" Content="流量统计" />
         </Grid>
 
         <Grid Grid.Row="4">
@@ -254,6 +254,147 @@
                 <Border Padding="18" Style="{StaticResource NetworkCard}"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto"/><RowDefinition Height="10"/><RowDefinition Height="Auto"/><RowDefinition Height="8"/><RowDefinition Height="Auto" /></Grid.RowDefinitions><StackPanel><TextBlock FontSize="17" FontWeight="SemiBold" Text="保存当前网络方案" /><TextBlock Margin="0,4,0,0" FontSize="10" Foreground="#7890A6" Text="保存代理、PAC、主用网卡、DNS、DHCP/静态地址与 MTU 快照；应用前展示差异并创建 24 小时恢复点。" TextWrapping="Wrap" /></StackPanel><TextBox x:Name="ProfileNameTextBox" Grid.Row="2" Style="{StaticResource NetworkTextBox}" Text="开发网络" /><WrapPanel Grid.Row="4"><CheckBox x:Name="ApplyProfileProxyCheckBox" Margin="0,0,14,0" IsChecked="True" Style="{StaticResource NetworkCheckBox}" Content="代理"/><CheckBox x:Name="ApplyProfileDnsCheckBox" Margin="0,0,14,0" IsChecked="True" Style="{StaticResource NetworkCheckBox}" Content="DNS"/><CheckBox x:Name="ApplyProfileAddressCheckBox" Margin="0,0,14,0" Style="{StaticResource NetworkCheckBox}" Content="DHCP / 静态 IPv4"/><CheckBox x:Name="ApplyProfileMtuCheckBox" Style="{StaticResource NetworkCheckBox}" Content="MTU"/></WrapPanel><Grid Grid.Row="6" VerticalAlignment="Top"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="8" /><ColumnDefinition Width="*" /><ColumnDefinition Width="8" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><Button Style="{StaticResource NetworkPrimaryButton}" Content="保存方案" Click="SaveProfile_Click" /><Button Grid.Column="2" Style="{StaticResource NetworkButton}" Content="重新读取" Click="ReloadProfiles_Click" /><Button Grid.Column="4" Style="{StaticResource NetworkButton}" Content="恢复应用前配置" Click="RestoreProfileSnapshot_Click" /></Grid><Grid Grid.Row="8"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="8"/><ColumnDefinition/></Grid.ColumnDefinitions><Button Style="{StaticResource NetworkButton}" Content="导入方案" Click="ImportProfiles_Click"/><Button Grid.Column="2" Style="{StaticResource NetworkButton}" Content="导出全部方案" Click="ExportProfiles_Click"/></Grid></Grid></Border>
                 <Border Grid.Column="2" Padding="18" Style="{StaticResource NetworkCard}"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="*" /></Grid.RowDefinitions><Grid><TextBlock FontSize="17" FontWeight="SemiBold" Text="网络方案" /><TextBlock x:Name="ProfilesSummaryText" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="10" Foreground="#7890A6" /></Grid><ListBox x:Name="ProfilesListBox" Grid.Row="2" Style="{StaticResource NetworkList}"><ListBox.ItemTemplate><DataTemplate><Border Padding="14,11" Background="#50FFFFFF" CornerRadius="10"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="1.1*" /><ColumnDefinition Width="1.3*" /><ColumnDefinition Width="120" /><ColumnDefinition Width="10" /><ColumnDefinition Width="82" /></Grid.ColumnDefinitions><StackPanel><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#3F607F" Text="{Binding Name}" /><TextBlock Margin="0,3,0,0" FontSize="9" Foreground="#7890A6" Text="{Binding UpdatedAtText}" /></StackPanel><TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="11" Foreground="#567EA9" Text="{Binding Summary}" TextTrimming="CharacterEllipsis" /><Button Grid.Column="2" Style="{StaticResource NetworkPrimaryButton}" Content="应用方案" Click="ApplyProfile_Click" /><Button Grid.Column="4" Style="{StaticResource NetworkButton}" Content="删除" Click="DeleteProfile_Click" /></Grid></Border></DataTemplate></ListBox.ItemTemplate></ListBox></Grid></Border>
             </Grid>
+
+            <ScrollViewer x:Name="TrafficStatsScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Visibility="Collapsed">
+                <Grid x:Name="TrafficStatsPanel" MinHeight="1210">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="14" /><RowDefinition Height="Auto" /><RowDefinition Height="14" /><RowDefinition Height="Auto" /><RowDefinition Height="14" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                    <Border Padding="18" Style="{StaticResource NetworkCard}">
+                        <Grid>
+                            <StackPanel>
+                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="流量统计" />
+                                <TextBlock Margin="0,5,0,0" FontSize="11" Foreground="#7890A6" Text="全局流量来自网卡计数器；应用明细使用按需授权的 ETW 进程采集，不读取数据包正文。" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal">
+                                <ProgressBar x:Name="TrafficStatsLoadingBar" Width="82" Height="4" Margin="0,0,8,0" VerticalAlignment="Center" IsIndeterminate="True" Visibility="Collapsed" />
+                                <TextBlock x:Name="TrafficStatsMonitorStatusText" Margin="0,0,12,0" VerticalAlignment="Center" FontSize="10" Foreground="#7890A6" Text="应用级监控未启用" />
+                                <Button x:Name="TrafficEnableExactButton" Width="142" Style="{StaticResource NetworkPrimaryButton}" Content="启用应用级监控" Click="TrafficEnableExact_Click" />
+                                <Button Width="88" Margin="8,0,0,0" Style="{StaticResource NetworkButton}" Content="刷新" Click="TrafficStatsRefresh_Click" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Grid Grid.Row="2">
+                        <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="10" /><ColumnDefinition /><ColumnDefinition Width="10" /><ColumnDefinition /><ColumnDefinition Width="10" /><ColumnDefinition /></Grid.ColumnDefinitions>
+                        <Border Padding="16" Style="{StaticResource NetworkCard}"><StackPanel><TextBlock Style="{StaticResource MetricTitle}" Text="当前下行" /><TextBlock x:Name="TrafficStatsDownloadText" Style="{StaticResource MetricValue}" Foreground="#4D7CFE" Text="0 B/s" /><TextBlock Margin="0,5,0,0" FontSize="10" Foreground="#7890A6" Text="主用物理网卡" /></StackPanel></Border>
+                        <Border Grid.Column="2" Padding="16" Style="{StaticResource NetworkCard}"><StackPanel><TextBlock Style="{StaticResource MetricTitle}" Text="当前上行" /><TextBlock x:Name="TrafficStatsUploadText" Style="{StaticResource MetricValue}" Foreground="#A55FEF" Text="0 B/s" /><TextBlock Margin="0,5,0,0" FontSize="10" Foreground="#7890A6" Text="主用物理网卡" /></StackPanel></Border>
+                        <Border Grid.Column="4" Padding="16" Style="{StaticResource NetworkCard}"><StackPanel><TextBlock Style="{StaticResource MetricTitle}" Text="应用总量" /><TextBlock x:Name="TrafficStatsProcessTotalText" Style="{StaticResource MetricValue}" Foreground="#1C9E94" Text="—" /><TextBlock Margin="0,5,0,0" FontSize="10" Foreground="#7890A6" Text="历史库累计（按保留期）" /></StackPanel></Border>
+                        <Border Grid.Column="6" Padding="16" Style="{StaticResource NetworkCard}"><StackPanel><TextBlock Style="{StaticResource MetricTitle}" Text="代理出口" /><TextBlock x:Name="TrafficStatsProxyTotalText" Style="{StaticResource MetricValue}" Foreground="#8A63D8" Text="—" /><TextBlock x:Name="TrafficStatsProxyHintText" Margin="0,5,0,0" FontSize="10" Foreground="#7890A6" Text="等待应用级监控" TextTrimming="CharacterEllipsis" /></StackPanel></Border>
+                    </Grid>
+
+                    <Border Grid.Row="4" Padding="16" Style="{StaticResource NetworkCard}">
+                        <Grid>
+                            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="180" /><RowDefinition Height="22" /></Grid.RowDefinitions>
+                            <Grid>
+                                <StackPanel>
+                                    <TextBlock FontSize="15" FontWeight="SemiBold" Foreground="#405F7C" Text="流量用量趋势" />
+                                    <TextBlock x:Name="TrafficUsageChartSummaryText" Margin="0,3,0,0" FontSize="10" Foreground="#7890A6" Text="等待应用级流量记录" />
+                                </StackPanel>
+                                <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+                                    <Ellipse Width="8" Height="8" Margin="0,0,5,0" VerticalAlignment="Center" Fill="#4D7CFE" />
+                                    <TextBlock Margin="0,0,14,0" VerticalAlignment="Center" FontSize="10" Foreground="#607D99" Text="非代理用量" />
+                                    <Ellipse Width="8" Height="8" Margin="0,0,5,0" VerticalAlignment="Center" Fill="#8A63D8" />
+                                    <TextBlock VerticalAlignment="Center" FontSize="10" Foreground="#607D99" Text="代理出口用量" />
+                                </StackPanel>
+                            </Grid>
+                            <StackPanel Grid.Row="2" Orientation="Horizontal">
+                                <Button x:Name="TrafficUsage24HourButton" Width="82" Height="28" Style="{StaticResource NetworkPrimaryButton}" Tag="24h" Click="TrafficUsageRange_Click" Content="24 小时" FontSize="10" />
+                                <Button x:Name="TrafficUsage7DayButton" Width="72" Height="28" Margin="8,0,0,0" Style="{StaticResource NetworkButton}" Tag="7d" Click="TrafficUsageRange_Click" Content="7 天" FontSize="10" />
+                                <Button x:Name="TrafficUsage30DayButton" Width="72" Height="28" Margin="8,0,0,0" Style="{StaticResource NetworkButton}" Tag="30d" Click="TrafficUsageRange_Click" Content="30 天" FontSize="10" />
+                            </StackPanel>
+                            <Grid Grid.Row="4">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="54" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <Canvas x:Name="TrafficUsageAxisCanvas" ClipToBounds="False">
+                                    <TextBlock x:Name="TrafficUsageAxisMaxText" Canvas.Right="0" FontSize="9" Foreground="#7890A6" Text="0 B" />
+                                    <TextBlock x:Name="TrafficUsageAxisAdaptiveText" Canvas.Right="0" FontSize="9" Foreground="#7890A6" Text="0 B" Visibility="Collapsed" />
+                                    <TextBlock x:Name="TrafficUsageAxisMidText" Canvas.Right="0" FontSize="9" Foreground="#7890A6" Text="0 B" />
+                                    <TextBlock x:Name="TrafficUsageAxisMinText" Canvas.Right="0" FontSize="9" Foreground="#7890A6" Text="0 B" />
+                                </Canvas>
+                                <Grid Grid.Column="1" Margin="4,0,0,0">
+                                    <Canvas x:Name="TrafficUsageGridCanvas" ClipToBounds="True" IsHitTestVisible="False" />
+                                    <Canvas x:Name="TrafficUsageCanvas" Panel.ZIndex="2" ClipToBounds="True" Background="Transparent" MouseMove="TrafficUsageCanvas_MouseMove" MouseLeave="TrafficUsageCanvas_MouseLeave" />
+                                    <Rectangle x:Name="TrafficUsageHoverHighlight" Panel.ZIndex="3" HorizontalAlignment="Left" VerticalAlignment="Stretch" Fill="#194D7CFE" IsHitTestVisible="False" Visibility="Collapsed" />
+                                    <Border x:Name="TrafficUsageTooltip" Panel.ZIndex="4" MinWidth="210" MaxWidth="280" Padding="16,12" HorizontalAlignment="Left" VerticalAlignment="Top" BorderBrush="#9AC4DBEE" BorderThickness="1" CornerRadius="14" IsHitTestVisible="False" Visibility="Collapsed">
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                                <GradientStop Offset="0" Color="#EFFFFFFF" />
+                                                <GradientStop Offset="0.55" Color="#DDEAF3FA" />
+                                                <GradientStop Offset="1" Color="#D2E2F0F8" />
+                                            </LinearGradientBrush>
+                                        </Border.Background>
+                                        <Border.Effect><DropShadowEffect BlurRadius="18" ShadowDepth="3" Opacity="0.22" Color="#476B89" /></Border.Effect>
+                                        <TextBlock x:Name="TrafficUsageTooltipText" FontSize="12" FontWeight="Medium" Foreground="#365670" LineHeight="19" TextWrapping="Wrap" />
+                                    </Border>
+                                    <TextBlock x:Name="TrafficUsageEmptyText" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="11" Foreground="#7890A6" Text="授权并产生应用级流量后，这里会记录代理与非代理用量" TextAlignment="Center" TextWrapping="Wrap" />
+                                </Grid>
+                            </Grid>
+                            <Grid Grid.Row="5" Margin="58,2,0,0">
+                                <TextBlock x:Name="TrafficUsageAxisStartText" HorizontalAlignment="Left" FontSize="9" Foreground="#7890A6" Text="—" />
+                                <TextBlock x:Name="TrafficUsageAxisCenterText" HorizontalAlignment="Center" FontSize="9" Foreground="#7890A6" Text="—" />
+                                <TextBlock x:Name="TrafficUsageAxisEndText" HorizontalAlignment="Right" FontSize="9" Foreground="#7890A6" Text="—" />
+                            </Grid>
+                        </Grid>
+                    </Border>
+
+                    <Border Grid.Row="6" Padding="18" Style="{StaticResource NetworkCard}">
+                        <Grid>
+                            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                            <Grid>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button x:Name="TrafficGlobalModeButton" Width="100" Style="{StaticResource NetworkPrimaryButton}" Content="全局流量" Tag="Global" Click="TrafficStatsMode_Click" />
+                                    <Button x:Name="TrafficProxyModeButton" Width="100" Margin="8,0,0,0" Style="{StaticResource NetworkButton}" Content="代理流量" Tag="Proxy" Click="TrafficStatsMode_Click" />
+                                </StackPanel>
+                                <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+                                    <TextBlock x:Name="TrafficStatsProxySummaryText" Margin="0,0,12,0" VerticalAlignment="Center" FontSize="10" Foreground="#7890A6" Text="代理判定：尚未启用应用级监控" TextTrimming="CharacterEllipsis" />
+                                    <Button Style="{StaticResource NetworkChipButton}" Content="导出 CSV" Click="TrafficStatsExport_Click" />
+                                </StackPanel>
+                            </Grid>
+                            <TextBlock x:Name="TrafficStatsDetailText" Grid.Row="2" FontSize="10" Foreground="#7890A6" Text="启用应用级监控后，将显示进程路径、上传下载字节和代理判定依据。" TextWrapping="Wrap" />
+                            <Border Grid.Row="4" Background="#36E8F2FF" BorderBrush="#72CFE4F4" BorderThickness="1" CornerRadius="12" Padding="10">
+                                <Grid>
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                    <Grid>
+                                        <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="#405F7C" Text="应用流量排行" />
+                                        <TextBlock x:Name="TrafficStatsRowsSummaryText" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="10" Foreground="#7890A6" Text="0 项" />
+                                    </Grid>
+                                    <ListBox x:Name="TrafficProcessesListBox" Grid.Row="2" Style="{StaticResource NetworkList}">
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border MinHeight="94" Padding="0" Background="#62FFFFFF" BorderBrush="#70CFE3F2" BorderThickness="1" CornerRadius="13" ClipToBounds="True">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions><ColumnDefinition Width="5" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                                        <Border Background="{Binding CardAccentBrush}" CornerRadius="12,0,0,12" />
+                                                        <Grid Grid.Column="1" Margin="18,15">
+                                                            <Grid.ColumnDefinitions><ColumnDefinition Width="2.25*" /><ColumnDefinition Width="4.5*" /><ColumnDefinition Width="24" /></Grid.ColumnDefinitions>
+                                                            <StackPanel>
+                                                                <StackPanel Orientation="Horizontal"><TextBlock FontSize="15" FontWeight="SemiBold" Foreground="#405F7C" Text="{Binding ProcessName}" TextTrimming="CharacterEllipsis" /><Border Margin="10,0,0,0" Padding="9,4" Background="{Binding BadgeBackground}" BorderBrush="{Binding BadgeForeground}" BorderThickness="1" CornerRadius="8" Visibility="{Binding ProxyBadgeVisibility}"><TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{Binding BadgeForeground}" Text="{Binding ProxyBadge}" /></Border></StackPanel>
+                                                                <TextBlock Margin="0,6,0,0" FontSize="11" Foreground="#7890A6" Text="{Binding DetailText}" TextTrimming="CharacterEllipsis" ToolTip="{Binding DetailText}" />
+                                                            </StackPanel>
+                                                            <Grid Grid.Column="1">
+                                                                <Grid.RenderTransform><TranslateTransform X="24" /></Grid.RenderTransform>
+                                                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                                                <StackPanel VerticalAlignment="Center"><TextBlock FontSize="11" Foreground="#7890A6" Text="下载" /><TextBlock Margin="0,5,0,0" FontSize="14" FontWeight="SemiBold" Foreground="#4D7CFE" Text="{Binding DownloadText}" /></StackPanel>
+                                                                <StackPanel Grid.Column="1" VerticalAlignment="Center"><TextBlock FontSize="11" Foreground="#7890A6" Text="上传" /><TextBlock Margin="0,5,0,0" FontSize="14" FontWeight="SemiBold" Foreground="#A55FEF" Text="{Binding UploadText}" /></StackPanel>
+                                                                <StackPanel Grid.Column="2" VerticalAlignment="Center"><TextBlock FontSize="11" Foreground="#7890A6" Text="总量" /><TextBlock Margin="0,5,0,0" FontSize="14" FontWeight="SemiBold" Foreground="#1C9E94" Text="{Binding TotalText}" /></StackPanel>
+                                                                <StackPanel Grid.Column="3" VerticalAlignment="Center"><TextBlock FontSize="11" Foreground="#7890A6" Text="实时" /><TextBlock Margin="0,5,0,0" FontSize="14" FontWeight="SemiBold" Foreground="#53718E" Text="{Binding RateText}" /></StackPanel>
+                                                            </Grid>
+                                                            <Grid Grid.Column="2" Width="20" Height="20" HorizontalAlignment="Right" VerticalAlignment="Center" ToolTip="{Binding RunningStatusText}">
+                                                                <Ellipse Width="20" Height="20" Fill="{Binding RunningStatusBrush}" Opacity="0.18" />
+                                                                <Ellipse Width="12" Height="12" Fill="{Binding RunningStatusBrush}" Opacity="0.28" />
+                                                                <Ellipse Width="8" Height="8" Fill="{Binding RunningStatusBrush}" />
+                                                            </Grid>
+                                                        </Grid>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                    <TextBlock x:Name="TrafficStatsEmptyText" Grid.Row="2" MaxWidth="520" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="12" Foreground="#7890A6" TextAlignment="Center" TextWrapping="Wrap" Text="尚未启用应用级监控&#x0a;全局网卡速率仍会正常显示；按进程明细需要点击上方按钮并在 UAC 中授权。" Visibility="Visible" />
+                                </Grid>
+                            </Border>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </ScrollViewer>
         </Grid>
     </Grid>
 </UserControl>

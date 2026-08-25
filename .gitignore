@@ -33,3 +33,9 @@ ScreenshotApp/Models/VoiceInput/sensevoice.tar.bz2
 *.suo
 *.tmp
 *.log
+
+# Android 协作端源码纳入主线；仅忽略本机构建缓存和产物。
+AndroidApp/.gradle/
+AndroidApp/.kotlin/
+AndroidApp/**/build/
+AndroidApp/local.properties

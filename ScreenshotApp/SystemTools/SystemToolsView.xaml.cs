@@ -7,8 +7,10 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
+using WpfShapes = System.Windows.Shapes;
 using System.Windows.Threading;
 using ScreenshotApp.StorageAnalysis;
+using ScreenshotApp.Motion;
 
 namespace ScreenshotApp.SystemTools;
 
@@ -37,6 +39,9 @@ public partial class SystemToolsView : UserControl
     private IReadOnlyList<DeviceDriverEntry> _allDrivers = Array.Empty<DeviceDriverEntry>();
     private IReadOnlyList<SystemDiagnosticGroup> _allDiagnosticGroups = Array.Empty<SystemDiagnosticGroup>();
     private IReadOnlyList<SystemDiagnosticTimelineBucket> _diagnosticTimelineBuckets = Array.Empty<SystemDiagnosticTimelineBucket>();
+    private IReadOnlyList<DiskHistoryPoint> _diskHistoryPoints = Array.Empty<DiskHistoryPoint>();
+    private int _diskHistoryDays = 30;
+    private string? _historyVolumeId;
     private SystemDiagnosticSnapshot? _diagnosticSnapshot;
     private int _selectedDiagnosticBucketIndex = -1;
     private CancellationTokenSource? _diagnosticCancellation;
@@ -44,10 +49,30 @@ public partial class SystemToolsView : UserControl
     private string _portSortKey = "Port";
     private bool _portHeaderSortActive;
     private readonly DispatcherTimer _portAutoRefreshTimer;
+    private readonly DispatcherTimer _diskHistoryAutoCaptureTimer;
     private bool _isRefreshingPorts;
+    private bool _isRefreshingProcesses;
+    private bool _isRefreshingServices;
     private bool _isRefreshingRelationships;
     private bool _isRefreshingDeviceInfo;
     private bool _isRefreshingStorage;
+    private bool _isCapturingDiskHistory;
+    private bool _isStorageSectionActive;
+    private int _diskHistoryHoverSegment = -1;
+    private int _diskHistoryHoverVersion;
+    private IReadOnlyList<Point> _diskHistoryChartPoints = Array.Empty<Point>();
+    private double _diskHistoryChartLeft;
+    private double _diskHistoryChartRight;
+    private double _diskHistoryChartTop;
+    private double _diskHistoryChartBottom;
+    private double _diskHistoryChartAxisMin;
+    private double _diskHistoryChartAxisMax;
+    private IReadOnlyList<DiskFileChange> _diskHistoryHoverChanges = Array.Empty<DiskFileChange>();
+    private Border? _diskHistoryHoverCard;
+    private TextBlock? _diskHistoryHoverText;
+    private WpfShapes.Polygon? _diskHistoryHoverRegion;
+    private WpfShapes.Line? _diskHistoryHoverGuide;
+    private WpfShapes.Line? _diskHistoryHoverHorizontalGuide;
     private bool _processesAscending = true;
     private bool _servicesAscending = true;
     private string _processSortKey = "Name";
@@ -61,6 +86,7 @@ public partial class SystemToolsView : UserControl
     private readonly Dictionary<TextBlock, (string Key, string Title)> _serviceHeaders = new();
     private readonly Dictionary<TextBlock, (string Key, string Title)> _relationshipHeaders = new();
     private readonly HashSet<string> _expandedProcessGroups = new(StringComparer.OrdinalIgnoreCase);
+    private readonly MotionPageGroup _tabMotion;
 
     public SystemToolsView()
     {
@@ -69,9 +95,22 @@ public partial class SystemToolsView : UserControl
         ProcessesListBox.ItemsSource = _processes;
         ServicesListBox.ItemsSource = _services;
         RelationsBubbleListBox.ItemsSource = _relationships;
+        _tabMotion = new MotionPageGroup(
+            PortsPanel,
+            PortsPanel,
+            ProcessesPanel,
+            ServicesPanel,
+            RelationsBubblePanel,
+            OverviewPanel,
+            DriversPanel,
+            StoragePanel,
+            StartupManagementView,
+            EnvironmentPanel,
+            DiagnosticsPanel);
         EnvironmentListBox.ItemsSource = _environmentVariables;
         PathEntriesListBox.ItemsSource = _pathEntries;
         DriverCategoryItems.ItemsSource = _driverCategories;
+        DriverPageCategoryItems.ItemsSource = _driverCategories;
         StorageVolumesItems.ItemsSource = _storageVolumes;
         PhysicalStorageItems.ItemsSource = _physicalStorage;
         DiagnosticResultsListBox.ItemsSource = _diagnosticGroups;
@@ -83,6 +122,8 @@ public partial class SystemToolsView : UserControl
         PathEntriesListBox.PreviewMouseLeftButtonDown += PathEntriesListBox_PreviewMouseLeftButtonDown;
         _portAutoRefreshTimer = new DispatcherTimer();
         _portAutoRefreshTimer.Tick += AutoRefreshPorts_Tick;
+        _diskHistoryAutoCaptureTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(15) };
+        _diskHistoryAutoCaptureTimer.Tick += DiskHistoryAutoCaptureTimer_Tick;
         EnvironmentScopeComboBox.SelectedIndex = 0;
         AutoRefreshIntervalComboBox.SelectedIndex = 1;
         UpdatePortAutoRefreshInterval();
@@ -108,6 +149,8 @@ public partial class SystemToolsView : UserControl
         Unloaded += (_, _) =>
         {
             _portAutoRefreshTimer.Stop();
+            StartupManagementView.CancelActiveScan();
+            _diskHistoryAutoCaptureTimer.Stop();
             StorageAnalysisView.CancelActiveScan();
             CancelActiveDiagnostics();
         };
@@ -133,16 +176,22 @@ public partial class SystemToolsView : UserControl
 
     private async Task RefreshProcessesAsync()
     {
+        if (_isRefreshingProcesses) return;
+        _isRefreshingProcesses = true;
         ProcessesSummaryText.Text = "正在采样 CPU 与内存…";
         try { _allProcesses = await Task.Run(SystemToolsService.GetProcesses); ApplyProcessFilter(); ConfigureProcessColumns(); }
         catch (Exception exception) { ProcessesSummaryText.Text = $"读取失败：{exception.Message}"; }
+        finally { _isRefreshingProcesses = false; }
     }
 
     private async Task RefreshServicesAsync()
     {
+        if (_isRefreshingServices) return;
+        _isRefreshingServices = true;
         ServicesSummaryText.Text = "正在读取…";
         try { _allServices = await Task.Run(SystemToolsService.GetServices); ApplyServiceFilter(); }
         catch (Exception exception) { ServicesSummaryText.Text = $"读取失败：{exception.Message}"; }
+        finally { _isRefreshingServices = false; }
     }
 
     /// <summary>通过同一次快照建立服务、进程与端口关系，避免页面间依赖搜索框或重复读取数据。</summary>
@@ -220,6 +269,7 @@ public partial class SystemToolsView : UserControl
             StorageSummaryText.Text = overview.SummaryText;
             StorageVolumeEmptyState.Visibility = _storageVolumes.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             PhysicalStorageEmptyState.Visibility = _physicalStorage.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            await LoadDiskHistoryAsync();
         }
         catch (Exception exception)
         {
@@ -229,6 +279,705 @@ public partial class SystemToolsView : UserControl
         {
             _isRefreshingStorage = false;
         }
+    }
+
+    /// <summary>系统工具打开期间低频补采每日快照；同一天重复执行不会产生重复记录。</summary>
+    private void StartDiskHistoryAutoCapture()
+    {
+        if (!EnvironmentOnly)
+        {
+            return;
+        }
+
+        _diskHistoryAutoCaptureTimer.Start();
+        DiskHistoryStore.StartFileChangeTracking();
+        _ = CaptureTodayDiskHistoryAsync();
+    }
+
+    private async void DiskHistoryAutoCaptureTimer_Tick(object? sender, EventArgs e)
+    {
+        await CaptureTodayDiskHistoryAsync();
+    }
+
+    private async Task CaptureTodayDiskHistoryAsync()
+    {
+        if (_isCapturingDiskHistory)
+        {
+            return;
+        }
+
+        _isCapturingDiskHistory = true;
+        try
+        {
+            await DiskHistoryStore.EnsureTodaySnapshotAsync();
+            if (IsLoaded && _isStorageSectionActive && !_isRefreshingStorage)
+            {
+                await LoadDiskHistoryAsync();
+            }
+        }
+        catch
+        {
+            // 后台补采失败不打断系统工具；用户仍可通过“立即快照”查看明确错误。
+        }
+        finally
+        {
+            _isCapturingDiskHistory = false;
+        }
+    }
+
+    /// <summary>补采今日快照并刷新用量历史图表。</summary>
+    private async Task LoadDiskHistoryAsync()
+    {
+        try
+        {
+            await DiskHistoryStore.EnsureTodaySnapshotAsync();
+            PopulateHistoryVolumeCombo();
+            var volumeId = (HistoryVolumeComboBox.SelectedItem as ComboBoxItem)?.Tag as string;
+            if (string.IsNullOrEmpty(volumeId))
+            {
+                _diskHistoryPoints = Array.Empty<DiskHistoryPoint>();
+                DrawDiskHistoryChart();
+                DiskHistorySummaryText.Text = "未找到可记录的固定卷，无法建立用量历史。";
+                return;
+            }
+
+            _historyVolumeId = volumeId;
+            _diskHistoryPoints = await DiskHistoryStore.LoadHistoryAsync(volumeId, _diskHistoryDays);
+            DrawDiskHistoryChart();
+            UpdateHistoryRangeStates();
+            DiskHistorySummaryText.Text = BuildDiskHistorySummary();
+        }
+        catch (Exception exception)
+        {
+            DiskHistorySummaryText.Text = "用量历史读取失败：" + exception.Message;
+        }
+    }
+
+    private void PopulateHistoryVolumeCombo()
+    {
+        var previous = _historyVolumeId;
+        HistoryVolumeComboBox.Items.Clear();
+        foreach (var volume in _storageVolumes)
+        {
+            var label = string.IsNullOrWhiteSpace(volume.VolumeLabel) ? string.Empty : " " + volume.VolumeLabel;
+            HistoryVolumeComboBox.Items.Add(new ComboBoxItem { Tag = volume.DriveName, Content = volume.DriveName.TrimEnd('\\') + label });
+        }
+        if (HistoryVolumeComboBox.Items.Count > 0)
+        {
+            var match = HistoryVolumeComboBox.Items
+                .Cast<ComboBoxItem>()
+                .FirstOrDefault(item => string.Equals(item.Tag as string, previous, StringComparison.OrdinalIgnoreCase));
+            HistoryVolumeComboBox.SelectedItem = match ?? HistoryVolumeComboBox.Items[0];
+        }
+    }
+
+    private void HistoryVolume_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded || HistoryVolumeComboBox.SelectedItem is not ComboBoxItem { Tag: string volumeId })
+        {
+            return;
+        }
+        _historyVolumeId = volumeId;
+        _ = RefreshDiskHistoryAsync();
+    }
+
+    private void HistoryRange_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: string days } && int.TryParse(days, out var parsed))
+        {
+            _diskHistoryDays = parsed;
+            UpdateHistoryRangeStates();
+            _ = RefreshDiskHistoryAsync();
+        }
+    }
+
+    private async Task RefreshDiskHistoryAsync()
+    {
+        try
+        {
+            _diskHistoryPoints = _historyVolumeId == null
+                ? Array.Empty<DiskHistoryPoint>()
+                : await DiskHistoryStore.LoadHistoryAsync(_historyVolumeId, _diskHistoryDays);
+            DrawDiskHistoryChart();
+            DiskHistorySummaryText.Text = BuildDiskHistorySummary();
+        }
+        catch (Exception exception)
+        {
+            DiskHistorySummaryText.Text = "用量历史读取失败：" + exception.Message;
+        }
+    }
+
+    private async void CaptureDiskSnapshot_Click(object sender, RoutedEventArgs e)
+    {
+        CaptureSnapshotButton.IsEnabled = false;
+        try
+        {
+            await DiskHistoryStore.EnsureTodaySnapshotAsync();
+            await RefreshDiskHistoryAsync();
+            DiskHistorySummaryText.Text = "已记录今日快照。" + BuildDiskHistorySummary();
+        }
+        catch (Exception exception)
+        {
+            DiskHistorySummaryText.Text = "快照失败：" + exception.Message;
+        }
+        finally
+        {
+            CaptureSnapshotButton.IsEnabled = true;
+        }
+    }
+
+    private async void ClearDiskHistory_Click(object sender, RoutedEventArgs e)
+    {
+        var window = Window.GetWindow(this);
+        if (MessageBox.Show(window,
+                "确定清空全部磁盘用量历史？此操作不会影响磁盘上的任何文件。",
+                "清理用量历史",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning) != MessageBoxResult.Yes)
+        {
+            return;
+        }
+        try
+        {
+            await DiskHistoryStore.ClearAsync();
+            _diskHistoryPoints = Array.Empty<DiskHistoryPoint>();
+            DrawDiskHistoryChart();
+            DiskHistorySummaryText.Text = "用量历史已清空，程序运行期间会自动重新开始记录。";
+        }
+        catch (Exception exception)
+        {
+            DiskHistorySummaryText.Text = "清理失败：" + exception.Message;
+        }
+    }
+
+    private void UpdateHistoryRangeStates()
+    {
+        SetRangeButtonState(HistoryRange7Button, _diskHistoryDays == 7);
+        SetRangeButtonState(HistoryRange30Button, _diskHistoryDays == 30);
+        SetRangeButtonState(HistoryRange90Button, _diskHistoryDays == 90);
+    }
+
+    private static void SetRangeButtonState(Button button, bool selected)
+    {
+        button.Background = new SolidColorBrush(selected ? Color.FromRgb(222, 236, 255) : Color.FromArgb(134, 255, 255, 255));
+        button.BorderBrush = new SolidColorBrush(selected ? Color.FromRgb(102, 158, 255) : Color.FromArgb(166, 209, 232, 247));
+    }
+
+    private string BuildDiskHistorySummary()
+    {
+        if (_diskHistoryPoints.Count == 0)
+        {
+            return "暂无记录，点击“立即快照”可立即建立今日记录；X-Tool 运行期间会每天自动补采。";
+        }
+
+        var latest = _diskHistoryPoints[^1];
+        var first = _diskHistoryPoints[0];
+        var usedDelta = latest.UsedBytes - first.UsedBytes;
+        var sign = usedDelta >= 0 ? "增加" : "减少";
+        return $"{_diskHistoryDays} 天内有 {_diskHistoryPoints.Count} 条记录 · 当前已用 {FormatCapacity(latest.UsedBytes)} / 总 {FormatCapacity(latest.TotalBytes)} · 区间内{sign} {FormatCapacity(Math.Abs(usedDelta))} · 程序未运行日期无法补采";
+    }
+
+    private static string FormatCapacity(long bytes)
+    {
+        if (bytes >= 1024L * 1024 * 1024)
+        {
+            return $"{bytes / 1024.0 / 1024 / 1024:0.0} GB";
+        }
+        return $"{bytes / 1024.0 / 1024:0.0} MB";
+    }
+
+    private void DiskHistoryCanvas_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (IsLoaded)
+        {
+            DrawDiskHistoryChart();
+        }
+    }
+
+    private async void DiskHistoryCanvas_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (_diskHistoryChartPoints.Count == 0 || _diskHistoryChartRight <= _diskHistoryChartLeft)
+        {
+            HideDiskHistoryHoverCard();
+            return;
+        }
+
+        var position = e.GetPosition(DiskHistoryCanvas);
+        if (position.X < _diskHistoryChartLeft || position.X > _diskHistoryChartRight
+            || position.Y < _diskHistoryChartTop || position.Y > _diskHistoryChartBottom)
+        {
+            HideDiskHistoryHoverCard();
+            return;
+        }
+
+        var segment = _diskHistoryChartPoints.Count == 1
+            ? 0
+            : Math.Clamp(
+                (int)Math.Floor((position.X - _diskHistoryChartLeft)
+                    / ((_diskHistoryChartRight - _diskHistoryChartLeft) / (_diskHistoryChartPoints.Count - 1))),
+                0,
+                _diskHistoryChartPoints.Count - 2);
+        var valueRatio = Math.Clamp(
+            (position.Y - _diskHistoryChartTop) / (_diskHistoryChartBottom - _diskHistoryChartTop),
+            0,
+            1);
+        var hoveredBytes = _diskHistoryChartAxisMax
+            - (_diskHistoryChartAxisMax - _diskHistoryChartAxisMin) * valueRatio;
+        var segmentChanged = _diskHistoryHoverSegment != segment;
+        var version = segmentChanged ? ++_diskHistoryHoverVersion : _diskHistoryHoverVersion;
+        if (segmentChanged)
+        {
+            _diskHistoryHoverSegment = segment;
+            _diskHistoryHoverChanges = Array.Empty<DiskFileChange>();
+        }
+
+        UpdateDiskHistoryHoverRegion(segment);
+        EnsureDiskHistoryHoverCard();
+        PositionDiskHistoryHoverCard(position);
+        UpdateDiskHistoryHoverText(segment, hoveredBytes, segmentChanged ? "正在读取区间内的文件变化…" : null);
+
+        if (!segmentChanged || _diskHistoryChartPoints.Count < 2 || _historyVolumeId is null)
+        {
+            return;
+        }
+
+        var start = _diskHistoryPoints[segment].Date;
+        var end = _diskHistoryPoints[segment + 1].Date;
+        var changes = await DiskHistoryStore.LoadFileChangesAsync(_historyVolumeId, start, end);
+        if (version != _diskHistoryHoverVersion || _diskHistoryHoverSegment != segment)
+        {
+            return;
+        }
+
+        _diskHistoryHoverChanges = changes;
+        UpdateDiskHistoryHoverText(segment, hoveredBytes, null);
+    }
+
+    private void DiskHistoryCanvas_MouseLeave(object sender, MouseEventArgs e)
+    {
+        HideDiskHistoryHoverCard();
+    }
+
+    private void EnsureDiskHistoryHoverCard()
+    {
+        if (_diskHistoryHoverCard is not null)
+        {
+            _diskHistoryHoverCard.Visibility = Visibility.Visible;
+            return;
+        }
+
+        _diskHistoryHoverText = new TextBlock
+        {
+            FontSize = 11,
+            Foreground = new SolidColorBrush(Color.FromRgb(46, 75, 103)),
+            TextWrapping = TextWrapping.Wrap,
+            MaxWidth = 300
+        };
+        _diskHistoryHoverCard = new Border
+        {
+            Padding = new Thickness(12, 9, 12, 9),
+            MaxWidth = 326,
+            Background = new SolidColorBrush(Color.FromArgb(242, 249, 253, 255)),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(210, 142, 214, 241)),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(11),
+            Effect = new System.Windows.Media.Effects.DropShadowEffect
+            {
+                BlurRadius = 12,
+                ShadowDepth = 2,
+                Opacity = 0.16,
+                Color = Color.FromRgb(52, 87, 125)
+            },
+            IsHitTestVisible = false,
+            Child = _diskHistoryHoverText
+        };
+        _diskHistoryHoverGuide = new WpfShapes.Line
+        {
+            Y1 = _diskHistoryChartTop,
+            Y2 = _diskHistoryChartBottom,
+            Stroke = new SolidColorBrush(Color.FromArgb(130, 77, 124, 254)),
+            StrokeThickness = 1,
+            StrokeDashArray = new DoubleCollection { 3, 3 },
+            IsHitTestVisible = false
+        };
+        _diskHistoryHoverHorizontalGuide = new WpfShapes.Line
+        {
+            X1 = _diskHistoryChartLeft,
+            X2 = _diskHistoryChartRight,
+            Stroke = new SolidColorBrush(Color.FromArgb(90, 77, 124, 254)),
+            StrokeThickness = 1,
+            StrokeDashArray = new DoubleCollection { 3, 3 },
+            IsHitTestVisible = false
+        };
+        DiskHistoryCanvas.Children.Add(_diskHistoryHoverHorizontalGuide);
+        DiskHistoryCanvas.Children.Add(_diskHistoryHoverGuide);
+        DiskHistoryCanvas.Children.Add(_diskHistoryHoverCard);
+    }
+
+    private void PositionDiskHistoryHoverCard(Point position)
+    {
+        if (_diskHistoryHoverCard is null)
+        {
+            return;
+        }
+
+        _diskHistoryHoverCard.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var cardWidth = _diskHistoryHoverCard.DesiredSize.Width;
+        var cardHeight = _diskHistoryHoverCard.DesiredSize.Height;
+        var left = position.X + 16;
+        var top = position.Y - cardHeight - 14;
+        if (left + cardWidth > DiskHistoryCanvas.ActualWidth - 6)
+        {
+            left = position.X - cardWidth - 16;
+        }
+        if (top < 5)
+        {
+            top = position.Y + 16;
+        }
+        Canvas.SetLeft(_diskHistoryHoverCard, Math.Max(5, left));
+        Canvas.SetTop(_diskHistoryHoverCard, Math.Max(5, top));
+        if (_diskHistoryHoverGuide is not null)
+        {
+            _diskHistoryHoverGuide.X1 = position.X;
+            _diskHistoryHoverGuide.X2 = position.X;
+            _diskHistoryHoverGuide.Y1 = _diskHistoryChartTop;
+            _diskHistoryHoverGuide.Y2 = _diskHistoryChartBottom;
+        }
+        if (_diskHistoryHoverHorizontalGuide is not null)
+        {
+            _diskHistoryHoverHorizontalGuide.X1 = _diskHistoryChartLeft;
+            _diskHistoryHoverHorizontalGuide.X2 = _diskHistoryChartRight;
+            _diskHistoryHoverHorizontalGuide.Y1 = position.Y;
+            _diskHistoryHoverHorizontalGuide.Y2 = position.Y;
+        }
+    }
+
+    private void UpdateDiskHistoryHoverText(int segment, double hoveredBytes, string? loadingText)
+    {
+        if (_diskHistoryHoverText is null || _diskHistoryPoints.Count == 0)
+        {
+            return;
+        }
+
+        var start = _diskHistoryPoints[Math.Min(segment, _diskHistoryPoints.Count - 1)];
+        var end = _diskHistoryPoints[Math.Min(segment + 1, _diskHistoryPoints.Count - 1)];
+        var delta = end.UsedBytes - start.UsedBytes;
+        var sign = delta >= 0 ? "+" : "−";
+        var lines = new List<string>
+        {
+            $"指向约 {FormatCapacityPrecise(Math.Max(0, hoveredBytes))}",
+            _diskHistoryPoints.Count < 2
+                ? $"记录时间 {start.Date:yyyy-MM-dd HH:mm}"
+                : $"区间 {start.Date:MM-dd HH:mm} → {end.Date:MM-dd HH:mm}",
+            _diskHistoryPoints.Count < 2
+                ? $"已用 {FormatCapacity(start.UsedBytes)}"
+                : $"已用 {FormatCapacity(start.UsedBytes)} → {FormatCapacity(end.UsedBytes)}（{sign}{FormatCapacity(Math.Abs(delta))}）"
+        };
+
+        if (loadingText is not null)
+        {
+            lines.Add(loadingText);
+        }
+        else if (_diskHistoryHoverChanges.Count == 0)
+        {
+            lines.Add("该区间暂无已捕获的文件变化");
+            lines.Add("文件明细从新版启动后开始记录");
+        }
+        else
+        {
+            lines.Add($"捕获到 {_diskHistoryHoverChanges.Count} 个文件变化：");
+            foreach (var change in _diskHistoryHoverChanges.Take(6))
+            {
+                var path = change.Path.Length > 58 ? "…" + change.Path[^57..] : change.Path;
+                lines.Add($"{change.ChangeKind} · {path}");
+            }
+        }
+
+        _diskHistoryHoverText.Text = string.Join("\n", lines);
+        _diskHistoryHoverCard?.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+    }
+
+    private void HideDiskHistoryHoverCard()
+    {
+        _diskHistoryHoverVersion++;
+        _diskHistoryHoverSegment = -1;
+        _diskHistoryHoverChanges = Array.Empty<DiskFileChange>();
+        if (_diskHistoryHoverCard is not null)
+        {
+            _diskHistoryHoverCard.Visibility = Visibility.Collapsed;
+        }
+        if (_diskHistoryHoverGuide is not null)
+        {
+            _diskHistoryHoverGuide.Visibility = Visibility.Collapsed;
+        }
+        if (_diskHistoryHoverHorizontalGuide is not null)
+        {
+            _diskHistoryHoverHorizontalGuide.Visibility = Visibility.Collapsed;
+        }
+        if (_diskHistoryHoverRegion is not null)
+        {
+            _diskHistoryHoverRegion.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    /// <summary>高亮当前鼠标所在区间折线下方到横轴的面积，视觉上保持与整张趋势图连贯。</summary>
+    private void UpdateDiskHistoryHoverRegion(int segment)
+    {
+        if (_diskHistoryHoverRegion is null || _diskHistoryChartPoints.Count < 2)
+        {
+            return;
+        }
+
+        var safeSegment = Math.Clamp(segment, 0, _diskHistoryChartPoints.Count - 2);
+        var startPoint = _diskHistoryChartPoints[safeSegment];
+        var endPoint = _diskHistoryChartPoints[safeSegment + 1];
+        _diskHistoryHoverRegion.Points = new PointCollection
+        {
+            startPoint,
+            endPoint,
+            new Point(endPoint.X, _diskHistoryChartBottom),
+            new Point(startPoint.X, _diskHistoryChartBottom)
+        };
+        _diskHistoryHoverRegion.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>在画布上绘制局部缩放的容量趋势，让小幅变化也能清晰呈现。</summary>
+    private void DrawDiskHistoryChart()
+    {
+        HideDiskHistoryHoverCard();
+        DiskHistoryCanvas.Children.Clear();
+        _diskHistoryHoverCard = null;
+        _diskHistoryHoverText = null;
+        _diskHistoryHoverRegion = null;
+        _diskHistoryHoverGuide = null;
+        _diskHistoryHoverHorizontalGuide = null;
+        var width = Math.Max(DiskHistoryCanvas.ActualWidth, 320);
+        var height = Math.Max(DiskHistoryCanvas.ActualHeight, 300);
+        var left = 16.0;
+        var right = width - 76;
+        var top = 32.0;
+        var bottom = height - 34;
+        var plotWidth = right - left;
+        var plotHeight = bottom - top;
+
+        var points = _diskHistoryPoints;
+        if (points.Count == 0)
+        {
+            _diskHistoryChartPoints = Array.Empty<Point>();
+            var empty = new TextBlock
+            {
+                Text = "暂无用量记录",
+                FontSize = 12,
+                Foreground = new SolidColorBrush(Color.FromRgb(138, 154, 172))
+            };
+            Canvas.SetLeft(empty, width / 2 - 40);
+            Canvas.SetTop(empty, height / 2 - 6);
+            DiskHistoryCanvas.Children.Add(empty);
+            return;
+        }
+
+        var maxTotal = points.Max(point => point.TotalBytes);
+        var minUsed = points.Min(point => (double)point.UsedBytes);
+        var maxUsed = points.Max(point => (double)point.UsedBytes);
+        var valueRange = Math.Max(maxUsed - minUsed, 1d);
+        var padding = Math.Max(1024d * 1024 * 1024, valueRange * 0.22);
+        var axisMin = Math.Max(0d, minUsed - padding);
+        var axisMax = Math.Min(Math.Max((double)maxTotal, axisMin + 1d), maxUsed + padding);
+        if (axisMax - axisMin < 1024d * 1024 * 1024)
+        {
+            axisMax = Math.Min(Math.Max((double)maxTotal, axisMin + 1024d * 1024 * 1024), axisMin + 4d * 1024 * 1024 * 1024);
+        }
+
+        if (axisMax <= axisMin)
+        {
+            axisMax = axisMin + 1d;
+        }
+
+        var axisRange = axisMax - axisMin;
+        _diskHistoryChartLeft = left;
+        _diskHistoryChartRight = right;
+        _diskHistoryChartTop = top;
+        _diskHistoryChartBottom = bottom;
+        _diskHistoryChartAxisMin = axisMin;
+        _diskHistoryChartAxisMax = axisMax;
+
+        AddAxisLabel(left, 8, "已用容量趋势 · 局部缩放");
+        AddAxisLabel(Math.Max(left + 150, right - 128), 8, $"总容量 {FormatCapacity(maxTotal)}");
+
+        // 先绘制柔和的渐变面积，再叠加网格与折线，形成轻量毛玻璃层次。
+        var areaPolygon = new PointCollection { new Point(left, bottom) };
+        var scaleX = plotWidth / Math.Max(points.Count - 1, 1);
+        var usedPolyline = new PointCollection();
+        for (var i = 0; i < points.Count; i++)
+        {
+            var x = left + scaleX * i;
+            var y = bottom - plotHeight * ((points[i].UsedBytes - axisMin) / axisRange);
+            usedPolyline.Add(new Point(x, y));
+            areaPolygon.Add(new Point(x, y));
+        }
+        areaPolygon.Add(new Point(right, bottom));
+        _diskHistoryChartPoints = usedPolyline.ToArray();
+        DiskHistoryCanvas.Children.Add(new WpfShapes.Polygon
+        {
+            Points = areaPolygon,
+            Fill = new LinearGradientBrush(
+                Color.FromArgb(92, 77, 124, 254),
+                Color.FromArgb(8, 77, 124, 254),
+                new Point(0, 0),
+                new Point(0, 1))
+            {
+                MappingMode = BrushMappingMode.RelativeToBoundingBox
+            }
+        });
+        _diskHistoryHoverRegion = new WpfShapes.Polygon
+        {
+            Fill = new LinearGradientBrush(
+                Color.FromArgb(92, 102, 170, 255),
+                Color.FromArgb(20, 102, 170, 255),
+                new Point(0, 0),
+                new Point(0, 1))
+            {
+                MappingMode = BrushMappingMode.RelativeToBoundingBox
+            },
+            Stroke = new SolidColorBrush(Color.FromArgb(145, 102, 158, 245)),
+            StrokeThickness = 1,
+            IsHitTestVisible = false,
+            Visibility = Visibility.Collapsed
+        };
+        DiskHistoryCanvas.Children.Add(_diskHistoryHoverRegion);
+
+        // 局部区间的四级网格，使小幅容量变化仍然易读。
+        for (var i = 0; i <= 3; i++)
+        {
+            var y = top + plotHeight * i / 3.0;
+            DiskHistoryCanvas.Children.Add(new WpfShapes.Line
+            {
+                X1 = left,
+                X2 = right,
+                Y1 = y,
+                Y2 = y,
+                Stroke = new SolidColorBrush(Color.FromArgb(42, 112, 146, 178)),
+                StrokeThickness = 1
+            });
+            AddAxisLabel(right + 8, y - 7, FormatCapacity((long)Math.Max(0, axisMax - axisRange * i / 3.0)));
+        }
+
+        // 总容量在当前缩放区间内时，显示为浅绿色参考虚线；否则通过顶部标签保留上下文。
+        if (maxTotal >= axisMin && maxTotal <= axisMax)
+        {
+            var totalY = bottom - plotHeight * ((maxTotal - axisMin) / axisRange);
+            DiskHistoryCanvas.Children.Add(new WpfShapes.Line
+            {
+                X1 = left,
+                X2 = right,
+                Y1 = totalY,
+                Y2 = totalY,
+                Stroke = new SolidColorBrush(Color.FromArgb(150, 22, 185, 155)),
+                StrokeThickness = 1.2,
+                StrokeDashArray = new DoubleCollection { 5, 4 }
+            });
+        }
+
+        // 柔和的外发光叠加在主线下方，避免传统图表的生硬单线效果。
+        DiskHistoryCanvas.Children.Add(new WpfShapes.Polyline
+        {
+            Points = usedPolyline,
+            Stroke = new SolidColorBrush(Color.FromArgb(28, 77, 124, 254)),
+            StrokeThickness = 9,
+            StrokeLineJoin = PenLineJoin.Round,
+            StrokeStartLineCap = PenLineCap.Round,
+            StrokeEndLineCap = PenLineCap.Round
+        });
+        DiskHistoryCanvas.Children.Add(new WpfShapes.Polyline
+        {
+            Points = usedPolyline,
+            Stroke = new SolidColorBrush(Color.FromRgb(77, 124, 254)),
+            StrokeThickness = 3,
+            StrokeLineJoin = PenLineJoin.Round,
+            StrokeStartLineCap = PenLineCap.Round,
+            StrokeEndLineCap = PenLineCap.Round
+        });
+
+        // 记录点较多时适当抽样，保持曲线清爽；最新点始终保留。
+        var nodeStride = Math.Max(1, (int)Math.Ceiling(points.Count / 24d));
+        for (var i = 0; i < points.Count; i += nodeStride)
+        {
+            var point = usedPolyline[i];
+            DiskHistoryCanvas.Children.Add(new WpfShapes.Ellipse
+            {
+                Width = 14,
+                Height = 14,
+                Fill = new SolidColorBrush(Color.FromArgb(56, 77, 124, 254)),
+                Stroke = Brushes.Transparent
+            });
+            Canvas.SetLeft(DiskHistoryCanvas.Children[^1], point.X - 7);
+            Canvas.SetTop(DiskHistoryCanvas.Children[^1], point.Y - 7);
+            DiskHistoryCanvas.Children.Add(new WpfShapes.Ellipse
+            {
+                Width = 6,
+                Height = 6,
+                Fill = new SolidColorBrush(Color.FromRgb(77, 124, 254)),
+                Stroke = Brushes.White,
+                StrokeThickness = 1.2
+            });
+            Canvas.SetLeft(DiskHistoryCanvas.Children[^1], point.X - 3);
+            Canvas.SetTop(DiskHistoryCanvas.Children[^1], point.Y - 3);
+        }
+
+        if (points.Count > 1 && (points.Count - 1) % nodeStride != 0)
+        {
+            var point = usedPolyline[^1];
+            DiskHistoryCanvas.Children.Add(new WpfShapes.Ellipse
+            {
+                Width = 14,
+                Height = 14,
+                Fill = new SolidColorBrush(Color.FromArgb(56, 77, 124, 254)),
+                Stroke = Brushes.Transparent
+            });
+            Canvas.SetLeft(DiskHistoryCanvas.Children[^1], point.X - 7);
+            Canvas.SetTop(DiskHistoryCanvas.Children[^1], point.Y - 7);
+            DiskHistoryCanvas.Children.Add(new WpfShapes.Ellipse
+            {
+                Width = 6,
+                Height = 6,
+                Fill = new SolidColorBrush(Color.FromRgb(77, 124, 254)),
+                Stroke = Brushes.White,
+                StrokeThickness = 1.2
+            });
+            Canvas.SetLeft(DiskHistoryCanvas.Children[^1], point.X - 3);
+            Canvas.SetTop(DiskHistoryCanvas.Children[^1], point.Y - 3);
+        }
+
+        // X 轴日期标签（首 / 中 / 尾）。
+        var first = points[0].Date;
+        var last = points[^1].Date;
+        var middle = points[points.Count / 2].Date;
+        AddAxisLabel(left - 14, bottom + 5, first.ToString("MM-dd"));
+        AddAxisLabel(left + plotWidth / 2 - 14, bottom + 5, middle.ToString("MM-dd"));
+        AddAxisLabel(right - 24, bottom + 5, last.ToString("MM-dd"));
+    }
+
+    private void AddAxisLabel(double x, double y, string text)
+    {
+        DiskHistoryCanvas.Children.Add(new TextBlock
+        {
+            Text = text,
+            FontSize = 10,
+            Foreground = new SolidColorBrush(Color.FromRgb(120, 144, 166))
+        });
+        Canvas.SetLeft(DiskHistoryCanvas.Children[^1], x);
+        Canvas.SetTop(DiskHistoryCanvas.Children[^1], y);
+    }
+
+    private static string FormatCapacityPrecise(double bytes)
+    {
+        const double gigabyte = 1024d * 1024 * 1024;
+        if (bytes >= gigabyte)
+        {
+            return $"{bytes / gigabyte:0.00} GB";
+        }
+
+        return $"{bytes / 1024d / 1024:0.00} MB";
     }
 
     /// <summary>按需读取可靠性记录，并用分段事件日志补充诊断细节；全过程只读。</summary>
@@ -300,6 +1049,7 @@ public partial class SystemToolsView : UserControl
     private void TabButton_Click(object sender, RoutedEventArgs e)
     {
         var section = (sender as FrameworkElement)?.Tag?.ToString() ?? "Ports";
+        _isStorageSectionActive = section == "Storage";
         if (section != "Storage")
         {
             StorageAnalysisView.CancelActiveScan();
@@ -308,24 +1058,40 @@ public partial class SystemToolsView : UserControl
         {
             CancelActiveDiagnostics();
         }
-        PortsPanel.Visibility = section == "Ports" ? Visibility.Visible : Visibility.Collapsed;
-        ProcessesPanel.Visibility = section == "Processes" ? Visibility.Visible : Visibility.Collapsed;
-        ServicesPanel.Visibility = section == "Services" ? Visibility.Visible : Visibility.Collapsed;
-        RelationsBubblePanel.Visibility = section == "Relations" ? Visibility.Visible : Visibility.Collapsed;
-        OverviewPanel.Visibility = section == "Overview" ? Visibility.Visible : Visibility.Collapsed;
-        StoragePanel.Visibility = section == "Storage" ? Visibility.Visible : Visibility.Collapsed;
-        EnvironmentPanel.Visibility = section == "Environment" ? Visibility.Visible : Visibility.Collapsed;
-        DiagnosticsPanel.Visibility = section == "Diagnostics" ? Visibility.Visible : Visibility.Collapsed;
+        if (section != "Startup")
+        {
+            StartupManagementView.CancelActiveScan();
+        }
+        FrameworkElement target = section switch
+        {
+            "Processes" => ProcessesPanel,
+            "Services" => ServicesPanel,
+            "Relations" => RelationsBubblePanel,
+            "Overview" => OverviewPanel,
+            "Drivers" => DriversPanel,
+            "Storage" => StoragePanel,
+            "Startup" => StartupManagementView,
+            "Environment" => EnvironmentPanel,
+            "Diagnostics" => DiagnosticsPanel,
+            _ => PortsPanel
+        };
+        _tabMotion.Show(target);
         SetActiveTab(section);
         if (section == "Processes") _ = RefreshProcessesAsync();
         else if (section == "Services") _ = RefreshServicesAsync();
         else if (section == "Relations") _ = RefreshRelationshipsAsync();
         else if (section == "Overview") _ = RefreshDeviceInfoAsync();
-        else if (section == "Storage") _ = RefreshStorageAsync();
+        else if (section == "Drivers") _ = RefreshDeviceInfoAsync();
+        else if (section == "Storage")
+        {
+            StartDiskHistoryAutoCapture();
+            _ = RefreshStorageAsync();
+        }
+        else if (section == "Startup") _ = StartupManagementView.RefreshAsync();
         else if (section == "Environment") RefreshEnvironment();
     }
 
-    /// <summary>资源管理保留观察与关联功能；系统工具承载设备、存储与环境变量功能。</summary>
+    /// <summary>资源管理保留观察与关联功能；系统工具承载设备、存储、启动项与环境变量功能。</summary>
     private void ConfigureModuleMode()
     {
         if (EnvironmentOnly)
@@ -336,11 +1102,15 @@ public partial class SystemToolsView : UserControl
             RelationsTabButton.Visibility = Visibility.Collapsed;
             OverviewTabButton.Visibility = Visibility.Visible;
             StorageTabButton.Visibility = Visibility.Visible;
+            DriverTabButton.Visibility = Visibility.Visible;
+            StartupTabButton.Visibility = Visibility.Visible;
             DiagnosticsTabButton.Visibility = Visibility.Visible;
             Grid.SetColumn(OverviewTabButton, 0);
             Grid.SetColumn(StorageTabButton, 2);
-            Grid.SetColumn(EnvironmentTabButton, 4);
-            Grid.SetColumn(DiagnosticsTabButton, 6);
+            Grid.SetColumn(DriverTabButton, 4);
+            Grid.SetColumn(StartupTabButton, 6);
+            Grid.SetColumn(EnvironmentTabButton, 8);
+            Grid.SetColumn(DiagnosticsTabButton, 10);
             AutoRefreshHostPanel.Visibility = Visibility.Collapsed;
             PortsPanel.Visibility = Visibility.Collapsed;
             ProcessesPanel.Visibility = Visibility.Collapsed;
@@ -348,25 +1118,34 @@ public partial class SystemToolsView : UserControl
             RelationsBubblePanel.Visibility = Visibility.Collapsed;
             EnvironmentPanel.Visibility = Visibility.Collapsed;
             StoragePanel.Visibility = Visibility.Collapsed;
+            DriversPanel.Visibility = Visibility.Collapsed;
+            StartupManagementView.Visibility = Visibility.Collapsed;
             DiagnosticsPanel.Visibility = Visibility.Collapsed;
             StorageOverviewContentPanel.Visibility = Visibility.Visible;
             StorageAnalysisView.Visibility = Visibility.Collapsed;
             OverviewPanel.Visibility = Visibility.Visible;
+            _tabMotion.SetCurrent(OverviewPanel);
             SetActiveTab("Overview");
-            SetPageHeading("系统工具", "查看设备信息、存储空间、环境变量与系统诊断；所有写入操作都会在执行前明确确认。");
+            SetPageHeading("系统工具", "查看设备、存储、启动项、环境变量与系统诊断；所有写入操作都会在执行前明确确认。");
             return;
         }
 
         OverviewTabButton.Visibility = Visibility.Collapsed;
         StorageTabButton.Visibility = Visibility.Collapsed;
+        DriverTabButton.Visibility = Visibility.Collapsed;
+        StartupTabButton.Visibility = Visibility.Collapsed;
         EnvironmentTabButton.Visibility = Visibility.Collapsed;
         DiagnosticsTabButton.Visibility = Visibility.Collapsed;
         OverviewPanel.Visibility = Visibility.Collapsed;
         StoragePanel.Visibility = Visibility.Collapsed;
+        DriversPanel.Visibility = Visibility.Collapsed;
+        StartupManagementView.Visibility = Visibility.Collapsed;
         DiagnosticsPanel.Visibility = Visibility.Collapsed;
         HideStorageAnalysis();
         AutoRefreshHostPanel.Visibility = Visibility.Visible;
         EnvironmentPanel.Visibility = Visibility.Collapsed;
+        PortsPanel.Visibility = Visibility.Visible;
+        _tabMotion.SetCurrent(PortsPanel);
         SetPageHeading("资源管理", "查看本机端口、进程、服务与关联关系；系统级操作会在执行时明确提示权限要求。");
     }
 
@@ -378,7 +1157,7 @@ public partial class SystemToolsView : UserControl
 
     private void SetActiveTab(string section)
     {
-        foreach (var (button, name) in new[] { (PortsTabButton, "Ports"), (ProcessesTabButton, "Processes"), (ServicesTabButton, "Services"), (RelationsTabButton, "Relations"), (OverviewTabButton, "Overview"), (StorageTabButton, "Storage"), (EnvironmentTabButton, "Environment"), (DiagnosticsTabButton, "Diagnostics") })
+        foreach (var (button, name) in new[] { (PortsTabButton, "Ports"), (ProcessesTabButton, "Processes"), (ServicesTabButton, "Services"), (RelationsTabButton, "Relations"), (OverviewTabButton, "Overview"), (StorageTabButton, "Storage"), (DriverTabButton, "Drivers"), (StartupTabButton, "Startup"), (EnvironmentTabButton, "Environment"), (DiagnosticsTabButton, "Diagnostics") })
         {
             var active = name == section;
             button.Background = new SolidColorBrush(active ? Color.FromRgb(77, 124, 254) : Color.FromArgb(134, 255, 255, 255));
@@ -657,7 +1436,8 @@ public partial class SystemToolsView : UserControl
             return;
         }
 
-        var rootPath = Path.GetPathRoot(volume.DriveName);
+        // 卷名形如“C:”时属于驱动器相对路径，必须补上分隔符后再解析为绝对卷根目录。
+        var rootPath = Path.GetPathRoot(volume.DriveName + Path.DirectorySeparatorChar);
         if (string.IsNullOrWhiteSpace(rootPath) || !Directory.Exists(rootPath))
         {
             MessageBox.Show("所选本地卷当前不可用，请刷新存储信息后重试。", "无法分析本地卷", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -692,7 +1472,17 @@ public partial class SystemToolsView : UserControl
     {
         if (IsLoaded) ApplyDriverFilter();
     }
+
+    private void DriverPageFilterTextBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (IsLoaded) ApplyDriverFilter();
+    }
     private void DriverScopeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (IsLoaded) ApplyDriverFilter();
+    }
+
+    private void DriverPageScopeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (IsLoaded) ApplyDriverFilter();
     }
@@ -739,10 +1529,18 @@ public partial class SystemToolsView : UserControl
     private async void AutoRefreshPorts_Tick(object? sender, EventArgs e)
     {
         if (AutoRefreshCheckBox.IsChecked != true) return;
-        if (PortsPanel.Visibility == Visibility.Visible) await RefreshPortsAsync();
-        else if (ProcessesPanel.Visibility == Visibility.Visible) await RefreshProcessesAsync();
-        else if (ServicesPanel.Visibility == Visibility.Visible) await RefreshServicesAsync();
-        else if (RelationsBubblePanel.Visibility == Visibility.Visible) await RefreshRelationshipsAsync();
+        _portAutoRefreshTimer.Stop();
+        try
+        {
+            if (PortsPanel.Visibility == Visibility.Visible) await RefreshPortsAsync();
+            else if (ProcessesPanel.Visibility == Visibility.Visible) await RefreshProcessesAsync();
+            else if (ServicesPanel.Visibility == Visibility.Visible) await RefreshServicesAsync();
+            else if (RelationsBubblePanel.Visibility == Visibility.Visible) await RefreshRelationshipsAsync();
+        }
+        finally
+        {
+            if (IsLoaded && IsVisible && AutoRefreshCheckBox.IsChecked == true) _portAutoRefreshTimer.Start();
+        }
     }
     private void ProcessFilterTextBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyProcessFilter();
     private void ProcessDisplayOption_Changed(object sender, RoutedEventArgs e)
@@ -1067,8 +1865,10 @@ public partial class SystemToolsView : UserControl
     /// <summary>设备页默认突出常用类别，同时保留异常项，避免把大量系统组件淹没在首屏。</summary>
     private void ApplyDriverFilter()
     {
-        var keyword = DriverFilterTextBox?.Text.Trim() ?? string.Empty;
-        var scope = SelectedTag(DriverScopeComboBox);
+        var filterBox = DriversPanel.Visibility == Visibility.Visible ? DriverPageFilterTextBox : DriverFilterTextBox;
+        var scopeBox = DriversPanel.Visibility == Visibility.Visible ? DriverPageScopeComboBox : DriverScopeComboBox;
+        var keyword = filterBox?.Text.Trim() ?? string.Empty;
+        var scope = SelectedTag(scopeBox);
         var drivers = _allDrivers.Where(item => scope switch
             {
                 "Key" => item.IsKeyDevice || item.HasIssue,
@@ -1089,6 +1889,7 @@ public partial class SystemToolsView : UserControl
             ? "未读取到 Windows PnP 驱动信息"
             : $"显示 {categories.Length:N0} 类 / {drivers.Length:N0} 项 · {issueCount:N0} 项需要注意";
         DriverEmptyState.Visibility = drivers.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        DriverPageEmptyState.Visibility = drivers.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void OpenProcessDirectory_Click(object sender, RoutedEventArgs e)

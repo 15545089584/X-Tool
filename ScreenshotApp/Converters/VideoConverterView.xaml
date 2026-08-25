@@ -6,6 +6,36 @@
              DragOver="Root_DragOver">
     <UserControl.Resources>
         <SolidColorBrush x:Key="MutedBrush" Color="#75879B" />
+        <Style x:Key="GlassScrollBar" TargetType="ScrollBar">
+            <Setter Property="Width" Value="9" />
+            <Setter Property="Margin" Value="3,7,3,7" />
+            <Setter Property="Background" Value="#38D3E5F5" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Border Padding="2" Background="{TemplateBinding Background}" CornerRadius="5">
+                            <Track x:Name="PART_Track" IsDirectionReversed="True">
+                                <Track.DecreaseRepeatButton><RepeatButton Command="ScrollBar.PageUpCommand" Background="Transparent" BorderThickness="0" /></Track.DecreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb Background="#89A9C7E5" Cursor="Hand">
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Border x:Name="ThumbRoot" Background="{TemplateBinding Background}" CornerRadius="4" />
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ThumbRoot" Property="Background" Value="#C14D7CFE" /></Trigger>
+                                                    <Trigger Property="IsDragging" Value="True"><Setter TargetName="ThumbRoot" Property="Background" Value="#E54D7CFE" /></Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Track.Thumb>
+                                <Track.IncreaseRepeatButton><RepeatButton Command="ScrollBar.PageDownCommand" Background="Transparent" BorderThickness="0" /></Track.IncreaseRepeatButton>
+                            </Track>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style x:Key="GlassButton" TargetType="Button">
             <Setter Property="Height" Value="42" /><Setter Property="Padding" Value="18,0" /><Setter Property="Background" Value="#AFFFFFFF" /><Setter Property="BorderBrush" Value="#C9DDEEF8" /><Setter Property="BorderThickness" Value="1" /><Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="Root" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="11"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" /></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Background" Value="#D8FFFFFF" /></Trigger><Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.72" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter TargetName="Root" Property="Opacity" Value="0.45" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
@@ -19,7 +49,7 @@
         <Style x:Key="GlassTextBox" TargetType="TextBox"><Setter Property="Height" Value="44" /><Setter Property="Padding" Value="12,10" /><Setter Property="Background" Value="#BFFFFFFF" /><Setter Property="BorderBrush" Value="#ABCBE7F8" /><Setter Property="BorderThickness" Value="1" /><Setter Property="Foreground" Value="#405D78" /><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TextBox"><Border x:Name="TextRoot" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="11"><ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" /></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="TextRoot" Property="Background" Value="#EAF3FF" /></Trigger><Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="TextRoot" Property="BorderBrush" Value="#7EA8F7" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
         <Style x:Key="ModeRadio" TargetType="RadioButton">
             <Setter Property="Margin" Value="0,0,8,0" /><Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="RadioButton"><Border x:Name="Card" Padding="11,9" Background="#88FFFFFF" BorderBrush="#C9DDEEF8" BorderThickness="1" CornerRadius="10"><ContentPresenter HorizontalAlignment="Center" /></Border><ControlTemplate.Triggers><Trigger Property="IsChecked" Value="True"><Setter TargetName="Card" Property="Background" Value="#DCE9FF" /><Setter TargetName="Card" Property="BorderBrush" Value="#7EA8F7" /></Trigger><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Card" Property="Opacity" Value="0.82" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="RadioButton"><Border x:Name="Card" Padding="12,9" Background="#88FFFFFF" BorderBrush="#C9DDEEF8" BorderThickness="1" CornerRadius="10"><ContentPresenter HorizontalAlignment="Center" /></Border><ControlTemplate.Triggers><Trigger Property="IsChecked" Value="True"><Setter TargetName="Card" Property="Background" Value="#DCE9FF" /><Setter TargetName="Card" Property="BorderBrush" Value="#7EA8F7" /></Trigger><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Card" Property="Opacity" Value="0.82" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
         </Style>
         <Style x:Key="GlassProgress" TargetType="ProgressBar"><Setter Property="Height" Value="8" /><Setter Property="Background" Value="#DCEAF4FB" /><Setter Property="Foreground" Value="#5B86FF" /><Setter Property="BorderThickness" Value="0" /></Style>
         <Style x:Key="GlassExpander" TargetType="Expander"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Expander"><StackPanel><ToggleButton x:Name="HeaderButton" IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" Background="Transparent" BorderThickness="0" Cursor="Hand"><ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><Border x:Name="HeaderRoot" Padding="12,10" Background="#75F7FBFF" BorderBrush="#B8D8EAF8" BorderThickness="1" CornerRadius="11"><Grid><ContentPresenter VerticalAlignment="Center" /><TextBlock x:Name="Arrow" HorizontalAlignment="Right" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="13" Foreground="#5C7C9B" Text="&#xE70D;" /></Grid></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="HeaderRoot" Property="Background" Value="#C9ECF5FF" /></Trigger><Trigger Property="IsChecked" Value="True"><Setter TargetName="Arrow" Property="Text" Value="&#xE70E;" /><Setter TargetName="HeaderRoot" Property="Background" Value="#B8E7F1FF" /></Trigger></ControlTemplate.Triggers></ControlTemplate></ToggleButton.Template><ContentPresenter Content="{TemplateBinding Header}" /></ToggleButton><ContentPresenter x:Name="ExpandContent" Margin="0,8,0,0" ContentSource="Content" Visibility="Collapsed" /></StackPanel><ControlTemplate.Triggers><Trigger Property="IsExpanded" Value="True"><Setter TargetName="ExpandContent" Property="Visibility" Value="Visible" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
@@ -29,10 +59,10 @@
         <Grid.ColumnDefinitions><ColumnDefinition Width="1.08*" /><ColumnDefinition Width="20" /><ColumnDefinition Width="0.92*" /></Grid.ColumnDefinitions>
         <Grid>
             <Grid.RowDefinitions><RowDefinition Height="150" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-            <Border Padding="22" Background="#62F0F3FF" BorderBrush="#9BBFE1F3" BorderThickness="1.5" CornerRadius="17">
+            <Border Padding="22" Background="#66EEF5FF" BorderBrush="#8EBEDCF5" BorderThickness="1.5" CornerRadius="17">
                 <Grid>
                     <Grid.ColumnDefinitions><ColumnDefinition Width="64" /><ColumnDefinition Width="18" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                    <Border Width="64" Height="64" Background="#E7E0FF" CornerRadius="19"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="28" Foreground="#7B61D8" Text="&#xE714;" /></Border>
+                    <Border Width="64" Height="64" Background="#D9E8FF" CornerRadius="19"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="28" Foreground="#4D7CFE" Text="&#xE714;" /></Border>
                     <StackPanel Grid.Column="2" VerticalAlignment="Center">
                         <TextBlock FontSize="17" FontWeight="SemiBold" Text="拖入视频或点击添加" />
                         <TextBlock Margin="0,7,0,0" FontSize="11" Foreground="{StaticResource MutedBrush}" Text="MP4、MOV、MKV、AVI、WebM、FLV、WMV" />
@@ -48,58 +78,105 @@
                     <Grid Grid.Row="2" Margin="12,0"><Grid.ColumnDefinitions><ColumnDefinition Width="74" /><ColumnDefinition Width="1.75*" /><ColumnDefinition Width="0.85*" /><ColumnDefinition Width="0.7*" /><ColumnDefinition Width="0.8*" /><ColumnDefinition Width="0.75*" /><ColumnDefinition Width="0.8*" /><ColumnDefinition Width="0.75*" /></Grid.ColumnDefinitions><TextBlock Grid.Column="1" HorizontalAlignment="Left" FontSize="10" Foreground="{StaticResource MutedBrush}" Text="文件名" /><TextBlock Grid.Column="2" HorizontalAlignment="Center" FontSize="10" Foreground="{StaticResource MutedBrush}" Text="分辨率" /><TextBlock Grid.Column="3" HorizontalAlignment="Center" FontSize="10" Foreground="{StaticResource MutedBrush}" Text="FPS" /><TextBlock Grid.Column="4" HorizontalAlignment="Center" FontSize="10" Foreground="{StaticResource MutedBrush}" Text="编码" /><TextBlock Grid.Column="5" HorizontalAlignment="Center" FontSize="10" Foreground="{StaticResource MutedBrush}" Text="时长" /><TextBlock Grid.Column="6" HorizontalAlignment="Center" FontSize="10" Foreground="{StaticResource MutedBrush}" Text="大小" /><TextBlock Grid.Column="7" HorizontalAlignment="Center" FontSize="10" Foreground="{StaticResource MutedBrush}" Text="状态" /></Grid>
                     <ListBox x:Name="FileList" Grid.Row="4" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                         <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Margin" Value="0,0,0,8" /><Setter Property="Background" Value="Transparent" /></Style></ListBox.ItemContainerStyle>
-                        <ListBox.ItemTemplate><DataTemplate><Border Padding="12,11" Background="#79F4F9FF" BorderBrush="#A6D6E7F6" BorderThickness="1" CornerRadius="11"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="74" /><ColumnDefinition Width="1.75*" /><ColumnDefinition Width="0.85*" /><ColumnDefinition Width="0.7*" /><ColumnDefinition Width="0.8*" /><ColumnDefinition Width="0.75*" /><ColumnDefinition Width="0.8*" /><ColumnDefinition Width="0.75*" /></Grid.ColumnDefinitions><Border Width="30" Height="30" HorizontalAlignment="Left" VerticalAlignment="Top" Background="#E7E0FF" CornerRadius="9"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="15" Foreground="#7B61D8" Text="&#xE714;" /></Border><StackPanel Grid.Column="1" Margin="0,0,10,0"><TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#304A63" Text="{Binding FileName}" TextTrimming="CharacterEllipsis" /><TextBlock Margin="0,4,0,0" FontSize="9" Foreground="#71869B" Text="{Binding Format}" /></StackPanel><TextBlock Grid.Column="2" HorizontalAlignment="Center" VerticalAlignment="Top" FontSize="10" Foreground="#5279A4" Text="{Binding ResolutionDisplay}" /><TextBlock Grid.Column="3" HorizontalAlignment="Center" VerticalAlignment="Top" FontSize="10" Foreground="#5279A4" Text="{Binding FrameRateDisplay}" /><TextBlock Grid.Column="4" HorizontalAlignment="Center" VerticalAlignment="Top" FontSize="10" Foreground="#5279A4" Text="{Binding CodecDisplay}" TextTrimming="CharacterEllipsis" /><TextBlock Grid.Column="5" HorizontalAlignment="Center" VerticalAlignment="Top" FontSize="10" Foreground="#5279A4" Text="{Binding DurationDisplay}" /><TextBlock Grid.Column="6" HorizontalAlignment="Center" VerticalAlignment="Top" FontSize="10" Foreground="#5279A4" Text="{Binding FileSize}" /><TextBlock Grid.Column="7" HorizontalAlignment="Center" VerticalAlignment="Top" FontSize="10" FontWeight="SemiBold" Foreground="#7B61D8" Text="{Binding Status}" /><ProgressBar Grid.Column="1" Grid.ColumnSpan="7" Margin="0,31,4,0" Style="{StaticResource GlassProgress}" Maximum="100" Value="{Binding Progress}" /></Grid></Border></DataTemplate></ListBox.ItemTemplate>
+                        <ListBox.ItemTemplate><DataTemplate><Border Padding="12,11" Background="#79F4F9FF" BorderBrush="#A6D6E7F6" BorderThickness="1" CornerRadius="11"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="74" /><ColumnDefinition Width="1.75*" /><ColumnDefinition Width="0.85*" /><ColumnDefinition Width="0.7*" /><ColumnDefinition Width="0.8*" /><ColumnDefinition Width="0.75*" /><ColumnDefinition Width="0.8*" /><ColumnDefinition Width="0.75*" /></Grid.ColumnDefinitions><Border Width="30" Height="30" HorizontalAlignment="Left" VerticalAlignment="Top" Background="#DDEBFF" CornerRadius="9"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="15" Foreground="#4D7CFE" Text="&#xE714;" /></Border><StackPanel Grid.Column="1" Margin="0,0,10,0"><TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#304A63" Text="{Binding FileName}" TextTrimming="CharacterEllipsis" /><TextBlock Margin="0,4,0,0" FontSize="9" Foreground="#71869B" Text="{Binding Format}" /></StackPanel><TextBlock Grid.Column="2" HorizontalAlignment="Center" VerticalAlignment="Top" FontSize="10" Foreground="#5279A4" Text="{Binding ResolutionDisplay}" /><TextBlock Grid.Column="3" HorizontalAlignment="Center" VerticalAlignment="Top" FontSize="10" Foreground="#5279A4" Text="{Binding FrameRateDisplay}" /><TextBlock Grid.Column="4" HorizontalAlignment="Center" VerticalAlignment="Top" FontSize="10" Foreground="#5279A4" Text="{Binding CodecDisplay}" TextTrimming="CharacterEllipsis" /><TextBlock Grid.Column="5" HorizontalAlignment="Center" VerticalAlignment="Top" FontSize="10" Foreground="#5279A4" Text="{Binding DurationDisplay}" /><TextBlock Grid.Column="6" HorizontalAlignment="Center" VerticalAlignment="Top" FontSize="10" Foreground="#5279A4" Text="{Binding FileSize}" /><TextBlock Grid.Column="7" HorizontalAlignment="Center" VerticalAlignment="Top" FontSize="10" FontWeight="SemiBold" Foreground="#4D7CFE" Text="{Binding Status}" /><ProgressBar Grid.Column="1" Grid.ColumnSpan="7" Margin="0,31,4,0" Style="{StaticResource GlassProgress}" Maximum="100" Value="{Binding Progress}" /></Grid></Border></DataTemplate></ListBox.ItemTemplate>
                     </ListBox>
                 </Grid>
             </Border>
         </Grid>
 
         <Border Grid.Column="2" Padding="20" Background="#D8FFFFFF" BorderBrush="#E9FFFFFF" BorderThickness="1" CornerRadius="18">
-            <ScrollViewer VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="12" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="12" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="10" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
                 <Grid>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                    <Grid><TextBlock FontSize="17" FontWeight="SemiBold" Text="视频设置" /><TextBlock x:Name="EngineStatusText" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="10" Foreground="#6D8094" /></Grid>
-                    <Border Grid.Row="2" Padding="13" Background="#55EEF0FF" BorderBrush="#B7D5E9F7" BorderThickness="1" CornerRadius="12">
-                        <StackPanel>
-                            <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#526F8B" Text="处理方式" />
-                            <UniformGrid Margin="0,9,0,0" Rows="1" Columns="3">
-                                <RadioButton x:Name="ConvertModeRadio" GroupName="VideoMode" Style="{StaticResource ModeRadio}" Content="转换与压缩" IsChecked="True" Checked="Mode_Checked" />
-                                <RadioButton x:Name="ExtractModeRadio" GroupName="VideoMode" Style="{StaticResource ModeRadio}" Content="提取音频" Checked="Mode_Checked" />
-                                <RadioButton x:Name="GifModeRadio" GroupName="VideoMode" Style="{StaticResource ModeRadio}" Content="转 GIF" Checked="Mode_Checked" />
-                            </UniformGrid>
-                            <TextBlock x:Name="ModeHintText" Margin="0,9,0,0" FontSize="10" Foreground="#6D8297" TextWrapping="Wrap" />
-                        </StackPanel>
-                    </Border>
-                    <Border Grid.Row="4" Padding="13" Background="#55EEF0FF" BorderBrush="#B7D5E9F7" BorderThickness="1" CornerRadius="12">
-                        <Grid>
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="10" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                            <StackPanel><TextBlock FontSize="10" Foreground="{StaticResource MutedBrush}" Text="输出格式" /><ComboBox x:Name="OutputFormatCombo" Margin="0,5,0,0" Style="{StaticResource GlassCombo}" SelectedIndex="0" /></StackPanel>
-                            <StackPanel Grid.Column="2"><TextBlock FontSize="10" Foreground="{StaticResource MutedBrush}" Text="质量模式" /><ComboBox x:Name="QualityCombo" Margin="0,5,0,0" Style="{StaticResource GlassCombo}" SelectedIndex="1"><ComboBoxItem>高质量</ComboBoxItem><ComboBoxItem>标准</ComboBoxItem><ComboBoxItem>小文件</ComboBoxItem></ComboBox></StackPanel>
-                        </Grid>
-                    </Border>
-                    <Expander x:Name="VideoAdvancedExpander" Grid.Row="6" Style="{StaticResource GlassExpander}" IsExpanded="False"><Expander.Header><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#526F8B" Text="高级设置" /></Expander.Header><Border x:Name="VideoAdvancedCard" Margin="0,8,0,0" Padding="13" Background="#55EEF0FF" BorderBrush="#B7D5E9F7" BorderThickness="1" CornerRadius="12">
-                        <Grid>
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="10" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                            <StackPanel><TextBlock FontSize="10" Foreground="{StaticResource MutedBrush}" Text="输出宽度" /><ComboBox x:Name="WidthCombo" Margin="0,5,0,0" Style="{StaticResource GlassCombo}" SelectedIndex="0"><ComboBoxItem Tag="">保持原分辨率</ComboBoxItem><ComboBoxItem Tag="1920">1920</ComboBoxItem><ComboBoxItem Tag="1280">1280</ComboBoxItem><ComboBoxItem Tag="854">854</ComboBoxItem><ComboBoxItem Tag="640">640</ComboBoxItem></ComboBox></StackPanel>
-                            <StackPanel Grid.Column="2"><TextBlock FontSize="10" Foreground="{StaticResource MutedBrush}" Text="编码格式" /><ComboBox x:Name="CodecCombo" Margin="0,5,0,0" Style="{StaticResource GlassCombo}" SelectedIndex="0"><ComboBoxItem>H.264</ComboBoxItem><ComboBoxItem>H.265</ComboBoxItem><ComboBoxItem>AV1</ComboBoxItem></ComboBox></StackPanel>
-                            <StackPanel Grid.Row="2"><TextBlock FontSize="10" Foreground="{StaticResource MutedBrush}" Text="视频码率（kbps，可选）" /><TextBox x:Name="VideoBitRateText" Margin="0,5,0,0" Style="{StaticResource GlassTextBox}" /></StackPanel>
-                            <TextBlock Grid.Row="2" Grid.Column="2" Margin="0,20,0,0" VerticalAlignment="Center" FontSize="10" Foreground="#8495A7" Text="留空时按质量模式自动编码" TextWrapping="Wrap" />
-                        </Grid>
-                    </Border></Expander>
-                    <Border x:Name="GifSettingsCard" Grid.Row="8" Padding="13" Background="#55EEF0FF" BorderBrush="#B7D5E9F7" BorderThickness="1" CornerRadius="12" Visibility="Collapsed">
-                        <Grid>
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="8" /><ColumnDefinition Width="*" /><ColumnDefinition Width="8" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                            <StackPanel><TextBlock FontSize="10" Foreground="{StaticResource MutedBrush}" Text="开始时间" /><TextBox x:Name="GifStartText" Margin="0,5,0,0" Style="{StaticResource GlassTextBox}" Text="00:00:00" /></StackPanel>
-                            <StackPanel Grid.Column="2"><TextBlock FontSize="10" Foreground="{StaticResource MutedBrush}" Text="结束时间" /><TextBox x:Name="GifEndText" Margin="0,5,0,0" Style="{StaticResource GlassTextBox}" /></StackPanel>
-                            <StackPanel Grid.Column="4"><TextBlock FontSize="10" Foreground="{StaticResource MutedBrush}" Text="FPS" /><ComboBox x:Name="GifFpsCombo" Margin="0,5,0,0" Style="{StaticResource GlassCombo}" SelectedIndex="1"><ComboBoxItem Tag="10">10</ComboBoxItem><ComboBoxItem Tag="15">15</ComboBoxItem><ComboBoxItem Tag="24">24</ComboBoxItem></ComboBox></StackPanel>
-                        </Grid>
-                    </Border>
-                    <Border Grid.Row="10" Padding="13" Background="#55EEF0FF" BorderBrush="#B7D5E9F7" BorderThickness="1" CornerRadius="12"><Grid><StackPanel><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#526F8B" Text="输出位置" /><TextBlock x:Name="OutputFolderText" Margin="0,6,154,0" FontSize="10" Foreground="#6A8096" Text="请选择输出文件夹" TextTrimming="CharacterEllipsis" /></StackPanel><StackPanel HorizontalAlignment="Right" Orientation="Horizontal"><Button Width="64" Margin="0,0,7,0" Style="{StaticResource GlassButton}" Click="OpenOutput_Click" Content="打开" /><Button Width="72" Style="{StaticResource GlassButton}" Click="BrowseOutput_Click" Content="浏览" /></StackPanel></Grid></Border>
-                    <TextBlock x:Name="StatusText" Grid.Row="11" Margin="0,12,0,0" FontSize="11" Foreground="#5B7690" TextWrapping="Wrap" />
-                    <Grid Grid.Row="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="10" /><ColumnDefinition Width="*" /><ColumnDefinition Width="10" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><Button Style="{StaticResource GlassButton}" Click="Clear_Click" Content="清空列表" /><Button x:Name="CancelButton" Grid.Column="2" Style="{StaticResource GlassButton}" Click="Cancel_Click" Content="取消转换" IsEnabled="False" /><Button x:Name="StartButton" Grid.Column="4" Style="{StaticResource PrimaryButton}" Click="Start_Click" Content="开始转换" /></Grid>
+                    <TextBlock FontSize="17" FontWeight="SemiBold" Text="视频设置" />
+                    <TextBlock x:Name="EngineStatusText" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="10" Foreground="#6D8094" />
                 </Grid>
-            </ScrollViewer>
+
+                <ScrollViewer Grid.Row="2" Margin="0,0,-8,0" Padding="0,0,8,0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <ScrollViewer.Resources><Style TargetType="ScrollBar" BasedOn="{StaticResource GlassScrollBar}" /></ScrollViewer.Resources>
+                    <StackPanel>
+                        <Border Padding="13" Background="#55EAF3FF" BorderBrush="#ADD7EAF7" BorderThickness="1" CornerRadius="12">
+                            <StackPanel>
+                                <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#526F8B" Text="处理方式" />
+                                <UniformGrid Margin="0,9,0,0" Rows="1" Columns="3">
+                                    <RadioButton x:Name="ConvertModeRadio" GroupName="VideoMode" Style="{StaticResource ModeRadio}" Content="转换与压缩" IsChecked="True" Checked="Mode_Checked" />
+                                    <RadioButton x:Name="ExtractModeRadio" GroupName="VideoMode" Style="{StaticResource ModeRadio}" Content="提取音频" Checked="Mode_Checked" />
+                                    <RadioButton x:Name="GifModeRadio" GroupName="VideoMode" Style="{StaticResource ModeRadio}" Content="转 GIF" Checked="Mode_Checked" />
+                                </UniformGrid>
+                                <TextBlock x:Name="ModeHintText" Margin="0,9,0,0" FontSize="11" Foreground="#6D8297" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Margin="0,10,0,0" Padding="13" Background="#55EAF3FF" BorderBrush="#ADD7EAF7" BorderThickness="1" CornerRadius="12">
+                            <StackPanel>
+                                <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#526F8B" Text="输出格式" />
+                                <ComboBox x:Name="OutputFormatCombo" Margin="0,7,0,0" Style="{StaticResource GlassCombo}" SelectedIndex="0" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border x:Name="QualitySettingsCard" Margin="0,10,0,0" Padding="13" Background="#55EAF3FF" BorderBrush="#ADD7EAF7" BorderThickness="1" CornerRadius="12">
+                            <StackPanel>
+                                <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#526F8B" Text="质量模式" />
+                                <UniformGrid Margin="0,9,0,0" Rows="1" Columns="3">
+                                    <RadioButton x:Name="HighQualityRadio" GroupName="VideoQuality" Style="{StaticResource ModeRadio}" Content="高质量" Checked="QualityMode_Checked" />
+                                    <RadioButton x:Name="StandardQualityRadio" GroupName="VideoQuality" Style="{StaticResource ModeRadio}" Content="标准" IsChecked="True" Checked="QualityMode_Checked" />
+                                    <RadioButton x:Name="SmallQualityRadio" GroupName="VideoQuality" Style="{StaticResource ModeRadio}" Content="小文件" Checked="QualityMode_Checked" />
+                                </UniformGrid>
+                                <TextBlock x:Name="VideoQualityHintText" Margin="0,9,0,0" FontSize="11" Foreground="#6D8297" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+
+                        <Expander x:Name="VideoAdvancedExpander" Margin="0,10,0,0" Style="{StaticResource GlassExpander}" IsExpanded="False">
+                            <Expander.Header><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#526F8B" Text="高级设置" /></Expander.Header>
+                            <Border x:Name="VideoAdvancedCard" Margin="0,8,0,0" Padding="13" Background="#55EAF3FF" BorderBrush="#ADD7EAF7" BorderThickness="1" CornerRadius="12">
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="10" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="8" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                                    <StackPanel><TextBlock FontSize="10" Foreground="{StaticResource MutedBrush}" Text="输出宽度" /><ComboBox x:Name="WidthCombo" Margin="0,5,0,0" Style="{StaticResource GlassCombo}" SelectedIndex="0"><ComboBoxItem Tag="">保持原分辨率</ComboBoxItem><ComboBoxItem Tag="1920">1920</ComboBoxItem><ComboBoxItem Tag="1280">1280</ComboBoxItem><ComboBoxItem Tag="854">854</ComboBoxItem><ComboBoxItem Tag="640">640</ComboBoxItem></ComboBox></StackPanel>
+                                    <StackPanel Grid.Column="2"><TextBlock FontSize="10" Foreground="{StaticResource MutedBrush}" Text="编码格式" /><ComboBox x:Name="CodecCombo" Margin="0,5,0,0" Style="{StaticResource GlassCombo}" SelectedIndex="0"><ComboBoxItem>H.264</ComboBoxItem><ComboBoxItem>H.265</ComboBoxItem><ComboBoxItem>AV1</ComboBoxItem></ComboBox></StackPanel>
+                                    <StackPanel Grid.Row="2"><TextBlock FontSize="10" Foreground="{StaticResource MutedBrush}" Text="视频码率（kbps，可选）" /><TextBox x:Name="VideoBitRateText" Margin="0,5,0,0" Style="{StaticResource GlassTextBox}" /></StackPanel>
+                                    <TextBlock Grid.Row="2" Grid.Column="2" Margin="0,20,0,0" VerticalAlignment="Center" FontSize="10" Foreground="#8495A7" Text="留空时按质量模式自动编码" TextWrapping="Wrap" />
+                                </Grid>
+                            </Border>
+                        </Expander>
+
+                        <Border x:Name="GifSettingsCard" Margin="0,10,0,0" Padding="13" Background="#55EAF3FF" BorderBrush="#ADD7EAF7" BorderThickness="1" CornerRadius="12" Visibility="Collapsed">
+                            <StackPanel>
+                                <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#526F8B" Text="GIF 范围与帧率" />
+                                <Grid Margin="0,9,0,0">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="8" /><ColumnDefinition Width="*" /><ColumnDefinition Width="8" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                    <StackPanel><TextBlock FontSize="10" Foreground="{StaticResource MutedBrush}" Text="开始时间" /><TextBox x:Name="GifStartText" Margin="0,5,0,0" Style="{StaticResource GlassTextBox}" Text="00:00:00" /></StackPanel>
+                                    <StackPanel Grid.Column="2"><TextBlock FontSize="10" Foreground="{StaticResource MutedBrush}" Text="结束时间" /><TextBox x:Name="GifEndText" Margin="0,5,0,0" Style="{StaticResource GlassTextBox}" /></StackPanel>
+                                    <StackPanel Grid.Column="4"><TextBlock FontSize="10" Foreground="{StaticResource MutedBrush}" Text="FPS" /><ComboBox x:Name="GifFpsCombo" Margin="0,5,0,0" Style="{StaticResource GlassCombo}" SelectedIndex="1"><ComboBoxItem Tag="10">10</ComboBoxItem><ComboBoxItem Tag="15">15</ComboBoxItem><ComboBoxItem Tag="24">24</ComboBoxItem></ComboBox></StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Margin="0,10,0,0" Padding="13" Background="#55EAF3FF" BorderBrush="#ADD7EAF7" BorderThickness="1" CornerRadius="12">
+                            <Grid>
+                                <StackPanel><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#526F8B" Text="输出位置" /><TextBlock x:Name="OutputFolderText" Margin="0,6,154,0" FontSize="10" Foreground="#6A8096" Text="请选择输出文件夹" TextTrimming="CharacterEllipsis" /></StackPanel>
+                                <StackPanel HorizontalAlignment="Right" Orientation="Horizontal"><Button Width="64" Margin="0,0,7,0" Style="{StaticResource GlassButton}" Click="OpenOutput_Click" Content="打开" /><Button Width="72" Style="{StaticResource GlassButton}" Click="BrowseOutput_Click" Content="浏览" /></StackPanel>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <TextBlock x:Name="StatusText" Grid.Row="4" FontSize="11" Foreground="#5B7690" TextWrapping="Wrap" />
+                <Grid Grid.Row="6">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="10" /><ColumnDefinition Width="*" /><ColumnDefinition Width="10" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                    <Button Style="{StaticResource GlassButton}" Click="Clear_Click" Content="清空列表" />
+                    <Button x:Name="CancelButton" Grid.Column="2" Style="{StaticResource GlassButton}" Click="Cancel_Click" Content="取消转换" IsEnabled="False" />
+                    <Button x:Name="StartButton" Grid.Column="4" Style="{StaticResource PrimaryButton}" Click="Start_Click"><TextBlock FontWeight="SemiBold" Foreground="White" Text="开始转换" /></Button>
+                </Grid>
+            </Grid>
         </Border>
     </Grid>
 </UserControl>

@@ -12,12 +12,256 @@ using ScreenshotApp.FileWorkbench;
 using ScreenshotApp.Ocr;
 using ScreenshotApp.Translation;
 using ScreenshotApp.Converters;
+using ScreenshotApp.StorageAnalysis;
+using ScreenshotApp.NetworkWorkbench;
+using ScreenshotApp.SystemTools;
+using ScreenshotApp.DesktopPet;
+using Microsoft.Data.Sqlite;
 
 const int Width = 720;
 const int FrameHeight = 520;
 const int ContentHeight = 4200;
 
 var failures = new List<string>();
+
+if (args.Length >= 1 && args[0] == "--sqlite-smoke")
+{
+    var tempDatabase = Path.Combine(Path.GetTempPath(), "XTool-Sqlite-" + Guid.NewGuid().ToString("N") + ".db");
+    try
+    {
+        string sqliteVersion;
+        using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = tempDatabase }.ToString()))
+        {
+            connection.Open();
+            using (var versionCommand = connection.CreateCommand())
+            {
+                versionCommand.CommandText = "SELECT sqlite_version();";
+                sqliteVersion = versionCommand.ExecuteScalar()?.ToString() ?? string.Empty;
+            }
+
+            using var transaction = connection.BeginTransaction();
+            using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = @"CREATE TABLE migration_probe (
+                    id INTEGER PRIMARY KEY,
+                    value TEXT NOT NULL);
+                INSERT INTO migration_probe (value) VALUES ($value);";
+            command.Parameters.AddWithValue("$value", "X-Tool · 中文 SQLite 回归");
+            command.ExecuteNonQuery();
+            transaction.Commit();
+        }
+
+        using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+               {
+                   DataSource = tempDatabase,
+                   Mode = SqliteOpenMode.ReadOnly
+               }.ToString()))
+        {
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT value FROM migration_probe WHERE id = 1;";
+            if (!string.Equals(command.ExecuteScalar()?.ToString(), "X-Tool · 中文 SQLite 回归", StringComparison.Ordinal))
+            {
+                Console.WriteLine("SQLite 回归 | 失败 | 临时数据库读写结果不一致");
+                return 5;
+            }
+        }
+
+        var existingDatabases = new[]
+        {
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "X-Tool", "System", "disk-history.db"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "X-Tool", "Network", "network-history.db")
+        };
+        var checkedDatabases = 0;
+        foreach (var databasePath in existingDatabases.Where(File.Exists))
+        {
+            using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+            {
+                DataSource = databasePath,
+                Mode = SqliteOpenMode.ReadOnly,
+                Cache = SqliteCacheMode.Private
+            }.ToString());
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = "PRAGMA quick_check;";
+            var result = command.ExecuteScalar()?.ToString();
+            if (!string.Equals(result, "ok", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.WriteLine($"SQLite 回归 | 失败 | {databasePath} | quick_check={result}");
+                return 6;
+            }
+            checkedDatabases++;
+        }
+
+        await DiskHistoryStore.EnsureTodaySnapshotAsync();
+        var diskHistory = await DiskHistoryStore.LoadHistoryAsync("C:", 7);
+        await using var networkHistoryStore = new NetworkHistoryStore();
+        var retentionDays = await networkHistoryStore.GetRetentionDaysAsync();
+        var networkEvents = await networkHistoryStore.GetEventsAsync(1);
+
+        var secureVersion = Version.TryParse(sqliteVersion, out var parsedVersion)
+                            && parsedVersion >= new Version(3, 50, 2);
+        Console.WriteLine($"SQLite 回归 | {(secureVersion ? "通过" : "失败")} | SQLite {sqliteVersion} | " +
+                          $"临时库读写通过 | 既有数据库检查 {checkedDatabases} | " +
+                          $"磁盘历史 {diskHistory.Count} | 网络保留 {retentionDays} 天 | 网络事件样本 {networkEvents.Count}");
+        return secureVersion ? 0 : 7;
+    }
+    finally
+    {
+        try { File.Delete(tempDatabase); } catch { }
+    }
+}
+
+if (args.Length >= 1 && args[0] == "--storage-analysis")
+{
+    var root = args.Length >= 2 ? Path.GetPathRoot(args[1]) ?? args[1] : "C:\\";
+    var drive = new DriveInfo(root);
+    var target = new StorageAnalysisTarget(root, drive.VolumeLabel, drive.TotalSize, drive.AvailableFreeSpace);
+    var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+    var result = StorageAnalysisService.Analyze(target, StorageAnalysisService.DefaultLargeFileLimit,
+        progress: null, CancellationToken.None, forceRefresh: true);
+    stopwatch.Stop();
+    var usedBytes = Math.Max(1, drive.TotalSize - drive.AvailableFreeSpace);
+    Console.WriteLine($"存储分析 | 来源 {result.SourceText} | {stopwatch.Elapsed.TotalSeconds:F2} 秒 | " +
+                      $"文件 {result.FilesScanned:N0} | 目录 {result.DirectoriesScanned:N0} | " +
+                      $"逻辑大小 {result.ScannedBytes:N0} | 已用覆盖 {result.ScannedBytes / (double)usedBytes:P1} | " +
+                      $"分组 {result.DirectoryUsages.Count} | 大文件 {result.LargeFiles.Count}");
+    foreach (var usage in result.DirectoryUsages.Take(8))
+        Console.WriteLine($"  {usage.Name} | {usage.SizeText} | 文件 {usage.FilesScanned:N0} | 目录 {usage.DirectoriesScanned:N0}");
+    return result.FilesScanned > 0 && result.DirectoryUsages.Count > 0 && result.LargeFiles.Count > 0 ? 0 : 3;
+}
+
+if (args.Length >= 1 && args[0] == "--desktop-pet-smoke")
+{
+    var assetRoot = args.Length >= 2
+        ? Path.GetFullPath(args[1])
+        : Path.Combine(AppContext.BaseDirectory, "assets", "desktop-pet");
+    try
+    {
+        var catalog = DesktopPetAnimationCatalog.Load(assetRoot);
+        var expectedFrameCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["state-01"] = 80,
+            ["state-02"] = 107,
+            ["state-03"] = 107,
+            ["state-04"] = 22,
+            ["state-05"] = 40,
+            ["state-06"] = 43
+        };
+        var manifestPassed = catalog.CanvasWidth == 512 && catalog.CanvasHeight == 512 &&
+                             catalog.Anchor == new DesktopPetAnchor(256, 508) &&
+                             catalog.States.Count == expectedFrameCounts.Count &&
+                             catalog.States.All(state =>
+                                 expectedFrameCounts.TryGetValue(state.Id, out var expectedCount) &&
+                                 state.FramePaths.Count == expectedCount && state.Fps == 20 && state.Loop);
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        var process = System.Diagnostics.Process.GetCurrentProcess();
+        process.Refresh();
+        var memoryBefore = process.PrivateMemorySize64;
+
+        var framePassed = true;
+        var playbackPassed = true;
+        var stateMetrics = new List<string>();
+        long largestDecodedBytes = 0;
+        foreach (var state in catalog.States)
+        {
+            var loadWatch = System.Diagnostics.Stopwatch.StartNew();
+            var frames = DesktopPetAnimationPlayer.LoadFrames(
+                state, catalog.DisplaySize, CancellationToken.None);
+            loadWatch.Stop();
+            var decodedBytes = DesktopPetAnimationPlayer.CalculateDecodedBytes(frames);
+            largestDecodedBytes = Math.Max(largestDecodedBytes, decodedBytes);
+            framePassed &= frames.Count == expectedFrameCounts[state.Id] &&
+                           frames.All(frame => frame.IsFrozen &&
+                                               frame.PixelWidth == catalog.DisplaySize &&
+                                               frame.PixelHeight == catalog.DisplaySize);
+            playbackPassed &=
+                DesktopPetPlaybackMath.GetFrameIndex(TimeSpan.Zero, state.Fps, frames.Count, state.Loop) == 0 &&
+                DesktopPetPlaybackMath.GetFrameIndex(
+                    TimeSpan.FromMilliseconds(1000d / state.Fps - 1), state.Fps, frames.Count, state.Loop) == 0 &&
+                DesktopPetPlaybackMath.GetFrameIndex(
+                    TimeSpan.FromMilliseconds(1000d / state.Fps), state.Fps, frames.Count, state.Loop) == 1 &&
+                DesktopPetPlaybackMath.GetFrameIndex(
+                    TimeSpan.FromMilliseconds(state.DurationMs), state.Fps, frames.Count, state.Loop) == 0;
+            stateMetrics.Add(
+                $"{state.Id} {frames.Count} 帧 / {decodedBytes / 1024d / 1024d:F2} MiB / {loadWatch.Elapsed.TotalMilliseconds:F0} ms");
+        }
+
+        process.Refresh();
+        var memoryAfterAllStates = process.PrivateMemorySize64;
+
+        var workArea = new Rect(0, 0, 1920, 1040);
+        var right = DesktopPetPlacement.SnapToNearestEdge(new Rect(1600, 300, 288, 288), workArea, 12);
+        var bottom = DesktopPetPlacement.SnapToNearestEdge(new Rect(800, 720, 288, 288), workArea, 12);
+        var secondaryArea = new Rect(-1920, 0, 1920, 1040);
+        var secondaryLeft = DesktopPetPlacement.SnapToNearestEdge(
+            new Rect(-1880, 280, 288, 288), secondaryArea, 12);
+        var placementPassed = right == new System.Windows.Point(1620, 300) &&
+                              bottom == new System.Windows.Point(800, 740) &&
+                              secondaryLeft == new System.Windows.Point(-1908, 280);
+
+        var smallSize = catalog.DisplaySize * 0.6;
+        var largeSize = catalog.DisplaySize * 1.6;
+        var scalePlacementPassed =
+            DesktopPetPlacement.SnapToNearestEdge(new Rect(1700, 400, smallSize, smallSize), workArea, 12).X ==
+            workArea.Right - smallSize - 12 &&
+            DesktopPetPlacement.SnapToNearestEdge(new Rect(1500, 400, largeSize, largeSize), workArea, 12).X ==
+            workArea.Right - largeSize - 12;
+
+        var passed = manifestPassed && framePassed && playbackPassed && placementPassed && scalePlacementPassed;
+        Console.WriteLine($"桌面宠物清单 | {(manifestPassed ? "通过" : "失败")} | " +
+                          $"共 {catalog.States.Count} 个状态 | " +
+                          $"锚点 ({catalog.Anchor.X}, {catalog.Anchor.Y})");
+        Console.WriteLine($"桌面宠物帧解码 | {(framePassed ? "通过" : "失败")} | " +
+                          string.Join(" | ", stateMetrics));
+        Console.WriteLine($"桌面宠物时序与贴边 | {(playbackPassed && placementPassed ? "通过" : "失败")} | " +
+                          $"20 FPS 循环边界 {(playbackPassed ? "正确" : "错误")} | " +
+                          $"主副屏工作区贴边 {(placementPassed ? "正确" : "错误")} | " +
+                          $"60%/160% 尺寸贴边 {(scalePlacementPassed ? "正确" : "错误")}");
+        Console.WriteLine($"桌面宠物进程私有内存 | 基线 {memoryBefore / 1024d / 1024d:F1} MiB | " +
+                          $"六状态依次解码后 {memoryAfterAllStates / 1024d / 1024d:F1} MiB | " +
+                          $"单状态最大解码量 {largestDecodedBytes / 1024d / 1024d:F2} MiB");
+        return passed ? 0 : 8;
+    }
+    catch (Exception exception)
+    {
+        Console.Error.WriteLine($"桌面宠物回归失败：{exception}");
+        return 9;
+    }
+}
+
+if (args.Length >= 1 && args[0] == "--storage-analysis-native-smoke")
+{
+    var root = Path.Combine(Path.GetTempPath(), "XTool-StorageAnalysis-" + Guid.NewGuid().ToString("N"));
+    try
+    {
+        Directory.CreateDirectory(Path.Combine(root, "Alpha", "Nested"));
+        Directory.CreateDirectory(Path.Combine(root, "Beta"));
+        File.WriteAllBytes(Path.Combine(root, "Alpha", "large.bin"), new byte[8192]);
+        File.WriteAllBytes(Path.Combine(root, "Alpha", "Nested", "small.bin"), new byte[1024]);
+        File.WriteAllBytes(Path.Combine(root, "Beta", "medium.bin"), new byte[4096]);
+        File.WriteAllBytes(Path.Combine(root, "root.bin"), new byte[512]);
+        var target = new StorageAnalysisTarget(root, "原生扫描回归", 20_000, 6_176);
+        var first = StorageAnalysisService.Analyze(target, 100, null, CancellationToken.None,
+            forceRefresh: true, allowEverything: false);
+        var cached = StorageAnalysisService.Analyze(target, 100, null, CancellationToken.None,
+            forceRefresh: false, allowEverything: false);
+        var alpha = first.DirectoryUsages.Single(item => item.Name == "Alpha");
+        var passed = first.SourceText == "优化原生扫描" && first.FilesScanned == 4 &&
+                     first.ScannedBytes == 13_824 && alpha.LogicalBytes == 9_216 &&
+                     first.LargeFiles.First().Size == 8_192 && cached.IsCached;
+        Console.WriteLine($"原生存储扫描 | {(passed ? "通过" : "失败")} | 文件 {first.FilesScanned} | " +
+                          $"总量 {first.ScannedBytes} | Alpha {alpha.LogicalBytes} | 缓存 {cached.IsCached}");
+        return passed ? 0 : 4;
+    }
+    finally
+    {
+        try { Directory.Delete(root, recursive: true); } catch { }
+    }
+}
 
 if (args.Length == 4 && args[0] == "--pair")
 {

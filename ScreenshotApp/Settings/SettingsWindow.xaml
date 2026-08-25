@@ -1,0 +1,358 @@
+<Window x:Class="ScreenshotApp.Settings.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:primitives="clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework"
+        Title="X-Tool 设置" Width="1120" Height="700"
+        MinWidth="900" MinHeight="590" MaxWidth="1220" MaxHeight="760"
+        WindowStartupLocation="CenterOwner" WindowStyle="None" ResizeMode="NoResize"
+        ShowInTaskbar="False" AllowsTransparency="True" Background="Transparent"
+        PreviewKeyDown="Window_PreviewKeyDown">
+    <Window.Resources>
+        <Style x:Key="CategoryNavStyle" TargetType="RadioButton">
+            <Setter Property="Height" Value="52" />
+            <Setter Property="Margin" Value="0,0,0,7" />
+            <Setter Property="Padding" Value="14,0" />
+            <Setter Property="Foreground" Value="#4E647A" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Root" Background="Transparent" BorderBrush="Transparent" BorderThickness="1" CornerRadius="13">
+                            <ContentPresenter Margin="{TemplateBinding Padding}" VerticalAlignment="Center"
+                                              TextElement.Foreground="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="#58FFFFFF" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="#D94D7CFE" />
+                                <Setter TargetName="Root" Property="BorderBrush" Value="#727EA6FF" />
+                                <Setter Property="Foreground" Value="White" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="CategoryNavTextStyle" TargetType="TextBlock">
+            <Setter Property="Foreground"
+                    Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type RadioButton}}}" />
+        </Style>
+
+        <Style x:Key="SettingCardStyle" TargetType="Border">
+            <Setter Property="Background" Value="#79FFFFFF" />
+            <Setter Property="BorderBrush" Value="#9CFFFFFF" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="14" />
+            <Setter Property="Margin" Value="0,0,0,10" />
+            <Setter Property="Effect">
+                <Setter.Value><DropShadowEffect BlurRadius="13" ShadowDepth="2" Direction="270" Opacity="0.07" Color="#3F607D" /></Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SettingToggleStyle" TargetType="CheckBox">
+            <Setter Property="Width" Value="48" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Border x:Name="Track" Padding="3" Background="#82DCE4EE" BorderBrush="#9FC6D4E3" BorderThickness="1" CornerRadius="14">
+                            <Ellipse x:Name="Thumb" Width="20" Height="20" HorizontalAlignment="Left" Fill="#F8FCFF">
+                                <Ellipse.Effect><DropShadowEffect BlurRadius="5" ShadowDepth="1" Opacity="0.18" Color="#36506A" /></Ellipse.Effect>
+                            </Ellipse>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Track" Property="Background" Value="#5E82C8FF" />
+                                <Setter TargetName="Track" Property="BorderBrush" Value="#9C58A8FF" />
+                                <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Track" Property="Opacity" Value="0.82" /></Trigger>
+                            <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Track" Property="Opacity" Value="0.58" /></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="GlassButtonStyle" TargetType="Button">
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Padding" Value="14,0" />
+            <Setter Property="Background" Value="#8FFFFFFF" />
+            <Setter Property="BorderBrush" Value="#ABD4E7F6" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="#43617E" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Background" Value="#D6EDF7FF" /></Trigger>
+                            <Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.70" /></Trigger>
+                            <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Root" Property="Opacity" Value="0.48" /></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SettingsCloseButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="38" />
+            <Setter Property="Height" Value="38" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="#72FFFFFF" />
+            <Setter Property="BorderBrush" Value="#82C8DCEC" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="#536C83" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="12">
+                            <Grid Width="14" Height="14" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Path Data="M 2,2 L 12,12 M 12,2 L 2,12"
+                                      Stroke="{TemplateBinding Foreground}" StrokeThickness="1.7"
+                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="#D6EDF6FD" />
+                                <Setter TargetName="Root" Property="BorderBrush" Value="#95AACCE6" />
+                                <Setter Property="Foreground" Value="#294A68" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Root" Property="Opacity" Value="0.68" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SettingsScrollThumbStyle" TargetType="primitives:Thumb">
+            <Setter Property="MinHeight" Value="38" />
+            <Setter Property="Margin" Value="2,1" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="primitives:Thumb">
+                        <Border x:Name="ThumbBody" Background="#7197BFE0" CornerRadius="4" />
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ThumbBody" Property="Background" Value="#A06E9FD0" />
+                            </Trigger>
+                            <Trigger Property="IsDragging" Value="True">
+                                <Setter TargetName="ThumbBody" Property="Background" Value="#C0588FC7" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ScrollBar">
+            <Setter Property="Width" Value="10" />
+            <Setter Property="Margin" Value="3,2,0,2" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Grid Width="10" Background="Transparent">
+                            <Border Width="6" HorizontalAlignment="Center" Background="#268AA8C1" CornerRadius="3" />
+                            <primitives:Track x:Name="PART_Track" IsDirectionReversed="True">
+                                <primitives:Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="{x:Static ScrollBar.PageUpCommand}"
+                                                  Background="Transparent" BorderThickness="0" Opacity="0" />
+                                </primitives:Track.DecreaseRepeatButton>
+                                <primitives:Track.Thumb>
+                                    <primitives:Thumb Style="{StaticResource SettingsScrollThumbStyle}" />
+                                </primitives:Track.Thumb>
+                                <primitives:Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="{x:Static ScrollBar.PageDownCommand}"
+                                                  Background="Transparent" BorderThickness="0" Opacity="0" />
+                                </primitives:Track.IncreaseRepeatButton>
+                            </primitives:Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ShortcutValueButtonStyle" TargetType="Button" BasedOn="{StaticResource GlassButtonStyle}">
+            <Setter Property="MinWidth" Value="164" />
+            <Setter Property="Height" Value="40" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="#315B86" />
+        </Style>
+
+        <Style x:Key="PetScaleSliderStyle" TargetType="Slider">
+            <Setter Property="Height" Value="42" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Slider">
+                        <Grid Height="24" VerticalAlignment="Center">
+                            <Border Height="6" VerticalAlignment="Center" Background="#D9E5EFF8" BorderBrush="#B8D2E6F4" BorderThickness="1" CornerRadius="3" />
+                            <primitives:Track x:Name="PART_Track" VerticalAlignment="Center">
+                                <primitives:Track.DecreaseRepeatButton><RepeatButton IsTabStop="False" Background="Transparent" BorderThickness="0" Opacity="0" /></primitives:Track.DecreaseRepeatButton>
+                                <primitives:Track.Thumb><primitives:Thumb Width="19" Height="19"><primitives:Thumb.Template><ControlTemplate TargetType="primitives:Thumb"><Border Background="#F9FCFF" BorderBrush="#77A7D6FF" BorderThickness="2" CornerRadius="10"><Border.Effect><DropShadowEffect BlurRadius="8" ShadowDepth="1" Opacity="0.18" Color="#416D9B" /></Border.Effect></Border></ControlTemplate></primitives:Thumb.Template></primitives:Thumb></primitives:Track.Thumb>
+                                <primitives:Track.IncreaseRepeatButton><RepeatButton IsTabStop="False" Background="Transparent" BorderThickness="0" Opacity="0" /></primitives:Track.IncreaseRepeatButton>
+                            </primitives:Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Border Margin="14" Background="#EAF4F9FD" BorderBrush="#B6DCECF8" BorderThickness="1" CornerRadius="24">
+        <Border.Effect><DropShadowEffect BlurRadius="34" ShadowDepth="8" Direction="270" Opacity="0.28" Color="#29445D" /></Border.Effect>
+        <Grid ClipToBounds="True">
+            <Grid IsHitTestVisible="False">
+                <Ellipse Width="440" Height="440" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-220,-250,0,0" Fill="#557EAFFF"><Ellipse.Effect><BlurEffect Radius="70" /></Ellipse.Effect></Ellipse>
+                <Ellipse Width="380" Height="380" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-150,-220" Fill="#4C79E5CE"><Ellipse.Effect><BlurEffect Radius="70" /></Ellipse.Effect></Ellipse>
+            </Grid>
+
+            <Grid Margin="26">
+                <Grid.RowDefinitions><RowDefinition Height="66" /><RowDefinition Height="*" /><RowDefinition Height="34" /></Grid.RowDefinitions>
+                <Grid MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock FontSize="25" FontWeight="SemiBold" Foreground="#23384D" Text="设置" />
+                        <TextBlock Margin="0,4,0,0" FontSize="11" Foreground="#70869B" Text="按类别管理 X-Tool 的常用行为" />
+                    </StackPanel>
+                    <Button HorizontalAlignment="Right" VerticalAlignment="Center"
+                            Style="{StaticResource SettingsCloseButtonStyle}"
+                            ToolTip="关闭设置" AutomationProperties.Name="关闭设置"
+                            Click="CloseButton_Click" />
+                </Grid>
+
+                <Grid Grid.Row="1">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="214" /><ColumnDefinition Width="18" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                    <Border Padding="12" Background="#62FFFFFF" BorderBrush="#87FFFFFF" BorderThickness="1" CornerRadius="18">
+                        <StackPanel>
+                            <RadioButton x:Name="GeneralCategoryNav" GroupName="SettingsCategories" Tag="General" IsChecked="True" Style="{StaticResource CategoryNavStyle}" Checked="CategoryNav_Checked"><StackPanel Orientation="Horizontal"><TextBlock Width="25" FontFamily="Segoe Fluent Icons" FontSize="16" Style="{StaticResource CategoryNavTextStyle}" Text="&#xE713;" /><TextBlock FontSize="14" Style="{StaticResource CategoryNavTextStyle}" Text="通用" /></StackPanel></RadioButton>
+                            <RadioButton x:Name="ScreenshotCategoryNav" GroupName="SettingsCategories" Tag="Screenshot" Style="{StaticResource CategoryNavStyle}" Checked="CategoryNav_Checked"><StackPanel Orientation="Horizontal"><TextBlock Width="25" FontFamily="Segoe Fluent Icons" FontSize="16" Style="{StaticResource CategoryNavTextStyle}" Text="&#xE7F4;" /><TextBlock FontSize="14" Style="{StaticResource CategoryNavTextStyle}" Text="截图" /></StackPanel></RadioButton>
+                            <RadioButton x:Name="ShortcutCategoryNav" GroupName="SettingsCategories" Tag="Shortcut" Style="{StaticResource CategoryNavStyle}" Checked="CategoryNav_Checked"><StackPanel Orientation="Horizontal"><TextBlock Width="25" FontFamily="Segoe Fluent Icons" FontSize="16" Style="{StaticResource CategoryNavTextStyle}" Text="&#xE765;" /><TextBlock FontSize="14" Style="{StaticResource CategoryNavTextStyle}" Text="快捷键" /></StackPanel></RadioButton>
+                            <RadioButton x:Name="DesktopPetCategoryNav" GroupName="SettingsCategories" Tag="DesktopPet" Style="{StaticResource CategoryNavStyle}" Checked="CategoryNav_Checked"><StackPanel Orientation="Horizontal"><TextBlock Width="25" FontFamily="Segoe Fluent Icons" FontSize="16" Style="{StaticResource CategoryNavTextStyle}" Text="&#xE74C;" /><TextBlock FontSize="14" Style="{StaticResource CategoryNavTextStyle}" Text="桌面宠物" /></StackPanel></RadioButton>
+                            <RadioButton x:Name="ReadWriteCategoryNav" GroupName="SettingsCategories" Tag="ReadWrite" Style="{StaticResource CategoryNavStyle}" Checked="CategoryNav_Checked"><StackPanel Orientation="Horizontal"><TextBlock Width="25" FontFamily="Segoe Fluent Icons" FontSize="16" Style="{StaticResource CategoryNavTextStyle}" Text="&#xE8C1;" /><TextBlock FontSize="14" Style="{StaticResource CategoryNavTextStyle}" Text="读写" /></StackPanel></RadioButton>
+                            <RadioButton x:Name="NetworkTrafficCategoryNav" GroupName="SettingsCategories" Tag="NetworkTraffic" Style="{StaticResource CategoryNavStyle}" Checked="CategoryNav_Checked"><StackPanel Orientation="Horizontal"><TextBlock Width="25" FontFamily="Segoe Fluent Icons" FontSize="16" Style="{StaticResource CategoryNavTextStyle}" Text="&#xE968;" /><TextBlock FontSize="14" Style="{StaticResource CategoryNavTextStyle}" Text="网络流量自动获取" /></StackPanel></RadioButton>
+                            <RadioButton x:Name="ConnectionCategoryNav" GroupName="SettingsCategories" Tag="Connection" Style="{StaticResource CategoryNavStyle}" Checked="CategoryNav_Checked"><StackPanel Orientation="Horizontal"><TextBlock Width="25" FontFamily="Segoe Fluent Icons" FontSize="16" Style="{StaticResource CategoryNavTextStyle}" Text="&#xE753;" /><TextBlock FontSize="14" Style="{StaticResource CategoryNavTextStyle}" Text="连接" /></StackPanel></RadioButton>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Column="2" Padding="24,20" Background="#72FFFFFF" BorderBrush="#96FFFFFF" BorderThickness="1" CornerRadius="18">
+                        <Grid>
+                            <Grid.RowDefinitions><RowDefinition Height="62" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                            <StackPanel>
+                                <TextBlock x:Name="CategoryTitleText" FontSize="21" FontWeight="SemiBold" Foreground="#29445F" Text="通用设置" />
+                                <TextBlock x:Name="CategoryDescriptionText" Margin="0,5,0,0" FontSize="11" Foreground="#74899E" Text="管理应用启动与基础行为" />
+                            </StackPanel>
+
+                            <Grid Grid.Row="1">
+                                <ScrollViewer x:Name="GeneralSettingsPanel" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                    <StackPanel Margin="0,2,8,0">
+                                        <Border Style="{StaticResource SettingCardStyle}"><Grid Height="82" Margin="20,0"><StackPanel VerticalAlignment="Center"><TextBlock FontSize="15" Foreground="#304A63" Text="开机自启动" /><TextBlock Margin="0,5,0,0" FontSize="11" Foreground="#74899E" Text="登录当前 Windows 账户后自动启动 X-Tool" /></StackPanel><CheckBox x:Name="StartWithWindowsCheckBox" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource SettingToggleStyle}" Click="StartWithWindowsCheckBox_Click" /></Grid></Border>
+                                    </StackPanel>
+                                </ScrollViewer>
+
+                                <ScrollViewer x:Name="ScreenshotSettingsPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                    <StackPanel Margin="0,2,8,0">
+                                        <Border Style="{StaticResource SettingCardStyle}"><Grid Height="76" Margin="20,0"><StackPanel VerticalAlignment="Center"><TextBlock FontSize="15" Foreground="#304A63" Text="截图后自动复制" /><TextBlock Margin="0,5,0,0" FontSize="11" Foreground="#74899E" Text="完成截图后写入系统剪贴板；当前截图流程固定启用" /></StackPanel><CheckBox HorizontalAlignment="Right" VerticalAlignment="Center" IsChecked="True" IsEnabled="False" Style="{StaticResource SettingToggleStyle}" /></Grid></Border>
+                                        <Border Style="{StaticResource SettingCardStyle}"><Grid Height="70" Margin="20,0"><StackPanel VerticalAlignment="Center"><TextBlock FontSize="15" Foreground="#304A63" Text="保存截图历史" /><TextBlock Margin="0,5,0,0" FontSize="11" Foreground="#74899E" Text="保存截图与长截图，供历史记录和剪贴板工作台使用" /></StackPanel><CheckBox HorizontalAlignment="Right" VerticalAlignment="Center" IsChecked="True" IsEnabled="False" Style="{StaticResource SettingToggleStyle}" /></Grid></Border>
+                                        <Border Style="{StaticResource SettingCardStyle}"><Grid Height="76" Margin="20,0"><StackPanel VerticalAlignment="Center"><TextBlock FontSize="15" Foreground="#304A63" Text="贴图默认置顶" /><TextBlock Margin="0,5,0,0" FontSize="11" Foreground="#74899E" Text="创建贴图后始终显示在其他窗口上方" /></StackPanel><CheckBox x:Name="StickerTopmostCheckBox" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource SettingToggleStyle}" Click="StickerTopmostCheckBox_Click" /></Grid></Border>
+                                        <TextBlock Margin="2,10,0,10" FontSize="14" FontWeight="SemiBold" Foreground="#3A5671" Text="存储位置" />
+                                        <Border Style="{StaticResource SettingCardStyle}" Padding="16,8">
+                                            <StackPanel>
+                                                <Grid Height="48"><Grid.ColumnDefinitions><ColumnDefinition Width="80" /><ColumnDefinition Width="*" /><ColumnDefinition Width="98" /></Grid.ColumnDefinitions><TextBlock VerticalAlignment="Center" Foreground="#3D566E" Text="截图" /><TextBlock x:Name="ScreenshotStoragePathText" Grid.Column="1" Margin="4,0,12,0" VerticalAlignment="Center" FontSize="11" Foreground="#74899E" TextTrimming="CharacterEllipsis" /><Button Grid.Column="2" Style="{StaticResource GlassButtonStyle}" Content="选择文件夹" Tag="截图" Click="StorageLocationButton_Click" /></Grid>
+                                                <Border Height="1" Background="#55FFFFFF" />
+                                                <Grid Height="48"><Grid.ColumnDefinitions><ColumnDefinition Width="80" /><ColumnDefinition Width="*" /><ColumnDefinition Width="98" /></Grid.ColumnDefinitions><TextBlock VerticalAlignment="Center" Foreground="#3D566E" Text="长截图" /><TextBlock x:Name="LongScreenshotStoragePathText" Grid.Column="1" Margin="4,0,12,0" VerticalAlignment="Center" FontSize="11" Foreground="#74899E" TextTrimming="CharacterEllipsis" /><Button Grid.Column="2" Style="{StaticResource GlassButtonStyle}" Content="选择文件夹" Tag="长截图" Click="StorageLocationButton_Click" /></Grid>
+                                                <Border Height="1" Background="#55FFFFFF" />
+                                                <Grid Height="48"><Grid.ColumnDefinitions><ColumnDefinition Width="80" /><ColumnDefinition Width="*" /><ColumnDefinition Width="98" /></Grid.ColumnDefinitions><TextBlock VerticalAlignment="Center" Foreground="#3D566E" Text="文字提取" /><TextBlock x:Name="TextExtractionStoragePathText" Grid.Column="1" Margin="4,0,12,0" VerticalAlignment="Center" FontSize="11" Foreground="#74899E" TextTrimming="CharacterEllipsis" /><Button Grid.Column="2" Style="{StaticResource GlassButtonStyle}" Content="选择文件夹" Tag="文字提取" Click="StorageLocationButton_Click" /></Grid>
+                                                <Border Height="1" Background="#55FFFFFF" />
+                                                <Grid Height="48"><Grid.ColumnDefinitions><ColumnDefinition Width="80" /><ColumnDefinition Width="*" /><ColumnDefinition Width="98" /></Grid.ColumnDefinitions><TextBlock VerticalAlignment="Center" Foreground="#3D566E" Text="翻译" /><TextBlock x:Name="TranslationStoragePathText" Grid.Column="1" Margin="4,0,12,0" VerticalAlignment="Center" FontSize="11" Foreground="#74899E" TextTrimming="CharacterEllipsis" /><Button Grid.Column="2" Style="{StaticResource GlassButtonStyle}" Content="选择文件夹" Tag="翻译" Click="StorageLocationButton_Click" /></Grid>
+                                                <Border Height="1" Background="#55FFFFFF" />
+                                                <Grid Height="48"><Grid.ColumnDefinitions><ColumnDefinition Width="80" /><ColumnDefinition Width="*" /><ColumnDefinition Width="98" /></Grid.ColumnDefinitions><TextBlock VerticalAlignment="Center" Foreground="#3D566E" Text="屏幕录制" /><TextBlock x:Name="RecordingStoragePathText" Grid.Column="1" Margin="4,0,12,0" VerticalAlignment="Center" FontSize="11" Foreground="#74899E" TextTrimming="CharacterEllipsis" /><Button Grid.Column="2" Style="{StaticResource GlassButtonStyle}" Content="选择文件夹" Tag="屏幕录制" Click="StorageLocationButton_Click" /></Grid>
+                                                <Border Height="1" Background="#55FFFFFF" />
+                                                <Grid Height="48"><Grid.ColumnDefinitions><ColumnDefinition Width="80" /><ColumnDefinition Width="*" /><ColumnDefinition Width="98" /></Grid.ColumnDefinitions><TextBlock VerticalAlignment="Center" Foreground="#3D566E" Text="外部复制" /><TextBlock x:Name="ClipboardStoragePathText" Grid.Column="1" Margin="4,0,12,0" VerticalAlignment="Center" FontSize="11" Foreground="#74899E" TextTrimming="CharacterEllipsis" /><Button Grid.Column="2" Style="{StaticResource GlassButtonStyle}" Content="选择文件夹" Tag="外部复制" Click="StorageLocationButton_Click" /></Grid>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </ScrollViewer>
+
+                                <ScrollViewer x:Name="ShortcutSettingsPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                    <StackPanel Margin="0,2,8,0">
+                                        <Border Style="{StaticResource SettingCardStyle}" Padding="4,6"><StackPanel>
+                                            <Grid Height="72" Margin="20,0"><TextBlock VerticalAlignment="Center" FontSize="15" Foreground="#304A63" Text="区域截图" /><Button x:Name="ScreenshotShortcutButton" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource ShortcutValueButtonStyle}" Tag="Screenshot" Click="ShortcutButton_Click" PreviewKeyDown="ShortcutButton_PreviewKeyDown" /></Grid>
+                                            <Border Height="1" Background="#55FFFFFF" />
+                                            <Grid Height="72" Margin="20,0"><StackPanel VerticalAlignment="Center"><TextBlock FontSize="15" Foreground="#304A63" Text="全屏截图" /><TextBlock Margin="0,4,0,0" FontSize="10" Foreground="#74899E" Text="直接截取鼠标所在屏幕" /></StackPanel><Button x:Name="FullScreenShortcutButton" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource ShortcutValueButtonStyle}" Tag="FullScreen" Click="ShortcutButton_Click" PreviewKeyDown="ShortcutButton_PreviewKeyDown" /></Grid>
+                                            <Border Height="1" Background="#55FFFFFF" />
+                                            <Grid Height="72" Margin="20,0"><TextBlock VerticalAlignment="Center" FontSize="15" Foreground="#304A63" Text="剪贴板选择粘贴" /><Button x:Name="ClipboardShortcutButton" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource ShortcutValueButtonStyle}" Tag="Clipboard" Click="ShortcutButton_Click" PreviewKeyDown="ShortcutButton_PreviewKeyDown" /></Grid>
+                                            <Border Height="1" Background="#55FFFFFF" />
+                                            <Grid Height="72" Margin="20,0"><TextBlock VerticalAlignment="Center" FontSize="15" Foreground="#304A63" Text="本地语音输入" /><Button x:Name="VoiceShortcutButton" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource ShortcutValueButtonStyle}" Tag="Voice" Click="ShortcutButton_Click" PreviewKeyDown="ShortcutButton_PreviewKeyDown" /></Grid>
+                                        </StackPanel></Border>
+                                        <TextBlock x:Name="ShortcutStatusText" Margin="4,8,4,0" FontSize="11" Foreground="#5E819F" TextWrapping="Wrap" Text="点击右侧键位后直接按下新快捷键；按 Esc 可取消修改。" />
+                                    </StackPanel>
+                                </ScrollViewer>
+
+                                <ScrollViewer x:Name="DesktopPetSettingsPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                    <StackPanel Margin="0,2,8,0">
+                                        <Border Style="{StaticResource SettingCardStyle}"><Grid Height="82" Margin="20,0"><StackPanel VerticalAlignment="Center"><TextBlock FontSize="15" Foreground="#304A63" Text="显示桌面宠物" /><TextBlock Margin="0,5,0,0" FontSize="11" Foreground="#74899E" Text="控制桌面宠物是否显示；关闭后下次启动仍保持隐藏" /></StackPanel><CheckBox x:Name="DesktopPetVisibleCheckBox" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource SettingToggleStyle}" Click="DesktopPetVisibleCheckBox_Click" /></Grid></Border>
+                                        <Border Style="{StaticResource SettingCardStyle}"><Grid Height="92" Margin="20,0"><StackPanel VerticalAlignment="Center"><TextBlock FontSize="15" Foreground="#304A63" Text="宠物接管文件通知" /><TextBlock Margin="0,5,64,0" FontSize="11" Foreground="#74899E" TextWrapping="Wrap" Text="宠物显示时用头顶彩虹气泡替代文件传输系统通知；隐藏宠物后自动恢复 Windows 通知" /></StackPanel><CheckBox x:Name="DesktopPetTransferNotificationsCheckBox" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource SettingToggleStyle}" Click="DesktopPetTransferNotificationsCheckBox_Click" /></Grid></Border>
+                                        <Border Style="{StaticResource SettingCardStyle}" Padding="22,20">
+                                            <StackPanel>
+                                                <Grid><StackPanel><TextBlock FontSize="16" Foreground="#304A63" Text="桌面宠物大小" /><TextBlock Margin="0,5,0,0" FontSize="11" Foreground="#74899E" Text="调整后立即生效，并保持角色底部锚点与屏幕贴边位置" /></StackPanel><TextBlock x:Name="DesktopPetScaleValueText" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" Foreground="#4D7CFE" Text="100% · 288 DIP" /></Grid>
+                                                <Grid Margin="0,26,0,0"><TextBlock FontSize="11" Foreground="#7890A6" Text="较小 60%" /><TextBlock HorizontalAlignment="Right" FontSize="11" Foreground="#7890A6" Text="较大 160%" /></Grid>
+                                                <Slider x:Name="DesktopPetScaleSlider" Margin="0,5,0,0" Style="{StaticResource PetScaleSliderStyle}" Minimum="60" Maximum="160" Value="100" TickFrequency="5" IsSnapToTickEnabled="True" ValueChanged="DesktopPetScaleSlider_ValueChanged" />
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </ScrollViewer>
+
+                                <ScrollViewer x:Name="ReadWriteSettingsPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                    <StackPanel Margin="0,2,8,0">
+                                        <Border Style="{StaticResource SettingCardStyle}"><Grid Height="92" Margin="20,0"><StackPanel VerticalAlignment="Center"><TextBlock FontSize="15" Foreground="#304A63" Text="本地语音输入" /><TextBlock Margin="0,5,0,0" FontSize="11" Foreground="#74899E" Text="默认右 Alt 唤起；全屏程序建议改用组合键" /><TextBlock x:Name="VoiceInputModelStatusText" Margin="0,4,0,0" FontSize="10" Foreground="#5E819F" /></StackPanel><CheckBox x:Name="VoiceInputEnabledCheckBox" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource SettingToggleStyle}" Click="VoiceInputEnabledCheckBox_Click" /></Grid></Border>
+                                        <Border Style="{StaticResource SettingCardStyle}"><Grid Height="78" Margin="20,0"><StackPanel VerticalAlignment="Center"><TextBlock FontSize="15" Foreground="#304A63" Text="识别后自动粘贴" /><TextBlock Margin="0,5,0,0" FontSize="11" Foreground="#74899E" Text="关闭后仅复制识别结果到系统剪贴板" /></StackPanel><CheckBox x:Name="VoiceInputPasteAutomaticallyCheckBox" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource SettingToggleStyle}" Click="VoiceInputPasteAutomaticallyCheckBox_Click" /></Grid></Border>
+                                    </StackPanel>
+                                </ScrollViewer>
+
+                                <ScrollViewer x:Name="NetworkTrafficSettingsPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                    <StackPanel Margin="0,2,8,0">
+                                        <Border Style="{StaticResource SettingCardStyle}" Padding="22,20"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="178" /></Grid.ColumnDefinitions><StackPanel><TextBlock FontSize="16" Foreground="#304A63" Text="网络流量自动获取" /><TextBlock Margin="0,7,20,0" FontSize="11" Foreground="#74899E" TextWrapping="Wrap" Text="一次授权后注册独立 ETW 辅助任务；主程序仍保持普通权限。撤销授权后将不再随 X-Tool 自动启动辅助进程。" /><TextBlock x:Name="NetworkEtwAuthorizationStatusText" Margin="0,10,20,0" FontSize="11" Foreground="#5E819F" TextWrapping="Wrap" Text="正在检查授权状态…" /></StackPanel><Button x:Name="NetworkEtwAuthorizationButton" Grid.Column="1" Height="38" VerticalAlignment="Center" Style="{StaticResource GlassButtonStyle}" Content="授权并自动获取" Click="NetworkEtwAuthorizationButton_Click" /></Grid></Border>
+                                    </StackPanel>
+                                </ScrollViewer>
+
+                                <ScrollViewer x:Name="ConnectionSettingsPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                    <StackPanel Margin="0,2,8,0">
+                                        <Border Style="{StaticResource SettingCardStyle}"><Grid Height="88" Margin="20,0"><StackPanel VerticalAlignment="Center"><TextBlock FontSize="15" Foreground="#304A63" Text="连接一次后自动连接" /><TextBlock Margin="0,5,0,0" FontSize="11" Foreground="#74899E" Text="已信任手机与电脑处于同一局域网时，自动发现电脑的新地址并恢复安全会话" /></StackPanel><CheckBox x:Name="CollaborationAutoReconnectCheckBox" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource SettingToggleStyle}" Click="CollaborationAutoReconnectCheckBox_Click" /></Grid></Border>
+                                        <TextBlock Margin="2,12,0,10" FontSize="14" FontWeight="SemiBold" Foreground="#3A5671" Text="文件传输位置" />
+                                        <Border Style="{StaticResource SettingCardStyle}" Padding="16,8">
+                                            <StackPanel>
+                                                <Grid Height="56"><Grid.ColumnDefinitions><ColumnDefinition Width="86" /><ColumnDefinition Width="*" /><ColumnDefinition Width="98" /></Grid.ColumnDefinitions><StackPanel VerticalAlignment="Center"><TextBlock Foreground="#3D566E" Text="手机接收" /><TextBlock Margin="0,3,0,0" FontSize="9" Foreground="#8295A7" Text="电脑收到" /></StackPanel><TextBlock x:Name="CollaborationIncomingPathText" Grid.Column="1" Margin="4,0,12,0" VerticalAlignment="Center" FontSize="11" Foreground="#74899E" TextTrimming="CharacterEllipsis" /><Button Grid.Column="2" Style="{StaticResource GlassButtonStyle}" Content="选择文件夹" Tag="协作接收" Click="StorageLocationButton_Click" /></Grid>
+                                                <Border Height="1" Background="#55FFFFFF" />
+                                                <Grid Height="56"><Grid.ColumnDefinitions><ColumnDefinition Width="86" /><ColumnDefinition Width="*" /><ColumnDefinition Width="98" /></Grid.ColumnDefinitions><StackPanel VerticalAlignment="Center"><TextBlock Foreground="#3D566E" Text="电脑发送" /><TextBlock Margin="0,3,0,0" FontSize="9" Foreground="#8295A7" Text="一次性队列" /></StackPanel><TextBlock x:Name="CollaborationOutgoingPathText" Grid.Column="1" Margin="4,0,12,0" VerticalAlignment="Center" FontSize="11" Foreground="#74899E" TextTrimming="CharacterEllipsis" /><Button Grid.Column="2" Style="{StaticResource GlassButtonStyle}" Content="选择文件夹" Tag="协作发送" Click="StorageLocationButton_Click" /></Grid>
+                                            </StackPanel>
+                                        </Border>
+                                        <Border Margin="0,12,0,0" Padding="18,15" Background="#72EEF7FF" BorderBrush="#83CDE2F4" BorderThickness="1" CornerRadius="14"><StackPanel><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#405E78" Text="自动连接的安全边界" /><TextBlock Margin="0,6,0,0" FontSize="11" Foreground="#71879B" TextWrapping="Wrap" Text="局域网发现广播不包含配对令牌。只有曾扫码配对并保存有效令牌的手机才能恢复连接；关闭本选项不会删除已保存的信任关系。" /></StackPanel></Border>
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </Grid>
+                        </Grid>
+                    </Border>
+                </Grid>
+
+                <Grid Grid.Row="2">
+                    <TextBlock x:Name="FooterStatusText" VerticalAlignment="Bottom" FontSize="10" Foreground="#71879B" Text="设置修改后立即保存到本机" />
+                    <TextBlock HorizontalAlignment="Right" VerticalAlignment="Bottom" FontSize="10" Foreground="#8A9AAB" Text="Esc 关闭" />
+                </Grid>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

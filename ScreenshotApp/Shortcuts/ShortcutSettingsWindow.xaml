@@ -1,7 +1,7 @@
 <Window x:Class="ScreenshotApp.Shortcuts.ShortcutSettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="快捷键设置" Width="620" Height="520" WindowStartupLocation="CenterOwner"
+        Title="快捷键设置" Width="620" Height="590" WindowStartupLocation="CenterOwner"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent">
     <Window.Resources>
         <Style x:Key="GlassButton" TargetType="Button">
@@ -89,6 +89,15 @@
                         <TextBlock VerticalAlignment="Center" FontSize="15" Foreground="#3E5B76" Text="截图" />
                         <Button x:Name="ScreenshotShortcutButton" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource ShortcutValueButtonStyle}"
                                 Click="ShortcutButton_Click" PreviewKeyDown="ShortcutButton_PreviewKeyDown" Tag="Screenshot" />
+                    </Grid>
+                    <Border Height="1" Background="#55FFFFFF" />
+                    <Grid Height="72" Margin="22,0">
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock FontSize="15" Foreground="#3E5B76" Text="全屏截图" />
+                            <TextBlock Margin="0,4,0,0" FontSize="10" Foreground="#7890A6" Text="直接截取鼠标所在屏幕，无需框选" />
+                        </StackPanel>
+                        <Button x:Name="FullScreenShortcutButton" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource ShortcutValueButtonStyle}"
+                                Click="ShortcutButton_Click" PreviewKeyDown="ShortcutButton_PreviewKeyDown" Tag="FullScreen" />
                     </Grid>
                     <Border Height="1" Background="#55FFFFFF" />
                     <Grid Height="72" Margin="22,0">

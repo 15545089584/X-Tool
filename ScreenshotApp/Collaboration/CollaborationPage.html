@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>X-Tool 临时文件传输</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; padding: 22px 16px; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #29445f; background: linear-gradient(155deg, #eaf4ff, #f8fbfe 56%, #e7faf5); }
+  main { width: min(620px, 100%); margin: 0 auto; }
+  header { display: flex; align-items: center; gap: 12px; margin: 8px 2px 20px; }
+  .mark { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 16px; color: white; font-size: 25px; font-weight: 700; background: linear-gradient(135deg, #4d7cfe, #70a2ff); box-shadow: 0 10px 28px rgba(77,124,254,.25); }
+  h1 { margin: 0; font-size: 22px; }
+  .subtitle, .tip, .meta { color: #74899e; font-size: 12px; }
+  .subtitle { margin-top: 4px; }
+  .status { margin-left: auto; display: flex; align-items: center; gap: 7px; font-size: 12px; color: #74899e; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: #e16370; box-shadow: 0 0 0 5px rgba(225,99,112,.11); }
+  .dot.on { background: #20b58b; box-shadow: 0 0 0 5px rgba(32,181,139,.11); }
+  .card { margin-bottom: 14px; padding: 18px; border: 1px solid rgba(163,203,229,.72); border-radius: 22px; background: rgba(255,255,255,.76); box-shadow: 0 14px 36px rgba(52,83,111,.10); backdrop-filter: blur(18px); }
+  h2 { margin: 0 0 7px; font-size: 16px; }
+  input[type=file] { width: 100%; margin: 14px 0 10px; padding: 12px; border: 1px dashed #9ec7e4; border-radius: 14px; background: rgba(239,247,253,.75); color: #48647e; }
+  button, a.action { min-height: 42px; border: 1px solid #a4cbe5; border-radius: 13px; padding: 0 16px; background: rgba(255,255,255,.82); color: #34536f; font-size: 13px; font-weight: 600; text-decoration: none; cursor: pointer; }
+  a.action { display: inline-flex; align-items: center; }
+  button.primary { width: 100%; border-color: #6f98ff; color: white; background: #4d7cfe; }
+  button:disabled { opacity: .55; }
+  .progress-shell { display: none; height: 7px; margin-top: 13px; overflow: hidden; border-radius: 999px; background: #dceaf4; }
+  .progress { width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #4d7cfe, #22b89a); transition: width .12s linear; }
+  .file { display: flex; align-items: center; gap: 12px; min-height: 58px; padding: 10px 0; border-bottom: 1px solid rgba(184,211,230,.55); }
+  .file:last-child { border-bottom: 0; }
+  .file-info { min-width: 0; flex: 1; }
+  .name { overflow: hidden; font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+  .empty { padding: 18px 0 4px; text-align: center; color: #8195a8; font-size: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="mark">↔</div>
+    <div><h1>X-Tool 文件协作</h1><div class="subtitle">浏览器临时传输入口</div></div>
+    <div class="status"><span class="dot" id="dot"></span><span id="statusText">正在连接</span></div>
+  </header>
+
+  <section class="card">
+    <h2>发送到电脑</h2>
+    <div class="tip">支持多选；文件会保存到电脑端“连接”设置指定的接收目录。</div>
+    <input type="file" id="fileInput" multiple>
+    <button class="primary" id="uploadButton" onclick="uploadFiles()">开始发送</button>
+    <div class="progress-shell" id="progressShell"><div class="progress" id="progress"></div></div>
+    <div class="tip" id="uploadTip"></div>
+  </section>
+
+  <section class="card">
+    <h2>电脑发来的文件</h2>
+    <div class="tip">下载完成后，电脑端一次性发送队列会自动移除对应副本。</div>
+    <div id="fileList"><div class="empty">正在读取文件列表…</div></div>
+  </section>
+</main>
+
+<script>
+const TOKEN = '__TOKEN__';
+const HOST = '__HOST__';
+const byId = id => document.getElementById(id);
+const apiUrl = (path, query = {}) => {
+  const url = new URL(HOST + path);
+  url.searchParams.set('t', TOKEN);
+  Object.entries(query).forEach(([key, value]) => url.searchParams.set(key, value));
+  return url.toString();
+};
+const sizeText = bytes => bytes >= 1073741824 ? `${(bytes / 1073741824).toFixed(2)} GB` : bytes >= 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : bytes >= 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${bytes} B`;
+
+async function refreshStatus() {
+  try {
+    const response = await fetch(apiUrl('/api/status'), { cache: 'no-store' });
+    if (!response.ok) throw new Error();
+    byId('dot').classList.add('on');
+    byId('statusText').textContent = '已连接';
+  } catch {
+    byId('dot').classList.remove('on');
+    byId('statusText').textContent = '连接中断';
+  }
+}
+
+function uploadOne(file, id) {
+  return new Promise(resolve => {
+    const request = new XMLHttpRequest();
+    request.open('PUT', apiUrl('/api/files/upload', { name: file.name, id }));
+    request.upload.onprogress = event => {
+      if (!event.lengthComputable) return;
+      byId('progress').style.width = `${Math.round(event.loaded * 100 / event.total)}%`;
+      byId('uploadTip').textContent = `正在发送 ${file.name} · ${sizeText(event.loaded)} / ${sizeText(event.total)}`;
+    };
+    request.onload = () => resolve(request.status >= 200 && request.status < 300);
+    request.onerror = () => resolve(false);
+    request.send(file);
+  });
+}
+
+async function uploadFiles() {
+  const files = Array.from(byId('fileInput').files || []);
+  if (!files.length) { byId('uploadTip').textContent = '请先选择文件'; return; }
+  byId('uploadButton').disabled = true;
+  byId('progressShell').style.display = 'block';
+  let completed = 0;
+  for (let index = 0; index < files.length; index++) {
+    byId('progress').style.width = '0';
+    const ok = await uploadOne(files[index], `${Date.now()}-${index}`);
+    if (ok) completed++;
+  }
+  byId('progress').style.width = '100%';
+  byId('uploadTip').textContent = `发送完成：${completed}/${files.length} 个文件`;
+  byId('uploadButton').disabled = false;
+}
+
+async function loadFiles() {
+  const list = byId('fileList');
+  try {
+    const response = await fetch(apiUrl('/api/files/list', { dir: 'outgoing' }), { cache: 'no-store' });
+    if (!response.ok) throw new Error();
+    const data = await response.json();
+    list.replaceChildren();
+    if (!data.files?.length) {
+      const empty = document.createElement('div');
+      empty.className = 'empty';
+      empty.textContent = '电脑端尚未发送文件';
+      list.appendChild(empty);
+      return;
+    }
+    data.files.forEach((file, index) => {
+      const row = document.createElement('div');
+      row.className = 'file';
+      const info = document.createElement('div');
+      info.className = 'file-info';
+      const name = document.createElement('div');
+      name.className = 'name';
+      name.textContent = file.name;
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      meta.textContent = sizeText(file.size);
+      const link = document.createElement('a');
+      link.className = 'action';
+      link.textContent = '下载';
+      link.href = apiUrl('/api/files/download', { dir: 'outgoing', name: file.name, id: file.id || `web-${Date.now()}-${index}` });
+      info.append(name, meta);
+      row.append(info, link);
+      list.appendChild(row);
+    });
+  } catch {
+    list.innerHTML = '<div class="empty">文件列表读取失败，请检查局域网连接</div>';
+  }
+}
+
+refreshStatus();
+loadFiles();
+setInterval(refreshStatus, 2500);
+setInterval(loadFiles, 5000);
+</script>
+</body>
+</html>

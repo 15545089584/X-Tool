@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using ScreenshotApp.Motion;
 using ScreenshotApp.SystemTools;
 
 namespace ScreenshotApp.DeveloperTools;
@@ -29,6 +30,7 @@ public partial class DeveloperToolsView : UserControl
     private ToolchainSummary? _configurationToolchain;
     private ToolchainEnvironmentPlan? _configurationPlan;
     private bool _isApplyingEnvironment;
+    private readonly MotionPageGroup _tabMotion;
 
     public DeveloperToolsView()
     {
@@ -44,6 +46,7 @@ public partial class DeveloperToolsView : UserControl
         ManagedHistoricalPythonReleasesItemsControl.ItemsSource = _managedHistoricalPythonReleases;
         ManagedNodeReleasesItemsControl.ItemsSource = _managedNodeReleases;
         ManagedInstallRootText.Text = $"托管目录：{_managedToolchainService.ManagedRoot}";
+        _tabMotion = new MotionPageGroup(OverviewView, OverviewView, ToolchainsView, ManagedInstallView, DiagnosticsView);
     }
 
     private void DeveloperToolsView_Unloaded(object sender, RoutedEventArgs e)
@@ -154,10 +157,14 @@ public partial class DeveloperToolsView : UserControl
         }
 
         var tab = radioButton.Tag?.ToString() ?? "Overview";
-        OverviewView.Visibility = tab == "Overview" ? Visibility.Visible : Visibility.Collapsed;
-        ToolchainsView.Visibility = tab == "Toolchains" ? Visibility.Visible : Visibility.Collapsed;
-        ManagedInstallView.Visibility = tab == "Managed" ? Visibility.Visible : Visibility.Collapsed;
-        DiagnosticsView.Visibility = tab == "Diagnostics" ? Visibility.Visible : Visibility.Collapsed;
+        FrameworkElement target = tab switch
+        {
+            "Toolchains" => ToolchainsView,
+            "Managed" => ManagedInstallView,
+            "Diagnostics" => DiagnosticsView,
+            _ => OverviewView
+        };
+        _tabMotion.Show(target);
         if (tab == "Managed" && _managedReleases.Count == 0 && _managedHistoricalReleases.Count == 0 && _managedPythonReleases.Count == 0 &&
             _managedHistoricalPythonReleases.Count == 0 &&
             _managedNodeReleases.Count == 0 && _managedCatalogCancellation is null)

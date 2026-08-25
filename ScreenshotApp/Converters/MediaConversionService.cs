@@ -66,8 +66,8 @@ internal sealed class MediaConversionService
 
     public MediaConversionService()
     {
-        _ffmpegPath = FindExecutable("ffmpeg.exe");
-        _ffprobePath = FindExecutable("ffprobe.exe");
+        _ffmpegPath = FindExecutablePath("ffmpeg.exe");
+        _ffprobePath = FindExecutablePath("ffprobe.exe");
     }
 
     public bool IsAvailable => _ffmpegPath is not null && _ffprobePath is not null;
@@ -389,7 +389,7 @@ internal sealed class MediaConversionService
         return info;
     }
 
-    private static string? FindExecutable(string fileName)
+    internal static string? FindExecutablePath(string fileName)
     {
         var baseDirectory = AppContext.BaseDirectory;
         var candidates = new[]

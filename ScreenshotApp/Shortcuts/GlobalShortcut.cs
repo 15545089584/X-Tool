@@ -3,9 +3,15 @@ using System.Windows.Input;
 namespace ScreenshotApp.Shortcuts;
 
 /// <summary>可持久化的全局快捷键描述与 Windows 热键参数转换。</summary>
-internal readonly record struct GlobalShortcut(Key Key, ModifierKeys Modifiers, bool IsRightAlt = false)
+internal readonly record struct GlobalShortcut(
+    Key Key,
+    ModifierKeys Modifiers,
+    bool IsRightAlt = false,
+    bool IsRightCtrl = false)
 {
     internal static GlobalShortcut ScreenshotDefault => new(Key.A, ModifierKeys.Control | ModifierKeys.Shift);
+
+    internal static GlobalShortcut FullScreenDefault => new(Key.RightCtrl, ModifierKeys.None, IsRightCtrl: true);
 
     internal static GlobalShortcut ClipboardDefault => new(Key.V, ModifierKeys.Control | ModifierKeys.Shift);
 
@@ -13,7 +19,9 @@ internal readonly record struct GlobalShortcut(Key Key, ModifierKeys Modifiers, 
 
     internal string DisplayText => IsRightAlt
         ? "右 Alt"
-        : string.Join(" + ", GetModifierNames().Append(GetKeyName()));
+        : IsRightCtrl
+            ? "右 Ctrl"
+            : string.Join(" + ", GetModifierNames().Append(GetKeyName()));
 
     internal uint NativeModifiers
     {
@@ -31,7 +39,7 @@ internal readonly record struct GlobalShortcut(Key Key, ModifierKeys Modifiers, 
     internal uint VirtualKey => (uint)KeyInterop.VirtualKeyFromKey(Key);
 
     internal bool IsSupportedGlobalCombination =>
-        !IsRightAlt &&
+        !IsRightAlt && !IsRightCtrl &&
         Key != Key.None &&
         !IsModifierKey(Key) &&
         !Modifiers.HasFlag(ModifierKeys.Windows);
@@ -44,7 +52,9 @@ internal readonly record struct GlobalShortcut(Key Key, ModifierKeys Modifiers, 
     internal static GlobalShortcut FromKey(Key key, ModifierKeys modifiers) =>
         key == Key.RightAlt && modifiers == ModifierKeys.None
             ? VoiceDefault
-            : new GlobalShortcut(key, modifiers);
+            : key == Key.RightCtrl && modifiers == ModifierKeys.Control
+                ? FullScreenDefault
+                : new GlobalShortcut(key, modifiers);
 
     internal static bool TryParse(string? value, GlobalShortcut fallback, out GlobalShortcut shortcut)
     {
@@ -52,6 +62,12 @@ internal readonly record struct GlobalShortcut(Key Key, ModifierKeys Modifiers, 
         if (string.Equals(value, "RightAlt", StringComparison.OrdinalIgnoreCase))
         {
             shortcut = VoiceDefault;
+            return true;
+        }
+
+        if (string.Equals(value, "RightCtrl", StringComparison.OrdinalIgnoreCase))
+        {
+            shortcut = FullScreenDefault;
             return true;
         }
 
@@ -92,7 +108,9 @@ internal readonly record struct GlobalShortcut(Key Key, ModifierKeys Modifiers, 
 
     internal string ToPreferenceValue() => IsRightAlt
         ? "RightAlt"
-        : string.Join("+", GetModifierNames().Append(Key.ToString()));
+        : IsRightCtrl
+            ? "RightCtrl"
+            : string.Join("+", GetModifierNames().Append(Key.ToString()));
 
     private IEnumerable<string> GetModifierNames()
     {

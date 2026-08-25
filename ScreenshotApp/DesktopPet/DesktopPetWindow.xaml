@@ -1,0 +1,31 @@
+<Window x:Class="ScreenshotApp.DesktopPet.DesktopPetWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="X-Tool 桌面宠物"
+        Width="288" Height="288"
+        AllowsTransparency="True" Background="Transparent"
+        WindowStyle="None" ResizeMode="NoResize"
+        ShowInTaskbar="False" ShowActivated="False" Topmost="True"
+        WindowStartupLocation="Manual">
+    <Grid x:Name="PetSurface" Background="Transparent"
+          AllowDrop="True"
+          MouseLeftButtonDown="PetSurface_MouseLeftButtonDown"
+          DragEnter="PetSurface_DragEnter"
+          DragOver="PetSurface_DragOver"
+          DragLeave="PetSurface_DragLeave"
+          Drop="PetSurface_Drop">
+        <Grid.ContextMenu>
+            <ContextMenu>
+                <MenuItem x:Name="AnimationStateMenu" Header="动画状态" />
+                <Separator />
+                <MenuItem Header="贴近屏幕边缘" Click="SnapToEdgeMenuItem_Click" />
+                <MenuItem Header="隐藏桌面宠物" Click="HidePetMenuItem_Click" />
+            </ContextMenu>
+        </Grid.ContextMenu>
+        <Image x:Name="PetImage"
+               Width="288" Height="288"
+               Stretch="Uniform"
+               SnapsToDevicePixels="True"
+               RenderOptions.BitmapScalingMode="HighQuality" />
+    </Grid>
+</Window>

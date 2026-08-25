@@ -1,19 +1,20 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net6.0-windows</TargetFramework>
+    <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- 仅面向 Windows x64：避免 onnxruntime/OpenCvSharp 等包复制全部平台原生库，输出体积可缩减约 400 MB。 -->
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
     <AssemblyName>XTool</AssemblyName>
     <RootNamespace>ScreenshotApp</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\XTool.ico</ApplicationIcon>
     <!-- WPF 仍通过 manifest 配置 PerMonitorV2；WinForms 只承载托盘图标。 -->
     <NoWarn>$(NoWarn);WFAC010</NoWarn>
-    <!-- 主程序仍锁定 net6；安装 net8 SDK 后避免构建工具重复输出已知生命周期提示。 -->
-    <CheckEolTargetFramework>false</CheckEolTargetFramework>
     <DefaultItemExcludes>$(DefaultItemExcludes);obj-scroll-test\**;bin-scroll-test\**</DefaultItemExcludes>
   </PropertyGroup>
 
@@ -32,16 +33,22 @@
     <PackageReference Include="OpenCvSharp4.Windows" Version="4.11.0.20250507" />
     <PackageReference Include="Vortice.Direct3D11" Version="2.4.2" />
     <PackageReference Include="Vortice.MediaFoundation" Version="2.4.2" />
+    <!-- 二维码的本地生成与识别，全程离线；Apache-2.0 许可。 -->
+    <PackageReference Include="ZXing.Net" Version="0.16.11" />
     <!-- 图片与已有 PDF 的本地生成、合并采用 MIT 许可的 PDFsharp。 -->
     <PackageReference Include="PDFsharp" Version="6.2.4" />
     <!-- 网络工作台历史监测数据；所有数据库 I/O 均在专用后台线程执行。 -->
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.8" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.29" />
+    <!-- 显式使用 SQLitePCLRaw 3.x，发布 SQLite 3.50.4，避开旧 2.x 原生包的高危漏洞链。 -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
     <!-- Windows ETW 网络事件解析，用于管理员授权后的逐进程精确流量采集。 -->
     <PackageReference Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="3.1.21" />
     <!-- 系统概览读取只读 WMI/SMBIOS 公开信息，不用于任何系统写操作。 -->
     <PackageReference Include="System.Management" Version="6.0.0" />
     <!-- 系统诊断按需读取 Windows System/Application 事件日志，不订阅实时事件。 -->
     <PackageReference Include="System.Diagnostics.EventLog" Version="6.0.0" />
+    <!-- Windows Search 的只读 OLE DB 查询接口；索引不可用时文件工作台会自动回退到本地扫描。 -->
+    <PackageReference Include="System.Data.OleDb" Version="6.0.1" />
   </ItemGroup>
 
   <ItemGroup>
@@ -50,15 +57,31 @@
     <Using Remove="System.Windows.Forms" />
   </ItemGroup>
 
-  <Target Name="RemoveObsoleteHardwareSensorArtifacts" BeforeTargets="Build">
-    <!-- 清除旧版增量构建可能遗留的助手目录，避免已废弃二进制被再次随主程序发布。 -->
-    <RemoveDir Directories="$(OutDir)tools\hardware-sensor" />
+  <Target Name="RemoveLegacyReleaseArtifacts" BeforeTargets="Build">
+    <!-- 清理旧版增量构建遗留的已废弃发布目录。 -->
+    <RemoveDir Directories="$(OutDir)tools\hardware-sensors-v2;$(OutDir)tools\hardware-sensor;$(OutDir)tools\pawnio" />
   </Target>
 
   <ItemGroup>
     <Resource Include="Assets\XTool.ico" />
     <Resource Include="Assets\XTool.png" />
     <Resource Include="Assets\XToolMark.png" />
+    <Resource Include="Assets\XToolLogo.png" />
+    <Resource Include="Assets\Toolchains\*.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 手机浏览器配对页作为兜底入口；原生 Android 客户端使用同一会话协议。 -->
+    <EmbeddedResource Include="Collaboration\CollaborationPage.html" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 桌面宠物使用独立 PNG 帧资源，按需解码并冻结后交给 WPF 播放。 -->
+    <None Remove="Assets\DesktopPet\**\*" />
+    <Content Include="Assets\DesktopPet\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>assets\desktop-pet\%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>

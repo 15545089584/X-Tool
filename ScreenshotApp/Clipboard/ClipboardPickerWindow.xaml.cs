@@ -11,14 +11,21 @@ public partial class ClipboardPickerWindow : Window
 {
     private const int WmMouseActivate = 0x0021;
     private const int MaNoActivate = 3;
-    private readonly IReadOnlyList<ScreenshotHistoryItem> _items;
+    private IReadOnlyList<ScreenshotHistoryItem> _items = Array.Empty<ScreenshotHistoryItem>();
+    private string _currentFilter = "All";
     private HwndSource? _windowSource;
 
-    public ClipboardPickerWindow(IEnumerable<ScreenshotHistoryItem> items)
+    public ClipboardPickerWindow(IEnumerable<ScreenshotHistoryItem> items, string initialFilter = "All")
     {
         InitializeComponent();
         _items = items.ToArray();
-        ApplyFilter("All");
+        if (initialFilter == "Image")
+        {
+            // 仅图片模式：只展示图片类历史，隐藏分类切换，标题同步说明用途。
+            FilterBar.Visibility = Visibility.Collapsed;
+            TitleText.Text = "选择剪贴板图片";
+        }
+        ApplyFilter(initialFilter);
         SourceInitialized += OnSourceInitialized;
         Closed += (_, _) => _windowSource?.RemoveHook(WindowMessageHook);
         PreviewKeyDown += (_, eventArgs) =>
@@ -28,6 +35,22 @@ public partial class ClipboardPickerWindow : Window
                 Close();
             }
         };
+    }
+
+    /// <summary>延迟加载模式：窗口先弹出，数据准备好后调用此方法填充列表。</summary>
+    public ClipboardPickerWindow(string initialFilter = "All")
+        : this(Array.Empty<ScreenshotHistoryItem>(), initialFilter)
+    {
+        LoadingText.Visibility = Visibility.Visible;
+    }
+
+    public void SetItems(IEnumerable<ScreenshotHistoryItem> items)
+    {
+        _items = items.ToArray();
+        ApplyFilter(_currentFilter);
+        var hasImages = _items.Any(item => item.HasThumbnail);
+        LoadingText.Text = hasImages ? string.Empty : "暂无可用的图片记录";
+        LoadingText.Visibility = hasImages ? Visibility.Collapsed : Visibility.Visible;
     }
 
     public event EventHandler<ScreenshotHistoryItem>? ItemSelected;
@@ -70,6 +93,7 @@ public partial class ClipboardPickerWindow : Window
 
     private void ApplyFilter(string filter)
     {
+        _currentFilter = filter;
         var items = filter switch
         {
             "Image" => _items.Where(item => item.HasThumbnail),

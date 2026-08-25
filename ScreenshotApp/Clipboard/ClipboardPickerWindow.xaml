@@ -39,9 +39,9 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
             <Grid MouseLeftButtonDown="Header_MouseLeftButtonDown">
-                <TextBlock FontSize="20" FontWeight="SemiBold" Foreground="#263747" Text="剪贴板" />
+                <TextBlock x:Name="TitleText" FontSize="20" FontWeight="SemiBold" Foreground="#263747" Text="剪贴板" />
             </Grid>
-            <primitives:UniformGrid Grid.Row="1" Rows="1" Columns="6" Margin="0,12,0,0">
+            <primitives:UniformGrid x:Name="FilterBar" Grid.Row="1" Rows="1" Columns="6" Margin="0,12,0,0">
                 <Button Style="{StaticResource FilterButtonStyle}" Tag="All" Click="FilterButton_Click" Background="#EEF1F6" BorderBrush="#D1D9E5" Foreground="#52657A" Content="全部" />
                 <Button Style="{StaticResource FilterButtonStyle}" Tag="Image" Click="FilterButton_Click" Background="#E8ECFF" BorderBrush="#AEBBF4" Foreground="#5369C7" Content="图片" />
                 <Button Style="{StaticResource FilterButtonStyle}" Tag="Text" Click="FilterButton_Click" Background="#FBEAF3" BorderBrush="#F1BED8" Foreground="#C1508A" Content="文字" />
@@ -131,6 +131,7 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </ScrollViewer>
+            <TextBlock x:Name="LoadingText" Grid.Row="3" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="13" Foreground="#8A9AAC" Text="正在加载图片…" IsHitTestVisible="False" Visibility="Collapsed" />
         </Grid>
     </Border>
 </Window>

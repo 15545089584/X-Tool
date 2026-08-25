@@ -35,6 +35,9 @@ public partial class TranslationResultWindow : Window
         Loaded += (_, _) => PositionNearSelection();
     }
 
+    /// <summary>复制成功后为 true，截图窗口据此自动退出截图模式。</summary>
+    internal bool ExitCaptureRequested { get; private set; }
+
     private void Header_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (e.LeftButton == MouseButtonState.Pressed)
@@ -53,7 +56,8 @@ public partial class TranslationResultWindow : Window
         try
         {
             ClipboardService.SetText(TranslationTextBox.Text);
-            StatusText.Text = "译文已复制到剪贴板";
+            ExitCaptureRequested = true;
+            Close();
         }
         catch
         {

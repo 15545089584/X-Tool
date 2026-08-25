@@ -39,6 +39,12 @@ public sealed class ToolchainSummary
     public string Id { get; init; } = string.Empty;
     public string DisplayName { get; init; } = string.Empty;
     public string Description { get; init; } = string.Empty;
+    private string? _iconSource;
+    public string IconSource
+    {
+        get => _iconSource ?? $"/Assets/Toolchains/{Id}.png";
+        init => _iconSource = value;
+    }
     public string IconGlyph { get; init; } = "\uE943";
     public string IconBackground { get; init; } = "#E6F0FF";
     public string IconForeground { get; init; } = "#2D7DFF";

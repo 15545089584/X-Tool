@@ -1,19 +1,24 @@
 using ScreenshotApp.SystemTools;
+using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using System.Windows.Threading;
+using ScreenshotApp.Motion;
 
 namespace ScreenshotApp.NetworkWorkbench;
 
 public partial class NetworkWorkbenchView : UserControl
 {
+    private const int MaxDisplayedTrafficProcesses = 60;
+    private const long MinimumHistoricalProcessBytes = 64 * 1024;
     private readonly ObservableCollection<NetworkAdapterEntry> _adapters = new();
     private readonly ObservableCollection<NetworkProfile> _profiles = new();
     private readonly ObservableCollection<NetworkTimelineEvent> _timelineEvents = new();
@@ -26,6 +31,8 @@ public partial class NetworkWorkbenchView : UserControl
     private readonly List<double> _historicalUpload = new();
     private readonly NetworkHistoryStore _historyStore;
     private readonly NetworkMonitorCoordinator _monitorCoordinator;
+    private readonly NetworkEtwTrafficClient _trafficClient = new();
+    private readonly ObservableCollection<NetworkTrafficProcessRow> _trafficProcesses = new();
     private NetworkOverviewSnapshot? _previousOverview;
     private ProxySettingsSnapshot _proxySnapshot = new(false, string.Empty, string.Empty, string.Empty, true);
     private CancellationTokenSource? _deepNetworkCancellation;
@@ -47,6 +54,29 @@ public partial class NetworkWorkbenchView : UserControl
     private DateTime _lastDeepNetworkRefreshAt = DateTime.MinValue;
     private bool _updatingWifiEnvironment;
     private string _activeWifiBand = "2.4";
+    private string _trafficStatsMode = "Global";
+    private int _trafficStatsRefreshBusy;
+    private int _trafficStatsRefreshTick;
+    private DateTime _trafficStatsFastRefreshUntil = DateTime.MinValue;
+    private bool _trafficStatsLoading;
+    private readonly Dictionary<string, NetworkProcessTrafficHistoryTotal> _trafficHistoricalTotals = new(StringComparer.OrdinalIgnoreCase);
+    private string _trafficHistorySessionId = string.Empty;
+    private bool _trafficHistoryLoaded;
+    private int _trafficHistoryRetentionDays = 7;
+    private string _trafficUsageRange = "24h";
+    private readonly List<TrafficUsageChartBucket> _trafficUsageChartBuckets = new();
+    private readonly Dictionary<string, ProcessTrafficUsageSnapshot> _trafficUsageLastSnapshots = new(StringComparer.OrdinalIgnoreCase);
+    private readonly SortedDictionary<DateTime, ProcessTrafficUsageDelta> _trafficUsagePendingDeltas = new();
+    private string _trafficUsageSessionId = string.Empty;
+    private DateTime _trafficUsageLastPersistedAt = DateTime.MinValue;
+    private int _trafficUsageRefreshBusy;
+    private int _trafficUsagePersistBusy;
+    private int _trafficUsageHoverIndex = -1;
+    private readonly object _monitorStopSync = new();
+    private Task? _monitorStopTask;
+    private int _shutdownStarted;
+    private readonly ConcurrentDictionary<Task, byte> _pendingPersistence = new();
+    private readonly MotionPageGroup _tabMotion;
 
     public NetworkWorkbenchView()
     {
@@ -58,13 +88,25 @@ public partial class NetworkWorkbenchView : UserControl
         NetworkEventsListBox.ItemsSource = _timelineEvents;
         WifiNetworksListBox.ItemsSource = _wifiNetworks;
         WifiPropertiesListBox.ItemsSource = _wifiProperties;
+        TrafficProcessesListBox.ItemsSource = _trafficProcesses;
         _monitorCoordinator.SampleAvailable += MonitorCoordinator_SampleAvailable;
         _monitorCoordinator.TimelineEventAvailable += MonitorCoordinator_TimelineEventAvailable;
         _monitorCoordinator.MonitorFailed += MonitorCoordinator_MonitorFailed;
+        _trafficClient.FirstSampleAvailable += TrafficClient_FirstSampleAvailable;
         TrafficCanvas.SizeChanged += (_, _) => UpdateTrafficChart();
+        TrafficUsageCanvas.SizeChanged += (_, _) => DrawTrafficUsageChart();
         WifiChannelDistributionCanvas.SizeChanged += (_, _) => UpdateWifiChannelDistribution();
         Loaded += NetworkWorkbenchView_Loaded;
         Unloaded += NetworkWorkbenchView_Unloaded;
+        Application.Current.Exit += NetworkWorkbenchView_ApplicationExit;
+        _tabMotion = new MotionPageGroup(
+            OverviewPanel,
+            OverviewPanel,
+            RoutesFirewallPanel,
+            ProxyPanel,
+            WifiScrollViewer,
+            ProfilesPanel,
+            TrafficStatsScrollViewer);
         SelectTab("Overview");
     }
 
@@ -77,9 +119,76 @@ public partial class NetworkWorkbenchView : UserControl
 
     private async void NetworkWorkbenchView_Unloaded(object sender, RoutedEventArgs e)
     {
-        await _monitorCoordinator.StopAsync();
+        await StopMonitorAsync();
         _deepNetworkCancellation?.Cancel();
     }
+
+    private Task StopMonitorAsync()
+    {
+        lock (_monitorStopSync)
+        {
+            if (_monitorStopTask is { IsCompleted: false }) return _monitorStopTask;
+            _monitorStopTask = _monitorCoordinator.StopAsync();
+            return _monitorStopTask;
+        }
+    }
+
+    private void NetworkWorkbenchView_ApplicationExit(object? sender, ExitEventArgs e)
+    {
+        if (Interlocked.Exchange(ref _shutdownStarted, 1) != 0) return;
+        try
+        {
+            // 应用退出前等待最后一个采样桶和 SQLite 写入完成，避免尾部历史丢失。
+            StopMonitorAsync().GetAwaiter().GetResult();
+            AwaitPendingPersistenceAsync().GetAwaiter().GetResult();
+            if (_trafficClient.IsRunning)
+            {
+                var measurements = _trafficClient.GetProcessMeasurements(consumeRates: false);
+                var points = BuildTrafficProcessHistoryPoints(measurements, _proxySnapshot);
+                PersistProcessTrafficAsync(_trafficClient.SessionId, points).GetAwaiter().GetResult();
+                PersistTrafficUsageDeltaAsync(measurements, _proxySnapshot).GetAwaiter().GetResult();
+            }
+            AwaitPendingPersistenceAsync().GetAwaiter().GetResult();
+            _trafficClient.Dispose();
+            _historyStore.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
+        catch
+        {
+            // 退出清理失败不应阻止主窗口关闭。
+        }
+    }
+
+    public async Task<(bool Success, string Message)> StartPersistentTrafficAsync(bool silent = false)
+    {
+        if (_trafficClient.IsRunning) return (true, "独立 ETW 辅助进程正在运行");
+        if (!silent) SetTrafficStatsLoading(true, "正在连接独立 ETW 辅助进程…");
+        (bool Success, string Message) result;
+        try
+        {
+            result = await _trafficClient.StartPersistentAsync();
+        }
+        catch (Exception exception)
+        {
+            result = (false, $"精确监测启动失败：{exception.GetBaseException().Message}");
+        }
+        if (!result.Success)
+        {
+            if (!silent) SetTrafficStatsLoading(false, result.Message);
+            else if (IsVisible) TrafficStatsMonitorStatusText.Text = result.Message;
+            return result;
+        }
+
+        ResetTrafficUsageSession();
+        _trafficStatsFastRefreshUntil = DateTime.Now.AddSeconds(8);
+        if (IsVisible)
+        {
+            TrafficStatsMonitorStatusText.Text = "独立 ETW 已启动，等待首批网络事件…";
+            await RefreshTrafficStatsAsync();
+        }
+        return result;
+    }
+
+    public void StopTrafficMonitoring() => _trafficClient.Stop();
 
     private async void NetworkWorkbenchView_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
@@ -111,18 +220,28 @@ public partial class NetworkWorkbenchView : UserControl
         if ((tab == "Wifi" || tab == "NetworkInterfaces") && DateTime.UtcNow - _lastDeepNetworkRefreshAt > TimeSpan.FromSeconds(5)) await RefreshDeepNetworkAsync();
         if (tab == "Proxy") await LoadProxyAsync(updateSnapshot: false);
         if (tab == "Profiles") ReloadProfiles();
+        if (tab == "TrafficStats")
+        {
+            await RefreshTrafficStatsAsync();
+            await RefreshTrafficUsageChartAsync();
+        }
     }
 
     private void SelectTab(string tab)
     {
         _activeTab = tab;
-        OverviewPanel.Visibility = tab == "Overview" ? Visibility.Visible : Visibility.Collapsed;
-        RoutesFirewallPanel.Visibility = tab == "NetworkInterfaces" ? Visibility.Visible : Visibility.Collapsed;
-        ProxyPanel.Visibility = tab == "Proxy" ? Visibility.Visible : Visibility.Collapsed;
-        WifiScrollViewer.Visibility = tab == "Wifi" ? Visibility.Visible : Visibility.Collapsed;
-        ProfilesPanel.Visibility = tab == "Profiles" ? Visibility.Visible : Visibility.Collapsed;
+        FrameworkElement target = tab switch
+        {
+            "NetworkInterfaces" => RoutesFirewallPanel,
+            "Proxy" => ProxyPanel,
+            "Wifi" => WifiScrollViewer,
+            "Profiles" => ProfilesPanel,
+            "TrafficStats" => TrafficStatsScrollViewer,
+            _ => OverviewPanel
+        };
+        _tabMotion.Show(target);
 
-        foreach (var button in new[] { OverviewTabButton, NetworkInterfacesTabButton, ProxyTabButton, WifiTabButton, ProfilesTabButton })
+        foreach (var button in new[] { OverviewTabButton, NetworkInterfacesTabButton, ProxyTabButton, WifiTabButton, ProfilesTabButton, TrafficStatsTabButton })
         {
             var active = string.Equals(button.Tag?.ToString(), tab, StringComparison.Ordinal);
             button.Background = BrushFrom(active ? "#4D7CFE" : "#86FFFFFF");
@@ -181,6 +300,8 @@ public partial class NetworkWorkbenchView : UserControl
             OverviewGatewayText.Text = $"网关 {snapshot.Gateway}";
             OverviewDownloadText.Text = FormatByteRate(download);
             OverviewUploadText.Text = FormatByteRate(upload);
+            TrafficStatsDownloadText.Text = FormatByteRate(download);
+            TrafficStatsUploadText.Text = FormatByteRate(upload);
             OverviewLinkSpeedText.Text = FormatBitRate(snapshot.LinkSpeedBitsPerSecond);
             OverviewDetailGatewayText.Text = snapshot.Gateway;
             OverviewDnsText.Text = snapshot.DnsServers;
@@ -213,6 +334,13 @@ public partial class NetworkWorkbenchView : UserControl
             AddHistory(_downloadHistory, download);
             AddHistory(_uploadHistory, upload);
             if (_trafficRange == "Realtime" && _activeTab == "Overview") UpdateTrafficChart();
+            if (_trafficClient.IsRunning && ++_trafficStatsRefreshTick % 3 == 0)
+            {
+                if (_activeTab == "TrafficStats" || DateTime.Now < _trafficStatsFastRefreshUntil)
+                    _ = RefreshTrafficStatsAsync();
+                else
+                    _ = CaptureTrafficUsageAsync();
+            }
             _previousOverview = snapshot;
         }
         catch (Exception exception)
@@ -539,6 +667,7 @@ public partial class NetworkWorkbenchView : UserControl
             HistoryStatusText.Text = "历史数据已清除；实时监测仍在继续";
             HistoryStatusText.Visibility = Visibility.Visible;
             if (_trafficRange != "Realtime") await RefreshTrafficHistoryAsync();
+            if (_activeTab == "TrafficStats") await RefreshTrafficUsageChartAsync();
         }
         catch (Exception exception)
         {
@@ -579,7 +708,12 @@ public partial class NetworkWorkbenchView : UserControl
         catch (Exception exception) { MessageBox.Show(exception.Message, "保存告警设置失败", MessageBoxButton.OK, MessageBoxImage.Warning); }
     }
 
-    private static string EscapeCsv(string value) => value.Replace("\"", "\"\"");
+    private static string EscapeCsv(string value)
+    {
+        var safe = value ?? string.Empty;
+        if (safe.Length > 0 && safe[0] is '=' or '+' or '-' or '@') safe = "'" + safe;
+        return safe.Replace("\"", "\"\"");
+    }
 
     private void UpdateTrafficChart()
     {
@@ -615,6 +749,685 @@ public partial class NetworkWorkbenchView : UserControl
         {
             MessageBox.Show(Window.GetWindow(this), $"读取异常记录失败：{exception.Message}", "异常记录", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
+    }
+
+    private async Task RefreshTrafficStatsAsync()
+    {
+        if (!IsVisible || Interlocked.Exchange(ref _trafficStatsRefreshBusy, 1) != 0) return;
+        try
+        {
+            await EnsureTrafficProcessHistoryAsync();
+            TrafficStatsMonitorStatusText.Text = _trafficClient.IsRunning
+                ? "ETW 应用级监控中"
+                : _trafficClient.StatusText;
+            TrafficEnableExactButton.IsEnabled = !_trafficClient.IsRunning;
+            if (!_trafficClient.IsRunning)
+            {
+                _trafficStatsLoading = false;
+                TrafficStatsLoadingBar.Visibility = Visibility.Collapsed;
+                var savedRows = BuildTrafficProcessRows(Array.Empty<NetworkTrafficProcessMeasurement>(), _proxySnapshot, out _, out var savedMatchingRows);
+                ApplyTrafficProcessRows(savedRows);
+                TrafficStatsProcessTotalText.Text = FormatBytes(_trafficHistoricalTotals.Values.Sum(item => item.TotalBytes));
+                TrafficStatsProxyTotalText.Text = FormatBytes(_trafficHistoricalTotals.Values.Sum(item => item.ProxyExitTotalBytes));
+                var savedProxyRows = _trafficHistoricalTotals.Values.Count(item =>
+                    item.TotalBytes >= MinimumHistoricalProcessBytes && (item.ProxyExitSeen || item.ProxyIngressSeen));
+                TrafficStatsProxyHintText.Text = savedProxyRows == 0 ? "暂无已保存的代理记录" : $"已保存 {savedProxyRows} 个代理相关进程";
+                TrafficStatsProxySummaryText.Text = savedProxyRows == 0
+                    ? "代理判定：暂无已保存的本地代理记录"
+                    : $"代理判定：已保存 {savedProxyRows} 个进程 · 数据保留 {_trafficHistoryRetentionDays} 天";
+                TrafficStatsDetailText.Text = "当前未启用应用级监控；下方显示网络历史库中已保存的进程累计，速率将在授权后恢复实时采集。";
+                TrafficStatsRowsSummaryText.Text = BuildTrafficRowsSummary(savedRows.Count, savedMatchingRows, $"已保存 {_trafficHistoryRetentionDays} 天");
+                TrafficStatsEmptyText.Text = "尚未保存应用级流量数据\n全局网卡速率仍会正常显示；点击上方按钮并完成 UAC 授权后开始新的实时采集。";
+                TrafficStatsEmptyText.Visibility = savedRows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+                return;
+            }
+
+            var proxySnapshot = _proxySnapshot;
+            var measurements = await Task.Run(() => _trafficClient.GetProcessMeasurements());
+            var rowBuild = await Task.Run(() =>
+            {
+                var builtRows = BuildTrafficProcessRows(measurements, proxySnapshot, out _, out var matchingRows).ToArray();
+                return (Rows: builtRows, MatchingRows: matchingRows);
+            });
+            var rows = rowBuild.Rows;
+            var livePoints = BuildTrafficProcessHistoryPoints(measurements, proxySnapshot);
+            var usageChanged = await PersistTrafficUsageDeltaAsync(measurements, proxySnapshot);
+            if (_trafficUsageHoverIndex < 0) ApplyTrafficProcessRows(rows);
+            if (measurements.Count > 0)
+            {
+                _trafficStatsLoading = false;
+                TrafficStatsLoadingBar.Visibility = Visibility.Collapsed;
+                TrafficStatsMonitorStatusText.Text = "ETW 应用级监控中";
+            }
+            else if (_trafficStatsLoading && DateTime.Now >= _trafficStatsFastRefreshUntil)
+            {
+                _trafficStatsLoading = false;
+                TrafficStatsLoadingBar.Visibility = Visibility.Collapsed;
+                TrafficStatsMonitorStatusText.Text = "ETW 已启动，等待应用产生网络流量";
+            }
+            // 首先把内存中的统计显示出来，历史库写入放到后台，不阻塞首屏列表。
+            TrackPersistence(PersistProcessTrafficAsync(_trafficClient.SessionId, livePoints));
+            if (usageChanged && _activeTab == "TrafficStats" && _trafficUsageHoverIndex < 0) _ = RefreshTrafficUsageChartAsync();
+            var processTotal = measurements.Sum(item => item.TotalBytes) + _trafficHistoricalTotals.Values.Sum(item => item.TotalBytes);
+            var proxyTotal = livePoints.Sum(item => item.ProxyExitSentBytes + item.ProxyExitReceivedBytes) +
+                             _trafficHistoricalTotals.Values.Sum(item => item.ProxyExitTotalBytes);
+            var proxyRows = rows.Count(item => item.ProxyRole != ProxyTrafficRole.None);
+            TrafficStatsProcessTotalText.Text = FormatBytes(processTotal);
+            TrafficStatsProxyTotalText.Text = FormatBytes(proxyTotal);
+            var allProxyRows = proxyRows + _trafficHistoricalTotals.Values.Count(item =>
+                item.TotalBytes >= MinimumHistoricalProcessBytes && (item.ProxyExitSeen || item.ProxyIngressSeen));
+            TrafficStatsProxyHintText.Text = allProxyRows == 0 ? "未识别代理出口" : $"识别 {allProxyRows} 个代理相关进程";
+            TrafficStatsProxySummaryText.Text = proxyRows == 0
+                ? "代理判定：未发现本地代理出口"
+                : $"代理判定：{allProxyRows} 个进程 · 仅出口流量计入代理总量";
+            TrafficStatsDetailText.Text = $"代理出口按对外连接统计；127.0.0.1 / ::1 回环流量只用于识别代理接入，不与出口流量重复相加。历史累计保留 {_trafficHistoryRetentionDays} 天。";
+            TrafficStatsRowsSummaryText.Text = BuildTrafficRowsSummary(rows.Length, rowBuild.MatchingRows,
+                $"{_trafficStatsMode switch { "Proxy" => "代理相关", _ => "有实际流量" }} · 含历史累计");
+            TrafficStatsEmptyText.Text = "暂未采集到应用级流量\n请产生网络活动后稍候刷新；全局网卡速率仍会持续更新。";
+            TrafficStatsEmptyText.Visibility = rows.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+        catch (Exception exception)
+        {
+            TrafficStatsMonitorStatusText.Text = $"读取失败：{exception.Message}";
+            TrafficStatsEmptyText.Visibility = Visibility.Visible;
+        }
+        finally
+        {
+            Volatile.Write(ref _trafficStatsRefreshBusy, 0);
+        }
+    }
+
+    private async void TrafficClient_FirstSampleAvailable(object? sender, EventArgs e)
+    {
+        await Dispatcher.InvokeAsync(async () =>
+        {
+            if (_activeTab != "TrafficStats") return;
+            TrafficStatsMonitorStatusText.Text = "已收到首批网络事件，正在整理进程明细…";
+            await RefreshTrafficStatsAsync();
+        });
+    }
+
+    private async Task PersistProcessTrafficAsync(string sessionId, IReadOnlyList<NetworkProcessTrafficHistoryPoint> points)
+    {
+        try { await _historyStore.UpsertProcessTrafficAsync(sessionId, points); }
+        catch { /* 历史落盘失败不阻塞当前实时展示。 */ }
+    }
+
+    private void TrackPersistence(Task task)
+    {
+        _pendingPersistence.TryAdd(task, 0);
+        _ = task.ContinueWith(completed =>
+        {
+            _ = completed.Exception;
+            _pendingPersistence.TryRemove(completed, out _);
+        }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+    }
+
+    private async Task AwaitPendingPersistenceAsync()
+    {
+        while (true)
+        {
+            var pending = _pendingPersistence.Keys.ToArray();
+            if (pending.Length == 0) return;
+            try { await Task.WhenAll(pending); } catch { }
+        }
+    }
+
+    private async Task<bool> PersistTrafficUsageDeltaAsync(
+        IReadOnlyList<NetworkTrafficProcessMeasurement> measurements,
+        ProxySettingsSnapshot proxySnapshot)
+    {
+        if (string.IsNullOrWhiteSpace(_trafficClient.SessionId) ||
+            Interlocked.Exchange(ref _trafficUsagePersistBusy, 1) != 0) return false;
+        try
+        {
+            if (!string.Equals(_trafficUsageSessionId, _trafficClient.SessionId, StringComparison.Ordinal))
+            {
+                _trafficUsageSessionId = _trafficClient.SessionId;
+                _trafficUsageLastSnapshots.Clear();
+                _trafficUsageLastPersistedAt = DateTime.MinValue;
+                _trafficUsagePendingDeltas.Clear();
+            }
+
+            var now = DateTime.Now;
+            if (now - _trafficUsageLastPersistedAt < TimeSpan.FromSeconds(1)) return false;
+            var configuredPorts = ParseProxyPorts(proxySnapshot.Server);
+            long nonProxyDelta = 0;
+            long proxyDelta = 0;
+            var currentKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var measurement in measurements)
+            {
+                var identity = $"{measurement.ProcessId}:{measurement.ProcessStartTicks}";
+                currentKeys.Add(identity);
+                var loopbackFlows = measurement.Flows.Where(flow =>
+                    IsLoopbackEndpoint(flow.LocalEndpoint) || IsLoopbackEndpoint(flow.RemoteEndpoint)).ToArray();
+                var externalFlows = measurement.Flows.Where(flow =>
+                    !IsLoopbackEndpoint(flow.LocalEndpoint) && !IsLoopbackEndpoint(flow.RemoteEndpoint)).ToArray();
+                var hasConfiguredProxyPort = configuredPorts.Count > 0 && measurement.Flows.Any(flow =>
+                    configuredPorts.Contains(ParseEndpointPort(flow.LocalEndpoint)) || configuredPorts.Contains(ParseEndpointPort(flow.RemoteEndpoint)));
+                var isProxyExit = externalFlows.Length > 0 && LooksLikeProxyProcess(measurement.ProcessName, measurement.ProcessPath) &&
+                    (loopbackFlows.Length > 0 || hasConfiguredProxyPort);
+                var externalBytes = externalFlows.Sum(flow => Math.Max(0, flow.SentBytes) + Math.Max(0, flow.ReceivedBytes));
+                var current = new ProcessTrafficUsageSnapshot(externalBytes, isProxyExit);
+                var delta = _trafficUsageLastSnapshots.TryGetValue(identity, out var previous)
+                    ? Math.Max(0, current.ExternalBytes - previous.ExternalBytes)
+                    : Math.Max(0, current.ExternalBytes);
+                if (isProxyExit) proxyDelta += delta;
+                else nonProxyDelta += delta;
+                _trafficUsageLastSnapshots[identity] = current;
+            }
+            foreach (var staleKey in _trafficUsageLastSnapshots.Keys.Where(key => !currentKeys.Contains(key)).ToArray())
+                _trafficUsageLastSnapshots.Remove(staleKey);
+
+            _trafficUsageLastPersistedAt = now;
+            // 历史库暂时繁忙时按采样小时保留增量，重试时仍写回原小时，避免把整段流量挪到恢复后的时段。
+            var bucket = new DateTime(now.Year, now.Month, now.Day, now.Hour, 0, 0, DateTimeKind.Local);
+            if (nonProxyDelta > 0 || proxyDelta > 0)
+            {
+                _trafficUsagePendingDeltas.TryGetValue(bucket, out var currentPending);
+                _trafficUsagePendingDeltas[bucket] = currentPending.Add(nonProxyDelta, proxyDelta);
+            }
+
+            var usageChanged = false;
+            foreach (var pending in _trafficUsagePendingDeltas.ToArray())
+            {
+                try
+                {
+                    await _historyStore.AddProcessTrafficUsageAsync(pending.Key, pending.Value.NonProxyBytes, pending.Value.ProxyBytes);
+                    _trafficUsagePendingDeltas.Remove(pending.Key);
+                    usageChanged = true;
+                }
+                catch
+                {
+                    // 用量趋势写入失败不影响实时排行和 ETW 采集；保留当前及后续小时的增量等待重试。
+                    break;
+                }
+            }
+            return usageChanged;
+        }
+        finally
+        {
+            Volatile.Write(ref _trafficUsagePersistBusy, 0);
+        }
+    }
+
+    private async Task CaptureTrafficUsageAsync()
+    {
+        if (!_trafficClient.IsRunning) return;
+        try
+        {
+            var measurements = await Task.Run(() => _trafficClient.GetProcessMeasurements(consumeRates: false));
+            await PersistTrafficUsageDeltaAsync(measurements, _proxySnapshot);
+        }
+        catch
+        {
+            // 后台趋势采样失败时等待下个监测周期重试，不影响网络工作台其他功能。
+        }
+    }
+
+    private void ResetTrafficUsageSession()
+    {
+        _trafficUsageSessionId = string.Empty;
+        _trafficUsageLastSnapshots.Clear();
+        _trafficUsageLastPersistedAt = DateTime.MinValue;
+        _trafficUsagePendingDeltas.Clear();
+    }
+
+    private void SetTrafficStatsLoading(bool loading, string status)
+    {
+        _trafficStatsLoading = loading;
+        TrafficStatsLoadingBar.Visibility = loading ? Visibility.Visible : Visibility.Collapsed;
+        TrafficStatsMonitorStatusText.Text = status;
+    }
+
+    private async Task EnsureTrafficProcessHistoryAsync()
+    {
+        var sessionId = _trafficClient.IsRunning ? _trafficClient.SessionId : string.Empty;
+        if (_trafficHistoryLoaded && string.Equals(_trafficHistorySessionId, sessionId, StringComparison.Ordinal)) return;
+        _trafficHistoricalTotals.Clear();
+        _trafficHistoryRetentionDays = await _monitorCoordinator.GetRetentionDaysAsync();
+        var totals = await _historyStore.GetProcessTrafficTotalsAsync(TimeSpan.FromDays(_trafficHistoryRetentionDays), sessionId);
+        foreach (var total in totals) _trafficHistoricalTotals[total.ProcessKey] = total;
+        _trafficHistorySessionId = sessionId;
+        _trafficHistoryLoaded = true;
+    }
+
+    private void ApplyTrafficProcessRows(IReadOnlyList<NetworkTrafficProcessRow> rows)
+    {
+        // 暂时断开 ItemsSource，避免逐条 Add 触发数十次 WPF 测量与排列。
+        TrafficProcessesListBox.ItemsSource = null;
+        _trafficProcesses.Clear();
+        foreach (var row in rows) _trafficProcesses.Add(row);
+        TrafficProcessesListBox.ItemsSource = _trafficProcesses;
+    }
+
+    private static string BuildTrafficRowsSummary(int displayedRows, int matchingRows, string suffix) =>
+        matchingRows > displayedRows
+            ? $"显示前 {displayedRows} / {matchingRows} 项 · {suffix}"
+            : $"{displayedRows} 项 · {suffix}";
+
+    private async void TrafficUsageRange_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string range }) return;
+        _trafficUsageRange = range;
+        UpdateTrafficUsageRangeButtons();
+        await RefreshTrafficUsageChartAsync();
+    }
+
+    private void UpdateTrafficUsageRangeButtons()
+    {
+        foreach (var button in new[] { TrafficUsage24HourButton, TrafficUsage7DayButton, TrafficUsage30DayButton })
+        {
+            var selected = string.Equals(button.Tag?.ToString(), _trafficUsageRange, StringComparison.Ordinal);
+            button.Background = BrushFrom(selected ? "#4D7CFE" : "#70FFFFFF");
+            button.Foreground = BrushFrom(selected ? "#FFFFFF" : "#52708E");
+            button.BorderBrush = BrushFrom(selected ? "#4D7CFE" : "#8CC8E6F8");
+        }
+    }
+
+    private async Task RefreshTrafficUsageChartAsync()
+    {
+        if (Interlocked.Exchange(ref _trafficUsageRefreshBusy, 1) != 0) return;
+        try
+        {
+            var now = DateTime.Now;
+            var start = _trafficUsageRange switch
+            {
+                "7d" => now.Date.AddDays(-6),
+                "30d" => now.Date.AddDays(-29),
+                _ => new DateTime(now.Year, now.Month, now.Day, now.Hour, 0, 0).AddHours(-23)
+            };
+            var samples = await _historyStore.GetProcessTrafficUsageAsync(start);
+            _trafficUsageChartBuckets.Clear();
+            if (_trafficUsageRange == "24h")
+            {
+                for (var index = 0; index < 24; index++)
+                {
+                    var bucketStart = start.AddHours(index);
+                    var matching = samples.Where(item => item.BucketTime >= bucketStart && item.BucketTime < bucketStart.AddHours(1)).ToArray();
+                    _trafficUsageChartBuckets.Add(new TrafficUsageChartBucket(bucketStart, matching.Sum(item => item.NonProxyBytes), matching.Sum(item => item.ProxyBytes), matching.Length > 0));
+                }
+            }
+            else
+            {
+                var days = _trafficUsageRange == "7d" ? 7 : 30;
+                for (var index = 0; index < days; index++)
+                {
+                    var bucketStart = start.Date.AddDays(index);
+                    var matching = samples.Where(item => item.BucketTime.Date == bucketStart.Date).ToArray();
+                    _trafficUsageChartBuckets.Add(new TrafficUsageChartBucket(bucketStart, matching.Sum(item => item.NonProxyBytes), matching.Sum(item => item.ProxyBytes), matching.Length > 0));
+                }
+            }
+
+            var nonProxyTotal = _trafficUsageChartBuckets.Sum(item => item.NonProxyBytes);
+            var proxyTotal = _trafficUsageChartBuckets.Sum(item => item.ProxyBytes);
+            var missingSamples = _trafficUsageChartBuckets.Count(item => !item.HasSample);
+            TrafficUsageChartSummaryText.Text = nonProxyTotal + proxyTotal == 0
+                ? $"该范围暂无已落盘的应用级用量；软件运行状态与全局网卡流量不等于应用级记录{(missingSamples > 0 ? $" · {missingSamples} 个时段无应用级样本" : string.Empty)}"
+                : $"范围累计 {FormatBytes(nonProxyTotal + proxyTotal)} · 非代理 {FormatBytes(nonProxyTotal)} · 代理出口 {FormatBytes(proxyTotal)}{(missingSamples > 0 ? $" · {missingSamples} 个时段无应用级样本" : string.Empty)}";
+            UpdateTrafficUsageAxisLabels();
+            DrawTrafficUsageChart();
+        }
+        catch (Exception exception)
+        {
+            TrafficUsageChartSummaryText.Text = $"读取用量趋势失败：{exception.Message}";
+            _trafficUsageChartBuckets.Clear();
+            DrawTrafficUsageChart();
+        }
+        finally
+        {
+            Volatile.Write(ref _trafficUsageRefreshBusy, 0);
+        }
+    }
+
+    private void UpdateTrafficUsageAxisLabels()
+    {
+        if (_trafficUsageChartBuckets.Count == 0) return;
+        var first = _trafficUsageChartBuckets[0].Start;
+        var middle = _trafficUsageChartBuckets[_trafficUsageChartBuckets.Count / 2].Start;
+        var last = _trafficUsageChartBuckets[^1].Start;
+        if (_trafficUsageRange == "24h")
+        {
+            TrafficUsageAxisStartText.Text = first.ToString("HH:00");
+            TrafficUsageAxisCenterText.Text = middle.ToString("HH:00");
+            TrafficUsageAxisEndText.Text = last.ToString("HH:00");
+        }
+        else
+        {
+            TrafficUsageAxisStartText.Text = first.ToString("MM-dd");
+            TrafficUsageAxisCenterText.Text = middle.ToString("MM-dd");
+            TrafficUsageAxisEndText.Text = last.ToString("MM-dd");
+        }
+    }
+
+    private void DrawTrafficUsageChart()
+    {
+        var width = TrafficUsageCanvas.ActualWidth;
+        var height = TrafficUsageCanvas.ActualHeight;
+        if (width <= 1 || height <= 1) return;
+        TrafficUsageCanvas.Children.Clear();
+        TrafficUsageGridCanvas.Children.Clear();
+        var usageValues = _trafficUsageChartBuckets.Select(item => (double)item.TotalBytes).ToArray();
+        var peak = usageValues.Length == 0 ? 0d : usageValues.Max();
+        TrafficUsageEmptyText.Visibility = peak <= 0 ? Visibility.Visible : Visibility.Collapsed;
+        var scale = CreateAdaptiveTrafficUsageScale(usageValues);
+        TrafficUsageAxisMaxText.Text = FormatBytes(scale.Peak);
+        TrafficUsageAxisAdaptiveText.Text = FormatBytes(scale.LinearCeiling);
+        TrafficUsageAxisAdaptiveText.Visibility = scale.IsAdaptive ? Visibility.Visible : Visibility.Collapsed;
+        TrafficUsageAxisMidText.Text = FormatBytes(scale.LinearCeiling / 2d);
+        TrafficUsageAxisMinText.Text = "0 B";
+        Canvas.SetTop(TrafficUsageAxisMaxText, 0);
+        var normalCeilingY = height * (1d - TrafficUsageChartScale.LinearHeightRatio);
+        Canvas.SetTop(TrafficUsageAxisAdaptiveText, Math.Max(0, normalCeilingY - 6));
+        Canvas.SetTop(TrafficUsageAxisMidText, Math.Max(0, (scale.IsAdaptive
+            ? height * (1d - TrafficUsageChartScale.LinearHeightRatio / 2d)
+            : height / 2d) - 6));
+        Canvas.SetTop(TrafficUsageAxisMinText, Math.Max(0, height - 13));
+        var gridLines = scale.IsAdaptive
+            ? new[] { 0d, normalCeilingY, height * (1d - TrafficUsageChartScale.LinearHeightRatio / 2d), height - 1d }
+            : new[] { 0d, height / 2d, height - 1d };
+        foreach (var y in gridLines)
+        {
+            TrafficUsageGridCanvas.Children.Add(new Line
+            {
+                X1 = 0, X2 = width, Y1 = y, Y2 = y,
+                Stroke = BrushFrom("#55AFC8DD"), StrokeThickness = 1
+            });
+        }
+        if (_trafficUsageChartBuckets.Count == 0) return;
+        var slot = width / _trafficUsageChartBuckets.Count;
+        var gap = _trafficUsageChartBuckets.Count <= 7 ? 5d : _trafficUsageChartBuckets.Count <= 24 ? 2.5d : 1.2d;
+        var barWidth = Math.Max(2, slot - gap);
+        for (var index = 0; index < _trafficUsageChartBuckets.Count; index++)
+        {
+            var bucket = _trafficUsageChartBuckets[index];
+            var nonProxyHeight = MapTrafficUsageToHeight(bucket.NonProxyBytes, height, scale);
+            var totalHeight = MapTrafficUsageToHeight(bucket.TotalBytes, height, scale);
+            var proxyHeight = Math.Max(0d, totalHeight - nonProxyHeight);
+            var x = index * slot + (slot - barWidth) / 2d;
+            var nonProxyBar = new Rectangle
+            {
+                Width = barWidth, Height = Math.Max(0, nonProxyHeight), Fill = BrushFrom("#C94D7CFE"),
+                RadiusX = 2, RadiusY = 2
+            };
+            Canvas.SetLeft(nonProxyBar, x);
+            Canvas.SetTop(nonProxyBar, height - nonProxyHeight);
+            TrafficUsageCanvas.Children.Add(nonProxyBar);
+            var proxyBar = new Rectangle
+            {
+                Width = barWidth, Height = Math.Max(0, proxyHeight), Fill = BrushFrom("#D18A63D8"),
+                RadiusX = 2, RadiusY = 2
+            };
+            Canvas.SetLeft(proxyBar, x);
+            Canvas.SetTop(proxyBar, height - nonProxyHeight - proxyHeight);
+            TrafficUsageCanvas.Children.Add(proxyBar);
+        }
+    }
+
+    /// <summary>让极端流量峰值不压扁日常用量，同时始终保留原始数值用于悬停提示。</summary>
+    private static TrafficUsageChartScale CreateAdaptiveTrafficUsageScale(IReadOnlyCollection<double> values)
+    {
+        var linearPeak = RoundTrafficUsageScale(Math.Max(1d, values.DefaultIfEmpty(0d).Max()));
+        if (values.Count < 12) return new TrafficUsageChartScale(linearPeak, linearPeak, false);
+
+        var ordered = values.Where(value => value > 0d).OrderBy(value => value).ToArray();
+        if (ordered.Length < 4) return new TrafficUsageChartScale(linearPeak, linearPeak, false);
+
+        var percentile90 = ordered[Math.Clamp((int)Math.Ceiling(ordered.Length * 0.90d) - 1, 0, ordered.Length - 1)];
+        var normalCeiling = RoundTrafficUsageScale(Math.Max(1d, percentile90 * 1.25d));
+        return linearPeak > normalCeiling * 2d
+            ? new TrafficUsageChartScale(normalCeiling, linearPeak, true)
+            : new TrafficUsageChartScale(linearPeak, linearPeak, false);
+    }
+
+    private static double MapTrafficUsageToHeight(double value, double height, TrafficUsageChartScale scale)
+    {
+        value = Math.Max(0d, value);
+        if (!scale.IsAdaptive || value <= scale.LinearCeiling)
+            return Math.Min(1d, value / scale.LinearCeiling) * height * (scale.IsAdaptive ? TrafficUsageChartScale.LinearHeightRatio : 1d);
+
+        var compressed = Math.Log(Math.Max(1d, value / scale.LinearCeiling)) /
+                         Math.Log(Math.Max(1d, scale.Peak / scale.LinearCeiling));
+        return height * (TrafficUsageChartScale.LinearHeightRatio + Math.Clamp(compressed, 0d, 1d) * (1d - TrafficUsageChartScale.LinearHeightRatio));
+    }
+
+    private void TrafficUsageCanvas_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (_trafficUsageChartBuckets.Count == 0 || TrafficUsageCanvas.ActualWidth <= 0) return;
+        var position = e.GetPosition(TrafficUsageCanvas);
+        var index = Math.Clamp((int)(position.X / (TrafficUsageCanvas.ActualWidth / _trafficUsageChartBuckets.Count)), 0, _trafficUsageChartBuckets.Count - 1);
+        if (index == _trafficUsageHoverIndex) return;
+        _trafficUsageHoverIndex = index;
+        var bucket = _trafficUsageChartBuckets[index];
+        var label = _trafficUsageRange == "24h"
+            ? $"{bucket.Start:MM-dd HH:00}–{bucket.Start.AddHours(1):HH:00}"
+            : bucket.Start.ToString("yyyy-MM-dd");
+        TrafficUsageTooltipText.Text = bucket.HasSample
+            ? $"{label}\n总用量 {FormatBytes(bucket.TotalBytes)}\n非代理 {FormatBytes(bucket.NonProxyBytes)}\n代理出口 {FormatBytes(bucket.ProxyBytes)}"
+            : $"{label}\n未记录应用级样本\n这不等于软件未运行；请同时查看全局网卡统计和 ETW 状态";
+        TrafficUsageTooltip.Visibility = Visibility.Visible;
+        TrafficUsageTooltip.Margin = new Thickness(Math.Clamp(position.X + 14, 0, Math.Max(0, TrafficUsageCanvas.ActualWidth - 290)), 8, 0, 0);
+        var slot = TrafficUsageCanvas.ActualWidth / _trafficUsageChartBuckets.Count;
+        TrafficUsageHoverHighlight.Width = slot;
+        TrafficUsageHoverHighlight.Margin = new Thickness(index * slot, 0, 0, 0);
+        TrafficUsageHoverHighlight.Visibility = Visibility.Visible;
+    }
+
+    private void TrafficUsageCanvas_MouseLeave(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        TrafficUsageTooltip.Visibility = Visibility.Collapsed;
+        TrafficUsageHoverHighlight.Visibility = Visibility.Collapsed;
+        _trafficUsageHoverIndex = -1;
+        // 悬停期间暂停的列表与图表刷新在离开后补一次即可。
+        _ = RefreshTrafficStatsAsync();
+        _ = RefreshTrafficUsageChartAsync();
+    }
+
+    private static double RoundTrafficUsageScale(double bytes)
+    {
+        if (bytes <= 0) return 1;
+        var magnitude = Math.Pow(10, Math.Floor(Math.Log10(bytes)));
+        var normalized = bytes / magnitude;
+        var rounded = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+        return rounded * magnitude;
+    }
+
+    private IReadOnlyList<NetworkProcessTrafficHistoryPoint> BuildTrafficProcessHistoryPoints(
+        IReadOnlyList<NetworkTrafficProcessMeasurement> measurements,
+        ProxySettingsSnapshot proxySnapshot)
+    {
+        var configuredPorts = ParseProxyPorts(proxySnapshot.Server);
+        var points = new List<NetworkProcessTrafficHistoryPoint>();
+        foreach (var measurement in measurements)
+        {
+            if (measurement.TotalBytes <= 0 && measurement.TotalBitsPerSecond <= 0) continue;
+            var loopbackFlows = measurement.Flows.Where(flow => IsLoopbackEndpoint(flow.LocalEndpoint) || IsLoopbackEndpoint(flow.RemoteEndpoint)).ToArray();
+            var externalFlows = measurement.Flows.Where(flow =>
+                !IsLoopbackEndpoint(flow.LocalEndpoint) && !IsLoopbackEndpoint(flow.RemoteEndpoint)).ToArray();
+            var hasConfiguredProxyPort = configuredPorts.Count > 0 && measurement.Flows.Any(flow =>
+                configuredPorts.Contains(ParseEndpointPort(flow.LocalEndpoint)) || configuredPorts.Contains(ParseEndpointPort(flow.RemoteEndpoint)));
+            var looksLikeProxyCore = externalFlows.Length > 0 && LooksLikeProxyProcess(measurement.ProcessName, measurement.ProcessPath) &&
+                (loopbackFlows.Length > 0 || hasConfiguredProxyPort);
+            var looksLikeProxyIngress = !looksLikeProxyCore && loopbackFlows.Any(flow =>
+                IsLoopbackEndpoint(flow.LocalEndpoint) || IsLoopbackEndpoint(flow.RemoteEndpoint));
+            var role = looksLikeProxyCore ? "Exit" : looksLikeProxyIngress ? "Ingress" : "None";
+            var proxyExitSent = looksLikeProxyCore ? externalFlows.Sum(flow => flow.SentBytes) : 0;
+            var proxyExitReceived = looksLikeProxyCore ? externalFlows.Sum(flow => flow.ReceivedBytes) : 0;
+            points.Add(new NetworkProcessTrafficHistoryPoint(
+                GetProcessTrafficKey(measurement.ProcessName, measurement.ProcessPath), measurement.ProcessName, measurement.ProcessPath,
+                measurement.SentBytes, measurement.ReceivedBytes,
+                proxyExitSent, proxyExitReceived, role, DateTime.Now));
+        }
+        return points;
+    }
+
+    private IReadOnlyList<NetworkTrafficProcessRow> BuildTrafficProcessRows(
+        IReadOnlyList<NetworkTrafficProcessMeasurement> measurements,
+        ProxySettingsSnapshot proxySnapshot,
+        out IReadOnlyList<NetworkProcessTrafficHistoryPoint> historyPoints,
+        out int matchingRowCount)
+    {
+        historyPoints = BuildTrafficProcessHistoryPoints(measurements, proxySnapshot);
+        var configuredPorts = ParseProxyPorts(proxySnapshot.Server);
+        var rows = new List<NetworkTrafficProcessRow>();
+        foreach (var measurement in measurements)
+        {
+            if (measurement.TotalBytes <= 0 && measurement.TotalBitsPerSecond <= 0) continue;
+            var loopbackFlows = measurement.Flows.Where(flow => IsLoopbackEndpoint(flow.LocalEndpoint) || IsLoopbackEndpoint(flow.RemoteEndpoint)).ToArray();
+            var externalFlows = measurement.Flows.Where(flow =>
+                !IsLoopbackEndpoint(flow.LocalEndpoint) && !IsLoopbackEndpoint(flow.RemoteEndpoint)).ToArray();
+            var hasConfiguredProxyPort = configuredPorts.Count > 0 && measurement.Flows.Any(flow =>
+                configuredPorts.Contains(ParseEndpointPort(flow.LocalEndpoint)) || configuredPorts.Contains(ParseEndpointPort(flow.RemoteEndpoint)));
+            var looksLikeProxyCore = externalFlows.Length > 0 && LooksLikeProxyProcess(measurement.ProcessName, measurement.ProcessPath) &&
+                (loopbackFlows.Length > 0 || hasConfiguredProxyPort);
+            var looksLikeProxyIngress = !looksLikeProxyCore && loopbackFlows.Any(flow =>
+                IsLoopbackEndpoint(flow.LocalEndpoint) || IsLoopbackEndpoint(flow.RemoteEndpoint));
+            var role = looksLikeProxyCore ? ProxyTrafficRole.Exit : looksLikeProxyIngress ? ProxyTrafficRole.Ingress : ProxyTrafficRole.None;
+            var processKey = GetProcessTrafficKey(measurement.ProcessName, measurement.ProcessPath);
+            _trafficHistoricalTotals.TryGetValue(processKey, out var history);
+            role = ResolveProxyRole(role, history);
+            if (_trafficStatsMode == "Proxy" && role == ProxyTrafficRole.None) continue;
+            var externalSent = externalFlows.Sum(flow => flow.SentBytes);
+            var externalReceived = externalFlows.Sum(flow => flow.ReceivedBytes);
+            var isProxyMode = _trafficStatsMode == "Proxy";
+            var displaySent = isProxyMode && role == ProxyTrafficRole.Exit
+                ? externalSent + (history?.ProxyExitSentBytes ?? 0)
+                : measurement.SentBytes + (history?.SentBytes ?? 0);
+            var displayReceived = isProxyMode && role == ProxyTrafficRole.Exit
+                ? externalReceived + (history?.ProxyExitReceivedBytes ?? 0)
+                : measurement.ReceivedBytes + (history?.ReceivedBytes ?? 0);
+            rows.Add(new NetworkTrafficProcessRow(measurement, role, displaySent, displayReceived,
+                displaySent + displayReceived, IsProcessRunning(measurement)));
+        }
+        foreach (var history in _trafficHistoricalTotals.Values)
+        {
+            if (measurements.Any(item => string.Equals(GetProcessTrafficKey(item.ProcessName, item.ProcessPath), history.ProcessKey, StringComparison.OrdinalIgnoreCase))) continue;
+            var role = ResolveProxyRole(ProxyTrafficRole.None, history);
+            if (_trafficStatsMode == "Proxy" && role == ProxyTrafficRole.None) continue;
+            var displaySent = _trafficStatsMode == "Proxy" && role == ProxyTrafficRole.Exit ? history.ProxyExitSentBytes : history.SentBytes;
+            var displayReceived = _trafficStatsMode == "Proxy" && role == ProxyTrafficRole.Exit ? history.ProxyExitReceivedBytes : history.ReceivedBytes;
+            if (displaySent + displayReceived < MinimumHistoricalProcessBytes) continue;
+            var measurement = new NetworkTrafficProcessMeasurement(0, 0, history.ProcessName, history.ProcessPath,
+                history.SentBytes, history.ReceivedBytes, 0, 0, Array.Empty<NetworkTrafficFlowMeasurement>());
+            rows.Add(new NetworkTrafficProcessRow(measurement, role, displaySent, displayReceived,
+                displaySent + displayReceived, false, true));
+        }
+        var orderedRows = rows.OrderByDescending(item => item.TotalBytes).ToArray();
+        matchingRowCount = orderedRows.Length;
+        return orderedRows.Take(MaxDisplayedTrafficProcesses).ToArray();
+    }
+
+    private static bool IsProcessRunning(NetworkTrafficProcessMeasurement measurement)
+    {
+        if (measurement.ProcessId <= 0) return false;
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(measurement.ProcessId);
+            if (process.HasExited) return false;
+            if (measurement.ProcessStartTicks <= 0) return true;
+            try
+            {
+                return process.StartTime.ToUniversalTime().Ticks == measurement.ProcessStartTicks;
+            }
+            catch
+            {
+                // 某些受保护进程不允许读取启动时间，但进程句柄仍表明它正在运行。
+                return true;
+            }
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static ProxyTrafficRole ResolveProxyRole(ProxyTrafficRole currentRole, NetworkProcessTrafficHistoryTotal? history) =>
+        currentRole == ProxyTrafficRole.Exit || history?.ProxyExitSeen == true ? ProxyTrafficRole.Exit :
+        currentRole == ProxyTrafficRole.Ingress || history?.ProxyIngressSeen == true ? ProxyTrafficRole.Ingress : ProxyTrafficRole.None;
+
+    private static string GetProcessTrafficKey(string processName, string processPath) =>
+        !string.IsNullOrWhiteSpace(processPath)
+            ? System.IO.Path.GetFullPath(processPath).TrimEnd(System.IO.Path.DirectorySeparatorChar).ToLowerInvariant()
+            : $"name:{processName.Trim().ToLowerInvariant()}";
+
+    private void TrafficStatsMode_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string mode }) return;
+        _trafficStatsMode = mode;
+        var global = mode == "Global";
+        TrafficGlobalModeButton.Background = BrushFrom(global ? "#4D7CFE" : "#70FFFFFF");
+        TrafficGlobalModeButton.Foreground = BrushFrom(global ? "#FFFFFF" : "#41607D");
+        TrafficProxyModeButton.Background = BrushFrom(global ? "#70FFFFFF" : "#4D7CFE");
+        TrafficProxyModeButton.Foreground = BrushFrom(global ? "#41607D" : "#FFFFFF");
+        _ = RefreshTrafficStatsAsync();
+    }
+
+    private async void TrafficEnableExact_Click(object sender, RoutedEventArgs e)
+    {
+        TrafficEnableExactButton.IsEnabled = false;
+        SetTrafficStatsLoading(true, "正在请求管理员授权…");
+        var result = await _trafficClient.StartAsync();
+        TrafficStatsMonitorStatusText.Text = result.Message;
+        if (!result.Success)
+        {
+            SetTrafficStatsLoading(false, result.Message);
+            TrafficEnableExactButton.IsEnabled = true;
+        }
+        else
+        {
+            ResetTrafficUsageSession();
+            _trafficStatsFastRefreshUntil = DateTime.Now.AddSeconds(8);
+            TrafficStatsMonitorStatusText.Text = "ETW 已启动，等待首批网络事件…";
+        }
+        await RefreshTrafficStatsAsync();
+    }
+
+    private async void TrafficStatsRefresh_Click(object sender, RoutedEventArgs e) => await RefreshTrafficStatsAsync();
+
+    private void TrafficStatsExport_Click(object sender, RoutedEventArgs e)
+    {
+        if (_trafficProcesses.Count == 0)
+        {
+            MessageBox.Show("当前没有可导出的应用级流量数据，请先启用应用级监控。", "导出流量", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        var dialog = new Microsoft.Win32.SaveFileDialog { Filter = "CSV 文件|*.csv", FileName = $"XTool_应用流量_{DateTime.Now:yyyyMMdd_HHmm}.csv" };
+        if (dialog.ShowDialog() != true) return;
+        var lines = new List<string> { "进程,PID,路径,角色,下载字节,上传字节,总量,实时速率" };
+        lines.AddRange(_trafficProcesses.Select(item => string.Join(",", new[]
+        {
+            EscapeCsv(item.ProcessName), item.ProcessId.ToString(), EscapeCsv(item.ProcessPath), EscapeCsv(item.ProxyBadge),
+            item.DownloadedBytes.ToString(), item.UploadedBytes.ToString(), item.TotalBytes.ToString(), EscapeCsv(item.RateText)
+        })));
+        File.WriteAllLines(dialog.FileName, lines, new UTF8Encoding(true));
+        MessageBox.Show("应用流量已导出。", "导出流量", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    private static HashSet<int> ParseProxyPorts(string value)
+    {
+        var ports = new HashSet<int>();
+        foreach (Match match in Regex.Matches(value ?? string.Empty, @"(?<!\d)(\d{2,5})(?!\d)"))
+            if (int.TryParse(match.Groups[1].Value, out var port) && port is > 0 and <= 65535) ports.Add(port);
+        return ports;
+    }
+
+    private static int ParseEndpointPort(string endpoint)
+    {
+        var separator = endpoint.LastIndexOf(':');
+        return separator >= 0 && int.TryParse(endpoint[(separator + 1)..], out var port) ? port : 0;
+    }
+
+    private static bool IsLoopbackEndpoint(string endpoint)
+    {
+        var normalized = endpoint.Trim().ToLowerInvariant();
+        return normalized.StartsWith("127.", StringComparison.Ordinal) || normalized.StartsWith("[::1]", StringComparison.Ordinal) || normalized.StartsWith("::1:", StringComparison.Ordinal);
+    }
+
+    private static bool LooksLikeProxyProcess(string name, string path)
+    {
+        var value = $"{name} {path}";
+        return new[] { "proxy", "clash", "mihomo", "xray", "sing-box", "v2ray", "sakura", "vortex", "tun" }
+            .Any(token => value.Contains(token, StringComparison.OrdinalIgnoreCase));
     }
 
     private void OpenConnectionDiagnostics_Click(object sender, RoutedEventArgs e)
@@ -1511,7 +2324,7 @@ public partial class NetworkWorkbenchView : UserControl
     {
         var dialog = new Microsoft.Win32.SaveFileDialog { Filter = "CSV 文件 (*.csv)|*.csv", FileName = $"X-Tool-网络连接-{DateTime.Now:yyyyMMdd-HHmmss}.csv" };
         if (dialog.ShowDialog() != true) return;
-        static string Csv(string value) => $"\"{value.Replace("\"", "\"\"")}\"";
+        static string Csv(string value) => $"\"{EscapeCsv(value)}\"";
         var lines = new List<string> { "协议,本地端点,远程端点,进程,PID,进程估算速率,会话估算累计,状态" };
         lines.AddRange(_connections.Select(item => string.Join(",", new[] { Csv(item.Protocol), Csv(item.LocalAddress), Csv(item.RemoteAddress), Csv(item.ProcessName), item.ProcessId.ToString(), Csv(item.TrafficText), Csv(item.TotalTrafficText), Csv(item.State) })));
         File.WriteAllLines(dialog.FileName, lines, new UTF8Encoding(true));
@@ -1846,6 +2659,89 @@ public partial class NetworkWorkbenchView : UserControl
     }
 
     private static Brush BrushFrom(string value) => (Brush)new BrushConverter().ConvertFromString(value)!;
+
+    private enum ProxyTrafficRole
+    {
+        None,
+        Ingress,
+        Exit
+    }
+
+    private sealed record NetworkTrafficProcessRow(
+        NetworkTrafficProcessMeasurement Measurement,
+        ProxyTrafficRole ProxyRole,
+        long DisplaySentBytes,
+        long DisplayReceivedBytes,
+        long DisplayTotalBytes,
+        bool IsRunning,
+        bool IsHistorical = false)
+    {
+        public int ProcessId => Measurement.ProcessId;
+        public string ProcessName => Measurement.ProcessName;
+        public string ProcessPath => Measurement.ProcessPath;
+        public long DownloadedBytes => DisplayReceivedBytes;
+        public long UploadedBytes => DisplaySentBytes;
+        public long TotalBytes => DisplayTotalBytes;
+        public string DownloadText => FormatBytes(DownloadedBytes);
+        public string UploadText => FormatBytes(UploadedBytes);
+        public string TotalText => FormatBytes(DisplayTotalBytes);
+        public string RateText => !IsRunning
+            ? "—"
+            : Measurement.TotalBitsPerSecond > 0
+                ? FormatBitRate((long)Measurement.TotalBitsPerSecond)
+                : "0 bps";
+        public string DetailText => IsHistorical
+            ? "历史库累计 · 当前未运行"
+            : !IsRunning
+                ? string.IsNullOrWhiteSpace(ProcessPath)
+                    ? $"PID {ProcessId} · 进程已退出"
+                    : $"PID {ProcessId} · 已退出 · {ProcessPath}"
+            : string.IsNullOrWhiteSpace(ProcessPath)
+                ? $"PID {ProcessId} · 路径受系统保护"
+                : $"PID {ProcessId} · {ProcessPath}";
+        public string RunningStatusText => IsRunning ? "正在运行" : "当前未运行";
+        public Brush RunningStatusBrush => BrushFrom(IsRunning ? "#39C983" : "#EF6670");
+        public string ProxyBadge => ProxyRole switch
+        {
+            ProxyTrafficRole.Exit => "代理出口 · 对外",
+            ProxyTrafficRole.Ingress => "代理接入 · 本地",
+            _ => string.Empty
+        };
+        public Visibility ProxyBadgeVisibility => ProxyRole == ProxyTrafficRole.None ? Visibility.Collapsed : Visibility.Visible;
+        public Brush BadgeBackground => ProxyRole == ProxyTrafficRole.Exit ? BrushFrom("#E9E1FFFF") : BrushFrom("#E7F5EEFF");
+        public Brush BadgeForeground => ProxyRole == ProxyTrafficRole.Exit ? BrushFrom("#7651B5") : BrushFrom("#3B8A60");
+        public Brush CardAccentBrush => ProxyRole switch
+        {
+            ProxyTrafficRole.Exit => BrushFrom("#9B6DDF"),
+            ProxyTrafficRole.Ingress => BrushFrom("#55B982"),
+            _ => BrushFrom("#78A5C7")
+        };
+    }
+
+    private sealed record ProcessTrafficUsageSnapshot(long ExternalBytes, bool IsProxyExit);
+
+    private readonly record struct ProcessTrafficUsageDelta(long NonProxyBytes, long ProxyBytes)
+    {
+        public ProcessTrafficUsageDelta Add(long nonProxyBytes, long proxyBytes) => new(
+            SaturatingAdd(NonProxyBytes, nonProxyBytes), SaturatingAdd(ProxyBytes, proxyBytes));
+
+        private static long SaturatingAdd(long left, long right)
+        {
+            if (left <= 0) return Math.Max(0, right);
+            if (right <= 0) return left;
+            return left > long.MaxValue - right ? long.MaxValue : left + right;
+        }
+    }
+
+    private sealed record TrafficUsageChartBucket(DateTime Start, long NonProxyBytes, long ProxyBytes, bool HasSample)
+    {
+        public long TotalBytes => NonProxyBytes + ProxyBytes;
+    }
+
+    private sealed record TrafficUsageChartScale(double LinearCeiling, double Peak, bool IsAdaptive)
+    {
+        internal const double LinearHeightRatio = 0.76d;
+    }
 
     private static string FormatByteRate(double bytes)
     {
