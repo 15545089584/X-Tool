@@ -8,6 +8,8 @@ import android.app.Service
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
@@ -53,6 +55,7 @@ class SyncForegroundService : Service() {
     private lateinit var session: SessionStore
     private var automaticMode = true
     private var loopStarted = false
+    private var wasConnected = false
 
     override fun onCreate() {
         super.onCreate()
@@ -113,6 +116,7 @@ class SyncForegroundService : Service() {
             }
 
             if (!connected) {
+                wasConnected = false
                 TransferRuntime.updateConnection(false, "等待电脑出现在同一局域网")
                 updateConnectionNotification("等待已信任电脑上线")
                 delay(4500)
@@ -122,6 +126,8 @@ class SyncForegroundService : Service() {
             val displayName = session.serverName.ifBlank { host }
             TransferRuntime.updateConnection(true, "已连接 $displayName")
             updateConnectionNotification("已连接 $displayName")
+            if (!wasConnected && !automaticMode) playConnectionTone()
+            wasConnected = true
             receiveOutgoingFiles(host, token)
             delay(1800)
         }
@@ -182,7 +188,8 @@ class SyncForegroundService : Service() {
                     }, null, null)
                 }
                 TransferRuntime.updateTransfer(MobileTransfer(
-                    transferId, file.name, "电脑 → 手机", file.size, file.size, "completed", "已保存到 Download/XTool"
+                    transferId, file.name, "电脑 → 手机", file.size, file.size, "completed", "已保存到 Download/XTool",
+                    uri.toString()
                 ))
                 getSystemService(NotificationManager::class.java).cancel(progressNotificationId(transferId))
                 createdUri = null
@@ -247,6 +254,17 @@ class SyncForegroundService : Service() {
     }
 
     private fun progressNotificationId(transferId: String) = 3000 + (transferId.hashCode() and 0x0FFF)
+
+    private fun playConnectionTone() {
+        runCatching {
+            val tone = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 75)
+            tone.startTone(ToneGenerator.TONE_PROP_ACK, 140)
+            scope.launch {
+                delay(220)
+                tone.release()
+            }
+        }
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 

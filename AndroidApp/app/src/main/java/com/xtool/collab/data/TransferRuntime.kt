@@ -11,7 +11,8 @@ data class MobileTransfer(
     val transferred: Long,
     val total: Long,
     val state: String,
-    val message: String
+    val message: String,
+    val openUri: String = ""
 ) {
     val progress: Float get() = if (total <= 0) 0f else (transferred.toFloat() / total).coerceIn(0f, 1f)
 }

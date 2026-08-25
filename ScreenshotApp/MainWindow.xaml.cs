@@ -82,6 +82,7 @@ public partial class MainWindow : Window
     private GlobalShortcut _clipboardShortcut;
     private GlobalShortcut _voiceInputShortcut;
     private readonly HashSet<string> _notifiedCollaborationTransfers = new(StringComparer.Ordinal);
+    private int _lastCollaborationSessionCount;
 
     public MainWindow()
     {
@@ -95,6 +96,8 @@ public partial class MainWindow : Window
         CollaborationView.ConnectionSettingsRequested += () => OpenSettingsWindow("Connection");
         CollaborationService.Instance.FileReceived += CollaborationService_FileReceived;
         CollaborationService.Instance.TransferProgressChanged += CollaborationService_TransferProgressChanged;
+        CollaborationService.Instance.DeviceStateChanged += CollaborationService_DeviceStateChanged;
+        _lastCollaborationSessionCount = CollaborationService.Instance.SessionCount;
         QrCodeConverterViewHost.HistoryStore = _historyStore;
         ClipboardService.TextRecordRequested += async content =>
         {
@@ -680,6 +683,7 @@ public partial class MainWindow : Window
         CollaborationService.Instance.Stop();
         CollaborationService.Instance.FileReceived -= CollaborationService_FileReceived;
         CollaborationService.Instance.TransferProgressChanged -= CollaborationService_TransferProgressChanged;
+        CollaborationService.Instance.DeviceStateChanged -= CollaborationService_DeviceStateChanged;
         if (_windowSource is null)
         {
             return;
@@ -713,23 +717,44 @@ public partial class MainWindow : Window
         _voiceInputService.Dispose();
     }
 
-    private void CollaborationService_FileReceived(string name, long size)
+    private void CollaborationService_FileReceived(string name, long size, string filePath)
     {
         Dispatcher.BeginInvoke(() =>
         {
             if (Application.Current is not App app) return;
-            var directory = CollaborationService.Instance.IncomingDirectory;
-            app.ShowTrayBalloon("手机文件已接收", $"{name}（{FormatCollaborationSize(size)}）已保存，点击打开目录", () =>
+            app.ShowTrayBalloon("手机文件已接收", $"{name}（{FormatCollaborationSize(size)}）已保存，点击打开文件", () =>
             {
                 try
                 {
-                    Process.Start(new ProcessStartInfo("explorer.exe", $"\"{directory}\"") { UseShellExecute = true });
+                    Process.Start(new ProcessStartInfo(filePath) { UseShellExecute = true });
                 }
                 catch
                 {
-                    // 通知点击打开失败时不影响已完成传输。
+                    try
+                    {
+                        Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{filePath}\"") { UseShellExecute = true });
+                    }
+                    catch
+                    {
+                        // 通知点击打开失败时不影响已完成传输。
+                    }
                 }
             });
+        });
+    }
+
+    private void CollaborationService_DeviceStateChanged()
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            var service = CollaborationService.Instance;
+            var count = service.SessionCount;
+            if (count > _lastCollaborationSessionCount && Application.Current is App app)
+            {
+                var deviceName = service.ConnectedDeviceNames.FirstOrDefault() ?? "手机";
+                app.ShowTrayBalloon("协作设备已连接", $"{deviceName} 已连接，可以开始双向传输");
+            }
+            _lastCollaborationSessionCount = count;
         });
     }
 

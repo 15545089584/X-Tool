@@ -62,6 +62,14 @@ class CollabApi(private val host: String) {
         false
     }
 
+    /** 仅结束当前在线状态，不删除电脑端信任关系。 */
+    fun disconnect(token: String): Boolean = try {
+        val request = Request.Builder().url("${baseUrl()}/api/disconnect?t=${encode(token)}").build()
+        client.newCall(request).execute().use { it.isSuccessful }
+    } catch (_: Exception) {
+        false
+    }
+
     fun listOutgoingFiles(token: String): List<RemoteFile> {
         val request = Request.Builder().url("${baseUrl()}/api/files/list?t=${encode(token)}&dir=outgoing").build()
         client.newCall(request).execute().use { response ->

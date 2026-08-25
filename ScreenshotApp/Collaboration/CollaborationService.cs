@@ -64,6 +64,7 @@ public sealed class CollaborationService
     private readonly ConcurrentDictionary<string, SessionInfo> _sessions = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, string> _deviceSessions = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, string> _outgoingTransferIds = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, string> _transferOpenPaths = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, PairAttemptInfo> _pairAttempts = new(StringComparer.OrdinalIgnoreCase);
     private readonly SemaphoreSlim _clientGate = new(MaxConcurrentClients, MaxConcurrentClients);
     private readonly SemaphoreSlim _uploadGate = new(1, 1);
@@ -93,8 +94,8 @@ public sealed class CollaborationService
 
     public bool IsRunning { get; private set; }
 
-    /// <summary>手机文件上传成功后触发，参数为 (文件名, 字节数)。</summary>
-    public event Action<string, long>? FileReceived;
+    /// <summary>手机文件上传成功后触发，参数为 (文件名, 字节数, 本机完整路径)。</summary>
+    public event Action<string, long, string>? FileReceived;
 
     /// <summary>连接设备数、配对或掉线状态变化时触发。</summary>
     public event Action? DeviceStateChanged;
@@ -264,6 +265,7 @@ public sealed class CollaborationService
         var info = new FileInfo(sourcePath);
         var target = CreateUniqueTarget(OutgoingDirectory, SanitizeFileName(info.Name));
         var transferId = Guid.NewGuid().ToString("N");
+        _transferOpenPaths[transferId] = Path.GetFullPath(sourcePath);
         ReportTransfer(transferId, info.Name, "Send", 0, info.Length, "Preparing", "正在加入发送队列");
         await using var input = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read,
             128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
@@ -285,6 +287,20 @@ public sealed class CollaborationService
         SaveOutgoingQueue();
         ReportTransfer(transferId, queuedName, "Send", info.Length, info.Length, "Queued", "等待手机接收");
         return target;
+    }
+
+    /// <summary>获取完成项对应的本机文件；发送项指向原文件，接收项指向接收目录中的文件。</summary>
+    public bool TryGetTransferOpenPath(string transferId, out string path)
+    {
+        path = string.Empty;
+        if (string.IsNullOrWhiteSpace(transferId) ||
+            !_transferOpenPaths.TryGetValue(transferId, out var candidate) ||
+            string.IsNullOrWhiteSpace(candidate) || !File.Exists(candidate))
+        {
+            return false;
+        }
+        path = candidate;
+        return true;
     }
 
     /// <summary>电脑端捕获到外部复制后调用：文本入桥，手机轮询即可拉取。</summary>
@@ -701,6 +717,19 @@ public sealed class CollaborationService
                 return false;
             }
 
+            // 手动断开只结束当前在线状态，保留可信令牌，便于手机再次直接连接。
+            if (path == "/api/disconnect")
+            {
+                var token = query.GetValueOrDefault("t");
+                if (!string.IsNullOrEmpty(token) && _sessions.TryGetValue(token, out var info))
+                {
+                    _sessions[token] = info with { LastSeen = DateTime.MinValue };
+                    DeviceStateChanged?.Invoke();
+                }
+                await WriteJsonAsync(stream, 200, new { ok = true }, serviceToken);
+                return false;
+            }
+
             if (path == "/")
             {
                 await WriteTextAsync(stream, 200, "text/plain; charset=utf-8", "X-Tool 协作中心：请使用手机扫描电脑端二维码完成配对。", serviceToken);
@@ -794,9 +823,10 @@ public sealed class CollaborationService
                 }
                 var target = MoveUploadToUniqueTarget(request.TemporaryBodyPath, IncomingDirectory, name);
                 var transferId = NormalizeTransferId(query.GetValueOrDefault("id"));
+                _transferOpenPaths[transferId] = target;
                 ReportTransfer(transferId, Path.GetFileName(target), "Receive", request.BodyLength, request.BodyLength,
                     "Completed", "已收到手机文件");
-                FileReceived?.Invoke(Path.GetFileName(target), request.BodyLength);
+                FileReceived?.Invoke(Path.GetFileName(target), request.BodyLength, target);
                 await WriteJsonAsync(stream, 200, new { ok = true, name = Path.GetFileName(target) }, serviceToken);
                 return true;
             }
@@ -906,12 +936,17 @@ public sealed class CollaborationService
         var now = DateTime.UtcNow;
         if (_sessions.TryGetValue(token, out var info) && info.Expires > now)
         {
+            var becameActive = info.LastSeen < now.AddSeconds(-30);
             _sessions[token] = info with
             {
                 LastSeen = now,
                 Expires = now.AddDays(SessionLifetimeDays),
                 RemoteIpAddress = NormalizeRemoteIp(remoteEndpoint) ?? info.RemoteIpAddress
             };
+            if (becameActive)
+            {
+                DeviceStateChanged?.Invoke();
+            }
             return true;
         }
         _sessions.TryRemove(token, out _);

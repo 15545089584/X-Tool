@@ -12,11 +12,13 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.OpenableColumns
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -109,7 +111,7 @@ private fun CollaborationApp(session: SessionStore) {
     val background = Brush.verticalGradient(listOf(Color(0xFFEAF4FF), Color(0xFFF7FBFE), Color(0xFFEAFBF7)))
     Box(Modifier.fillMaxSize().background(background)) {
         if (paired) {
-            HomeScreen(session, onDisconnected = { paired = false })
+            HomeScreen(session)
         } else {
             PairScreen(session, onPaired = { paired = true })
         }
@@ -125,35 +127,34 @@ private fun PairScreen(session: SessionStore, onPaired: () -> Unit) {
     var message by remember { mutableStateOf("请在电脑协作中心扫描配对码") }
     var connecting by remember { mutableStateOf(false) }
 
-    fun applyScan(text: String) {
-        parsePairUrl(text)?.let {
-            host = it.first
-            pin = it.second
-            message = "已读取电脑地址，正在配对"
-        } ?: run { message = "未识别为 X-Tool 配对码" }
-    }
-
-    fun connect() {
-        val normalizedHost = normalizeHost(host)
-        if (normalizedHost.isBlank() || pin.length != 6) {
+    fun connect(targetHost: String = host, targetPin: String = pin) {
+        val normalizedHost = normalizeHost(targetHost)
+        val normalizedPin = targetPin.trim()
+        if (normalizedHost.isBlank() || normalizedPin.length != 6) {
             message = "请输入电脑地址和 6 位配对码"
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
             return
         }
         connecting = true
         scope.launch {
             val result = withContext(Dispatchers.IO) {
-                CollabApi(normalizedHost).pair(pin, session.deviceId, currentDeviceName())
+                CollabApi(normalizedHost).pair(normalizedPin, session.deviceId, currentDeviceName())
             }
             connecting = false
             if (result.token == null) {
                 message = result.error ?: "配对失败"
+                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                 return@launch
             }
             session.host = result.host.ifBlank { normalizedHost }
             session.token = result.token
-            session.pin = pin
+            session.pin = normalizedPin
             session.serverId = result.serverId
             session.serverName = result.serverName
+            host = session.host
+            pin = normalizedPin
+            message = "连接成功，已保存电脑地址与配对信息"
+            Toast.makeText(context, "已连接 ${session.serverName.ifBlank { session.host }}", Toast.LENGTH_SHORT).show()
             SyncForegroundService.start(context, automatic = false)
             onPaired()
         }
@@ -161,8 +162,16 @@ private fun PairScreen(session: SessionStore, onPaired: () -> Unit) {
 
     val scanner = rememberLauncherForActivityResult(ScanContract()) { result ->
         if (!result?.contents.isNullOrBlank()) {
-            applyScan(result.contents)
-            connect()
+            val parsed = parsePairUrl(result.contents)
+            if (parsed == null) {
+                message = "未识别为 X-Tool 配对码"
+                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+            } else {
+                host = parsed.first
+                pin = parsed.second
+                message = "已读取电脑地址，正在配对"
+                connect(parsed.first, parsed.second)
+            }
         }
     }
 
@@ -196,7 +205,7 @@ private fun PairScreen(session: SessionStore, onPaired: () -> Unit) {
                     value = pin, onValueChange = { pin = it.filter(Char::isDigit).take(6) }, modifier = Modifier.fillMaxWidth(),
                     singleLine = true, shape = RoundedCornerShape(14.dp), placeholder = { Text("000000") }
                 )
-                Text(message, Modifier.padding(top = 12.dp), color = if (message.contains("失败") || message.contains("无法")) Color(0xFFD65362) else Muted, fontSize = 12.sp)
+                Text(message, Modifier.padding(top = 12.dp), color = if (message.contains("失败") || message.contains("无法") || message.contains("不正确") || message.contains("错误")) Color(0xFFD65362) else Muted, fontSize = 12.sp)
                 Spacer(Modifier.height(18.dp))
                 Button(
                     onClick = { connect() }, enabled = !connecting, modifier = Modifier.fillMaxWidth().height(50.dp),
@@ -224,7 +233,7 @@ private fun currentDeviceName(): String {
 }
 
 @Composable
-private fun HomeScreen(session: SessionStore, onDisconnected: () -> Unit) {
+private fun HomeScreen(session: SessionStore) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     val connected by TransferRuntime.connected.collectAsState()
@@ -237,6 +246,7 @@ private fun HomeScreen(session: SessionStore, onDisconnected: () -> Unit) {
         if (uris.isEmpty()) return@rememberLauncherForActivityResult
         scope.launch {
             for (uri in uris) {
+                runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
                 uploadUri(context, session, uri) { actionMessage = it }
             }
         }
@@ -254,10 +264,11 @@ private fun HomeScreen(session: SessionStore, onDisconnected: () -> Unit) {
             }
             TextButton(onClick = {
                 scope.launch {
-                    withContext(Dispatchers.IO) { runCatching { CollabApi(session.host).logout(session.token) } }
+                    withContext(Dispatchers.IO) { runCatching { CollabApi(session.host).disconnect(session.token) } }
                     SyncForegroundService.stop(context)
-                    session.clearSession()
-                    onDisconnected()
+                    TransferRuntime.updateConnection(false, "已手动断开，点击连接电脑可重新连接")
+                    actionMessage = "已断开当前连接，电脑地址和配对信息已保留"
+                    Toast.makeText(context, "已断开，仍保留这台可信电脑", Toast.LENGTH_SHORT).show()
                 }
             }) { Text("断开", color = Color(0xFFD65362)) }
         }
@@ -270,8 +281,15 @@ private fun HomeScreen(session: SessionStore, onDisconnected: () -> Unit) {
                         Text(if (connected) "电脑已连接" else "等待电脑", fontWeight = FontWeight.SemiBold, color = Ink, fontSize = 17.sp)
                         Text(connectionText, color = Muted, fontSize = 11.sp)
                     }
-                    OutlinedButton(onClick = { SyncForegroundService.start(context, automatic = false) }, shape = RoundedCornerShape(12.dp)) {
-                        Text("重新连接", color = Blue, fontSize = 12.sp)
+                    OutlinedButton(
+                        onClick = {
+                            SyncForegroundService.start(context, automatic = false)
+                            actionMessage = "正在连接已信任电脑"
+                        },
+                        enabled = !connected,
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(if (connected) "已连接" else "连接电脑", color = Blue, fontSize = 12.sp)
                     }
                 }
                 Spacer(Modifier.height(14.dp))
@@ -323,15 +341,22 @@ private fun HomeScreen(session: SessionStore, onDisconnected: () -> Unit) {
             }
         } else {
             LazyColumn(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                items(transfers, key = { it.id }) { TransferCard(it) }
+                items(transfers, key = { it.id }) { transfer ->
+                    TransferCard(transfer) { openTransfer(context, transfer) }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun TransferCard(transfer: MobileTransfer) {
-    Card(colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.82f)), shape = RoundedCornerShape(17.dp)) {
+private fun TransferCard(transfer: MobileTransfer, onOpen: () -> Unit) {
+    val canOpen = transfer.state == "completed" && transfer.openUri.isNotBlank()
+    Card(
+        modifier = Modifier.clickable(enabled = canOpen, onClick = onOpen),
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.82f)),
+        shape = RoundedCornerShape(17.dp)
+    ) {
         Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -383,10 +408,24 @@ private suspend fun uploadUri(context: Context, session: SessionStore, uri: Uri,
     }
     TransferRuntime.updateTransfer(MobileTransfer(
         transferId, name, "手机 → 电脑", if (ok) size else 0, size,
-        if (ok) "completed" else "failed", if (ok) "电脑已接收" else "发送失败"
+        if (ok) "completed" else "failed", if (ok) "电脑已接收" else "发送失败",
+        if (ok) uri.toString() else ""
     ))
     showUploadCompleted(context, transferId, name, ok)
     report(if (ok) "$name 已发送到电脑" else "$name 发送失败，请检查连接")
+}
+
+private fun openTransfer(context: Context, transfer: MobileTransfer) {
+    if (transfer.openUri.isBlank()) return
+    val uri = Uri.parse(transfer.openUri)
+    val mimeType = context.contentResolver.getType(uri) ?: "*/*"
+    val intent = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(uri, mimeType)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    runCatching { context.startActivity(intent) }.onFailure {
+        Toast.makeText(context, "没有可打开此文件的应用", Toast.LENGTH_SHORT).show()
+    }
 }
 
 private fun showUploadProgress(context: Context, id: String, name: String, done: Long, total: Long) {

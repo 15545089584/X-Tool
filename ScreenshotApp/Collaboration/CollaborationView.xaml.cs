@@ -255,6 +255,29 @@ public partial class CollaborationView : UserControl
         TransferEmptyState.Visibility = Transfers.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
+    private void TransferItem_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: TransferRow row } || !row.IsCompleted)
+        {
+            return;
+        }
+        if (!_service.TryGetTransferOpenPath(row.TransferId, out var path))
+        {
+            DropTitleText.Text = "文件已不在原位置";
+            DropHintText.Text = "它可能已被移动或删除";
+            return;
+        }
+        try
+        {
+            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+        }
+        catch (Exception exception)
+        {
+            DropTitleText.Text = "无法打开该文件";
+            DropHintText.Text = exception.GetBaseException().Message;
+        }
+    }
+
     private void OpenIncomingFolder_Click(object sender, RoutedEventArgs e)
     {
         try
@@ -294,6 +317,7 @@ public sealed class TransferRow : INotifyPropertyChanged
     public Brush BadgeBackground { get => _badgeBackground; private set => SetField(ref _badgeBackground, value); }
     public Brush BadgeForeground { get => _badgeForeground; private set => SetField(ref _badgeForeground, value); }
     public bool IsFinished { get; private set; }
+    public bool IsCompleted { get; private set; }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -313,6 +337,7 @@ public sealed class TransferRow : INotifyPropertyChanged
             _ => "传输中"
         };
         IsFinished = progress.State is "Completed" or "Failed";
+        IsCompleted = progress.State == "Completed";
         BadgeBackground = new SolidColorBrush(progress.State switch
         {
             "Completed" => Color.FromArgb(170, 218, 250, 239),
@@ -326,6 +351,7 @@ public sealed class TransferRow : INotifyPropertyChanged
             _ => Color.FromRgb(77, 124, 254)
         });
         OnPropertyChanged(nameof(IsFinished));
+        OnPropertyChanged(nameof(IsCompleted));
     }
 
     private static string FormatBytes(long bytes) => bytes switch
