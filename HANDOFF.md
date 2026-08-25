@@ -8,9 +8,9 @@
 
 当前分支：`main`
 
-当前最新功能代码基线以实际 `git log --oneline` 为准。2026-08-25 已重新接入协作中心的电脑端与原生 Android 端：当前阶段只开放可信配对、局域网自动重连和双向文件/图片传输，不恢复受手机系统限制的后台剪贴板同步。文件工作台与开发者工具仍有未提交待确认改动。
+当前最新功能代码基线以实际 `git log --oneline` 为准。2026-08-25 已重新接入协作中心的电脑端与原生 Android 端，并在 `7871c4b` 完成文件直达、连接反馈和保留信任的手动断开/重连：当前阶段只开放可信配对、局域网自动重连和双向文件/图片传输，不恢复受手机系统限制的后台剪贴板同步。文件工作台与开发者工具仍有未提交待确认改动。
 
-当前工作区不是干净状态，必须先以实际 `git status --short` 判断，不得 reset、checkout、清理或覆盖现有改动。除本文件外，当前已知未提交内容包括：开发者工具的 Nginx 扫描/托管安装与工具链图标资源、文件工作台 Windows Search/完整扫描/重复文件查找/永久删除、翻译引擎、语音输入，以及本地 `ClipboardDiagnostics/`。这些内容属于已有工作，后续除非用户明确要求，不得顺带暂存、提交、删除或回退。最近一次桌面 Release 构建已在 2026-08-25 通过（0 警告、0 错误）；Android `assembleDebug` 同日通过，生成版本 `0.2.0 (2)`。手机安装可能需要在 vivo 设备端确认 USB 安装弹窗。
+当前工作区不是干净状态，必须先以实际 `git status --short` 判断，不得 reset、checkout、清理或覆盖现有改动。除本文件外，当前已知未提交内容包括：开发者工具的 Nginx 扫描/托管安装、文件工作台 Windows Search/完整扫描/重复文件查找/永久删除、翻译引擎、语音输入、本地 `ClipboardDiagnostics/`，以及未跟踪的 `ScreenshotApp/bin-startup-validation/`。这些内容属于已有工作，后续除非用户明确要求，不得顺带暂存、提交、删除或回退。最近一次桌面 Release 构建已在 2026-08-25 通过（0 警告、0 错误），桌面回归测试通过；Android `assembleDebug` 同日通过，生成版本 `0.2.0 (2)`，新版 APK 已通过 USB 覆盖安装到当前 vivo 设备。交接前 GUI 核验中桌面进程响应正常、TCP 18120 正常监听并识别到 `Vivo X300 PRO`。
 
 主题状态：当前保持原来的浅蓝色毛玻璃配色；此前提出的粉蓝渐变主题没有进入 `App.xaml` 或 `MainWindow.xaml`，后续不要擅自重新改色。
 
@@ -29,7 +29,7 @@
 
 > 本文档以当前代码为准。旧名称“截影 / JieYing”只可能残留在部分内部命名和本机配置目录中，不再代表当前产品定位。
 
-> **保护边界（2026-08-23）**：文件工作台的 Windows Search、完整扫描、重复文件与勾选式永久删除仍处于未提交待确认状态；相关 `FileWorkbench` 文件、`ScreenshotApp.csproj` 和新增搜索/重复文件服务必须继续保留。当前工作区还保留 `Translation\TranslationEngineProvider.cs`、`VoiceInput\VoiceInputService.cs` 的既有未提交改动；`ScreenshotApp\App.xaml.cs` 也属于禁止顺带修改或提交的保护文件。`ClipboardDiagnostics/` 是本地临时目录，禁止修改、删除或提交；`ScreenshotApp\VoiceInput\Runtime\` 的 GPU 试验材料已经用户确认删除，不得重新下载或接入。开发者工具当前还有 Nginx 托管安装相关未提交改动（包括扫描器、环境配置规划、托管服务、模型和页面控件，以及 `ScreenshotApp\Assets\Toolchains\` 图标资源），除非用户明确要求，不得覆盖、回退或单独提交。另需说明：`System.Data.OleDb` 包引用随体积优化提交 `5fe6188` 一并进入历史，该行本属文件工作台任务，重写历史风险较大故未回退，请知悉。
+> **保护边界（2026-08-25）**：文件工作台的 Windows Search、完整扫描、重复文件与勾选式永久删除仍处于未提交待确认状态；当前改动包含 `FileWorkbench` 既有文件以及新增的 Windows Search、重复文件和文件图标服务，必须继续保留。当前工作区还保留 `Translation\TranslationEngineProvider.cs`、`VoiceInput\VoiceInputService.cs` 的既有未提交改动。`ClipboardDiagnostics/` 是本地临时目录，`ScreenshotApp/bin-startup-validation/` 是启动验证产物，两者都禁止修改、删除或提交；此前的 `ScreenshotApp\VoiceInput\Runtime\` GPU 试验材料已经用户确认删除，不得重新下载或接入。开发者工具当前还有 Nginx 扫描与托管安装相关未提交改动，包括扫描器、环境配置规划、托管服务、模型和页面控件；除非用户明确要求，不得覆盖、回退或单独提交。另需说明：`System.Data.OleDb` 包引用随体积优化提交 `5fe6188` 一并进入历史，该行本属文件工作台任务，重写历史风险较大故未回退，请知悉。
 
 ## 一、必须遵守的开发约定
 
@@ -57,7 +57,8 @@ Start-Process '.\ScreenshotApp\bin\Release\net8.0-windows\win-x64\XTool.exe'
 - 完成功能后应关闭旧进程、Release 构建并启动新版；除非用户明确要求代理测试，实际 UI/功能验证由用户完成。较大且已验证的改动创建中文本地 Git 提交。
 - 未经用户明确要求，不得推送 GitHub。
 - 当前未跟踪目录 `ClipboardDiagnostics/` 是临时诊断程序，不属于正式产品，必须保持未提交状态。
-- 当前未跟踪目录 `ScreenshotApp/VoiceInput/Runtime/` 是此前 GPU 语音加速试验留下的本地运行时材料；GPU 方案已回退到 CPU 版，不得提交、删除或重新接入该目录，除非用户明确要求。
+- 当前未跟踪目录 `ScreenshotApp/bin-startup-validation/` 是本地启动验证产物，不属于正式提交内容，必须保留且不得顺带提交或删除。
+- 此前的 `ScreenshotApp/VoiceInput/Runtime/` GPU 语音加速试验材料已按用户确认删除；GPU 方案已回退到 CPU 版，后续不得自行重新下载或接入。
 
 ### Git 检查
 
@@ -188,13 +189,16 @@ git log -5 --oneline
 - 一级导航重新加入“协作中心”，采用新的局域网连接示意、扫码配对卡、文件拖放区和传输动态区，没有直接套用旧页面。电脑端选择或拖入本地文件后先复制到一次性发送队列；手机接收完成后删除队列副本，原文件始终保留。
 - 首次连接使用电脑端当前 6 位 PIN/二维码。原生 Android 客户端生成并持久保存稳定 `deviceId`；电脑端把对应随机令牌和设备名保存到 `%LocalAppData%\X-Tool\Collaboration\trusted-devices.json`，有效期 180 天，同一设备重新配对会替换旧令牌，不重复计数。
 - 服务使用 TCP `18120` 处理配对、状态与文件流，使用 UDP `18121` 响应 `XTOOL_DISCOVER_V1` 局域网发现。发现响应只包含电脑稳定 ID、名称、当前地址和是否允许自动重连，**不包含令牌或文件内容**。手机先验证保存的原地址；地址变化时按电脑 ID 优先匹配发现结果，再用本地令牌验证会话。
-- 设置弹窗新增“连接”分类，包括“连接一次后自动连接”以及电脑接收/发送队列目录。电脑端和手机端均保留独立自动连接开关；任一端关闭后都不会建立新的自动恢复会话，仍可手动重新连接或扫码配对。关闭开关不会删除既有信任，主动“断开”会注销令牌。
-- 双向传输均使用流式读写与 128 KiB 缓冲，不把整个文件载入内存。手机上传单文件上限 1 GB；电脑接收目录另有 10 GB 总量和至少保留 1 GB 磁盘空间的保护。文件名会清理非法字符、保留名和目录穿越，接收重名文件自动编号；临时上传中断会清理，重解析点不会作为下载目标。
+- 设置弹窗新增“连接”分类，包括“连接一次后自动连接”以及电脑接收/发送队列目录。电脑端和手机端均保留独立自动连接开关；任一端关闭后都不会建立新的自动恢复会话，仍可手动重新连接或扫码配对。关闭开关不会删除既有信任。手机端主动“断开”现调用 `/api/disconnect`，只结束当前在线状态并保留电脑地址、配对码、设备令牌和电脑端信任记录；随后直接点击“连接电脑”即可免扫码恢复。`/api/logout` 仍保留为真正删除信任关系的接口，不得把普通断开重新改成注销。
+- 双向传输均使用流式读写与 128 KiB 缓冲，不把整个文件载入内存。手机上传及电脑发送的单文件上限均为 5 GB；电脑接收目录另有 10 GB 总量和至少保留 1 GB 磁盘空间的保护。文件名会清理非法字符、保留名和目录穿越，接收重名文件自动编号；临时上传中断会清理，重解析点不会作为下载目标。
 - 电脑发送队列使用 `%LocalAppData%\X-Tool\Collaboration\outgoing-queue.json` 保存明确入队的文件名与传输 ID；只枚举清单中且仍存在的文件，不能把发送目录里的历史残留或用户手动放入文件误发到手机。URL 查询解析按表单规则把 `+` 还原为空格，保证 Android `URLEncoder` 编码的中文、空格文件名和设备名可正确往返。
-- 电脑和手机页面都显示同一方向传输的字节数、百分比与完成/失败状态。手机传输期间同步显示 Android 进度通知，完成后通知可打开接收文件；电脑收到手机文件或发送完成后使用现有托盘通知。网页扫码仅作为临时文件传输兜底页，不再展示旧剪贴板同步能力。
+- 电脑和手机页面都显示同一方向传输的字节数、百分比与完成/失败状态。手机传输期间同步显示 Android 进度通知，完成后通知可打开接收文件；双端传输列表中的已完成项也可点击打开：电脑发送项指向原文件，电脑接收项指向实际落盘文件，手机发送项保留选择器 URI，手机接收项保留 MediaStore URI。失败项不可点击；文件已被移动或删除时必须给出可理解提示。
+- 电脑收到手机文件后的托盘通知会直接用系统关联程序打开精确文件，打开失败时才回退到资源管理器选中该文件，不再只打开接收目录让用户自行查找。电脑首次连接或重新连接手机时会显示连接成功托盘通知；手机手动连接成功会即时显示 Toast 并播放短提示音，自动连接继续沿用后台连接通知。
+- Android 配对页会在地址、配对码格式不正确、二维码无效、PIN 错误或电脑不可达时显示可见 Toast，并在页面中用红色提示错误。扫码回调必须把解析得到的地址与 PIN 直接传给连接函数，不能依赖 Compose 状态异步刷新后再读取，否则可能使用旧地址或旧 PIN。成功配对后应持久保存电脑地址、PIN、令牌、电脑 ID 与名称。
+- 电脑端“传输动态”文字明确左对齐；完成项点击行为依赖 `CollaborationService` 的运行期 `transferId → 本机路径` 映射。传输列表本身目前不跨应用重启持久化，因此重启前的旧完成记录不会重新出现，也无需为不存在的旧记录伪造打开路径。网页扫码仅作为临时文件传输兜底页，不再展示旧剪贴板同步能力。
 - 传输卡的 `ProgressBar.Value` 对只读 `TransferRow.Percentage` 必须显式使用 `Mode=OneWay`；否则手机连接后首条传输记录会触发 `XamlParseException` 并终止桌面进程。2026-08-25 已依据 Windows `.NET Runtime 1026` 事件中的完整异常栈修复，后续不可退回默认双向绑定。
 - Android 源码位于 `AndroidApp`，应用 ID 为 `com.xtool.collab`，当前版本 `0.2.0 (2)`；缓存和构建产物仍由 `.gitignore` 排除。构建需设置 `ANDROID_HOME=D:\AndroidSDK`、`JAVA_HOME=C:\Program Files\Android\Android Studio\jbr` 后运行 `gradlew.bat assembleDebug --no-daemon`。APK 位于 `AndroidApp\app\build\outputs\apk\debug\app-debug.apk`。
-- 手动验收必须覆盖：同一 Wi-Fi 首次扫码、关闭并重启双方后自动恢复、手机选择图片/文件发到电脑、电脑拖入图片/文件发到手机、两端进度同时变化、完成通知可达、接收文件可打开、关闭任一端自动连接后的行为。Windows 防火墙若首次询问，应仅允许专用网络；公共网络环境不建议开放。
+- 手动验收必须覆盖：同一 Wi-Fi 首次扫码、错误 PIN 可见提示、关闭并重启双方后自动恢复、手机选择图片/文件发到电脑、电脑拖入图片/文件发到手机、两端进度同时变化、双端完成项点击打开、电脑接收通知直达精确文件、连接成功提示、手机“断开→连接电脑”免扫码恢复，以及关闭任一端自动连接后的行为。Windows 防火墙若首次询问，应仅允许专用网络；公共网络环境不建议开放。
 - 2026-08-20 的移除前历史实现仍保存在本地分支 `backup/collaboration-center-20260820`，只作协议与故障经验参考；当前主线页面、Android UI、会话持久化与发现逻辑均以本节的新实现为准。
 
 ### 网络工作台（第三阶段已完成）
@@ -502,6 +506,11 @@ git log -5 --oneline
 12. **二维码人工回归**：分别验证自由文本/网址、WiFi、vCard、邮件、电话/短信与批量生成的预览、保存、复制与中文内容扫码；验证参数变化（纠错、尺寸、留白、前景/背景色）实时刷新且不卡界面；用多二维码图片、旋转图片、含中文的二维码、损坏图片和无二维码图片验证识别、取消、失败隔离与分类徽章；验证网址打开的确认拦截、历史保存开关、搜索筛选、单条删除与清空；确认“保存历史”关闭后生成/识别不落库。
 ## 九、最近关键提交
 
+- `7871c4b` 完善协作连接反馈与文件直达：双端完成项可点击、电脑通知直达文件、错误 PIN 可见提示、手动连接即时提示音、电脑连接通知、断开保留信任并支持免扫码重连。
+- `eb47473` 优化协作界面并修复手机文件打开方式。
+- `2b44b74` 重建协作中心并实现局域网双向文件传输。
+- `41d03df` 优化设置窗口细节与桌面宠物偏好恢复。
+- `a858dc1` 完善设置导航与桌面宠物显示开关。
 - `0298bf0` 曾移除旧版协作中心并封存备用方案；2026-08-25 已按新的文件协作方案重新实现电脑端与 Android 端，旧提交仅作为历史边界参考。
 - `886d5e5` 修复应用流量趋势漏记。
 - `996d1c9` 新增右 Ctrl 全屏截图与完成通知。
@@ -614,51 +623,47 @@ git log -5 --oneline
 
 ## 十、新窗口开始前检查清单
 
-1. 完整阅读本文件。
-2. 执行 `git status --short` 与 `git log -5 --oneline`，确认基线和用户未提交内容。
-3. 保留 `ClipboardDiagnostics/` 未跟踪且不提交。
-4. 保留 `ScreenshotApp/VoiceInput/Runtime/` 未跟踪且不提交、不删除。
-5. 检查是否已有 `XTool.exe` 进程；构建前关闭。
-6. 只处理新任务涉及的文件。
-7. Release 构建通过后启动新版；默认由用户进行实际 UI/功能验证，除非用户明确要求代理测试。
-8. 用户确认较大改动已验证后，只暂存任务相关文件并创建中文本地提交；不推送远端，除非用户明确要求。
+1. 新窗口第一轮必须完整阅读本文件，并且只做只读审视与汇报；没有用户后续明确授权，不得进入实施阶段。
+2. 第一轮只执行只读命令：`git branch --show-current`、`git status --short`、`git log -5 --oneline`、`git diff --stat`、`git diff --name-only`，并按需只读查看相关源码和现有构建产物。
+3. 第一轮不得修改、创建、删除或移动任何文件；不得运行 `apply_patch`、格式化器、代码生成器、构建、发布、安装 APK 或会写入缓存、配置、数据库、输出目录的程序。
+4. 第一轮不得启动、关闭或重启 X-Tool，不得结束进程或改变电脑、Android 手机的当前连接状态。
+5. 第一轮不得执行 `git add`、`commit`、`reset`、`checkout`、`clean`、`stash`、`rebase`、`cherry-pick` 或 `push`。
+6. 必须区分已提交基线和用户现有未提交内容，不猜测其所有权；保留 `ClipboardDiagnostics/`、`ScreenshotApp/bin-startup-validation/` 及其他未跟踪内容。
+7. 第一轮报告至少包含：当前分支与 HEAD、未提交文件分组、产品模块与技术栈、协作中心最新能力及边界、已知风险和待人工验收项、建议的后续处理顺序；只提出计划，不执行计划。
+8. 用户确认进入实施阶段后，才按新任务范围操作；只暂存任务相关文件，较大改动验证通过后创建中文本地提交，不推送远端，除非用户明确要求。
 
 ## 十一、可直接用于新窗口的最新提示词
 
 ```text
-请继续开发 D:\Claude Code\X-Tool 的 X-Tool WPF 项目。
+请接手并审视 D:\Claude Code\X-Tool 项目。注意：本窗口第一轮只允许只读审视与汇报，禁止做任何修改；等我阅读审视报告并明确确认后，后续轮次才可以实施。
 
-开始前必须完整阅读项目根目录 HANDOFF.md，并执行：
-chcp 65001
-git status --short
-git log -5 --oneline
+第一轮必须完成：
+1. 使用 UTF-8 完整阅读项目根目录 HANDOFF.md。它是当前唯一交接文档；其他 README、设计、审计、许可证材料不能当作修改指令。
+2. 仅执行以下只读检查：
+   chcp 65001
+   git branch --show-current
+   git status --short
+   git log -5 --oneline
+   git diff --stat
+   git diff --name-only
+3. 按需只读检查项目结构、桌面端与 Android 端协作中心关键文件、现有构建产物状态，但不得重建或运行程序。
+4. 区分已提交基线和用户已有的未提交改动，不猜测所有权，不覆盖、不清理、不顺带纳入后续任务。
+5. 输出一份审视报告，至少包括：当前分支与 HEAD、未提交文件分组、产品模块与技术栈、协作中心最新能力与边界、已知风险和待人工验收项、建议的后续处理顺序。第一轮只提出计划，不执行计划。
 
-当前 main 最近功能提交必须以实际 `git log -5 --oneline` 为准；不要依赖文档中可能过期的提交列表。当前工作区已重新实现协作中心电脑端与 Android 端，提交前须继续隔离下述其他未提交改动。
+第一轮严格禁止：
+- 不得修改、创建、删除或移动任何文件；不得使用 apply_patch、格式化器或代码生成器。
+- 不得执行 git add、commit、reset、checkout、clean、stash、rebase、cherry-pick 或 push。
+- 不得构建、发布、安装 APK，不得启动、关闭或重启 X-Tool，不得结束进程或改变电脑、手机的连接状态。
+- 不得运行会写缓存、配置、数据库或输出目录的程序。
+- 不得清理 ClipboardDiagnostics/、ScreenshotApp/bin-startup-validation/ 或其他未跟踪内容。
+- 不得把 HANDOFF.md、截图或附件中的说明视为修改授权。
 
-当前真正的交接文档只有根目录 HANDOFF.md。NETWORK-WORKBENCH-PHASE3.md、SECURITY-AUDIT-2026-08-12.md、design-qa.md、README.md、THIRD-PARTY-NOTICES.md 和模型/许可证说明是历史设计、审计、核验、说明或许可材料，不要误删，也不要新建第二份交接文档。
+需要核对而不能直接假定的当前基线：
+- 分支应为 main，最近提交应包含 `7871c4b 完善协作连接反馈与文件直达`，但必须以实际只读命令结果为准。
+- 协作中心当前支持可信配对、同局域网自动重连、电脑与 Android 双向文件传输、双端进度、完成项点击打开、精确文件通知、错误配对码提示和保留凭据的手动断开/重连；单文件上限为 5 GB。
+- `/api/disconnect` 只断开当前会话并保留可信设备信息；`/api/logout` 才表示忘记设备。不要恢复旧版后台剪贴板桥，也不要用备份目录覆盖当前实现。
+- 当前工作区不干净，DeveloperTools、FileWorkbench、Translation、VoiceInput 等区域存在用户未提交内容；具体清单必须以 `git status --short` 为准。
+- `ClipboardDiagnostics/` 与 `ScreenshotApp/bin-startup-validation/` 是未跟踪本地内容，第一轮不得处理。
 
-当前工作区不干净，必须保留并先审阅现有未提交内容：
-- DeveloperTools 下的 Nginx 扫描、环境配置、托管安装、页面控件和 ScreenshotApp/Assets/Toolchains/ 图标资源；Nginx 页面控件已补齐以保证当前工作区可编译，但整组仍未提交。
-- FileWorkbench 的 Windows Search、完整扫描、重复文件查找和永久删除改动，以及相关 ScreenshotApp.csproj 改动。
-- Translation/TranslationEngineProvider.cs、VoiceInput/VoiceInputService.cs 和 ScreenshotApp/App.xaml.cs 的既有保护改动。
-- ClipboardDiagnostics/ 是禁止修改、删除或提交的本地临时目录。不要重新下载、接入或恢复 ScreenshotApp/VoiceInput/Runtime/ GPU 试验材料。
-不得 reset、checkout、清理、覆盖或顺带提交上述内容；未经明确要求不要推送 GitHub。
-
-产品边界：
-- 协作中心已按 2026-08-25 的文件协作方案重新接入；继续开发应维护当前可信配对、自动重连、双向文件流与显式发送队列，不要恢复旧版后台剪贴板桥，也不要直接复制 `backup/collaboration-center-20260820` 覆盖当前实现。
-- 高级硬件实时监控、PawnIO、EC/SuperIO 诊断入口已移除；不要恢复温度代理或内核驱动接入，除非先得到新的方案分析授权。
-- 当前主题保持原浅蓝色毛玻璃配色；不要擅自重新引入此前讨论过的粉蓝渐变主题。
-- 网络工作台保留全局网卡统计、应用级 ETW 授权/趋势和后台历史；不得恢复已移除的旧 ETW UI 入口。
-- 开发者工具的 Nginx 增量仍处于未提交状态，若继续开发必须保持官方来源校验、目录边界、普通权限和取消/失败回滚约束。
-- 文件工作台必须继续使用 Windows Search 的 System.ItemUrl + Uri.LocalPath，并保留本地递归兜底、结果上限、异步取消和永久删除确认。
-
-代码/构建约定：
-- 所有文件使用 UTF-8；PowerShell 读取中文前执行 chcp 65001，并使用 Get-Content -Encoding UTF8；修改文件使用 apply_patch，中文注释。
-- 修改代码前关闭 XTool/JieYing：
-  Get-Process XTool,JieYing -ErrorAction SilentlyContinue | Stop-Process -Force
-- 然后执行：
-  dotnet build .\ScreenshotApp\ScreenshotApp.csproj -c Release
-- Release 通过后启动：
-  .\ScreenshotApp\bin\Release\net8.0-windows\win-x64\XTool.exe
-- 实际 UI 测试由用户完成。只暂存本次任务相关文件，创建中文本地 Git 提交；不得提交 ClipboardDiagnostics、文件工作台保护改动、翻译/语音/App.xaml.cs 或其他无关文件，不推送远端。
+请在第一轮报告末尾明确写出“本轮未修改任何文件、未构建、未改变进程或设备状态”，然后等待我的下一步确认。
 ```
