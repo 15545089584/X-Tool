@@ -24,6 +24,7 @@ using ScreenshotApp.Translation;
 using ScreenshotApp.VoiceInput;
 using ScreenshotApp.NetworkWorkbench;
 using ScreenshotApp.Motion;
+using ScreenshotApp.InformationVault;
 
 namespace ScreenshotApp;
 
@@ -94,6 +95,7 @@ public partial class MainWindow : Window
         CollaborationService.Instance.AutoReconnectAllowed = _preferences.CollaborationAutoReconnect;
         CollaborationView.Configure(_preferences.CollaborationAutoReconnect);
         CollaborationView.ConnectionSettingsRequested += () => OpenSettingsWindow("Connection");
+        InformationVaultPage.NotificationRequested += ShowToast;
         CollaborationService.Instance.FileReceived += CollaborationService_FileReceived;
         CollaborationService.Instance.TransferProgressChanged += CollaborationService_TransferProgressChanged;
         CollaborationService.Instance.DeviceStateChanged += CollaborationService_DeviceStateChanged;
@@ -195,6 +197,19 @@ public partial class MainWindow : Window
         encoder.Frames.Add(BitmapFrame.Create(bitmap));
         using var stream = File.Create(outputPath);
         encoder.Save(stream);
+    }
+
+    internal void NavigateToInformationVaultForValidation()
+    {
+        InformationVaultNav.IsChecked = true;
+        NavigateToPage("InformationVault");
+        UpdateLayout();
+    }
+
+    internal void PrepareInformationVaultUnlockedValidationState()
+    {
+        InformationVaultPage.PrepareUnlockedValidationState();
+        UpdateLayout();
     }
 
     private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -489,6 +504,7 @@ public partial class MainWindow : Window
             "ResourceManagement" => ResourceManagementNav,
             "SystemTools" => SystemToolsNav,
             "DeveloperTools" => DeveloperToolsNav,
+            "InformationVault" => InformationVaultNav,
             "Collaboration" => CollaborationNav,
             _ => HomeNav
         };
@@ -576,6 +592,7 @@ public partial class MainWindow : Window
         "ResourceManagement" => ResourceManagementView,
         "SystemTools" => SystemToolsView,
         "DeveloperTools" => DeveloperToolsView,
+        "InformationVault" => InformationVaultPage,
         "Collaboration" => CollaborationView,
         "History" => HistoryView,
         _ => null
@@ -596,6 +613,7 @@ public partial class MainWindow : Window
         ResourceManagementView,
         SystemToolsView,
         DeveloperToolsView,
+        InformationVaultPage,
         CollaborationView,
         HistoryView
     ];
@@ -616,7 +634,8 @@ public partial class MainWindow : Window
         "ResourceManagement" => 50,
         "SystemTools" => 60,
         "DeveloperTools" => 70,
-        "Collaboration" => 80,
+        "InformationVault" => 80,
+        "Collaboration" => 90,
         _ => 0
     };
 
@@ -698,6 +717,7 @@ public partial class MainWindow : Window
 
     private void MainWindow_Closed(object? sender, EventArgs e)
     {
+        InformationVaultPage.LockVault();
         CollaborationService.Instance.Stop();
         CollaborationService.Instance.FileReceived -= CollaborationService_FileReceived;
         CollaborationService.Instance.TransferProgressChanged -= CollaborationService_TransferProgressChanged;
@@ -2518,6 +2538,9 @@ public partial class MainWindow : Window
                 break;
             case "DeveloperTools":
                 DeveloperToolsNav.IsChecked = true;
+                break;
+            case "InformationVault":
+                InformationVaultNav.IsChecked = true;
                 break;
             case "Shortcuts":
                 OpenShortcutSettings();

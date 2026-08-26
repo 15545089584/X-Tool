@@ -11,6 +11,7 @@
         xmlns:systemTools="clr-namespace:ScreenshotApp.SystemTools"
         xmlns:networkWorkbench="clr-namespace:ScreenshotApp.NetworkWorkbench"
         xmlns:developerTools="clr-namespace:ScreenshotApp.DeveloperTools"
+        xmlns:informationVault="clr-namespace:ScreenshotApp.InformationVault"
         mc:Ignorable="d"
         Title="X-Tool"
         Icon="Assets/XTool.png"
@@ -427,6 +428,15 @@
                             <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" FontSize="15" Text="开发者工具" />
                         </StackPanel>
                     </RadioButton>
+                    <RadioButton x:Name="InformationVaultNav" GroupName="Navigation" Style="{StaticResource NavItemStyle}"
+                                 Tag="InformationVault" Checked="NavButton_Checked">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Width="34" Height="34" Background="#F7F8FA" CornerRadius="9">
+                                <TextBlock Style="{StaticResource IconTextStyle}" FontSize="17" Text="&#xE72E;" Foreground="#626971" />
+                            </Border>
+                            <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" FontSize="15" Text="信息库" />
+                        </StackPanel>
+                    </RadioButton>
                     <RadioButton x:Name="CollaborationNav" GroupName="Navigation" Style="{StaticResource NavItemStyle}"
                                  Tag="Collaboration" Checked="NavButton_Checked">
                         <StackPanel Orientation="Horizontal">
@@ -478,7 +488,7 @@
                                         <TextBlock Margin="0,7,0,0" FontSize="13" Foreground="{StaticResource SecondaryTextBrush}"
                                                    Text="从屏幕内容、格式转换和文件整理，到网络、进程、设备与系统诊断，都在本机按需完成。" />
                                         <StackPanel Margin="0,14,0,0" Orientation="Horizontal">
-                                            <Border Padding="10,5" Background="#DCEBFF" CornerRadius="9"><TextBlock FontSize="11" Foreground="#326DAF" Text="7 个核心入口" /></Border>
+                                            <Border Padding="10,5" Background="#DCEBFF" CornerRadius="9"><TextBlock FontSize="11" Foreground="#326DAF" Text="8 个核心入口" /></Border>
                                             <Border Margin="8,0,0,0" Padding="10,5" Background="#DDF6EA" CornerRadius="9"><TextBlock FontSize="11" Foreground="#367A59" Text="本地优先" /></Border>
                                             <Border Margin="8,0,0,0" Padding="10,5" Background="#F3E8FF" CornerRadius="9"><TextBlock FontSize="11" Foreground="#76549A" Text="按需申请权限" /></Border>
                                         </StackPanel>
@@ -538,6 +548,13 @@
                                             <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#E4F2FF" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#4384C8" Text="&#xE943;" /></Border>
                                             <TextBlock Margin="0,11,0,0" FontSize="16" FontWeight="SemiBold" Text="开发者工具" />
                                             <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="工具链扫描、实际版本识别与开发环境诊断" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Height="148" Margin="8,8,0,0" Style="{StaticResource InteractiveActionCardStyle}" Tag="InformationVault" Click="HomeNavigate_Click">
+                                        <StackPanel>
+                                            <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#FDE9EF" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#B95C77" Text="&#xE72E;" /></Border>
+                                            <TextBlock Margin="0,11,0,0" FontSize="16" FontWeight="SemiBold" Text="信息库" />
+                                            <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="本地加密保存账号、密码、密钥与恢复码" />
                                         </StackPanel>
                                     </Button>
                                 </primitives:UniformGrid>
@@ -881,6 +898,7 @@
                             <systemTools:SystemToolsView x:Name="ResourceManagementView" Visibility="Collapsed" />
                             <systemTools:SystemToolsView x:Name="SystemToolsView" EnvironmentOnly="True" Visibility="Collapsed" />
                             <developerTools:DeveloperToolsView x:Name="DeveloperToolsView" Visibility="Collapsed" />
+                            <informationVault:InformationVaultView x:Name="InformationVaultPage" Visibility="Collapsed" />
                             <collaboration:CollaborationView x:Name="CollaborationView" Visibility="Collapsed" />
                             <!-- 设置页 -->
                             <Grid x:Name="SettingsView" Visibility="Collapsed" Margin="58,44">

@@ -8,6 +8,7 @@ using ScreenshotApp.NetworkWorkbench;
 using ScreenshotApp.Translation;
 using ScreenshotApp.DesktopPet;
 using ScreenshotApp.Settings;
+using ScreenshotApp.InformationVault;
 
 namespace ScreenshotApp;
 
@@ -333,6 +334,17 @@ public partial class App : System.Windows.Application
             await Task.Delay(150);
             const string mainWindowFileName = "main-home.png";
             validationMainWindow.CaptureForValidation(Path.Combine(outputDirectory, mainWindowFileName));
+            var informationVaultValidation = InformationVaultValidation.Run(outputDirectory);
+            validationMainWindow.NavigateToInformationVaultForValidation();
+            await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Render);
+            await Task.Delay(450);
+            const string informationVaultFileName = "information-vault-locked.png";
+            validationMainWindow.CaptureForValidation(Path.Combine(outputDirectory, informationVaultFileName));
+            validationMainWindow.PrepareInformationVaultUnlockedValidationState();
+            await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Render);
+            await Task.Delay(120);
+            const string informationVaultUnlockedFileName = "information-vault-unlocked.png";
+            validationMainWindow.CaptureForValidation(Path.Combine(outputDirectory, informationVaultUnlockedFileName));
             settingsWindow = validationMainWindow.CreateSettingsWindowForValidation();
             settingsWindow.Show();
             await Task.Delay(350);
@@ -358,6 +370,9 @@ public partial class App : System.Windows.Application
             {
                 succeeded = true,
                 mainWindowFileName,
+                informationVaultFileName,
+                informationVaultUnlockedFileName,
+                informationVaultValidation,
                 windowWidth = settingsWindow.ActualWidth,
                 windowHeight = settingsWindow.ActualHeight,
                 captures

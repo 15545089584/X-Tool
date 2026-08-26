@@ -1,0 +1,116 @@
+<Window x:Class="ScreenshotApp.InformationVault.InformationVaultEntryDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="信息库记录"
+        Width="680" Height="760"
+        MinWidth="620" MinHeight="640"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="None"
+        ResizeMode="CanResize"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False">
+    <Window.Resources>
+        <Style x:Key="FieldLabelStyle" TargetType="TextBlock">
+            <Setter Property="Margin" Value="0,0,0,7" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style x:Key="FieldTextBoxStyle" TargetType="TextBox">
+            <Setter Property="Height" Value="42" />
+            <Setter Property="Padding" Value="12,8" />
+            <Setter Property="Background" Value="#F6FAFE" />
+            <Setter Property="BorderBrush" Value="#D7E3EF" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+    </Window.Resources>
+
+    <Border Margin="18" Background="#FFF7FBFF" BorderBrush="#D8E7F4" BorderThickness="1" CornerRadius="20">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="28" ShadowDepth="8" Direction="270" Opacity="0.18" Color="#50677E" />
+        </Border.Effect>
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="64" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="76" />
+            </Grid.RowDefinitions>
+
+            <Grid Margin="24,0,16,0" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+                <TextBlock x:Name="DialogTitleText" VerticalAlignment="Center" FontSize="20" FontWeight="SemiBold" Text="添加信息" />
+                <Button Width="38" Height="38" HorizontalAlignment="Right" VerticalAlignment="Center"
+                        Background="Transparent" BorderThickness="0" FontSize="18" Cursor="Hand"
+                        Content="×" Click="Cancel_Click" />
+            </Grid>
+
+            <ScrollViewer Grid.Row="1" Padding="26,4,26,12" VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="类型" />
+                    <ComboBox x:Name="TypeComboBox" Height="42" Padding="10,7" Margin="0,0,0,16"
+                              SelectionChanged="TypeComboBox_SelectionChanged" />
+
+                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="名称" />
+                    <TextBox x:Name="TitleBox" Style="{StaticResource FieldTextBoxStyle}" Margin="0,0,0,16" />
+
+                    <StackPanel x:Name="AccountPanel">
+                        <TextBlock x:Name="AccountLabel" Style="{StaticResource FieldLabelStyle}" Text="账号" />
+                        <TextBox x:Name="AccountBox" Style="{StaticResource FieldTextBoxStyle}" Margin="0,0,0,16" />
+                    </StackPanel>
+
+                    <StackPanel x:Name="SecretPanel">
+                        <TextBlock x:Name="SecretLabel" Style="{StaticResource FieldLabelStyle}" Text="密码或密钥" />
+                        <PasswordBox x:Name="SecretBox" Height="42" Padding="12,8" Margin="0,0,0,16"
+                                     Background="#F6FAFE" BorderBrush="#D7E3EF" BorderThickness="1" FontSize="13" />
+                    </StackPanel>
+
+                    <Grid x:Name="ConnectionPanel" Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition Width="112" />
+                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource FieldLabelStyle}" Text="主机或 IP" />
+                            <TextBox x:Name="HostBox" Style="{StaticResource FieldTextBoxStyle}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Style="{StaticResource FieldLabelStyle}" Text="端口" />
+                            <TextBox x:Name="PortBox" Style="{StaticResource FieldTextBoxStyle}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="4">
+                            <TextBlock x:Name="DatabaseLabel" Style="{StaticResource FieldLabelStyle}" Text="数据库" />
+                            <TextBox x:Name="DatabaseBox" Style="{StaticResource FieldTextBoxStyle}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <StackPanel x:Name="RecoveryCodesPanel">
+                        <TextBlock Style="{StaticResource FieldLabelStyle}" Text="恢复码（每行一个）" />
+                        <TextBox x:Name="RecoveryCodesBox" MinHeight="112" Padding="12,9" Margin="0,0,0,16"
+                                 AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"
+                                 Background="#F6FAFE" BorderBrush="#D7E3EF" BorderThickness="1" FontSize="13" />
+                    </StackPanel>
+
+                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="备注" />
+                    <TextBox x:Name="NotesBox" MinHeight="90" Padding="12,9" AcceptsReturn="True" TextWrapping="Wrap"
+                             VerticalScrollBarVisibility="Auto" Background="#F6FAFE" BorderBrush="#D7E3EF"
+                             BorderThickness="1" FontSize="13" />
+
+                    <TextBlock x:Name="ValidationText" Margin="0,12,0,0" Foreground="#C44747" FontSize="12" TextWrapping="Wrap" />
+                </StackPanel>
+            </ScrollViewer>
+
+            <Border Grid.Row="2" BorderBrush="#E3EBF3" BorderThickness="0,1,0,0">
+                <StackPanel Margin="24,0" HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal">
+                    <Button Width="96" Height="40" Margin="0,0,10,0" Style="{StaticResource SecondaryButtonStyle}"
+                            Content="取消" Click="Cancel_Click" />
+                    <Button Width="112" Height="40" Style="{StaticResource PrimaryButtonStyle}"
+                            Content="保存记录" Click="Save_Click" />
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Border>
+</Window>
