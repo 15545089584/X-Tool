@@ -11,6 +11,7 @@ public partial class InformationVaultEntryDialog : Window
 {
     private readonly InformationVaultEntry _workingEntry;
     private readonly bool _isEditing;
+    private bool _isConfiguringOperatingSystemOptions;
 
     internal InformationVaultEntryDialog(InformationVaultEntry? entry = null)
     {
@@ -25,6 +26,7 @@ public partial class InformationVaultEntryDialog : Window
             _workingEntry.Type = InformationVaultEntryType.GitHubCredential;
         }
         DialogTitleText.Text = entry is null ? "添加信息" : "编辑信息";
+        ConfigureInitialOperatingSystemOptions();
         TypeComboBox.ItemsSource = InformationVaultEntryTypes.Options;
         TypeComboBox.SelectedItem = InformationVaultEntryTypes.Options.First(option => option.Type == _workingEntry.Type);
         TitleBox.Text = _workingEntry.Title;
@@ -36,6 +38,7 @@ public partial class InformationVaultEntryDialog : Window
         HostBox.Text = _workingEntry.Host;
         PortBox.Text = _workingEntry.Port;
         DatabaseBox.Text = _workingEntry.Database;
+        OperatingSystemVersionBox.Text = _workingEntry.OperatingSystemVersion;
         NotesBox.Text = _workingEntry.Notes;
         RecoveryCodesBox.Text = string.Join(Environment.NewLine, _workingEntry.RecoveryCodes.Select(code => code.Value));
         ConfigureFields(_workingEntry.Type);
@@ -124,6 +127,10 @@ public partial class InformationVaultEntryDialog : Window
         ConnectionPanel.Visibility = usesConnectionFields
             ? Visibility.Visible
             : Visibility.Collapsed;
+        var isVirtualMachine = type == InformationVaultEntryType.VirtualMachine;
+        VirtualMachineSystemPanel.Visibility = isVirtualMachine ? Visibility.Visible : Visibility.Collapsed;
+        DatabasePanel.Visibility = isVirtualMachine ? Visibility.Collapsed : Visibility.Visible;
+        Grid.SetColumnSpan(PortPanel, isVirtualMachine ? 3 : 1);
 
         AccountLabel.Text = type switch
         {
@@ -135,10 +142,10 @@ public partial class InformationVaultEntryDialog : Window
         {
             InformationVaultEntryType.DeepSeekApiKey => "API Key",
             InformationVaultEntryType.GitHubCredential => "GitHub 密码",
-            InformationVaultEntryType.Custom => "密码、密钥或秘密内容",
+            InformationVaultEntryType.Custom => "密码、密钥或敏感内容",
             _ => "密码"
         };
-        DatabaseLabel.Text = type == InformationVaultEntryType.VirtualMachine ? "系统或用途" : "数据库";
+        DatabaseLabel.Text = "数据库";
 
         if (!_isEditing && !usesTitle)
         {
@@ -191,6 +198,14 @@ public partial class InformationVaultEntryDialog : Window
             return;
         }
 
+        if (option.Type == InformationVaultEntryType.VirtualMachine &&
+            (OperatingSystemComboBox.SelectedItem is not string || OperatingSystemDistributionComboBox.SelectedItem is not string))
+        {
+            ValidationText.Text = "请选择虚拟机的操作系统和系统版本。";
+            OperatingSystemComboBox.Focus();
+            return;
+        }
+
         _workingEntry.Type = option.Type;
         _workingEntry.Title = title;
         _workingEntry.Account = usesAccount ? AccountBox.Text.Trim() : string.Empty;
@@ -202,13 +217,72 @@ public partial class InformationVaultEntryDialog : Window
                                                GitHubTwoFactorCheckBox.IsChecked == true;
         _workingEntry.Host = usesConnectionFields ? HostBox.Text.Trim() : string.Empty;
         _workingEntry.Port = usesConnectionFields ? PortBox.Text.Trim() : string.Empty;
-        _workingEntry.Database = usesConnectionFields ? DatabaseBox.Text.Trim() : string.Empty;
+        _workingEntry.Database = usesConnectionFields && option.Type != InformationVaultEntryType.VirtualMachine
+            ? DatabaseBox.Text.Trim()
+            : string.Empty;
+        _workingEntry.OperatingSystem = option.Type == InformationVaultEntryType.VirtualMachine
+            ? OperatingSystemComboBox.SelectedItem?.ToString()?.Trim() ?? string.Empty
+            : string.Empty;
+        _workingEntry.OperatingSystemDistribution = option.Type == InformationVaultEntryType.VirtualMachine
+            ? OperatingSystemDistributionComboBox.SelectedItem?.ToString()?.Trim() ?? string.Empty
+            : string.Empty;
+        _workingEntry.OperatingSystemVersion = option.Type == InformationVaultEntryType.VirtualMachine
+            ? OperatingSystemVersionBox.Text.Trim()
+            : string.Empty;
         _workingEntry.Notes = NotesBox.Text.Trim();
         _workingEntry.RecoveryCodes = option.Type == InformationVaultEntryType.GitHubCredential
             ? ParseRecoveryCodes(_workingEntry.RecoveryCodes)
             : [];
         _workingEntry.UpdatedAtUtc = DateTime.UtcNow;
         DialogResult = true;
+    }
+
+    private void ConfigureInitialOperatingSystemOptions()
+    {
+        _isConfiguringOperatingSystemOptions = true;
+        try
+        {
+            OperatingSystemComboBox.ItemsSource = InformationVaultOperatingSystems.Families;
+            var operatingSystem = string.IsNullOrWhiteSpace(_workingEntry.OperatingSystem)
+                ? "Linux"
+                : _workingEntry.OperatingSystem;
+            if (!InformationVaultOperatingSystems.Families.Contains(operatingSystem, StringComparer.OrdinalIgnoreCase))
+            {
+                operatingSystem = "其他";
+            }
+            OperatingSystemComboBox.SelectedItem = InformationVaultOperatingSystems.Families.First(item =>
+                string.Equals(item, operatingSystem, StringComparison.OrdinalIgnoreCase));
+            ConfigureOperatingSystemDistributions(operatingSystem, _workingEntry.OperatingSystemDistribution);
+        }
+        finally
+        {
+            _isConfiguringOperatingSystemOptions = false;
+        }
+    }
+
+    private void OperatingSystemComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isConfiguringOperatingSystemOptions || OperatingSystemComboBox.SelectedItem is not string operatingSystem)
+        {
+            return;
+        }
+
+        ConfigureOperatingSystemDistributions(operatingSystem, null);
+    }
+
+    private void ConfigureOperatingSystemDistributions(string operatingSystem, string? preferredDistribution)
+    {
+        var options = InformationVaultOperatingSystems.GetDistributions(operatingSystem).ToList();
+        if (!string.IsNullOrWhiteSpace(preferredDistribution) &&
+            !options.Contains(preferredDistribution, StringComparer.OrdinalIgnoreCase))
+        {
+            options.Add(preferredDistribution);
+        }
+
+        OperatingSystemDistributionComboBox.ItemsSource = options;
+        OperatingSystemDistributionComboBox.SelectedItem = !string.IsNullOrWhiteSpace(preferredDistribution)
+            ? options.First(item => string.Equals(item, preferredDistribution, StringComparison.OrdinalIgnoreCase))
+            : options.FirstOrDefault();
     }
 
     private List<InformationVaultRecoveryCode> ParseRecoveryCodes(IReadOnlyCollection<InformationVaultRecoveryCode> existingCodes)

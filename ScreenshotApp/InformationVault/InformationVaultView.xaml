@@ -117,6 +117,10 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <Style x:Key="VaultCloseButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="34" /><Setter Property="Height" Value="34" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /><Setter Property="Foreground" Value="#60758A" /><Setter Property="FontFamily" Value="Segoe UI" /><Setter Property="FontSize" Value="21" /><Setter Property="FontWeight" Value="Light" /><Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}" /><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Foreground" Value="#2E4862" /></Trigger><Trigger Property="IsPressed" Value="True"><Setter Property="Opacity" Value="0.55" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+        </Style>
 
         <Style x:Key="VaultTextBoxStyle" TargetType="TextBox">
             <Setter Property="MinHeight" Value="40" />
@@ -127,13 +131,15 @@
             <Setter Property="Foreground" Value="#2D4258" />
             <Setter Property="FontSize" Value="13" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="TextAlignment" Value="Left" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TextBox">
                         <Border x:Name="Root" Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10">
                             <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"
-                                          HorizontalAlignment="Stretch" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Root" Property="BorderBrush" Value="#609BFE" /><Setter TargetName="Root" Property="Background" Value="#E8F3FFFF" /></Trigger>
@@ -297,7 +303,7 @@
 
             <Border Grid.Row="2" Padding="22" Background="#7AFFFFFF" BorderBrush="#A0FFFFFF" BorderThickness="1" CornerRadius="16">
                 <Grid>
-                    <StackPanel><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#557493" Text="本地安全信息" /><TextBlock x:Name="VaultSummaryText" Margin="0,7,0,0" FontSize="20" FontWeight="SemiBold" Text="已安全保存 0 项信息" /><TextBlock Margin="0,6,0,0" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}" Text="整库采用 AES-256-GCM 加密，秘密复制 30 秒后自动清除" /></StackPanel>
+                    <StackPanel><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#557493" Text="本地安全信息" /><TextBlock x:Name="VaultSummaryText" Margin="0,7,0,0" FontSize="20" FontWeight="SemiBold" Text="已安全保存 0 项信息" /><TextBlock Margin="0,6,0,0" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}" Text="整库采用 AES-256-GCM 加密，敏感内容复制后 30 秒自动清除" /></StackPanel>
                     <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal">
                         <Border MinWidth="78" Padding="18,9" Background="#DDF6EA" CornerRadius="10"><StackPanel><TextBlock x:Name="AutoFillCountText" HorizontalAlignment="Center" FontSize="18" FontWeight="SemiBold" Foreground="#367A59" Text="0" /><TextBlock Margin="0,2,0,0" FontSize="10" Foreground="#5F7C6D" Text="支持填入" /></StackPanel></Border>
                     </StackPanel>
@@ -309,7 +315,26 @@
                 <Grid>
                     <TextBlock VerticalAlignment="Center" FontSize="16" FontWeight="SemiBold" Text="全部信息" />
                     <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
-                        <Grid Width="300"><TextBox x:Name="SearchBox" Height="40" Style="{StaticResource VaultTextBoxStyle}" Padding="36,0,12,0" TextChanged="SearchBox_TextChanged" /><TextBlock Margin="12,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#7390AA" IsHitTestVisible="False" Text="&#xE721;" /><TextBlock x:Name="SearchPlaceholderText" Margin="36,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False" FontSize="12" Foreground="#93A0AE" Text="搜索名称、账号、主机或备注" /></Grid>
+                        <Border Width="300" Height="40" BorderThickness="1" CornerRadius="10">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Background" Value="#B8FFFFFF" />
+                                    <Setter Property="BorderBrush" Value="#A9CEE8F8" />
+                                    <Style.Triggers>
+                                        <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter Property="BorderBrush" Value="#609BFE" /><Setter Property="Background" Value="#E8F3FFFF" /></Trigger>
+                                        <Trigger Property="IsMouseOver" Value="True"><Setter Property="BorderBrush" Value="#82B4E8" /></Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="36" /><ColumnDefinition Width="*" /><ColumnDefinition Width="12" /></Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#7390AA" IsHitTestVisible="False" Text="&#xE721;" />
+                                <Grid Grid.Column="1">
+                                    <TextBox x:Name="SearchBox" Padding="0" Background="Transparent" BorderThickness="0" Foreground="#2D4258" FontSize="13" TextAlignment="Left" HorizontalContentAlignment="Left" VerticalContentAlignment="Center" TextChanged="SearchBox_TextChanged" />
+                                    <TextBlock x:Name="SearchPlaceholderText" HorizontalAlignment="Left" VerticalAlignment="Center" IsHitTestVisible="False" FontSize="12" Foreground="#93A0AE" Text="搜索名称、账号、主机或备注" />
+                                </Grid>
+                            </Grid>
+                        </Border>
                         <ComboBox x:Name="TypeFilterComboBox" Width="180" Margin="10,0,0,0" Style="{StaticResource VaultComboBoxStyle}" SelectionChanged="TypeFilterComboBox_SelectionChanged" />
                     </StackPanel>
                 </Grid>
@@ -351,7 +376,7 @@
                 </Grid>
             </Grid>
 
-            <Grid x:Name="DetailOverlay" Grid.RowSpan="5" Panel.ZIndex="20" Background="#430C2033" Visibility="Collapsed">
+            <Grid x:Name="DetailOverlay" Grid.RowSpan="5" Panel.ZIndex="20" Background="Transparent" Visibility="Collapsed">
                 <Border Width="820" MaxHeight="700" Margin="34" Padding="26,22" HorizontalAlignment="Center" VerticalAlignment="Center" Background="#FAF8FCFF" BorderBrush="#C7DCEBFA" BorderThickness="1" CornerRadius="20">
                     <Border.Effect><DropShadowEffect BlurRadius="30" ShadowDepth="8" Direction="270" Opacity="0.20" Color="#314A62" /></Border.Effect>
                     <Grid>
@@ -359,7 +384,7 @@
                         <Grid>
                             <Border x:Name="DetailIconBorder" Width="46" Height="46" HorizontalAlignment="Left" Background="#E8F0FF" CornerRadius="13"><Grid><Image x:Name="DetailIconImage" Margin="8" Stretch="Uniform" Visibility="Collapsed" /><TextBlock x:Name="DetailIconText" HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="20" Foreground="#4C7CD8" /></Grid></Border>
                             <StackPanel Margin="60,0,48,0" VerticalAlignment="Center"><TextBlock x:Name="DetailTitleText" FontSize="22" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" /><StackPanel Margin="0,5,0,0" Orientation="Horizontal"><TextBlock x:Name="DetailTypeText" VerticalAlignment="Center" FontSize="12" Foreground="#5B7898" /><Border x:Name="DetailTwoFactorBadge" Margin="10,0,0,0" Padding="8,3" Background="#FFF1DB" BorderBrush="#F2C67C" BorderThickness="1" CornerRadius="7" Visibility="Collapsed"><TextBlock FontSize="10" FontWeight="SemiBold" Foreground="#A76A16" Text="需要二次验证" /></Border></StackPanel></StackPanel>
-                            <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource VaultIconButtonStyle}" Content="×" Click="CloseDetail_Click" />
+                            <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource VaultCloseButtonStyle}" Content="×" Click="CloseDetail_Click" ToolTip="关闭" />
                         </Grid>
                         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
                             <StackPanel>
@@ -371,7 +396,7 @@
                                 <Border x:Name="NotesField" Padding="16,13" Background="#85F8FBFE" BorderBrush="#CFE2F0" BorderThickness="1" CornerRadius="12"><StackPanel><TextBlock Style="{StaticResource DetailLabelStyle}" Text="备注" /><TextBlock x:Name="NotesValueText" Style="{StaticResource DetailValueStyle}" /></StackPanel></Border>
                             </StackPanel>
                         </ScrollViewer>
-                        <Grid Grid.Row="4"><StackPanel Orientation="Horizontal"><Button Style="{StaticResource VaultSecondaryButtonStyle}" Content="编辑信息" Click="EditEntry_Click" /><Button Margin="10,0,0,0" Style="{StaticResource VaultDangerButtonStyle}" Content="删除" Click="DeleteEntry_Click" /></StackPanel><StackPanel HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal"><TextBlock Margin="0,0,16,0" VerticalAlignment="Center" FontSize="10" Foreground="#7C8A99" Text="秘密复制将在 30 秒后清除" /><Button x:Name="AutoFillButton" MinWidth="148" Style="{StaticResource VaultPrimaryButtonStyle}" Content="一键填入客户端" Click="AutoFill_Click" /></StackPanel></Grid>
+                        <Grid Grid.Row="4"><StackPanel Orientation="Horizontal"><Button Style="{StaticResource VaultSecondaryButtonStyle}" Content="编辑信息" Click="EditEntry_Click" /><Button Margin="10,0,0,0" Style="{StaticResource VaultDangerButtonStyle}" Content="删除" Click="DeleteEntry_Click" /></StackPanel><StackPanel HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal"><TextBlock Margin="0,0,16,0" VerticalAlignment="Center" FontSize="10" Foreground="#7C8A99" Text="敏感内容复制后 30 秒自动清除" /><Button x:Name="AutoFillButton" MinWidth="148" Style="{StaticResource VaultPrimaryButtonStyle}" Content="一键填入客户端" Click="AutoFill_Click" /></StackPanel></Grid>
                     </Grid>
                 </Border>
             </Grid>

@@ -354,6 +354,10 @@ public partial class App : System.Windows.Application
             await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Render);
             const string informationVaultSingleEntryFileName = "information-vault-single-entry.png";
             validationMainWindow.CaptureForValidation(Path.Combine(outputDirectory, informationVaultSingleEntryFileName));
+            validationMainWindow.PrepareInformationVaultSearchInputValidationState();
+            await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Render);
+            const string informationVaultSearchInputFileName = "information-vault-search-input.png";
+            validationMainWindow.CaptureForValidation(Path.Combine(outputDirectory, informationVaultSearchInputFileName));
             informationVaultEntryDialog = new InformationVaultEntryDialog(new InformationVaultEntry
             {
                 Type = InformationVaultEntryType.Steam,
@@ -419,6 +423,29 @@ public partial class App : System.Windows.Application
             informationVaultEntryDialog.CaptureForValidation(Path.Combine(outputDirectory, informationVaultGitHubDialogFileName));
             informationVaultEntryDialog.Close();
             informationVaultEntryDialog = null;
+            informationVaultEntryDialog = new InformationVaultEntryDialog(new InformationVaultEntry
+            {
+                Type = InformationVaultEntryType.VirtualMachine,
+                Title = "Linux 测试虚拟机",
+                Account = "root",
+                Secret = "not-a-real-password",
+                Host = "192.0.2.10",
+                Port = "22",
+                OperatingSystem = "Linux",
+                OperatingSystemDistribution = "CentOS",
+                OperatingSystemVersion = "7.6",
+                Notes = "用于验证操作系统、发行版和版本号的联动字段。"
+            })
+            {
+                Owner = validationMainWindow
+            };
+            informationVaultEntryDialog.Show();
+            await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Render);
+            await Task.Delay(120);
+            const string informationVaultVirtualMachineDialogFileName = "information-vault-virtual-machine-dialog.png";
+            informationVaultEntryDialog.CaptureForValidation(Path.Combine(outputDirectory, informationVaultVirtualMachineDialogFileName));
+            informationVaultEntryDialog.Close();
+            informationVaultEntryDialog = null;
             settingsWindow = validationMainWindow.CreateSettingsWindowForValidation();
             settingsWindow.Show();
             await Task.Delay(350);
@@ -447,10 +474,13 @@ public partial class App : System.Windows.Application
                 informationVaultFileName,
                 informationVaultUnlockedFileName,
                 informationVaultDetailFileName,
+                informationVaultSingleEntryFileName,
+                informationVaultSearchInputFileName,
                 informationVaultEntryDialogFileName,
                 informationVaultEntryDialogDropDownFileName,
                 informationVaultDeepSeekDialogFileName,
                 informationVaultGitHubDialogFileName,
+                informationVaultVirtualMachineDialogFileName,
                 informationVaultValidation,
                 windowWidth = settingsWindow.ActualWidth,
                 windowHeight = settingsWindow.ActualHeight,

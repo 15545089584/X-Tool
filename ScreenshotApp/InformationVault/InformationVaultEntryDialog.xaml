@@ -116,7 +116,10 @@
             <Setter Property="Height" Value="40" /><Setter Property="MinWidth" Value="112" /><Setter Property="Padding" Value="16,0" /><Setter Property="Background" Value="#4D7CFE" /><Setter Property="BorderBrush" Value="#739BFF" /><Setter Property="BorderThickness" Value="1" /><Setter Property="Foreground" Value="White" /><Setter Property="FontSize" Value="13" /><Setter Property="FontWeight" Value="SemiBold" /><Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="Root" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{TemplateBinding Foreground}" Text="{TemplateBinding Content}" /></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Background" Value="#628BFF" /></Trigger><Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.72" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
         </Style>
-        <Style x:Key="DialogIconButtonStyle" TargetType="Button" BasedOn="{StaticResource DialogButtonStyle}"><Setter Property="Width" Value="38" /><Setter Property="MinWidth" Value="38" /><Setter Property="Padding" Value="0" /><Setter Property="FontSize" Value="20" /></Style>
+        <Style x:Key="DialogIconButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="34" /><Setter Property="Height" Value="34" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /><Setter Property="Foreground" Value="#60758A" /><Setter Property="FontFamily" Value="Segoe UI" /><Setter Property="FontSize" Value="21" /><Setter Property="FontWeight" Value="Light" /><Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}" /><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Foreground" Value="#2E4862" /></Trigger><Trigger Property="IsPressed" Value="True"><Setter Property="Opacity" Value="0.55" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+        </Style>
         <Style x:Key="DialogCheckBoxStyle" TargetType="CheckBox">
             <Setter Property="Foreground" Value="#334D65" />
             <Setter Property="FontSize" Value="13" />
@@ -152,7 +155,7 @@
             <Grid.RowDefinitions><RowDefinition Height="74" /><RowDefinition Height="*" /><RowDefinition Height="76" /></Grid.RowDefinitions>
             <Grid Margin="26,0,18,0" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
                 <StackPanel VerticalAlignment="Center"><TextBlock x:Name="DialogTitleText" FontSize="21" FontWeight="SemiBold" Text="添加信息" /><TextBlock Margin="0,4,0,0" FontSize="11" Foreground="#71869A" Text="记录将写入本地加密信息库" /></StackPanel>
-                <Button HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource DialogIconButtonStyle}" Content="×" Click="Cancel_Click" />
+                <Button HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource DialogIconButtonStyle}" Content="×" Click="Cancel_Click" ToolTip="关闭" />
             </Grid>
 
             <ScrollViewer Grid.Row="1" Padding="26,4,26,12" VerticalScrollBarVisibility="Auto">
@@ -192,11 +195,20 @@
                     </Border>
 
                     <Border x:Name="ConnectionPanel" Margin="0,12,0,0" Padding="18,16" Background="#78FFFFFF" BorderBrush="#B9DCE8F2" BorderThickness="1" CornerRadius="14">
-                        <Grid>
+                        <Grid x:Name="ConnectionGrid">
                             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="12" /><ColumnDefinition Width="110" /><ColumnDefinition Width="12" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                            <StackPanel><TextBlock Style="{StaticResource FieldLabelStyle}" Text="主机或 IP" /><TextBox x:Name="HostBox" Style="{StaticResource DialogTextBoxStyle}" /></StackPanel>
-                            <StackPanel Grid.Column="2"><TextBlock Style="{StaticResource FieldLabelStyle}" Text="端口" /><TextBox x:Name="PortBox" Style="{StaticResource DialogTextBoxStyle}" /></StackPanel>
-                            <StackPanel Grid.Column="4"><TextBlock x:Name="DatabaseLabel" Style="{StaticResource FieldLabelStyle}" Text="数据库" /><TextBox x:Name="DatabaseBox" Style="{StaticResource DialogTextBoxStyle}" /></StackPanel>
+                            <StackPanel x:Name="HostPanel"><TextBlock Style="{StaticResource FieldLabelStyle}" Text="主机或 IP" /><TextBox x:Name="HostBox" Style="{StaticResource DialogTextBoxStyle}" /></StackPanel>
+                            <StackPanel x:Name="PortPanel" Grid.Column="2"><TextBlock Style="{StaticResource FieldLabelStyle}" Text="端口" /><TextBox x:Name="PortBox" Style="{StaticResource DialogTextBoxStyle}" /></StackPanel>
+                            <StackPanel x:Name="DatabasePanel" Grid.Column="4"><TextBlock x:Name="DatabaseLabel" Style="{StaticResource FieldLabelStyle}" Text="数据库" /><TextBox x:Name="DatabaseBox" Style="{StaticResource DialogTextBoxStyle}" /></StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Border x:Name="VirtualMachineSystemPanel" Margin="0,12,0,0" Padding="18,16" Background="#78FFFFFF" BorderBrush="#B9DCE8F2" BorderThickness="1" CornerRadius="14" Visibility="Collapsed">
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="14" /><ColumnDefinition Width="*" /><ColumnDefinition Width="14" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                            <StackPanel><TextBlock Style="{StaticResource FieldLabelStyle}" Text="操作系统" /><ComboBox x:Name="OperatingSystemComboBox" Style="{StaticResource DialogComboBoxStyle}" SelectionChanged="OperatingSystemComboBox_SelectionChanged" /></StackPanel>
+                            <StackPanel Grid.Column="2"><TextBlock Style="{StaticResource FieldLabelStyle}" Text="系统版本（发行版）" /><ComboBox x:Name="OperatingSystemDistributionComboBox" Style="{StaticResource DialogComboBoxStyle}" /></StackPanel>
+                            <StackPanel Grid.Column="4"><TextBlock Style="{StaticResource FieldLabelStyle}" Text="版本号（可选）" /><TextBox x:Name="OperatingSystemVersionBox" Style="{StaticResource DialogTextBoxStyle}" /></StackPanel>
                         </Grid>
                     </Border>
 

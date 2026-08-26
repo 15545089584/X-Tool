@@ -100,8 +100,21 @@ internal sealed class InformationVaultStore : IDisposable
                     entry.GitHubPushKey = entry.Secret;
                     entry.Secret = string.Empty;
                 }
+
+                if (data.Version < 4 &&
+                    entry.Type == InformationVaultEntryType.VirtualMachine &&
+                    !entry.HasOperatingSystem &&
+                    !string.IsNullOrWhiteSpace(entry.Database))
+                {
+                    // 旧版虚拟机把系统信息写在 Database 中；拆分为系统、发行版和版本号后再清空旧字段。
+                    var migratedSystem = InformationVaultOperatingSystems.ParseLegacyValue(entry.Database);
+                    entry.OperatingSystem = migratedSystem.OperatingSystem;
+                    entry.OperatingSystemDistribution = migratedSystem.Distribution;
+                    entry.OperatingSystemVersion = migratedSystem.Version;
+                    entry.Database = string.Empty;
+                }
             }
-            data.Version = Math.Max(data.Version, 3);
+            data.Version = Math.Max(data.Version, 4);
 
             _salt = salt.ToArray();
             _iterations = envelope.Iterations;

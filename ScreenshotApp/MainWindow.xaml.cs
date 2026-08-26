@@ -224,6 +224,12 @@ public partial class MainWindow : Window
         UpdateLayout();
     }
 
+    internal void PrepareInformationVaultSearchInputValidationState()
+    {
+        InformationVaultPage.PrepareSearchInputValidationState();
+        UpdateLayout();
+    }
+
     private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (e.ClickCount == 2)

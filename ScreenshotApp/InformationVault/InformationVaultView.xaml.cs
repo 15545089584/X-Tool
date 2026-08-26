@@ -100,7 +100,9 @@ public partial class InformationVaultView : UserControl
                     Account = "developer",
                     Secret = "not-a-real-password",
                     Host = "192.0.2.10",
-                    Database = "Ubuntu 24.04",
+                    OperatingSystem = "Linux",
+                    OperatingSystemDistribution = "Ubuntu",
+                    OperatingSystemVersion = "24.04",
                     UpdatedAtUtc = DateTime.UtcNow.AddMinutes(-7)
                 }
             ]
@@ -140,6 +142,13 @@ public partial class InformationVaultView : UserControl
         LockedView.Visibility = Visibility.Collapsed;
         UnlockedView.Visibility = Visibility.Visible;
         RefreshEntries();
+    }
+
+    internal void PrepareSearchInputValidationState()
+    {
+        SearchBox.Text = "22";
+        SearchBox.CaretIndex = SearchBox.Text.Length;
+        SearchBox.Focus();
     }
 
     internal void LockVault()
@@ -284,9 +293,12 @@ public partial class InformationVaultView : UserControl
             return;
         }
 
-        var dialog = new InformationVaultEntryDialog(_selectedEntry) { Owner = Window.GetWindow(this) };
+        var editingEntry = _selectedEntry;
+        var dialog = new InformationVaultEntryDialog(editingEntry) { Owner = Window.GetWindow(this) };
+        DetailOverlay.Visibility = Visibility.Collapsed;
         if (dialog.ShowDialog() != true)
         {
+            DetailOverlay.Visibility = Visibility.Visible;
             return;
         }
 
@@ -412,6 +424,9 @@ public partial class InformationVaultView : UserControl
                entry.Account.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                entry.Host.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                entry.Database.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+               entry.OperatingSystem.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+               entry.OperatingSystemDistribution.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+               entry.OperatingSystemVersion.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                entry.Notes.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                entry.TypeDisplayName.Contains(query, StringComparison.OrdinalIgnoreCase);
     }
@@ -465,12 +480,14 @@ public partial class InformationVaultView : UserControl
         };
         SecretValueText.Text = "••••••••••••";
         GitHubPushKeyField.Visibility = entry.HasGitHubPushKey ? Visibility.Visible : Visibility.Collapsed;
-        var hasConnection = entry.HasHost || entry.HasPort || entry.HasDatabase;
+        var hasConnection = entry.HasHost || entry.HasPort || entry.HasDatabase || entry.HasOperatingSystem;
         ConnectionFields.Visibility = hasConnection ? Visibility.Visible : Visibility.Collapsed;
         HostValueText.Text = string.IsNullOrWhiteSpace(entry.Host) ? "未填写" : entry.Host;
         PortValueText.Text = string.IsNullOrWhiteSpace(entry.Port) ? "未填写" : entry.Port;
-        DatabaseValueText.Text = string.IsNullOrWhiteSpace(entry.Database) ? "未填写" : entry.Database;
-        DatabaseFieldLabel.Text = entry.Type == InformationVaultEntryType.VirtualMachine ? "系统或用途" : "数据库";
+        DatabaseValueText.Text = entry.Type == InformationVaultEntryType.VirtualMachine
+            ? entry.OperatingSystemDisplay
+            : string.IsNullOrWhiteSpace(entry.Database) ? "未填写" : entry.Database;
+        DatabaseFieldLabel.Text = entry.Type == InformationVaultEntryType.VirtualMachine ? "操作系统" : "数据库";
         RecoveryCodesField.Visibility = entry.HasRecoveryCodes ? Visibility.Visible : Visibility.Collapsed;
         RecoveryCodesItems.ItemsSource = entry.RecoveryCodes;
         NotesField.Visibility = entry.HasNotes ? Visibility.Visible : Visibility.Collapsed;
@@ -519,7 +536,9 @@ public partial class InformationVaultView : UserControl
             "GitHubPushKey" => (_selectedEntry.GitHubPushKey, "GitHub 推送密钥"),
             "Host" => (_selectedEntry.Host, "主机"),
             "Port" => (_selectedEntry.Port, "端口"),
-            "Database" => (_selectedEntry.Database, "数据库或用途"),
+            "Database" => (_selectedEntry.Type == InformationVaultEntryType.VirtualMachine
+                ? _selectedEntry.OperatingSystemDisplay
+                : _selectedEntry.Database, _selectedEntry.Type == InformationVaultEntryType.VirtualMachine ? "操作系统" : "数据库"),
             _ => (string.Empty, "内容")
         };
         CopySensitiveValue(value, label);
