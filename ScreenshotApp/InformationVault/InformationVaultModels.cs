@@ -97,6 +97,67 @@ internal sealed class InformationVaultEntry
     [JsonIgnore]
     public bool HasRecoveryCodes => RecoveryCodes.Count > 0;
 
+    [JsonIgnore]
+    public string IconGlyph => Type switch
+    {
+        InformationVaultEntryType.GitHubCredential => "\uE8D7",
+        InformationVaultEntryType.RecoveryCodes => "\uE72E",
+        InformationVaultEntryType.DeepSeekApiKey => "\uE8C8",
+        InformationVaultEntryType.Steam => "\uE7FC",
+        InformationVaultEntryType.Ubisoft => "\uE7FC",
+        InformationVaultEntryType.Epic => "\uE7FC",
+        InformationVaultEntryType.MySql => "\uE8A5",
+        InformationVaultEntryType.Redis => "\uE71A",
+        InformationVaultEntryType.VirtualMachine => "\uE7F4",
+        InformationVaultEntryType.WeChat => "\uE8BD",
+        InformationVaultEntryType.QQ => "\uE8BD",
+        _ => "\uE8D7"
+    };
+
+    [JsonIgnore]
+    public string AccentBackground => Type switch
+    {
+        InformationVaultEntryType.GitHubCredential => "#FFF0E1",
+        InformationVaultEntryType.RecoveryCodes => "#EEE7FF",
+        InformationVaultEntryType.DeepSeekApiKey => "#E2F2FF",
+        InformationVaultEntryType.Steam => "#E4ECFF",
+        InformationVaultEntryType.Ubisoft => "#E5F3FF",
+        InformationVaultEntryType.Epic => "#F0EAFF",
+        InformationVaultEntryType.MySql => "#E3F5F2",
+        InformationVaultEntryType.Redis => "#FFE8E8",
+        InformationVaultEntryType.VirtualMachine => "#E5F4E8",
+        InformationVaultEntryType.WeChat => "#E1F7E8",
+        InformationVaultEntryType.QQ => "#E4F1FF",
+        _ => "#EEF2F7"
+    };
+
+    [JsonIgnore]
+    public string AccentForeground => Type switch
+    {
+        InformationVaultEntryType.GitHubCredential => "#C57A18",
+        InformationVaultEntryType.RecoveryCodes => "#7B57C5",
+        InformationVaultEntryType.DeepSeekApiKey => "#397FB8",
+        InformationVaultEntryType.Steam => "#4C68B7",
+        InformationVaultEntryType.Ubisoft => "#3B7DA9",
+        InformationVaultEntryType.Epic => "#7254AD",
+        InformationVaultEntryType.MySql => "#377F72",
+        InformationVaultEntryType.Redis => "#BA5353",
+        InformationVaultEntryType.VirtualMachine => "#4D8757",
+        InformationVaultEntryType.WeChat => "#3C955F",
+        InformationVaultEntryType.QQ => "#477EAF",
+        _ => "#60758A"
+    };
+
+    [JsonIgnore]
+    public string UsageBadge => SupportsAutoFill
+        ? "支持一键填入"
+        : Type == InformationVaultEntryType.RecoveryCodes
+            ? $"剩余 {RecoveryCodes.Count(code => !code.IsUsed)} 个"
+            : "安全复制";
+
+    [JsonIgnore]
+    public string UpdatedAtDisplay => UpdatedAtUtc.ToLocalTime().ToString("MM-dd HH:mm");
+
     internal InformationVaultEntry Clone()
     {
         return new InformationVaultEntry

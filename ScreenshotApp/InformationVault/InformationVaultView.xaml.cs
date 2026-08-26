@@ -18,7 +18,7 @@ public partial class InformationVaultView : UserControl
     public InformationVaultView()
     {
         InitializeComponent();
-        EntriesList.ItemsSource = _visibleEntries;
+        EntriesGrid.ItemsSource = _visibleEntries;
         TypeFilterComboBox.ItemsSource = new[] { new VaultFilterOption(null, "全部类型") }
             .Concat(InformationVaultEntryTypes.Options.Select(option => new VaultFilterOption(option.Type, option.DisplayName)))
             .ToList();
@@ -49,6 +49,63 @@ public partial class InformationVaultView : UserControl
                     Account = "本地开发",
                     Secret = "sk-validation-not-real",
                     UpdatedAtUtc = DateTime.UtcNow.AddMinutes(-1)
+                },
+                new InformationVaultEntry
+                {
+                    Type = InformationVaultEntryType.GitHubCredential,
+                    Title = "GitHub 推送凭据",
+                    Account = "validation-user",
+                    Secret = "github-validation-secret",
+                    UpdatedAtUtc = DateTime.UtcNow.AddMinutes(-2)
+                },
+                new InformationVaultEntry
+                {
+                    Type = InformationVaultEntryType.RecoveryCodes,
+                    Title = "GitHub 恢复码",
+                    RecoveryCodes =
+                    [
+                        new InformationVaultRecoveryCode { Value = "VALIDATION-ONE" },
+                        new InformationVaultRecoveryCode { Value = "VALIDATION-TWO" },
+                        new InformationVaultRecoveryCode { Value = "VALIDATION-THREE", IsUsed = true }
+                    ],
+                    UpdatedAtUtc = DateTime.UtcNow.AddMinutes(-3)
+                },
+                new InformationVaultEntry
+                {
+                    Type = InformationVaultEntryType.Ubisoft,
+                    Title = "Ubisoft Connect",
+                    Account = "ubisoft@example.invalid",
+                    Secret = "not-a-real-password",
+                    UpdatedAtUtc = DateTime.UtcNow.AddMinutes(-4)
+                },
+                new InformationVaultEntry
+                {
+                    Type = InformationVaultEntryType.Epic,
+                    Title = "Epic Games",
+                    Account = "epic@example.invalid",
+                    Secret = "not-a-real-password",
+                    UpdatedAtUtc = DateTime.UtcNow.AddMinutes(-5)
+                },
+                new InformationVaultEntry
+                {
+                    Type = InformationVaultEntryType.MySql,
+                    Title = "本地 MySQL",
+                    Account = "root",
+                    Secret = "not-a-real-password",
+                    Host = "127.0.0.1",
+                    Port = "3306",
+                    Database = "development",
+                    UpdatedAtUtc = DateTime.UtcNow.AddMinutes(-6)
+                },
+                new InformationVaultEntry
+                {
+                    Type = InformationVaultEntryType.VirtualMachine,
+                    Title = "Linux 测试虚拟机",
+                    Account = "developer",
+                    Secret = "not-a-real-password",
+                    Host = "192.0.2.10",
+                    Database = "Ubuntu 24.04",
+                    UpdatedAtUtc = DateTime.UtcNow.AddMinutes(-7)
                 }
             ]
         };
@@ -57,12 +114,22 @@ public partial class InformationVaultView : UserControl
         RefreshEntries();
     }
 
+    internal void PrepareDetailValidationState()
+    {
+        var entry = _data?.Entries.FirstOrDefault(candidate => candidate.Type == InformationVaultEntryType.Steam);
+        if (entry is not null)
+        {
+            RefreshDetail(entry);
+        }
+    }
+
     internal void LockVault()
     {
         _store.Lock();
         _data = null;
         _selectedEntry = null;
         _visibleEntries.Clear();
+        DetailOverlay.Visibility = Visibility.Collapsed;
         MasterPasswordBox.Clear();
         ConfirmPasswordBox.Clear();
         PasswordMessageText.Text = string.Empty;
@@ -166,72 +233,7 @@ public partial class InformationVaultView : UserControl
 
     private bool ConfirmVaultReset()
     {
-        var owner = Window.GetWindow(this);
-        var confirmationBox = new TextBox
-        {
-            Height = 40,
-            Margin = new Thickness(0, 14, 0, 0),
-            Padding = new Thickness(10, 7, 10, 7),
-            FontSize = 13
-        };
-        var confirmButton = new Button
-        {
-            Width = 112,
-            Height = 38,
-            Margin = new Thickness(8, 0, 0, 0),
-            Content = "永久清空",
-            IsDefault = true
-        };
-        var cancelButton = new Button
-        {
-            Width = 88,
-            Height = 38,
-            Content = "取消",
-            IsCancel = true
-        };
-        var buttonPanel = new StackPanel
-        {
-            Margin = new Thickness(0, 18, 0, 0),
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Orientation = Orientation.Horizontal
-        };
-        buttonPanel.Children.Add(cancelButton);
-        buttonPanel.Children.Add(confirmButton);
-        var content = new StackPanel { Margin = new Thickness(26) };
-        content.Children.Add(new TextBlock { FontSize = 19, FontWeight = FontWeights.SemiBold, Text = "清空并重置信息库" });
-        content.Children.Add(new TextBlock
-        {
-            Margin = new Thickness(0, 9, 0, 0),
-            FontSize = 12,
-            Foreground = System.Windows.Media.Brushes.DimGray,
-            TextWrapping = TextWrapping.Wrap,
-            Text = "忘记主密码后无法恢复任何记录。请输入“清空信息库”确认永久清空。"
-        });
-        content.Children.Add(confirmationBox);
-        content.Children.Add(buttonPanel);
-        var dialog = new Window
-        {
-            Owner = owner,
-            Title = "重置信息库",
-            Width = 460,
-            Height = 250,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            ResizeMode = ResizeMode.NoResize,
-            Content = content
-        };
-        confirmButton.Click += (_, _) =>
-        {
-            if (string.Equals(confirmationBox.Text.Trim(), "清空信息库", StringComparison.Ordinal))
-            {
-                dialog.DialogResult = true;
-            }
-            else
-            {
-                confirmationBox.BorderBrush = System.Windows.Media.Brushes.IndianRed;
-                confirmationBox.SelectAll();
-                confirmationBox.Focus();
-            }
-        };
+        var dialog = new InformationVaultResetDialog { Owner = Window.GetWindow(this) };
         return dialog.ShowDialog() == true;
     }
 
@@ -349,7 +351,8 @@ public partial class InformationVaultView : UserControl
         _visibleEntries.Clear();
         if (_data is null)
         {
-            RefreshDetail(null);
+            CloseDetail();
+            UpdateSummary();
             return;
         }
 
@@ -365,10 +368,30 @@ public partial class InformationVaultView : UserControl
             _visibleEntries.Add(entry);
         }
 
-        EntriesList.SelectedItem = preferredId is null
-            ? _visibleEntries.FirstOrDefault()
-            : _visibleEntries.FirstOrDefault(entry => entry.Id == preferredId) ?? _visibleEntries.FirstOrDefault();
-        RefreshDetail(EntriesList.SelectedItem as InformationVaultEntry);
+        EmptyEntriesState.Visibility = _visibleEntries.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        UpdateSummary();
+        if (preferredId is Guid id)
+        {
+            var preferredEntry = _visibleEntries.FirstOrDefault(entry => entry.Id == id);
+            if (preferredEntry is not null)
+            {
+                RefreshDetail(preferredEntry);
+                return;
+            }
+        }
+
+        CloseDetail();
+    }
+
+    private void UpdateSummary()
+    {
+        var entries = _data?.Entries ?? [];
+        VaultSummaryText.Text = $"已安全保存 {entries.Count} 项信息";
+        AutoFillCountText.Text = entries.Count(entry => entry.SupportsAutoFill).ToString();
+        RecoveryCodeCountText.Text = entries
+            .Where(entry => entry.Type == InformationVaultEntryType.RecoveryCodes)
+            .Sum(entry => entry.RecoveryCodes.Count(code => !code.IsUsed))
+            .ToString();
     }
 
     private static bool MatchesQuery(InformationVaultEntry entry, string query)
@@ -381,24 +404,31 @@ public partial class InformationVaultView : UserControl
                entry.TypeDisplayName.Contains(query, StringComparison.OrdinalIgnoreCase);
     }
 
-    private void EntriesList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void EntryCard_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        RefreshDetail(EntriesList.SelectedItem as InformationVaultEntry);
+        if (sender is FrameworkElement { Tag: InformationVaultEntry entry })
+        {
+            RefreshDetail(entry);
+        }
     }
 
     private void RefreshDetail(InformationVaultEntry? entry)
     {
         _selectedEntry = entry;
         _secretRevealed = false;
-        EmptyDetailView.Visibility = entry is null ? Visibility.Visible : Visibility.Collapsed;
-        EntryDetailView.Visibility = entry is null ? Visibility.Collapsed : Visibility.Visible;
         if (entry is null)
         {
+            CloseDetail();
             return;
         }
 
+        DetailOverlay.Visibility = Visibility.Visible;
         DetailTitleText.Text = entry.Title;
         DetailTypeText.Text = entry.TypeDisplayName;
+        DetailIconText.Text = entry.IconGlyph;
+        DetailIconText.Foreground = (System.Windows.Media.Brush)new System.Windows.Media.BrushConverter().ConvertFromString(entry.AccentForeground)!;
+        DetailIconBorder.Background = (System.Windows.Media.Brush)new System.Windows.Media.BrushConverter().ConvertFromString(entry.AccentBackground)!;
+        ToggleSecretButton.Content = "显示";
         AccountField.Visibility = entry.HasAccount ? Visibility.Visible : Visibility.Collapsed;
         AccountValueText.Text = entry.Account;
         SecretField.Visibility = entry.HasSecret ? Visibility.Visible : Visibility.Collapsed;
@@ -420,6 +450,18 @@ public partial class InformationVaultView : UserControl
         NotesField.Visibility = entry.HasNotes ? Visibility.Visible : Visibility.Collapsed;
         NotesValueText.Text = entry.Notes;
         AutoFillButton.Visibility = entry.SupportsAutoFill ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void CloseDetail_Click(object sender, RoutedEventArgs e)
+    {
+        CloseDetail();
+    }
+
+    private void CloseDetail()
+    {
+        DetailOverlay.Visibility = Visibility.Collapsed;
+        _selectedEntry = null;
+        _secretRevealed = false;
     }
 
     private void ToggleSecret_Click(object sender, RoutedEventArgs e)

@@ -1,6 +1,9 @@
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 
 namespace ScreenshotApp.InformationVault;
 
@@ -30,6 +33,41 @@ public partial class InformationVaultEntryDialog : Window
     }
 
     internal InformationVaultEntry ResultEntry => _workingEntry;
+
+    internal void CaptureForValidation(string outputPath)
+    {
+        UpdateLayout();
+        var width = Math.Max(1, (int)Math.Round(ActualWidth));
+        var height = Math.Max(1, (int)Math.Round(ActualHeight));
+        var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(this);
+        bitmap.Freeze();
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        using var stream = File.Create(outputPath);
+        encoder.Save(stream);
+    }
+
+    internal void OpenTypeDropDownForValidation()
+    {
+        TypeComboBox.IsDropDownOpen = true;
+    }
+
+    internal void CaptureScreenForValidation(string outputPath)
+    {
+        UpdateLayout();
+        var topLeft = PointToScreen(new Point(0, 0));
+        var dpi = VisualTreeHelper.GetDpi(this);
+        var width = Math.Max(1, (int)Math.Round(ActualWidth * dpi.DpiScaleX));
+        var height = Math.Max(1, (int)Math.Round(ActualHeight * dpi.DpiScaleY));
+        using var bitmap = new System.Drawing.Bitmap(width, height);
+        using (var graphics = System.Drawing.Graphics.FromImage(bitmap))
+        {
+            graphics.CopyFromScreen((int)Math.Round(topLeft.X), (int)Math.Round(topLeft.Y), 0, 0, bitmap.Size);
+        }
+
+        bitmap.Save(outputPath, System.Drawing.Imaging.ImageFormat.Png);
+    }
 
     private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {

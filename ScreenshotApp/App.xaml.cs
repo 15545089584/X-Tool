@@ -326,6 +326,7 @@ public partial class App : System.Windows.Application
     {
         var exitCode = 0;
         SettingsWindow? settingsWindow = null;
+        InformationVaultEntryDialog? informationVaultEntryDialog = null;
         try
         {
             Directory.CreateDirectory(outputDirectory);
@@ -345,6 +346,33 @@ public partial class App : System.Windows.Application
             await Task.Delay(120);
             const string informationVaultUnlockedFileName = "information-vault-unlocked.png";
             validationMainWindow.CaptureForValidation(Path.Combine(outputDirectory, informationVaultUnlockedFileName));
+            validationMainWindow.PrepareInformationVaultDetailValidationState();
+            await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Render);
+            const string informationVaultDetailFileName = "information-vault-detail.png";
+            validationMainWindow.CaptureForValidation(Path.Combine(outputDirectory, informationVaultDetailFileName));
+            informationVaultEntryDialog = new InformationVaultEntryDialog(new InformationVaultEntry
+            {
+                Type = InformationVaultEntryType.Steam,
+                Title = "测试用 Steam 账号",
+                Account = "validation@example.invalid",
+                Secret = "not-a-real-password",
+                Notes = "用于验证表单控件、按钮边界与页面比例的模拟记录。"
+            })
+            {
+                Owner = validationMainWindow
+            };
+            informationVaultEntryDialog.Show();
+            await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Render);
+            await Task.Delay(120);
+            const string informationVaultEntryDialogFileName = "information-vault-entry-dialog.png";
+            informationVaultEntryDialog.CaptureForValidation(Path.Combine(outputDirectory, informationVaultEntryDialogFileName));
+            const string informationVaultEntryDialogDropDownFileName = "information-vault-entry-dialog-dropdown.png";
+            informationVaultEntryDialog.OpenTypeDropDownForValidation();
+            await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Render);
+            await Task.Delay(120);
+            informationVaultEntryDialog.CaptureScreenForValidation(Path.Combine(outputDirectory, informationVaultEntryDialogDropDownFileName));
+            informationVaultEntryDialog.Close();
+            informationVaultEntryDialog = null;
             settingsWindow = validationMainWindow.CreateSettingsWindowForValidation();
             settingsWindow.Show();
             await Task.Delay(350);
@@ -372,6 +400,9 @@ public partial class App : System.Windows.Application
                 mainWindowFileName,
                 informationVaultFileName,
                 informationVaultUnlockedFileName,
+                informationVaultDetailFileName,
+                informationVaultEntryDialogFileName,
+                informationVaultEntryDialogDropDownFileName,
                 informationVaultValidation,
                 windowWidth = settingsWindow.ActualWidth,
                 windowHeight = settingsWindow.ActualHeight,
@@ -393,6 +424,7 @@ public partial class App : System.Windows.Application
         }
         finally
         {
+            informationVaultEntryDialog?.Close();
             settingsWindow?.Close();
             IsExitRequested = true;
             validationMainWindow.Close();
