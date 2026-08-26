@@ -505,21 +505,21 @@
                                             <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="Windows Search、完整扫描、重复文件与批处理" />
                                         </StackPanel>
                                     </Button>
-                                    <Button Height="148" Margin="8,0,0,8" Style="{StaticResource InteractiveActionCardStyle}" Tag="NetworkWorkbench" Click="HomeNavigate_Click">
+                                    <Button Height="148" Margin="8,0,8,8" Style="{StaticResource InteractiveActionCardStyle}" Tag="NetworkWorkbench" Click="HomeNavigate_Click">
                                         <StackPanel>
                                             <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#E5F5FF" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#338BC4" Text="&#xE774;" /></Border>
                                             <TextBlock Margin="0,11,0,0" FontSize="16" FontWeight="SemiBold" Text="网络工作台" />
                                             <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="状态监测、连接诊断、Wi-Fi、代理 DNS 与网络方案" />
                                         </StackPanel>
                                     </Button>
-                                    <Button Height="148" Margin="0,8,8,0" Style="{StaticResource InteractiveActionCardStyle}" Tag="ResourceManagement" Click="HomeNavigate_Click">
+                                    <Button Height="148" Margin="8,0,0,8" Style="{StaticResource InteractiveActionCardStyle}" Tag="ResourceManagement" Click="HomeNavigate_Click">
                                         <StackPanel>
                                             <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#EAF0F7" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#657B94" Text="&#xE9D2;" /></Border>
                                             <TextBlock Margin="0,11,0,0" FontSize="16" FontWeight="SemiBold" Text="资源管理" />
                                             <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="端口、进程、服务与运行关系一站查看" />
                                         </StackPanel>
                                     </Button>
-                                    <Button Height="148" Margin="8,8,8,0" Style="{StaticResource InteractiveActionCardStyle}" Tag="SystemTools" Click="HomeNavigate_Click">
+                                    <Button Height="148" Margin="0,8,8,0" Style="{StaticResource InteractiveActionCardStyle}" Tag="SystemTools" Click="HomeNavigate_Click">
                                         <StackPanel>
                                             <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#F0EAFF" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#7659B3" Text="&#xE950;" /></Border>
                                             <TextBlock Margin="0,11,0,0" FontSize="16" FontWeight="SemiBold" Text="系统工具" />
@@ -533,7 +533,7 @@
                                             <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="统一管理区域截图、全屏截图、剪贴板与本地语音输入热键" />
                                         </StackPanel>
                                     </Button>
-                                    <Button Height="148" Margin="8,8,0,0" Style="{StaticResource InteractiveActionCardStyle}" Tag="DeveloperTools" Click="HomeNavigate_Click">
+                                    <Button Height="148" Margin="8,8,8,0" Style="{StaticResource InteractiveActionCardStyle}" Tag="DeveloperTools" Click="HomeNavigate_Click">
                                         <StackPanel>
                                             <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#E4F2FF" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#4384C8" Text="&#xE943;" /></Border>
                                             <TextBlock Margin="0,11,0,0" FontSize="16" FontWeight="SemiBold" Text="开发者工具" />

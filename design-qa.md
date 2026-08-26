@@ -5,12 +5,13 @@
 - 设置透明状态：`C:\Windows\TEMP\codex-clipboard-6a4219f9-9527-40f9-ae6c-47d332b8c43e.png`（1796 × 1050）。
 - 小剪贴板标题区：`C:\Windows\TEMP\codex-clipboard-5210015d-5706-4709-9f18-b781797e1295.png`（639 × 806）。
 - 原屏幕工作台及主导航：`C:\Windows\TEMP\codex-clipboard-c7e30e90-b76a-48e6-a677-7e49958810d4.png`（2354 × 1402）。
+- 首页卡片间距反馈：`C:\Windows\TEMP\codex-clipboard-13d63045-ad11-4844-9bd3-0978b8f9b89e.png`（2368 × 1436）。
 
 ## Implementation evidence
 
 - 设置截图页：`C:\Windows\TEMP\XToolSettingsClipboardValidationCaptures-20260826-v2\settings-screenshot.png`（1213 × 720）。
 - 小剪贴板：`C:\Windows\TEMP\XToolSettingsClipboardValidationCaptures-20260826\clipboard-picker.png`（410 × 520）。
-- 主窗口首页：`C:\Windows\TEMP\XToolSettingsClipboardValidationCaptures-20260826-v2\main-home.png`（1480 × 900）。
+- 主窗口首页：`C:\Windows\TEMP\XToolHomeGridFixCaptures-20260826\main-home.png`（1480 × 900）。
 
 ## Viewport and normalization
 
@@ -34,7 +35,7 @@
 
 - 没有发现可执行的 P0、P1 或 P2 问题。
 - 字体与排版：沿用现有字体、字重和层级；新增文字没有溢出或截断。
-- 间距与布局：新增入口对齐现有网格，标题区和筛选栏没有重叠。
+- 间距与布局：7 张首页卡片已按 4 + 3 位置重新分配四周边距，同排卡片顶边、底边及横向间隔一致。
 - 颜色与视觉令牌：保持现有冷色玻璃风格，同时通过不透明底层阻止背景穿透。
 - 图片与素材：未修改现有素材，系统图标保持清晰。
 - 文案：入口分别使用“剪贴板历史记录”“打开历史记录”“完整历史”，语义明确且一致。
@@ -45,11 +46,12 @@
 - 设置入口事件：`ClipboardHistoryRequested = True`。
 - 小剪贴板入口事件：`FullHistoryRequested = True`。
 - 完整历史导航：`HistoryView` 可见，`SettingsNav` 保持选中。
-- 未替换或重启用户当前运行的 X-Tool；最终端到端手动点击仍可由用户在新版中验收。
+- 最终端到端手动点击与不同系统缩放比例仍由用户在新版中验收。
 
 ## Comparison history
 
-- 第一轮比较未发现 P0/P1/P2 问题，因此没有需要修复后重拍的阻断项。
+- 第一轮自动比较漏报了一个 P2 间距问题：删除首张卡片后，第 3～7 张卡片仍部分沿用旧网格位置的边距，导致“资源管理”下沉且与“网络工作台”的间隔异常。
+- 第二轮重新映射 4 + 3 网格边距并重拍首页；四张首行卡片与三张次行卡片的尺寸、对齐和 16 DIP 间隔均通过复核。
 
 ## Implementation checklist
 
