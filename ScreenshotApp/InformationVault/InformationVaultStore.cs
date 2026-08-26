@@ -85,7 +85,13 @@ internal sealed class InformationVaultStore : IDisposable
             foreach (var entry in data.Entries)
             {
                 entry.RecoveryCodes ??= [];
+                if (entry.Type == InformationVaultEntryType.RecoveryCodes)
+                {
+                    // 旧版独立恢复码记录在内存中归并为 GitHub 凭据；仅在用户下次主动保存时落盘。
+                    entry.Type = InformationVaultEntryType.GitHubCredential;
+                }
             }
+            data.Version = Math.Max(data.Version, 2);
 
             _salt = salt.ToArray();
             _iterations = envelope.Iterations;

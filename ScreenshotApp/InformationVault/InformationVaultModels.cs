@@ -63,7 +63,7 @@ internal sealed class InformationVaultEntry
                 return string.IsNullOrWhiteSpace(Port) ? Host : $"{Host}:{Port}";
             }
 
-            if (Type == InformationVaultEntryType.RecoveryCodes)
+            if (RecoveryCodes.Count > 0)
             {
                 var remaining = RecoveryCodes.Count(code => !code.IsUsed);
                 return $"剩余 {remaining} / {RecoveryCodes.Count} 个";
@@ -151,7 +151,7 @@ internal sealed class InformationVaultEntry
     [JsonIgnore]
     public string UsageBadge => SupportsAutoFill
         ? "支持一键填入"
-        : Type == InformationVaultEntryType.RecoveryCodes
+        : HasRecoveryCodes
             ? $"剩余 {RecoveryCodes.Count(code => !code.IsUsed)} 个"
             : "安全复制";
 
@@ -199,7 +199,7 @@ internal sealed class InformationVaultRecoveryCode
 
 internal sealed class InformationVaultData
 {
-    public int Version { get; set; } = 1;
+    public int Version { get; set; } = 2;
 
     public List<InformationVaultEntry> Entries { get; set; } = [];
 }
@@ -214,7 +214,6 @@ internal static class InformationVaultEntryTypes
     internal static IReadOnlyList<InformationVaultEntryTypeOption> Options { get; } =
     [
         new(InformationVaultEntryType.GitHubCredential, "GitHub 凭据"),
-        new(InformationVaultEntryType.RecoveryCodes, "恢复码"),
         new(InformationVaultEntryType.DeepSeekApiKey, "DeepSeek API 密钥"),
         new(InformationVaultEntryType.Steam, "Steam"),
         new(InformationVaultEntryType.Ubisoft, "Ubisoft Connect"),
@@ -228,7 +227,36 @@ internal static class InformationVaultEntryTypes
     ];
 
     internal static string GetDisplayName(InformationVaultEntryType type) =>
-        Options.First(option => option.Type == type).DisplayName;
+        type == InformationVaultEntryType.RecoveryCodes
+            ? "GitHub 凭据"
+            : Options.FirstOrDefault(option => option.Type == type)?.DisplayName ?? "自定义安全信息";
+
+    internal static string GetDefaultTitle(InformationVaultEntryType type) => type switch
+    {
+        InformationVaultEntryType.GitHubCredential or InformationVaultEntryType.RecoveryCodes => "GitHub 凭据",
+        InformationVaultEntryType.DeepSeekApiKey => "DeepSeek API 密钥",
+        InformationVaultEntryType.Steam => "Steam",
+        InformationVaultEntryType.Ubisoft => "Ubisoft Connect",
+        InformationVaultEntryType.Epic => "Epic Games",
+        InformationVaultEntryType.WeChat => "微信",
+        InformationVaultEntryType.QQ => "QQ",
+        _ => string.Empty
+    };
+
+    internal static bool UsesEditableTitle(InformationVaultEntryType type) =>
+        type is InformationVaultEntryType.MySql or InformationVaultEntryType.Redis or
+            InformationVaultEntryType.VirtualMachine or InformationVaultEntryType.Custom;
+
+    internal static bool UsesAccount(InformationVaultEntryType type) =>
+        type is InformationVaultEntryType.Steam or InformationVaultEntryType.Ubisoft or
+            InformationVaultEntryType.Epic or InformationVaultEntryType.MySql or
+            InformationVaultEntryType.Redis or InformationVaultEntryType.VirtualMachine or
+            InformationVaultEntryType.WeChat or InformationVaultEntryType.QQ or
+            InformationVaultEntryType.Custom;
+
+    internal static bool RequiresAccount(InformationVaultEntryType type) =>
+        type is InformationVaultEntryType.Steam or InformationVaultEntryType.Ubisoft or
+            InformationVaultEntryType.Epic or InformationVaultEntryType.WeChat or InformationVaultEntryType.QQ;
 
     internal static bool SupportsAutoFill(InformationVaultEntryType type) =>
         type is InformationVaultEntryType.Steam or InformationVaultEntryType.Ubisoft or InformationVaultEntryType.Epic;

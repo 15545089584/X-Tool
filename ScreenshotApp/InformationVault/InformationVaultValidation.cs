@@ -25,6 +25,12 @@ internal static class InformationVaultValidation
             Account = fakeAccount,
             Secret = fakeSecret
         });
+        data.Entries.Add(new InformationVaultEntry
+        {
+            Type = InformationVaultEntryType.RecoveryCodes,
+            Title = "旧版 GitHub 恢复码",
+            RecoveryCodes = [new InformationVaultRecoveryCode { Value = "LEGACY-VALIDATION-CODE" }]
+        });
         store.Save(data);
         var encryptedFile = File.ReadAllText(vaultPath);
         var plaintextAbsent = !encryptedFile.Contains(fakeAccount, StringComparison.Ordinal) &&
@@ -43,7 +49,10 @@ internal static class InformationVaultValidation
         }
 
         var loaded = store.Unlock(password);
-        var firstRoundTripSucceeded = loaded.Entries.Count == 1 &&
+        var legacyRecoveryCodesMigrated = loaded.Entries.Count == 2 &&
+                                          loaded.Entries[1].Type == InformationVaultEntryType.GitHubCredential &&
+                                          loaded.Entries[1].RecoveryCodes.Count == 1;
+        var firstRoundTripSucceeded = loaded.Entries.Count == 2 &&
                                       loaded.Entries[0].Account == fakeAccount &&
                                       loaded.Entries[0].Secret == fakeSecret;
         loaded.Entries[0].Notes = "解锁后再次保存";
@@ -51,11 +60,12 @@ internal static class InformationVaultValidation
         store.Lock();
         var loadedAgain = store.Unlock(password);
         var roundTripSucceeded = firstRoundTripSucceeded &&
-                                 loadedAgain.Entries.Count == 1 &&
+                                 loadedAgain.Entries.Count == 2 &&
                                  loadedAgain.Entries[0].Notes == "解锁后再次保存";
         store.Reset();
         var resetRemovedVault = !File.Exists(vaultPath);
-        if (!plaintextAbsent || !wrongPasswordRejected || !roundTripSucceeded || !resetRemovedVault)
+        if (!plaintextAbsent || !wrongPasswordRejected || !roundTripSucceeded ||
+            !legacyRecoveryCodesMigrated || !resetRemovedVault)
         {
             throw new InvalidOperationException("信息库加密验证未通过。请检查明文泄漏、错误密码或重置路径。");
         }
@@ -64,6 +74,7 @@ internal static class InformationVaultValidation
             PlaintextAbsent: plaintextAbsent,
             WrongPasswordRejected: wrongPasswordRejected,
             RoundTripSucceeded: roundTripSucceeded,
+            LegacyRecoveryCodesMigrated: legacyRecoveryCodesMigrated,
             ResetRemovedVault: resetRemovedVault);
     }
 }
@@ -72,4 +83,5 @@ internal sealed record InformationVaultValidationResult(
     bool PlaintextAbsent,
     bool WrongPasswordRejected,
     bool RoundTripSucceeded,
+    bool LegacyRecoveryCodesMigrated,
     bool ResetRemovedVault);

@@ -45,30 +45,22 @@ public partial class InformationVaultView : UserControl
                 new InformationVaultEntry
                 {
                     Type = InformationVaultEntryType.DeepSeekApiKey,
-                    Title = "DeepSeek 开发测试",
-                    Account = "本地开发",
+                    Title = "DeepSeek API 密钥",
                     Secret = "sk-validation-not-real",
                     UpdatedAtUtc = DateTime.UtcNow.AddMinutes(-1)
                 },
                 new InformationVaultEntry
                 {
                     Type = InformationVaultEntryType.GitHubCredential,
-                    Title = "GitHub 推送凭据",
-                    Account = "validation-user",
+                    Title = "GitHub 凭据",
                     Secret = "github-validation-secret",
-                    UpdatedAtUtc = DateTime.UtcNow.AddMinutes(-2)
-                },
-                new InformationVaultEntry
-                {
-                    Type = InformationVaultEntryType.RecoveryCodes,
-                    Title = "GitHub 恢复码",
                     RecoveryCodes =
                     [
                         new InformationVaultRecoveryCode { Value = "VALIDATION-ONE" },
                         new InformationVaultRecoveryCode { Value = "VALIDATION-TWO" },
                         new InformationVaultRecoveryCode { Value = "VALIDATION-THREE", IsUsed = true }
                     ],
-                    UpdatedAtUtc = DateTime.UtcNow.AddMinutes(-3)
+                    UpdatedAtUtc = DateTime.UtcNow.AddMinutes(-2)
                 },
                 new InformationVaultEntry
                 {
@@ -142,9 +134,6 @@ public partial class InformationVaultView : UserControl
     {
         _isFirstSetup = !_store.Exists;
         LockedTitleText.Text = _isFirstSetup ? "创建本地信息库" : "解锁信息库";
-        LockedDescriptionText.Text = _isFirstSetup
-            ? "设置一个仅用于本地解密的主密码；忘记后只能清空信息库"
-            : "输入主密码，本次 X-Tool 运行期间无需重复输入";
         ConfirmPasswordPanel.Visibility = _isFirstSetup ? Visibility.Visible : Visibility.Collapsed;
         ResetVaultButton.Visibility = _isFirstSetup ? Visibility.Collapsed : Visibility.Visible;
         UnlockButton.Content = _isFirstSetup ? "创建并进入信息库" : "解锁信息库";
@@ -388,10 +377,6 @@ public partial class InformationVaultView : UserControl
         var entries = _data?.Entries ?? [];
         VaultSummaryText.Text = $"已安全保存 {entries.Count} 项信息";
         AutoFillCountText.Text = entries.Count(entry => entry.SupportsAutoFill).ToString();
-        RecoveryCodeCountText.Text = entries
-            .Where(entry => entry.Type == InformationVaultEntryType.RecoveryCodes)
-            .Sum(entry => entry.RecoveryCodes.Count(code => !code.IsUsed))
-            .ToString();
     }
 
     private static bool MatchesQuery(InformationVaultEntry entry, string query)

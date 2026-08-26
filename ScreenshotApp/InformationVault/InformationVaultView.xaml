@@ -20,7 +20,8 @@
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="Root" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Foreground="{TemplateBinding Foreground}" Text="{TemplateBinding Content}" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Background" Value="#628BFF" /></Trigger>
@@ -32,16 +33,64 @@
             </Setter>
         </Style>
 
-        <Style x:Key="VaultSecondaryButtonStyle" TargetType="Button" BasedOn="{StaticResource VaultPrimaryButtonStyle}">
+        <Style x:Key="VaultSecondaryButtonStyle" TargetType="Button">
+            <Setter Property="Height" Value="42" />
+            <Setter Property="MinWidth" Value="104" />
+            <Setter Property="Padding" Value="16,0" />
             <Setter Property="Background" Value="#86FFFFFF" />
             <Setter Property="BorderBrush" Value="#A9D4E8F7" />
+            <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Foreground" Value="#46627D" />
+            <Setter Property="FontSize" Value="13" />
             <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              TextElement.Foreground="{TemplateBinding Foreground}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Background" Value="#DCEEFF" /><Setter TargetName="Root" Property="BorderBrush" Value="#74A9E8" /></Trigger>
+                            <Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.72" /></Trigger>
+                            <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Root" Property="Opacity" Value="0.46" /></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
-        <Style x:Key="VaultDangerButtonStyle" TargetType="Button" BasedOn="{StaticResource VaultPrimaryButtonStyle}">
+        <Style x:Key="VaultDangerButtonStyle" TargetType="Button" BasedOn="{StaticResource VaultSecondaryButtonStyle}">
             <Setter Property="Background" Value="#FFF1F1" />
             <Setter Property="BorderBrush" Value="#F0CECE" />
             <Setter Property="Foreground" Value="#B44A4A" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10">
+                            <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{TemplateBinding Foreground}" Text="{TemplateBinding Content}" />
+                        </Border>
+                        <ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Background" Value="#FFE3E3" /><Setter TargetName="Root" Property="BorderBrush" Value="#E3A4A4" /></Trigger><Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.72" /></Trigger></ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="VaultResetButtonStyle" TargetType="Button" BasedOn="{StaticResource VaultSecondaryButtonStyle}">
+            <Setter Property="Height" Value="38" />
+            <Setter Property="Background" Value="#FFF9FB" />
+            <Setter Property="BorderBrush" Value="#E5D5DB" />
+            <Setter Property="Foreground" Value="#835F69" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10">
+                            <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{TemplateBinding Foreground}" Text="{TemplateBinding Content}" />
+                        </Border>
+                        <ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Background" Value="#FFF0F4" /><Setter TargetName="Root" Property="BorderBrush" Value="#D4AEB9" /></Trigger><Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.72" /></Trigger></ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
         <Style x:Key="VaultIconButtonStyle" TargetType="Button">
             <Setter Property="Width" Value="38" />
@@ -81,9 +130,10 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TextBox">
-                        <Border x:Name="Root" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}"
+                        <Border x:Name="Root" Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10">
-                            <ScrollViewer x:Name="PART_ContentHost" />
+                            <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"
+                                          HorizontalAlignment="Stretch" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Root" Property="BorderBrush" Value="#609BFE" /><Setter TargetName="Root" Property="Background" Value="#E8F3FFFF" /></Trigger>
@@ -95,7 +145,7 @@
         </Style>
         <Style x:Key="VaultPasswordBoxStyle" TargetType="PasswordBox">
             <Setter Property="Height" Value="46" />
-            <Setter Property="Padding" Value="13,9" />
+            <Setter Property="Padding" Value="13,0" />
             <Setter Property="Background" Value="#B8FFFFFF" />
             <Setter Property="BorderBrush" Value="#A9CEE8F8" />
             <Setter Property="BorderThickness" Value="1" />
@@ -104,9 +154,10 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="PasswordBox">
-                        <Border x:Name="Root" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}"
+                        <Border x:Name="Root" Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10">
-                            <ScrollViewer x:Name="PART_ContentHost" />
+                            <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"
+                                          HorizontalAlignment="Stretch" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Root" Property="BorderBrush" Value="#609BFE" /><Setter TargetName="Root" Property="Background" Value="#E8F3FFFF" /></Trigger>
@@ -223,13 +274,12 @@
                 <StackPanel>
                     <Border Width="58" Height="58" HorizontalAlignment="Center" Background="#E8F0FF" CornerRadius="17"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="25" Foreground="#4C7CD8" Text="&#xE72E;" /></Border>
                     <TextBlock x:Name="LockedTitleText" Margin="0,20,0,0" HorizontalAlignment="Center" FontSize="24" FontWeight="SemiBold" Text="解锁信息库" />
-                    <TextBlock x:Name="LockedDescriptionText" Margin="0,9,0,0" HorizontalAlignment="Center" Foreground="{StaticResource SecondaryTextBrush}" FontSize="13" TextAlignment="Center" Text="输入本次启动所需的主密码" />
-                    <TextBlock Margin="0,26,0,7" FontSize="12" FontWeight="SemiBold" Text="主密码" />
+                    <TextBlock Margin="0,24,0,7" FontSize="12" FontWeight="SemiBold" Text="主密码" />
                     <PasswordBox x:Name="MasterPasswordBox" Style="{StaticResource VaultPasswordBoxStyle}" KeyDown="PasswordBox_KeyDown" />
                     <StackPanel x:Name="ConfirmPasswordPanel" Margin="0,16,0,0"><TextBlock Margin="0,0,0,7" FontSize="12" FontWeight="SemiBold" Text="再次输入主密码" /><PasswordBox x:Name="ConfirmPasswordBox" Style="{StaticResource VaultPasswordBoxStyle}" KeyDown="PasswordBox_KeyDown" /></StackPanel>
                     <TextBlock x:Name="PasswordMessageText" Margin="0,13,0,0" MinHeight="18" Foreground="#C44747" FontSize="12" TextWrapping="Wrap" />
                     <Button x:Name="UnlockButton" Margin="0,8,0,0" Style="{StaticResource VaultPrimaryButtonStyle}" Content="解锁信息库" Click="UnlockButton_Click" />
-                    <Button x:Name="ResetVaultButton" Height="36" Margin="0,12,0,0" Background="Transparent" BorderThickness="0" Foreground="#8C6870" Cursor="Hand" Content="忘记主密码，清空并重置信息库" Click="ResetVaultButton_Click" />
+                    <Button x:Name="ResetVaultButton" Margin="0,12,0,0" Style="{StaticResource VaultResetButtonStyle}" Content="忘记主密码，清空并重置信息库" Click="ResetVaultButton_Click" />
                 </StackPanel>
             </Border>
         </Grid>
@@ -249,8 +299,7 @@
                 <Grid>
                     <StackPanel><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#557493" Text="本地安全信息" /><TextBlock x:Name="VaultSummaryText" Margin="0,7,0,0" FontSize="20" FontWeight="SemiBold" Text="已安全保存 0 项信息" /><TextBlock Margin="0,6,0,0" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}" Text="整库采用 AES-256-GCM 加密，秘密复制 30 秒后自动清除" /></StackPanel>
                     <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal">
-                        <Border Padding="16,9" Background="#DDF6EA" CornerRadius="10"><StackPanel><TextBlock x:Name="AutoFillCountText" HorizontalAlignment="Center" FontSize="18" FontWeight="SemiBold" Foreground="#367A59" Text="0" /><TextBlock Margin="0,2,0,0" FontSize="10" Foreground="#5F7C6D" Text="支持填入" /></StackPanel></Border>
-                        <Border Margin="10,0,0,0" Padding="16,9" Background="#EEE7FF" CornerRadius="10"><StackPanel><TextBlock x:Name="RecoveryCodeCountText" HorizontalAlignment="Center" FontSize="18" FontWeight="SemiBold" Foreground="#7552B5" Text="0" /><TextBlock Margin="0,2,0,0" FontSize="10" Foreground="#756A83" Text="可用恢复码" /></StackPanel></Border>
+                        <Border MinWidth="78" Padding="18,9" Background="#DDF6EA" CornerRadius="10"><StackPanel><TextBlock x:Name="AutoFillCountText" HorizontalAlignment="Center" FontSize="18" FontWeight="SemiBold" Foreground="#367A59" Text="0" /><TextBlock Margin="0,2,0,0" FontSize="10" Foreground="#5F7C6D" Text="支持填入" /></StackPanel></Border>
                     </StackPanel>
                 </Grid>
             </Border>
@@ -260,7 +309,7 @@
                 <Grid>
                     <TextBlock VerticalAlignment="Center" FontSize="16" FontWeight="SemiBold" Text="全部信息" />
                     <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
-                        <Grid Width="300"><TextBox x:Name="SearchBox" Style="{StaticResource VaultTextBoxStyle}" Padding="36,8,12,8" TextChanged="SearchBox_TextChanged" /><TextBlock Margin="12,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#7390AA" IsHitTestVisible="False" Text="&#xE721;" /><TextBlock x:Name="SearchPlaceholderText" Margin="36,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False" FontSize="12" Foreground="#93A0AE" Text="搜索名称、账号、主机或备注" /></Grid>
+                        <Grid Width="300"><TextBox x:Name="SearchBox" Height="40" Style="{StaticResource VaultTextBoxStyle}" Padding="36,0,12,0" TextChanged="SearchBox_TextChanged" /><TextBlock Margin="12,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#7390AA" IsHitTestVisible="False" Text="&#xE721;" /><TextBlock x:Name="SearchPlaceholderText" Margin="36,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False" FontSize="12" Foreground="#93A0AE" Text="搜索名称、账号、主机或备注" /></Grid>
                         <ComboBox x:Name="TypeFilterComboBox" Width="180" Margin="10,0,0,0" Style="{StaticResource VaultComboBoxStyle}" SelectionChanged="TypeFilterComboBox_SelectionChanged" />
                     </StackPanel>
                 </Grid>

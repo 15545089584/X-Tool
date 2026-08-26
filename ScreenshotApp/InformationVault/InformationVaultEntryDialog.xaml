@@ -29,9 +29,10 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TextBox">
-                        <Border x:Name="Root" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}"
+                        <Border x:Name="Root" Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10">
-                            <ScrollViewer x:Name="PART_ContentHost" />
+                            <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"
+                                          HorizontalAlignment="Stretch" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Root" Property="BorderBrush" Value="#609BFE" /><Setter TargetName="Root" Property="Background" Value="#E8F3FFFF" /></Trigger>
@@ -43,7 +44,7 @@
         </Style>
         <Style x:Key="DialogPasswordBoxStyle" TargetType="PasswordBox">
             <Setter Property="Height" Value="42" />
-            <Setter Property="Padding" Value="12,8" />
+            <Setter Property="Padding" Value="12,0" />
             <Setter Property="Background" Value="#B8FFFFFF" />
             <Setter Property="BorderBrush" Value="#A9CEE8F8" />
             <Setter Property="BorderThickness" Value="1" />
@@ -52,9 +53,10 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="PasswordBox">
-                        <Border x:Name="Root" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}"
+                        <Border x:Name="Root" Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10">
-                            <ScrollViewer x:Name="PART_ContentHost" />
+                            <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"
+                                          HorizontalAlignment="Stretch" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Root" Property="BorderBrush" Value="#609BFE" /><Setter TargetName="Root" Property="Background" Value="#E8F3FFFF" /></Trigger>
@@ -108,9 +110,12 @@
         </Style>
         <Style x:Key="DialogButtonStyle" TargetType="Button">
             <Setter Property="Height" Value="40" /><Setter Property="MinWidth" Value="96" /><Setter Property="Padding" Value="16,0" /><Setter Property="Background" Value="#86FFFFFF" /><Setter Property="BorderBrush" Value="#A9D4E8F7" /><Setter Property="BorderThickness" Value="1" /><Setter Property="Foreground" Value="#46627D" /><Setter Property="FontSize" Value="13" /><Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="Root" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" /></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Background" Value="#DCEEFF" /><Setter TargetName="Root" Property="BorderBrush" Value="#74A9E8" /></Trigger><Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.72" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="Root" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}" /></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Background" Value="#DCEEFF" /><Setter TargetName="Root" Property="BorderBrush" Value="#74A9E8" /></Trigger><Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.72" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
         </Style>
-        <Style x:Key="DialogPrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource DialogButtonStyle}"><Setter Property="MinWidth" Value="112" /><Setter Property="Background" Value="#4D7CFE" /><Setter Property="BorderBrush" Value="#739BFF" /><Setter Property="Foreground" Value="White" /><Setter Property="FontWeight" Value="SemiBold" /></Style>
+        <Style x:Key="DialogPrimaryButtonStyle" TargetType="Button">
+            <Setter Property="Height" Value="40" /><Setter Property="MinWidth" Value="112" /><Setter Property="Padding" Value="16,0" /><Setter Property="Background" Value="#4D7CFE" /><Setter Property="BorderBrush" Value="#739BFF" /><Setter Property="BorderThickness" Value="1" /><Setter Property="Foreground" Value="White" /><Setter Property="FontSize" Value="13" /><Setter Property="FontWeight" Value="SemiBold" /><Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="Root" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{TemplateBinding Foreground}" Text="{TemplateBinding Content}" /></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Background" Value="#628BFF" /></Trigger><Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.72" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+        </Style>
         <Style x:Key="DialogIconButtonStyle" TargetType="Button" BasedOn="{StaticResource DialogButtonStyle}"><Setter Property="Width" Value="38" /><Setter Property="MinWidth" Value="38" /><Setter Property="Padding" Value="0" /><Setter Property="FontSize" Value="20" /></Style>
         <Style TargetType="ScrollBar">
             <Setter Property="Width" Value="9" /><Setter Property="Margin" Value="3,7,3,7" /><Setter Property="Background" Value="#38D3E5F5" />
@@ -130,20 +135,23 @@
             <ScrollViewer Grid.Row="1" Padding="26,4,26,12" VerticalScrollBarVisibility="Auto">
                 <StackPanel>
                     <Border Padding="18,16" Background="#78FFFFFF" BorderBrush="#B9DCE8F2" BorderThickness="1" CornerRadius="14">
-                        <Grid>
+                        <Grid x:Name="IdentityGrid">
                             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="14" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                            <StackPanel><TextBlock Style="{StaticResource FieldLabelStyle}" Text="类型" /><ComboBox x:Name="TypeComboBox" Style="{StaticResource DialogComboBoxStyle}" SelectionChanged="TypeComboBox_SelectionChanged" /></StackPanel>
-                            <StackPanel Grid.Column="2"><TextBlock Style="{StaticResource FieldLabelStyle}" Text="名称" /><TextBox x:Name="TitleBox" Style="{StaticResource DialogTextBoxStyle}" /></StackPanel>
+                            <StackPanel x:Name="TypePanel"><TextBlock Style="{StaticResource FieldLabelStyle}" Text="类型" /><ComboBox x:Name="TypeComboBox" Style="{StaticResource DialogComboBoxStyle}" SelectionChanged="TypeComboBox_SelectionChanged" /></StackPanel>
+                            <StackPanel x:Name="TitlePanel" Grid.Column="2"><TextBlock Style="{StaticResource FieldLabelStyle}" Text="名称" /><TextBox x:Name="TitleBox" Style="{StaticResource DialogTextBoxStyle}" /></StackPanel>
                         </Grid>
                     </Border>
 
-                    <Border Margin="0,12,0,0" Padding="18,16" Background="#78FFFFFF" BorderBrush="#B9DCE8F2" BorderThickness="1" CornerRadius="14">
-                        <Grid>
+                    <Border x:Name="CredentialCard" Margin="0,12,0,0" Padding="18,16" Background="#78FFFFFF" BorderBrush="#B9DCE8F2" BorderThickness="1" CornerRadius="14">
+                        <Grid x:Name="CredentialGrid">
                             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="14" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                             <StackPanel x:Name="AccountPanel"><TextBlock x:Name="AccountLabel" Style="{StaticResource FieldLabelStyle}" Text="账号" /><TextBox x:Name="AccountBox" Style="{StaticResource DialogTextBoxStyle}" /></StackPanel>
                             <StackPanel x:Name="SecretPanel" Grid.Column="2"><TextBlock x:Name="SecretLabel" Style="{StaticResource FieldLabelStyle}" Text="密码或密钥" /><PasswordBox x:Name="SecretBox" Style="{StaticResource DialogPasswordBoxStyle}" /></StackPanel>
-                            <StackPanel x:Name="RecoveryCodesPanel" Grid.ColumnSpan="3"><TextBlock Style="{StaticResource FieldLabelStyle}" Text="恢复码（每行一个）" /><TextBox x:Name="RecoveryCodesBox" MinHeight="112" Style="{StaticResource DialogTextBoxStyle}" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top" /></StackPanel>
                         </Grid>
+                    </Border>
+
+                    <Border x:Name="RecoveryCodesCard" Margin="0,12,0,0" Padding="18,16" Background="#78FFFFFF" BorderBrush="#B9DCE8F2" BorderThickness="1" CornerRadius="14">
+                        <StackPanel><TextBlock Style="{StaticResource FieldLabelStyle}" Text="GitHub 恢复码（可选，每行一个）" /><TextBox x:Name="RecoveryCodesBox" MinHeight="104" Style="{StaticResource DialogTextBoxStyle}" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top" /></StackPanel>
                     </Border>
 
                     <Border x:Name="ConnectionPanel" Margin="0,12,0,0" Padding="18,16" Background="#78FFFFFF" BorderBrush="#B9DCE8F2" BorderThickness="1" CornerRadius="14">

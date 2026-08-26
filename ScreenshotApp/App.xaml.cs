@@ -373,6 +373,45 @@ public partial class App : System.Windows.Application
             informationVaultEntryDialog.CaptureScreenForValidation(Path.Combine(outputDirectory, informationVaultEntryDialogDropDownFileName));
             informationVaultEntryDialog.Close();
             informationVaultEntryDialog = null;
+            informationVaultEntryDialog = new InformationVaultEntryDialog(new InformationVaultEntry
+            {
+                Type = InformationVaultEntryType.DeepSeekApiKey,
+                Title = "DeepSeek API 密钥",
+                Secret = "sk-validation-not-real",
+                Notes = "仅显示 API Key 与可选备注。"
+            })
+            {
+                Owner = validationMainWindow
+            };
+            informationVaultEntryDialog.Show();
+            await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Render);
+            await Task.Delay(120);
+            const string informationVaultDeepSeekDialogFileName = "information-vault-deepseek-dialog.png";
+            informationVaultEntryDialog.CaptureForValidation(Path.Combine(outputDirectory, informationVaultDeepSeekDialogFileName));
+            informationVaultEntryDialog.Close();
+            informationVaultEntryDialog = null;
+            informationVaultEntryDialog = new InformationVaultEntryDialog(new InformationVaultEntry
+            {
+                Type = InformationVaultEntryType.GitHubCredential,
+                Title = "GitHub 凭据",
+                Secret = "github-validation-secret",
+                RecoveryCodes =
+                [
+                    new InformationVaultRecoveryCode { Value = "VALIDATION-ONE" },
+                    new InformationVaultRecoveryCode { Value = "VALIDATION-TWO" }
+                ],
+                Notes = "推送密钥与恢复码归入同一条 GitHub 凭据。"
+            })
+            {
+                Owner = validationMainWindow
+            };
+            informationVaultEntryDialog.Show();
+            await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Render);
+            await Task.Delay(120);
+            const string informationVaultGitHubDialogFileName = "information-vault-github-dialog.png";
+            informationVaultEntryDialog.CaptureForValidation(Path.Combine(outputDirectory, informationVaultGitHubDialogFileName));
+            informationVaultEntryDialog.Close();
+            informationVaultEntryDialog = null;
             settingsWindow = validationMainWindow.CreateSettingsWindowForValidation();
             settingsWindow.Show();
             await Task.Delay(350);
@@ -403,6 +442,8 @@ public partial class App : System.Windows.Application
                 informationVaultDetailFileName,
                 informationVaultEntryDialogFileName,
                 informationVaultEntryDialogDropDownFileName,
+                informationVaultDeepSeekDialogFileName,
+                informationVaultGitHubDialogFileName,
                 informationVaultValidation,
                 windowWidth = settingsWindow.ActualWidth,
                 windowHeight = settingsWindow.ActualHeight,
