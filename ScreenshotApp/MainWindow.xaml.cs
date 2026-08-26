@@ -183,6 +183,20 @@ public partial class MainWindow : Window
 #endif
     }
 
+    internal void CaptureForValidation(string outputPath)
+    {
+        UpdateLayout();
+        var width = Math.Max(1, (int)Math.Round(ActualWidth));
+        var height = Math.Max(1, (int)Math.Round(ActualHeight));
+        var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(this);
+        bitmap.Freeze();
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        using var stream = File.Create(outputPath);
+        encoder.Save(stream);
+    }
+
     private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (e.ClickCount == 2)
@@ -385,7 +399,9 @@ public partial class MainWindow : Window
             return;
         }
 
+        var openClipboardHistory = false;
         var window = CreateSettingsWindow();
+        window.ClipboardHistoryRequested += (_, _) => openClipboardHistory = true;
         window.SelectCategory(category);
         _settingsWindow = window;
         try
@@ -397,6 +413,11 @@ public partial class MainWindow : Window
             _settingsWindow = null;
             SynchronizeLegacySettingsControls();
             RestoreCurrentNavigationSelection();
+        }
+
+        if (openClipboardHistory)
+        {
+            OpenClipboardHistory();
         }
     }
 
@@ -460,7 +481,7 @@ public partial class MainWindow : Window
     {
         var navigation = _currentPage switch
         {
-            "ScreenWorkbench" or "History" => ScreenWorkbenchNav,
+            "History" => SettingsNav,
             "ConverterWorkbench" or "ImageConverter" or "AudioConverter" or "VideoConverter" or
                 "PdfConverter" or "EncodingConverter" or "QrCodeConverter" => ConverterWorkbenchNav,
             "FileWorkbench" => FileWorkbenchNav,
@@ -534,7 +555,7 @@ public partial class MainWindow : Window
             Dispatcher.BeginInvoke(new Action(() => NormalizeImageConverterLabels(ImageConverterView)), DispatcherPriority.Loaded);
         }
 
-        if (page is "History" or "ScreenWorkbench")
+        if (page == "History")
         {
             _ = RefreshHistoryAsync();
         }
@@ -543,7 +564,6 @@ public partial class MainWindow : Window
     private FrameworkElement? GetPageView(string page) => page switch
     {
         "Home" => HomeView,
-        "ScreenWorkbench" => ScreenWorkbenchView,
         "ConverterWorkbench" => ConverterWorkbenchView,
         "ImageConverter" => ImageConverterView,
         "AudioConverter" => AudioConverterView,
@@ -564,7 +584,6 @@ public partial class MainWindow : Window
     private FrameworkElement[] GetPageViews() =>
     [
         HomeView,
-        ScreenWorkbenchView,
         ConverterWorkbenchView,
         ImageConverterView,
         AudioConverterView,
@@ -584,8 +603,7 @@ public partial class MainWindow : Window
     private static int GetPageOrder(string page) => page switch
     {
         "Home" => 0,
-        "ScreenWorkbench" => 10,
-        "History" => 11,
+        "History" => 10,
         "ConverterWorkbench" => 20,
         "ImageConverter" => 21,
         "AudioConverter" => 22,
@@ -1690,11 +1708,6 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ShowHistory_Click(object sender, RoutedEventArgs e)
-    {
-        NavigateToPage("History");
-    }
-
     private async Task ShowClipboardPickerAsync()
     {
         if (_clipboardPicker is not null)
@@ -1736,6 +1749,7 @@ public partial class MainWindow : Window
         }
         _clipboardPicker = picker;
         picker.ItemSelected += ClipboardPicker_ItemSelected;
+        picker.FullHistoryRequested += ClipboardPicker_FullHistoryRequested;
         picker.Closed += (_, _) =>
         {
             if (ReferenceEquals(_clipboardPicker, picker))
@@ -1744,6 +1758,33 @@ public partial class MainWindow : Window
             }
         };
         picker.Show();
+    }
+
+    private void ClipboardPicker_FullHistoryRequested(object? sender, EventArgs e)
+    {
+        if (sender is ClipboardPickerWindow picker)
+        {
+            picker.Close();
+        }
+
+        OpenClipboardHistory();
+    }
+
+    private void OpenClipboardHistory()
+    {
+        if (!IsVisible)
+        {
+            Show();
+        }
+
+        if (WindowState == WindowState.Minimized)
+        {
+            WindowState = WindowState.Normal;
+        }
+
+        NavigateToPage("History");
+        RestoreCurrentNavigationSelection();
+        Activate();
     }
 
     private async void ClipboardPicker_ItemSelected(object? sender, ScreenshotHistoryItem item)
@@ -2452,12 +2493,6 @@ public partial class MainWindow : Window
         _preferences.Save();
     }
 
-    private void NavigateToWorkbench_Click(object sender, RoutedEventArgs e)
-    {
-        ScreenWorkbenchNav.IsChecked = true;
-        NavigateToPage("ScreenWorkbench");
-    }
-
     private void NavigateToConverterWorkbench_Click(object sender, RoutedEventArgs e)
     {
         ConverterWorkbenchNav.IsChecked = true;
@@ -2763,7 +2798,6 @@ public partial class MainWindow : Window
         {
             return "新快捷键注册失败，已恢复原快捷键。";
         }
-        HomeScreenshotShortcutText.Text = _screenshotShortcut.DisplayText;
         UpdateSettingsShortcutSummary();
         return null;
     }

@@ -11,7 +11,7 @@ using Forms = System.Windows.Forms;
 
 namespace ScreenshotApp.Settings;
 
-/// <summary>按类别组织应用设置的半透明子窗口。</summary>
+/// <summary>按类别组织应用设置的不透明子窗口。</summary>
 public partial class SettingsWindow : Window
 {
     internal static IReadOnlyList<string> ValidationCategories { get; } =
@@ -31,6 +31,8 @@ public partial class SettingsWindow : Window
     private GlobalShortcut _voiceInputShortcut;
     private string? _editingShortcutTarget;
     private bool _initialized;
+
+    internal event EventHandler? ClipboardHistoryRequested;
 
     internal SettingsWindow(
         AppPreferences preferences,
@@ -371,6 +373,12 @@ public partial class SettingsWindow : Window
         UpdateStorageLocationText();
         await _refreshHistory();
         SetFooterStatus($"已更新{category}的存储位置");
+    }
+
+    private void OpenClipboardHistoryButton_Click(object sender, RoutedEventArgs e)
+    {
+        ClipboardHistoryRequested?.Invoke(this, EventArgs.Empty);
+        Close();
     }
 
     private string GetStorageLocation(string category) => category switch

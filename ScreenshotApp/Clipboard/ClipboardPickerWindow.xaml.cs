@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
+using System.Windows.Media;
 using ScreenshotApp.Capture;
 using ScreenshotApp.History;
 
@@ -55,6 +56,8 @@ public partial class ClipboardPickerWindow : Window
 
     public event EventHandler<ScreenshotHistoryItem>? ItemSelected;
 
+    public event EventHandler? FullHistoryRequested;
+
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
         var handle = new WindowInteropHelper(this).Handle;
@@ -77,10 +80,31 @@ public partial class ClipboardPickerWindow : Window
 
     private void Header_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
+        if (e.OriginalSource is DependencyObject source && FindVisualParent<Button>(source) is not null)
+        {
+            return;
+        }
+
         if (e.LeftButton == System.Windows.Input.MouseButtonState.Pressed)
         {
             DragMove();
         }
+    }
+
+    private static T? FindVisualParent<T>(DependencyObject source) where T : DependencyObject
+    {
+        DependencyObject? current = source;
+        while (current is not null)
+        {
+            if (current is T match)
+            {
+                return match;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return null;
     }
 
     private void FilterButton_Click(object sender, RoutedEventArgs e)
@@ -89,6 +113,11 @@ public partial class ClipboardPickerWindow : Window
         {
             ApplyFilter(filter);
         }
+    }
+
+    private void OpenFullHistoryButton_Click(object sender, RoutedEventArgs e)
+    {
+        FullHistoryRequested?.Invoke(this, EventArgs.Empty);
     }
 
     private void ApplyFilter(string filter)

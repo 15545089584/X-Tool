@@ -213,7 +213,7 @@
         </Style>
     </Window.Resources>
 
-    <Border Margin="14" Background="#EAF4F9FD" BorderBrush="#B6DCECF8" BorderThickness="1" CornerRadius="24">
+    <Border Margin="14" Background="#FFF4F9FD" BorderBrush="#B6DCECF8" BorderThickness="1" CornerRadius="24">
         <Border.Effect><DropShadowEffect BlurRadius="34" ShadowDepth="8" Direction="270" Opacity="0.28" Color="#29445D" /></Border.Effect>
         <Grid ClipToBounds="True">
             <Grid IsHitTestVisible="False">
@@ -267,6 +267,15 @@
                                     <StackPanel Margin="0,2,8,0">
                                         <Border Style="{StaticResource SettingCardStyle}"><Grid Height="76" Margin="20,0"><StackPanel VerticalAlignment="Center"><TextBlock FontSize="15" Foreground="#304A63" Text="截图后自动复制" /><TextBlock Margin="0,5,0,0" FontSize="11" Foreground="#74899E" Text="完成截图后写入系统剪贴板；当前截图流程固定启用" /></StackPanel><CheckBox HorizontalAlignment="Right" VerticalAlignment="Center" IsChecked="True" IsEnabled="False" Style="{StaticResource SettingToggleStyle}" /></Grid></Border>
                                         <Border Style="{StaticResource SettingCardStyle}"><Grid Height="70" Margin="20,0"><StackPanel VerticalAlignment="Center"><TextBlock FontSize="15" Foreground="#304A63" Text="保存截图历史" /><TextBlock Margin="0,5,0,0" FontSize="11" Foreground="#74899E" Text="保存截图与长截图，供历史记录和剪贴板工作台使用" /></StackPanel><CheckBox HorizontalAlignment="Right" VerticalAlignment="Center" IsChecked="True" IsEnabled="False" Style="{StaticResource SettingToggleStyle}" /></Grid></Border>
+                                        <Border Style="{StaticResource SettingCardStyle}">
+                                            <Grid Height="76" Margin="20,0">
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock FontSize="15" Foreground="#304A63" Text="剪贴板历史记录" />
+                                                    <TextBlock Margin="0,5,150,0" FontSize="11" Foreground="#74899E" Text="集中查看截图、文字提取、翻译、录屏与外部复制记录" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                                <Button Width="126" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource GlassButtonStyle}" Content="打开历史记录" Click="OpenClipboardHistoryButton_Click" />
+                                            </Grid>
+                                        </Border>
                                         <Border Style="{StaticResource SettingCardStyle}"><Grid Height="76" Margin="20,0"><StackPanel VerticalAlignment="Center"><TextBlock FontSize="15" Foreground="#304A63" Text="贴图默认置顶" /><TextBlock Margin="0,5,0,0" FontSize="11" Foreground="#74899E" Text="创建贴图后始终显示在其他窗口上方" /></StackPanel><CheckBox x:Name="StickerTopmostCheckBox" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource SettingToggleStyle}" Click="StickerTopmostCheckBox_Click" /></Grid></Border>
                                         <TextBlock Margin="2,10,0,10" FontSize="14" FontWeight="SemiBold" Foreground="#3A5671" Text="存储位置" />
                                         <Border Style="{StaticResource SettingCardStyle}" Padding="16,8">

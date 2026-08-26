@@ -329,6 +329,10 @@ public partial class App : System.Windows.Application
         {
             Directory.CreateDirectory(outputDirectory);
             await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Render);
+            await Task.Delay(150);
+            const string mainWindowFileName = "main-home.png";
+            validationMainWindow.CaptureForValidation(Path.Combine(outputDirectory, mainWindowFileName));
             settingsWindow = validationMainWindow.CreateSettingsWindowForValidation();
             settingsWindow.Show();
             await Task.Delay(350);
@@ -353,6 +357,7 @@ public partial class App : System.Windows.Application
             var result = new
             {
                 succeeded = true,
+                mainWindowFileName,
                 windowWidth = settingsWindow.ActualWidth,
                 windowHeight = settingsWindow.ActualHeight,
                 captures

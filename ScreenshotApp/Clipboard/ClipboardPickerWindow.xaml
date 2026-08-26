@@ -39,7 +39,20 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
             <Grid MouseLeftButtonDown="Header_MouseLeftButtonDown">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
                 <TextBlock x:Name="TitleText" FontSize="20" FontWeight="SemiBold" Foreground="#263747" Text="剪贴板" />
+                <Button Grid.Column="1" Width="94" Height="32" Margin="0,-2,0,0" VerticalAlignment="Center"
+                        Style="{StaticResource FilterButtonStyle}" Background="#E8F0FA" BorderBrush="#C2D7EA" Foreground="#496882"
+                        ToolTip="打开完整剪贴板历史" AutomationProperties.Name="打开完整剪贴板历史"
+                        Click="OpenFullHistoryButton_Click">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <TextBlock Margin="0,0,6,0" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="13" Text="&#xE81C;" />
+                        <TextBlock VerticalAlignment="Center" Text="完整历史" />
+                    </StackPanel>
+                </Button>
             </Grid>
             <primitives:UniformGrid x:Name="FilterBar" Grid.Row="1" Rows="1" Columns="6" Margin="0,12,0,0">
                 <Button Style="{StaticResource FilterButtonStyle}" Tag="All" Click="FilterButton_Click" Background="#EEF1F6" BorderBrush="#D1D9E5" Foreground="#52657A" Content="全部" />
