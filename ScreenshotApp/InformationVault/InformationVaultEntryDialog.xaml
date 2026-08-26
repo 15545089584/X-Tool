@@ -117,6 +117,29 @@
             <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="Root" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{TemplateBinding Foreground}" Text="{TemplateBinding Content}" /></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Background" Value="#628BFF" /></Trigger><Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Opacity" Value="0.72" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
         </Style>
         <Style x:Key="DialogIconButtonStyle" TargetType="Button" BasedOn="{StaticResource DialogButtonStyle}"><Setter Property="Width" Value="38" /><Setter Property="MinWidth" Value="38" /><Setter Property="Padding" Value="0" /><Setter Property="FontSize" Value="20" /></Style>
+        <Style x:Key="DialogCheckBoxStyle" TargetType="CheckBox">
+            <Setter Property="Foreground" Value="#334D65" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="22" /><ColumnDefinition Width="10" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                            <Border x:Name="CheckRoot" Width="22" Height="22" Background="#B8FFFFFF" BorderBrush="#9BC6E6" BorderThickness="1" CornerRadius="7">
+                                <TextBlock x:Name="CheckGlyph" HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="12" Foreground="White" Text="&#xE73E;" Visibility="Collapsed" />
+                            </Border>
+                            <ContentPresenter Grid.Column="2" VerticalAlignment="Center" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="CheckRoot" Property="BorderBrush" Value="#609BFE" /><Setter TargetName="CheckRoot" Property="Background" Value="#E4F1FF" /></Trigger>
+                            <Trigger Property="IsChecked" Value="True"><Setter TargetName="CheckRoot" Property="Background" Value="#4D7CFE" /><Setter TargetName="CheckRoot" Property="BorderBrush" Value="#4D7CFE" /><Setter TargetName="CheckGlyph" Property="Visibility" Value="Visible" /></Trigger>
+                            <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.52" /></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style TargetType="ScrollBar">
             <Setter Property="Width" Value="9" /><Setter Property="Margin" Value="3,7,3,7" /><Setter Property="Background" Value="#38D3E5F5" />
             <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ScrollBar"><Border Background="{TemplateBinding Background}" CornerRadius="5" Padding="2"><Track x:Name="PART_Track" IsDirectionReversed="True"><Track.DecreaseRepeatButton><RepeatButton Command="ScrollBar.PageUpCommand" Background="Transparent" BorderThickness="0" /></Track.DecreaseRepeatButton><Track.Thumb><Thumb Background="#89A9C7E5" Cursor="Hand"><Thumb.Template><ControlTemplate TargetType="Thumb"><Border x:Name="ThumbRoot" Background="{TemplateBinding Background}" CornerRadius="4" /><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ThumbRoot" Property="Background" Value="#C14D7CFE" /></Trigger><Trigger Property="IsDragging" Value="True"><Setter TargetName="ThumbRoot" Property="Background" Value="#E54D7CFE" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Thumb.Template></Thumb></Track.Thumb><Track.IncreaseRepeatButton><RepeatButton Command="ScrollBar.PageDownCommand" Background="Transparent" BorderThickness="0" /></Track.IncreaseRepeatButton></Track></Border></ControlTemplate></Setter.Value></Setter>
@@ -146,8 +169,22 @@
                         <Grid x:Name="CredentialGrid">
                             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="14" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                             <StackPanel x:Name="AccountPanel"><TextBlock x:Name="AccountLabel" Style="{StaticResource FieldLabelStyle}" Text="账号" /><TextBox x:Name="AccountBox" Style="{StaticResource DialogTextBoxStyle}" /></StackPanel>
-                            <StackPanel x:Name="SecretPanel" Grid.Column="2"><TextBlock x:Name="SecretLabel" Style="{StaticResource FieldLabelStyle}" Text="密码或密钥" /><PasswordBox x:Name="SecretBox" Style="{StaticResource DialogPasswordBoxStyle}" /></StackPanel>
+                            <StackPanel x:Name="SecretPanel" Grid.Column="2"><TextBlock x:Name="SecretLabel" Style="{StaticResource FieldLabelStyle}" Text="密码或密钥" /><PasswordBox x:Name="SecretBox" Style="{StaticResource DialogPasswordBoxStyle}" /><TextBox x:Name="VisibleSecretBox" Style="{StaticResource DialogTextBoxStyle}" Visibility="Collapsed" /></StackPanel>
                         </Grid>
+                    </Border>
+
+                    <Border x:Name="GitHubOptionsCard" Margin="0,12,0,0" Padding="18,16" Background="#78FFFFFF" BorderBrush="#B9DCE8F2" BorderThickness="1" CornerRadius="14" Visibility="Collapsed">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource FieldLabelStyle}" Text="GitHub 推送密钥（可选）" />
+                            <PasswordBox x:Name="GitHubPushKeyBox" Style="{StaticResource DialogPasswordBoxStyle}" />
+                            <Border Margin="0,14,0,0" Padding="13,12" Background="#9CEEF4FF" BorderBrush="#BAD8EE" BorderThickness="1" CornerRadius="11">
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <CheckBox x:Name="GitHubTwoFactorCheckBox" VerticalAlignment="Center" Style="{StaticResource DialogCheckBoxStyle}" Content="此 GitHub 账号已启用二次验证" />
+                                    <TextBlock Grid.Column="1" Margin="18,0,0,0" VerticalAlignment="Center" FontSize="10" Foreground="#71869A" Text="保存后将在信息卡上提醒" />
+                                </Grid>
+                            </Border>
+                        </StackPanel>
                     </Border>
 
                     <Border x:Name="RecoveryCodesCard" Margin="0,12,0,0" Padding="18,16" Background="#78FFFFFF" BorderBrush="#B9DCE8F2" BorderThickness="1" CornerRadius="14">

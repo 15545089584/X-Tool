@@ -31,6 +31,10 @@ internal sealed class InformationVaultEntry
 
     public string Secret { get; set; } = string.Empty;
 
+    public string GitHubPushKey { get; set; } = string.Empty;
+
+    public bool GitHubTwoFactorEnabled { get; set; }
+
     public string Host { get; set; } = string.Empty;
 
     public string Port { get; set; } = string.Empty;
@@ -83,6 +87,9 @@ internal sealed class InformationVaultEntry
     public bool HasSecret => !string.IsNullOrWhiteSpace(Secret);
 
     [JsonIgnore]
+    public bool HasGitHubPushKey => !string.IsNullOrWhiteSpace(GitHubPushKey);
+
+    [JsonIgnore]
     public bool HasHost => !string.IsNullOrWhiteSpace(Host);
 
     [JsonIgnore]
@@ -96,6 +103,24 @@ internal sealed class InformationVaultEntry
 
     [JsonIgnore]
     public bool HasRecoveryCodes => RecoveryCodes.Count > 0;
+
+    [JsonIgnore]
+    public bool HasBrandIcon => BrandIconSource is not null;
+
+    [JsonIgnore]
+    public string? BrandIconSource => Type switch
+    {
+        InformationVaultEntryType.GitHubCredential => "/Assets/InformationVault/github.ico",
+        InformationVaultEntryType.DeepSeekApiKey => "/Assets/InformationVault/deepseek.ico",
+        InformationVaultEntryType.Steam => "/Assets/InformationVault/steam.ico",
+        InformationVaultEntryType.Ubisoft => "/Assets/InformationVault/ubisoft.ico",
+        InformationVaultEntryType.Epic => "/Assets/InformationVault/epic.ico",
+        InformationVaultEntryType.MySql => "/Assets/InformationVault/mysql.ico",
+        InformationVaultEntryType.Redis => "/Assets/InformationVault/redis.ico",
+        InformationVaultEntryType.WeChat => "/Assets/InformationVault/wechat.ico",
+        InformationVaultEntryType.QQ => "/Assets/InformationVault/qq.ico",
+        _ => null
+    };
 
     [JsonIgnore]
     public string IconGlyph => Type switch
@@ -167,6 +192,8 @@ internal sealed class InformationVaultEntry
             Title = Title,
             Account = Account,
             Secret = Secret,
+            GitHubPushKey = GitHubPushKey,
+            GitHubTwoFactorEnabled = GitHubTwoFactorEnabled,
             Host = Host,
             Port = Port,
             Database = Database,
@@ -199,7 +226,7 @@ internal sealed class InformationVaultRecoveryCode
 
 internal sealed class InformationVaultData
 {
-    public int Version { get; set; } = 2;
+    public int Version { get; set; } = 3;
 
     public List<InformationVaultEntry> Entries { get; set; } = [];
 }
@@ -248,14 +275,14 @@ internal static class InformationVaultEntryTypes
             InformationVaultEntryType.VirtualMachine or InformationVaultEntryType.Custom;
 
     internal static bool UsesAccount(InformationVaultEntryType type) =>
-        type is InformationVaultEntryType.Steam or InformationVaultEntryType.Ubisoft or
+        type is InformationVaultEntryType.GitHubCredential or InformationVaultEntryType.Steam or InformationVaultEntryType.Ubisoft or
             InformationVaultEntryType.Epic or InformationVaultEntryType.MySql or
             InformationVaultEntryType.Redis or InformationVaultEntryType.VirtualMachine or
             InformationVaultEntryType.WeChat or InformationVaultEntryType.QQ or
             InformationVaultEntryType.Custom;
 
     internal static bool RequiresAccount(InformationVaultEntryType type) =>
-        type is InformationVaultEntryType.Steam or InformationVaultEntryType.Ubisoft or
+        type is InformationVaultEntryType.GitHubCredential or InformationVaultEntryType.Steam or InformationVaultEntryType.Ubisoft or
             InformationVaultEntryType.Epic or InformationVaultEntryType.WeChat or InformationVaultEntryType.QQ;
 
     internal static bool SupportsAutoFill(InformationVaultEntryType type) =>

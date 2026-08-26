@@ -68,6 +68,7 @@
     <Resource Include="Assets\XToolMark.png" />
     <Resource Include="Assets\XToolLogo.png" />
     <Resource Include="Assets\Toolchains\*.png" />
+    <Resource Include="Assets\InformationVault\*.ico" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,0 +1,12 @@
+这些图标仅用于在信息库中识别对应服务或应用，相关商标和图标权利归各自所有者所有。
+
+来源：
+- GitHub：https://github.com/favicon.ico
+- DeepSeek：https://www.deepseek.com/favicon.ico
+- Steam：https://store.steampowered.com/favicon.ico
+- Ubisoft：https://www.ubisoft.com/favicon.ico
+- MySQL：https://www.mysql.com/favicon.ico
+- Redis：https://redis.io/favicon.ico
+- 微信：https://res.wx.qq.com/a/wx_fed/assets/res/NTI4MWU5.ico
+- QQ：https://im.qq.com/favicon.ico
+- Epic Games：从本机已安装的 Epic Games Launcher 可执行文件中提取的应用图标。

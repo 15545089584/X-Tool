@@ -31,6 +31,13 @@ internal static class InformationVaultValidation
             Title = "旧版 GitHub 恢复码",
             RecoveryCodes = [new InformationVaultRecoveryCode { Value = "LEGACY-VALIDATION-CODE" }]
         });
+        data.Entries.Add(new InformationVaultEntry
+        {
+            Type = InformationVaultEntryType.GitHubCredential,
+            Title = "旧版 GitHub 推送密钥",
+            Secret = "legacy-github-push-key"
+        });
+        data.Version = 2;
         store.Save(data);
         var encryptedFile = File.ReadAllText(vaultPath);
         var plaintextAbsent = !encryptedFile.Contains(fakeAccount, StringComparison.Ordinal) &&
@@ -49,23 +56,42 @@ internal static class InformationVaultValidation
         }
 
         var loaded = store.Unlock(password);
-        var legacyRecoveryCodesMigrated = loaded.Entries.Count == 2 &&
+        var legacyRecoveryCodesMigrated = loaded.Entries.Count == 3 &&
                                           loaded.Entries[1].Type == InformationVaultEntryType.GitHubCredential &&
                                           loaded.Entries[1].RecoveryCodes.Count == 1;
-        var firstRoundTripSucceeded = loaded.Entries.Count == 2 &&
+        var legacyGitHubPushKeyMigrated = loaded.Version == 3 &&
+                                          loaded.Entries[2].GitHubPushKey == "legacy-github-push-key" &&
+                                          string.IsNullOrEmpty(loaded.Entries[2].Secret);
+        var firstRoundTripSucceeded = loaded.Entries.Count == 3 &&
                                       loaded.Entries[0].Account == fakeAccount &&
                                       loaded.Entries[0].Secret == fakeSecret;
         loaded.Entries[0].Notes = "解锁后再次保存";
+        loaded.Entries.Add(new InformationVaultEntry
+        {
+            Type = InformationVaultEntryType.GitHubCredential,
+            Title = "新版 GitHub 凭据",
+            Account = "github-validation@example.invalid",
+            Secret = "not-a-real-password",
+            GitHubPushKey = "github-validation-push-key",
+            GitHubTwoFactorEnabled = true,
+            RecoveryCodes = [new InformationVaultRecoveryCode { Value = "CURRENT-VALIDATION-CODE" }]
+        });
         store.Save(loaded);
         store.Lock();
         var loadedAgain = store.Unlock(password);
         var roundTripSucceeded = firstRoundTripSucceeded &&
-                                 loadedAgain.Entries.Count == 2 &&
-                                 loadedAgain.Entries[0].Notes == "解锁后再次保存";
+                                 loadedAgain.Entries.Count == 4 &&
+                                 loadedAgain.Entries[0].Notes == "解锁后再次保存" &&
+                                 loadedAgain.Entries[2].GitHubPushKey == "legacy-github-push-key" &&
+                                 loadedAgain.Entries[3].Account == "github-validation@example.invalid" &&
+                                 loadedAgain.Entries[3].Secret == "not-a-real-password" &&
+                                 loadedAgain.Entries[3].GitHubPushKey == "github-validation-push-key" &&
+                                 loadedAgain.Entries[3].GitHubTwoFactorEnabled &&
+                                 loadedAgain.Entries[3].RecoveryCodes.Count == 1;
         store.Reset();
         var resetRemovedVault = !File.Exists(vaultPath);
         if (!plaintextAbsent || !wrongPasswordRejected || !roundTripSucceeded ||
-            !legacyRecoveryCodesMigrated || !resetRemovedVault)
+            !legacyRecoveryCodesMigrated || !legacyGitHubPushKeyMigrated || !resetRemovedVault)
         {
             throw new InvalidOperationException("信息库加密验证未通过。请检查明文泄漏、错误密码或重置路径。");
         }
@@ -75,6 +101,7 @@ internal static class InformationVaultValidation
             WrongPasswordRejected: wrongPasswordRejected,
             RoundTripSucceeded: roundTripSucceeded,
             LegacyRecoveryCodesMigrated: legacyRecoveryCodesMigrated,
+            LegacyGitHubPushKeyMigrated: legacyGitHubPushKeyMigrated,
             ResetRemovedVault: resetRemovedVault);
     }
 }
@@ -84,4 +111,5 @@ internal sealed record InformationVaultValidationResult(
     bool WrongPasswordRejected,
     bool RoundTripSucceeded,
     bool LegacyRecoveryCodesMigrated,
+    bool LegacyGitHubPushKeyMigrated,
     bool ResetRemovedVault);

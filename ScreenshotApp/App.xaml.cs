@@ -350,6 +350,10 @@ public partial class App : System.Windows.Application
             await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Render);
             const string informationVaultDetailFileName = "information-vault-detail.png";
             validationMainWindow.CaptureForValidation(Path.Combine(outputDirectory, informationVaultDetailFileName));
+            validationMainWindow.PrepareInformationVaultSingleEntryValidationState();
+            await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Render);
+            const string informationVaultSingleEntryFileName = "information-vault-single-entry.png";
+            validationMainWindow.CaptureForValidation(Path.Combine(outputDirectory, informationVaultSingleEntryFileName));
             informationVaultEntryDialog = new InformationVaultEntryDialog(new InformationVaultEntry
             {
                 Type = InformationVaultEntryType.Steam,
@@ -394,13 +398,16 @@ public partial class App : System.Windows.Application
             {
                 Type = InformationVaultEntryType.GitHubCredential,
                 Title = "GitHub 凭据",
-                Secret = "github-validation-secret",
+                Account = "validation@example.invalid",
+                Secret = "not-a-real-password",
+                GitHubPushKey = "github-validation-push-key",
+                GitHubTwoFactorEnabled = true,
                 RecoveryCodes =
                 [
                     new InformationVaultRecoveryCode { Value = "VALIDATION-ONE" },
                     new InformationVaultRecoveryCode { Value = "VALIDATION-TWO" }
                 ],
-                Notes = "推送密钥与恢复码归入同一条 GitHub 凭据。"
+                Notes = "账号、密码、推送密钥、二次验证与恢复码归入同一条 GitHub 凭据。"
             })
             {
                 Owner = validationMainWindow

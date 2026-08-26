@@ -90,8 +90,18 @@ internal sealed class InformationVaultStore : IDisposable
                     // 旧版独立恢复码记录在内存中归并为 GitHub 凭据；仅在用户下次主动保存时落盘。
                     entry.Type = InformationVaultEntryType.GitHubCredential;
                 }
+
+                if (data.Version < 3 &&
+                    entry.Type == InformationVaultEntryType.GitHubCredential &&
+                    string.IsNullOrWhiteSpace(entry.GitHubPushKey) &&
+                    !string.IsNullOrWhiteSpace(entry.Secret))
+                {
+                    // 旧版 GitHub Secret 保存的是推送密钥；迁移后密码留空，避免把令牌误标成登录密码。
+                    entry.GitHubPushKey = entry.Secret;
+                    entry.Secret = string.Empty;
+                }
             }
-            data.Version = Math.Max(data.Version, 2);
+            data.Version = Math.Max(data.Version, 3);
 
             _salt = salt.ToArray();
             _iterations = envelope.Iterations;

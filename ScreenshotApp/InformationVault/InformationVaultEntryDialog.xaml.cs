@@ -30,6 +30,9 @@ public partial class InformationVaultEntryDialog : Window
         TitleBox.Text = _workingEntry.Title;
         AccountBox.Text = _workingEntry.Account;
         SecretBox.Password = _workingEntry.Secret;
+        VisibleSecretBox.Text = _workingEntry.Secret;
+        GitHubPushKeyBox.Password = _workingEntry.GitHubPushKey;
+        GitHubTwoFactorCheckBox.IsChecked = _workingEntry.GitHubTwoFactorEnabled;
         HostBox.Text = _workingEntry.Host;
         PortBox.Text = _workingEntry.Port;
         DatabaseBox.Text = _workingEntry.Database;
@@ -109,6 +112,12 @@ public partial class InformationVaultEntryDialog : Window
         AccountPanel.Visibility = usesAccount ? Visibility.Visible : Visibility.Collapsed;
         Grid.SetColumn(SecretPanel, usesAccount ? 2 : 0);
         Grid.SetColumnSpan(SecretPanel, usesAccount ? 1 : 3);
+        var showsVisibleSecret = type == InformationVaultEntryType.DeepSeekApiKey;
+        SecretBox.Visibility = showsVisibleSecret ? Visibility.Collapsed : Visibility.Visible;
+        VisibleSecretBox.Visibility = showsVisibleSecret ? Visibility.Visible : Visibility.Collapsed;
+        GitHubOptionsCard.Visibility = type == InformationVaultEntryType.GitHubCredential
+            ? Visibility.Visible
+            : Visibility.Collapsed;
         RecoveryCodesCard.Visibility = type == InformationVaultEntryType.GitHubCredential
             ? Visibility.Visible
             : Visibility.Collapsed;
@@ -118,13 +127,14 @@ public partial class InformationVaultEntryDialog : Window
 
         AccountLabel.Text = type switch
         {
+            InformationVaultEntryType.GitHubCredential => "GitHub 账号或邮箱",
             InformationVaultEntryType.VirtualMachine => "登录用户名",
             _ => "账号或用户名"
         };
         SecretLabel.Text = type switch
         {
             InformationVaultEntryType.DeepSeekApiKey => "API Key",
-            InformationVaultEntryType.GitHubCredential => "GitHub 推送密钥（可选）",
+            InformationVaultEntryType.GitHubCredential => "GitHub 密码",
             InformationVaultEntryType.Custom => "密码、密钥或秘密内容",
             _ => "密码"
         };
@@ -157,19 +167,20 @@ public partial class InformationVaultEntryDialog : Window
             return;
         }
 
-        var recoveryCodes = ParseRecoveryCodes(_workingEntry.RecoveryCodes);
-        if (option.Type == InformationVaultEntryType.GitHubCredential &&
-            string.IsNullOrWhiteSpace(SecretBox.Password) && recoveryCodes.Count == 0)
-        {
-            ValidationText.Text = "请填写 GitHub 推送密钥，或至少填写一个恢复码。";
-            SecretBox.Focus();
-            return;
-        }
-
-        if (option.Type != InformationVaultEntryType.GitHubCredential && string.IsNullOrEmpty(SecretBox.Password))
+        var secret = option.Type == InformationVaultEntryType.DeepSeekApiKey
+            ? VisibleSecretBox.Text.Trim()
+            : SecretBox.Password;
+        if (string.IsNullOrEmpty(secret))
         {
             ValidationText.Text = "请填写需要保护的密码或密钥。";
-            SecretBox.Focus();
+            if (option.Type == InformationVaultEntryType.DeepSeekApiKey)
+            {
+                VisibleSecretBox.Focus();
+            }
+            else
+            {
+                SecretBox.Focus();
+            }
             return;
         }
 
@@ -183,12 +194,19 @@ public partial class InformationVaultEntryDialog : Window
         _workingEntry.Type = option.Type;
         _workingEntry.Title = title;
         _workingEntry.Account = usesAccount ? AccountBox.Text.Trim() : string.Empty;
-        _workingEntry.Secret = SecretBox.Password;
+        _workingEntry.Secret = secret;
+        _workingEntry.GitHubPushKey = option.Type == InformationVaultEntryType.GitHubCredential
+            ? GitHubPushKeyBox.Password
+            : string.Empty;
+        _workingEntry.GitHubTwoFactorEnabled = option.Type == InformationVaultEntryType.GitHubCredential &&
+                                               GitHubTwoFactorCheckBox.IsChecked == true;
         _workingEntry.Host = usesConnectionFields ? HostBox.Text.Trim() : string.Empty;
         _workingEntry.Port = usesConnectionFields ? PortBox.Text.Trim() : string.Empty;
         _workingEntry.Database = usesConnectionFields ? DatabaseBox.Text.Trim() : string.Empty;
         _workingEntry.Notes = NotesBox.Text.Trim();
-        _workingEntry.RecoveryCodes = option.Type == InformationVaultEntryType.GitHubCredential ? recoveryCodes : [];
+        _workingEntry.RecoveryCodes = option.Type == InformationVaultEntryType.GitHubCredential
+            ? ParseRecoveryCodes(_workingEntry.RecoveryCodes)
+            : [];
         _workingEntry.UpdatedAtUtc = DateTime.UtcNow;
         DialogResult = true;
     }

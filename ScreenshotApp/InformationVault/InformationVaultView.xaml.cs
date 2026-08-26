@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media.Imaging;
 using ScreenshotApp.ClipboardUi;
 
 namespace ScreenshotApp.InformationVault;
@@ -53,7 +54,10 @@ public partial class InformationVaultView : UserControl
                 {
                     Type = InformationVaultEntryType.GitHubCredential,
                     Title = "GitHub 凭据",
-                    Secret = "github-validation-secret",
+                    Account = "validation@example.invalid",
+                    Secret = "not-a-real-password",
+                    GitHubPushKey = "github-validation-push-key",
+                    GitHubTwoFactorEnabled = true,
                     RecoveryCodes =
                     [
                         new InformationVaultRecoveryCode { Value = "VALIDATION-ONE" },
@@ -113,6 +117,29 @@ public partial class InformationVaultView : UserControl
         {
             RefreshDetail(entry);
         }
+    }
+
+    internal void PrepareSingleEntryValidationState()
+    {
+        _data = new InformationVaultData
+        {
+            Entries =
+            [
+                new InformationVaultEntry
+                {
+                    Type = InformationVaultEntryType.GitHubCredential,
+                    Title = "GitHub 凭据",
+                    Account = "validation@example.invalid",
+                    Secret = "not-a-real-password",
+                    GitHubPushKey = "github-validation-push-key",
+                    GitHubTwoFactorEnabled = true,
+                    UpdatedAtUtc = DateTime.UtcNow
+                }
+            ]
+        };
+        LockedView.Visibility = Visibility.Collapsed;
+        UnlockedView.Visibility = Visibility.Visible;
+        RefreshEntries();
     }
 
     internal void LockVault()
@@ -247,7 +274,7 @@ public partial class InformationVaultView : UserControl
             return;
         }
 
-        RefreshEntries(entry.Id);
+        RefreshEntries();
     }
 
     private void EditEntry_Click(object sender, RoutedEventArgs e)
@@ -411,8 +438,21 @@ public partial class InformationVaultView : UserControl
         DetailTitleText.Text = entry.Title;
         DetailTypeText.Text = entry.TypeDisplayName;
         DetailIconText.Text = entry.IconGlyph;
+        if (entry.HasBrandIcon && entry.BrandIconSource is not null)
+        {
+            DetailIconImage.Source = new BitmapImage(new Uri(entry.BrandIconSource, UriKind.Relative));
+            DetailIconImage.Visibility = Visibility.Visible;
+            DetailIconText.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            DetailIconImage.Source = null;
+            DetailIconImage.Visibility = Visibility.Collapsed;
+            DetailIconText.Visibility = Visibility.Visible;
+        }
         DetailIconText.Foreground = (System.Windows.Media.Brush)new System.Windows.Media.BrushConverter().ConvertFromString(entry.AccentForeground)!;
         DetailIconBorder.Background = (System.Windows.Media.Brush)new System.Windows.Media.BrushConverter().ConvertFromString(entry.AccentBackground)!;
+        DetailTwoFactorBadge.Visibility = entry.GitHubTwoFactorEnabled ? Visibility.Visible : Visibility.Collapsed;
         ToggleSecretButton.Content = "显示";
         AccountField.Visibility = entry.HasAccount ? Visibility.Visible : Visibility.Collapsed;
         AccountValueText.Text = entry.Account;
@@ -420,10 +460,11 @@ public partial class InformationVaultView : UserControl
         SecretFieldLabel.Text = entry.Type switch
         {
             InformationVaultEntryType.DeepSeekApiKey => "API Key",
-            InformationVaultEntryType.GitHubCredential => "令牌或密钥",
+            InformationVaultEntryType.GitHubCredential => "GitHub 密码",
             _ => "密码"
         };
         SecretValueText.Text = "••••••••••••";
+        GitHubPushKeyField.Visibility = entry.HasGitHubPushKey ? Visibility.Visible : Visibility.Collapsed;
         var hasConnection = entry.HasHost || entry.HasPort || entry.HasDatabase;
         ConnectionFields.Visibility = hasConnection ? Visibility.Visible : Visibility.Collapsed;
         HostValueText.Text = string.IsNullOrWhiteSpace(entry.Host) ? "未填写" : entry.Host;
@@ -475,6 +516,7 @@ public partial class InformationVaultView : UserControl
         {
             "Account" => (_selectedEntry.Account, "账号"),
             "Secret" => (_selectedEntry.Secret, _selectedEntry.Type == InformationVaultEntryType.DeepSeekApiKey ? "API Key" : "密码或密钥"),
+            "GitHubPushKey" => (_selectedEntry.GitHubPushKey, "GitHub 推送密钥"),
             "Host" => (_selectedEntry.Host, "主机"),
             "Port" => (_selectedEntry.Port, "端口"),
             "Database" => (_selectedEntry.Database, "数据库或用途"),
