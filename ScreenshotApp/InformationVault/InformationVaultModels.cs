@@ -200,9 +200,11 @@ internal sealed class InformationVaultEntry
     [JsonIgnore]
     public string UsageBadge => SupportsAutoFill
         ? "支持一键填入"
-        : HasRecoveryCodes
-            ? $"剩余 {RecoveryCodes.Count(code => !code.IsUsed)} 个"
+        : Type is InformationVaultEntryType.GitHubCredential or InformationVaultEntryType.RecoveryCodes
+            ? string.Empty
             : "安全复制";
+
+    public bool HasUsageBadge => !string.IsNullOrEmpty(UsageBadge);
 
     [JsonIgnore]
     public string UpdatedAtDisplay => UpdatedAtUtc.ToLocalTime().ToString("MM-dd HH:mm");
