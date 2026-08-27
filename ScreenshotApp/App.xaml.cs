@@ -335,6 +335,16 @@ public partial class App : System.Windows.Application
             await Task.Delay(150);
             const string mainWindowFileName = "main-home.png";
             validationMainWindow.CaptureForValidation(Path.Combine(outputDirectory, mainWindowFileName));
+            validationMainWindow.NavigateToEfficiencyToolsForValidation();
+            await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Render);
+            await Task.Delay(650);
+            const string efficiencyToolsFileName = "main-efficiency-tools.png";
+            validationMainWindow.CaptureForValidation(Path.Combine(outputDirectory, efficiencyToolsFileName));
+            validationMainWindow.NavigateToSystemCenterForValidation();
+            await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Render);
+            await Task.Delay(300);
+            const string systemCenterFileName = "main-system-center.png";
+            validationMainWindow.CaptureForValidation(Path.Combine(outputDirectory, systemCenterFileName));
             var informationVaultValidation = InformationVaultValidation.Run(outputDirectory);
             validationMainWindow.NavigateToInformationVaultForValidation();
             await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Render);
@@ -471,6 +481,8 @@ public partial class App : System.Windows.Application
             {
                 succeeded = true,
                 mainWindowFileName,
+                efficiencyToolsFileName,
+                systemCenterFileName,
                 informationVaultFileName,
                 informationVaultUnlockedFileName,
                 informationVaultDetailFileName,

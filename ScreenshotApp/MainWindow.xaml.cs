@@ -75,6 +75,9 @@ public partial class MainWindow : Window
     private FrameworkElement? _visiblePageView;
     private SettingsWindow? _settingsWindow;
     private bool _suppressMainNavigation;
+    private bool _suppressSectionNavigation;
+    private string _lastEfficiencyPage = "ConverterWorkbench";
+    private string _lastSystemPage = "NetworkWorkbench";
     private bool _settingsControlsInitialized;
     private int _pageTransitionGeneration;
     private int _toastAnimationGeneration;
@@ -201,8 +204,22 @@ public partial class MainWindow : Window
 
     internal void NavigateToInformationVaultForValidation()
     {
-        InformationVaultNav.IsChecked = true;
+        SelectMainNavigation(InformationVaultNav);
         NavigateToPage("InformationVault");
+        UpdateLayout();
+    }
+
+    internal void NavigateToEfficiencyToolsForValidation()
+    {
+        SelectMainNavigation(EfficiencyToolsNav);
+        NavigateToPage("ConverterWorkbench");
+        UpdateLayout();
+    }
+
+    internal void NavigateToSystemCenterForValidation()
+    {
+        SelectMainNavigation(SystemCenterNav);
+        NavigateToPage("NetworkWorkbench");
         UpdateLayout();
     }
 
@@ -421,7 +438,28 @@ public partial class MainWindow : Window
             return;
         }
 
+        page = page switch
+        {
+            "EfficiencyTools" => _lastEfficiencyPage,
+            "SystemCenter" => _lastSystemPage,
+            _ => page
+        };
+
         NavigateToPage(page);
+    }
+
+    private void WorkspaceSectionTab_Checked(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded || _suppressSectionNavigation || sender is not RadioButton radioButton)
+        {
+            return;
+        }
+
+        var page = radioButton.Tag?.ToString();
+        if (!string.IsNullOrWhiteSpace(page))
+        {
+            NavigateToPage(page);
+        }
     }
 
     private void OpenSettingsWindow(string category = "General")
@@ -516,16 +554,26 @@ public partial class MainWindow : Window
         {
             "History" => SettingsNav,
             "ConverterWorkbench" or "ImageConverter" or "AudioConverter" or "VideoConverter" or
-                "PdfConverter" or "EncodingConverter" or "QrCodeConverter" => ConverterWorkbenchNav,
-            "FileWorkbench" => FileWorkbenchNav,
-            "NetworkWorkbench" => NetworkWorkbenchNav,
-            "ResourceManagement" => ResourceManagementNav,
-            "SystemTools" => SystemToolsNav,
+                "PdfConverter" or "EncodingConverter" or "QrCodeConverter" or "FileWorkbench" => EfficiencyToolsNav,
+            "NetworkWorkbench" or "ResourceManagement" or "SystemTools" => SystemCenterNav,
             "DeveloperTools" => DeveloperToolsNav,
             "InformationVault" => InformationVaultNav,
             "Collaboration" => CollaborationNav,
             _ => HomeNav
         };
+        _suppressMainNavigation = true;
+        try
+        {
+            navigation.IsChecked = true;
+        }
+        finally
+        {
+            _suppressMainNavigation = false;
+        }
+    }
+
+    private void SelectMainNavigation(RadioButton navigation)
+    {
         _suppressMainNavigation = true;
         try
         {
@@ -561,6 +609,8 @@ public partial class MainWindow : Window
 
             _visiblePageView = targetView;
             _currentPage = page;
+            RememberWorkspaceSectionPage(page);
+            UpdateWorkspaceSectionNavigation(page);
             AppMotion.AnimatePageTransition(outgoingView, targetView, direction, () =>
             {
                 if (transitionGeneration != _pageTransitionGeneration)
@@ -582,6 +632,8 @@ public partial class MainWindow : Window
         {
             targetView.Visibility = Visibility.Visible;
             _currentPage = page;
+            RememberWorkspaceSectionPage(page);
+            UpdateWorkspaceSectionNavigation(page);
         }
 
         if (page == "ImageConverter")
@@ -594,6 +646,62 @@ public partial class MainWindow : Window
             _ = RefreshHistoryAsync();
         }
     }
+
+    private void RememberWorkspaceSectionPage(string page)
+    {
+        if (IsEfficiencyPage(page))
+        {
+            _lastEfficiencyPage = page;
+        }
+        else if (IsSystemCenterPage(page))
+        {
+            _lastSystemPage = page;
+        }
+    }
+
+    private void UpdateWorkspaceSectionNavigation(string page)
+    {
+        var showEfficiency = IsEfficiencyPage(page);
+        var showSystem = IsSystemCenterPage(page);
+        WorkspaceSectionBar.Visibility = showEfficiency || showSystem
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        if (!showEfficiency && !showSystem)
+        {
+            return;
+        }
+
+        WorkspaceSectionTitleText.Text = showEfficiency ? "效率工具" : "系统中心";
+        EfficiencySectionTabs.Visibility = showEfficiency ? Visibility.Visible : Visibility.Collapsed;
+        SystemSectionTabs.Visibility = showSystem ? Visibility.Visible : Visibility.Collapsed;
+
+        _suppressSectionNavigation = true;
+        try
+        {
+            if (showEfficiency)
+            {
+                ConverterSectionTab.IsChecked = page != "FileWorkbench";
+                FileSectionTab.IsChecked = page == "FileWorkbench";
+            }
+            else
+            {
+                NetworkSectionTab.IsChecked = page == "NetworkWorkbench";
+                ResourceSectionTab.IsChecked = page == "ResourceManagement";
+                SystemToolsSectionTab.IsChecked = page == "SystemTools";
+            }
+        }
+        finally
+        {
+            _suppressSectionNavigation = false;
+        }
+    }
+
+    private static bool IsEfficiencyPage(string page) => page is
+        "ConverterWorkbench" or "ImageConverter" or "AudioConverter" or "VideoConverter" or
+        "PdfConverter" or "EncodingConverter" or "QrCodeConverter" or "FileWorkbench";
+
+    private static bool IsSystemCenterPage(string page) => page is
+        "NetworkWorkbench" or "ResourceManagement" or "SystemTools";
 
     private FrameworkElement? GetPageView(string page) => page switch
     {
@@ -676,7 +784,7 @@ public partial class MainWindow : Window
     /// <summary>存储页仅负责发现空间来源；用户点击后才切到文件工作台继续搜索或批处理。</summary>
     private async void SystemToolsView_FileWorkbenchRequested(object? sender, FileWorkbenchNavigationRequestedEventArgs e)
     {
-        FileWorkbenchNav.IsChecked = true;
+        SelectMainNavigation(EfficiencyToolsNav);
         NavigateToPage("FileWorkbench");
         await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Render);
         await FileWorkbenchView.OpenFolderFromStorageAsync(e.FolderPath, e.SearchKeyword, e.KnownFilePath);
@@ -2533,7 +2641,7 @@ public partial class MainWindow : Window
 
     private void NavigateToConverterWorkbench_Click(object sender, RoutedEventArgs e)
     {
-        ConverterWorkbenchNav.IsChecked = true;
+        SelectMainNavigation(EfficiencyToolsNav);
         NavigateToPage("ConverterWorkbench");
     }
 
@@ -2543,22 +2651,18 @@ public partial class MainWindow : Window
         switch (page)
         {
             case "FileWorkbench":
-                FileWorkbenchNav.IsChecked = true;
+                SelectMainNavigation(EfficiencyToolsNav);
                 break;
             case "NetworkWorkbench":
-                NetworkWorkbenchNav.IsChecked = true;
-                break;
             case "ResourceManagement":
-                ResourceManagementNav.IsChecked = true;
-                break;
             case "SystemTools":
-                SystemToolsNav.IsChecked = true;
+                SelectMainNavigation(SystemCenterNav);
                 break;
             case "DeveloperTools":
-                DeveloperToolsNav.IsChecked = true;
+                SelectMainNavigation(DeveloperToolsNav);
                 break;
             case "InformationVault":
-                InformationVaultNav.IsChecked = true;
+                SelectMainNavigation(InformationVaultNav);
                 break;
             case "Shortcuts":
                 OpenShortcutSettings();
@@ -2575,13 +2679,13 @@ public partial class MainWindow : Window
 
     private void OpenImageConverter_Click(object sender, RoutedEventArgs e)
     {
-        ConverterWorkbenchNav.IsChecked = true;
+        SelectMainNavigation(EfficiencyToolsNav);
         NavigateToPage("ImageConverter");
     }
 
     private void ConverterToolRail_ToolRequested(object? sender, ConverterToolRequestedEventArgs e)
     {
-        ConverterWorkbenchNav.IsChecked = true;
+        SelectMainNavigation(EfficiencyToolsNav);
         NavigateToPage(e.Tool switch
         {
             "Audio" => "AudioConverter",

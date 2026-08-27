@@ -290,6 +290,52 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- 一级导航只表达工作域，域内模块使用这一组轻量分段按钮切换。 -->
+        <Style x:Key="WorkspaceSectionTabStyle" TargetType="RadioButton">
+            <Setter Property="Height" Value="36" />
+            <Setter Property="MinWidth" Value="94" />
+            <Setter Property="Margin" Value="4,0,0,0" />
+            <Setter Property="Padding" Value="15,0" />
+            <Setter Property="Foreground" Value="#5C7188" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Root"
+                                Padding="{TemplateBinding Padding}"
+                                Background="Transparent"
+                                BorderBrush="Transparent"
+                                BorderThickness="1"
+                                CornerRadius="10">
+                            <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Foreground="{TemplateBinding Foreground}" Text="{TemplateBinding Content}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="#B7E8F2FF" />
+                                <Setter TargetName="Root" Property="BorderBrush" Value="#91C9DFF4" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter Property="Foreground" Value="White" />
+                                <Setter TargetName="Root" Property="Background" Value="#4D7CFE" />
+                                <Setter TargetName="Root" Property="BorderBrush" Value="#79A0FF" />
+                                <Setter TargetName="Root" Property="Effect">
+                                    <Setter.Value>
+                                        <DropShadowEffect BlurRadius="10" ShadowDepth="2" Direction="270" Opacity="0.18" Color="#4D7CFE" />
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Root" Property="Opacity" Value="0.72" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <Grid x:Name="RootVisual" Background="{StaticResource WindowTintBrush}">
@@ -374,49 +420,22 @@
                             <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" FontSize="15" Text="首页" />
                         </StackPanel>
                     </RadioButton>
-                    <RadioButton x:Name="ConverterWorkbenchNav" GroupName="Navigation" Style="{StaticResource NavItemStyle}"
-                                 Tag="ConverterWorkbench" Checked="NavButton_Checked">
+                    <RadioButton x:Name="EfficiencyToolsNav" GroupName="Navigation" Style="{StaticResource NavItemStyle}"
+                                 Tag="EfficiencyTools" Checked="NavButton_Checked">
                         <StackPanel Orientation="Horizontal">
                             <Border Width="34" Height="34" Background="#F7F8FA" CornerRadius="9">
                                 <TextBlock Style="{StaticResource IconTextStyle}" FontSize="17" Text="&#xE8C8;" Foreground="#626971" />
                             </Border>
-                            <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" FontSize="15" Text="转换器工作台" />
+                            <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" FontSize="15" Text="效率工具" />
                         </StackPanel>
                     </RadioButton>
-                    <RadioButton x:Name="FileWorkbenchNav" GroupName="Navigation" Style="{StaticResource NavItemStyle}"
-                                 Tag="FileWorkbench" Checked="NavButton_Checked">
-                        <StackPanel Orientation="Horizontal">
-                            <Border Width="34" Height="34" Background="#F7F8FA" CornerRadius="9">
-                                <TextBlock Style="{StaticResource IconTextStyle}" FontSize="17" Text="&#xE8B7;" Foreground="#626971" />
-                            </Border>
-                            <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" FontSize="15" Text="文件工作台" />
-                        </StackPanel>
-                    </RadioButton>
-                    <RadioButton x:Name="NetworkWorkbenchNav" GroupName="Navigation" Style="{StaticResource NavItemStyle}"
-                                 Tag="NetworkWorkbench" Checked="NavButton_Checked">
-                        <StackPanel Orientation="Horizontal">
-                            <Border Width="34" Height="34" Background="#F7F8FA" CornerRadius="9">
-                                <TextBlock Style="{StaticResource IconTextStyle}" FontSize="17" Text="&#xE774;" Foreground="#626971" />
-                            </Border>
-                            <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" FontSize="15" Text="网络工作台" />
-                        </StackPanel>
-                    </RadioButton>
-                    <RadioButton x:Name="ResourceManagementNav" GroupName="Navigation" Style="{StaticResource NavItemStyle}"
-                                 Tag="ResourceManagement" Checked="NavButton_Checked">
-                        <StackPanel Orientation="Horizontal">
-                            <Border Width="34" Height="34" Background="#F7F8FA" CornerRadius="9">
-                                <TextBlock Style="{StaticResource IconTextStyle}" FontSize="17" Text="&#xE9D2;" Foreground="#626971" />
-                            </Border>
-                            <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" FontSize="15" Text="资源管理" />
-                        </StackPanel>
-                    </RadioButton>
-                    <RadioButton x:Name="SystemToolsNav" GroupName="Navigation" Style="{StaticResource NavItemStyle}"
-                                 Tag="SystemTools" Checked="NavButton_Checked">
+                    <RadioButton x:Name="SystemCenterNav" GroupName="Navigation" Style="{StaticResource NavItemStyle}"
+                                 Tag="SystemCenter" Checked="NavButton_Checked">
                         <StackPanel Orientation="Horizontal">
                             <Border Width="34" Height="34" Background="#F7F8FA" CornerRadius="9">
                                 <TextBlock Style="{StaticResource IconTextStyle}" FontSize="17" Text="&#xE950;" Foreground="#626971" />
                             </Border>
-                            <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" FontSize="15" Text="系统工具" />
+                            <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" FontSize="15" Text="系统中心" />
                         </StackPanel>
                     </RadioButton>
                     <RadioButton x:Name="DeveloperToolsNav" GroupName="Navigation" Style="{StaticResource NavItemStyle}"
@@ -470,8 +489,41 @@
                     <!-- 主内容区 -->
                     <Grid Background="Transparent">
                         <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+
+                            <Border x:Name="WorkspaceSectionBar" Height="46" Margin="44,18,52,0"
+                                    HorizontalAlignment="Left" Padding="7,5"
+                                    Background="#A8FFFFFF" BorderBrush="#B4D5E7F5" BorderThickness="1"
+                                    CornerRadius="14" Visibility="Collapsed">
+                                <Border.Effect>
+                                    <DropShadowEffect BlurRadius="14" ShadowDepth="3" Direction="270" Opacity="0.10" Color="#496A88" />
+                                </Border.Effect>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock x:Name="WorkspaceSectionTitleText" Margin="9,0,12,0" VerticalAlignment="Center"
+                                               FontSize="12" FontWeight="SemiBold" Foreground="#486683" Text="效率工具" />
+                                    <Border Width="1" Height="22" Margin="0,0,7,0" VerticalAlignment="Center" Background="#88C8DCEB" />
+                                    <StackPanel x:Name="EfficiencySectionTabs" Orientation="Horizontal">
+                                        <RadioButton x:Name="ConverterSectionTab" GroupName="EfficiencySection" Style="{StaticResource WorkspaceSectionTabStyle}"
+                                                     Tag="ConverterWorkbench" Content="转换器" Checked="WorkspaceSectionTab_Checked" />
+                                        <RadioButton x:Name="FileSectionTab" GroupName="EfficiencySection" Style="{StaticResource WorkspaceSectionTabStyle}"
+                                                     Tag="FileWorkbench" Content="文件" Checked="WorkspaceSectionTab_Checked" />
+                                    </StackPanel>
+                                    <StackPanel x:Name="SystemSectionTabs" Orientation="Horizontal" Visibility="Collapsed">
+                                        <RadioButton x:Name="NetworkSectionTab" GroupName="SystemSection" Style="{StaticResource WorkspaceSectionTabStyle}"
+                                                     Tag="NetworkWorkbench" Content="网络" Checked="WorkspaceSectionTab_Checked" />
+                                        <RadioButton x:Name="ResourceSectionTab" GroupName="SystemSection" Style="{StaticResource WorkspaceSectionTabStyle}"
+                                                     Tag="ResourceManagement" Content="资源" Checked="WorkspaceSectionTab_Checked" />
+                                        <RadioButton x:Name="SystemToolsSectionTab" GroupName="SystemSection" Style="{StaticResource WorkspaceSectionTabStyle}"
+                                                     Tag="SystemTools" Content="系统" Checked="WorkspaceSectionTab_Checked" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
                             <!-- X-Tool 工具箱首页 -->
-                            <Grid x:Name="HomeView" Margin="44,34,44,34">
+                            <Grid x:Name="HomeView" Grid.Row="1" Margin="44,34,44,34">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="174" />
                                     <RowDefinition Height="20" />
@@ -488,7 +540,7 @@
                                         <TextBlock Margin="0,7,0,0" FontSize="13" Foreground="{StaticResource SecondaryTextBrush}"
                                                    Text="从屏幕内容、格式转换和文件整理，到网络、进程、设备与系统诊断，都在本机按需完成。" />
                                         <StackPanel Margin="0,14,0,0" Orientation="Horizontal">
-                                            <Border Padding="10,5" Background="#DCEBFF" CornerRadius="9"><TextBlock FontSize="11" Foreground="#326DAF" Text="8 个核心入口" /></Border>
+                                            <Border Padding="10,5" Background="#DCEBFF" CornerRadius="9"><TextBlock FontSize="11" Foreground="#326DAF" Text="8 项核心能力" /></Border>
                                             <Border Margin="8,0,0,0" Padding="10,5" Background="#DDF6EA" CornerRadius="9"><TextBlock FontSize="11" Foreground="#367A59" Text="本地优先" /></Border>
                                             <Border Margin="8,0,0,0" Padding="10,5" Background="#F3E8FF" CornerRadius="9"><TextBlock FontSize="11" Foreground="#76549A" Text="按需申请权限" /></Border>
                                         </StackPanel>
@@ -560,9 +612,8 @@
                                 </primitives:UniformGrid>
                             </Grid>
 
-                            <!-- 屏幕工具的专属工作台；剪贴板仅作为这里的子入口。 -->
-                            <!-- 转换器使用独立的二级纵向导航；新增工具只需在导航区追加按钮。 -->
-                            <Grid x:Name="ConverterWorkbenchView" Visibility="Collapsed" Margin="44,42,52,38">
+                            <!-- 效率工具在共享分组栏中切换转换器与文件模块；转换器内部继续使用独立工具轨道。 -->
+                            <Grid x:Name="ConverterWorkbenchView" Grid.Row="1" Visibility="Collapsed" Margin="44,18,52,38">
                                 <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="14" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                                 <StackPanel>
                                     <TextBlock FontSize="30" FontWeight="SemiBold" Text="转换器工作台" />
@@ -583,7 +634,7 @@
                             </Grid>
 
                             <!-- 图片处理专用页：参数区与文件队列分离，便于后续扩展预设、进度与批处理。 -->
-                            <Grid x:Name="ImageConverterView" Visibility="Collapsed" Margin="44,42,52,38">
+                            <Grid x:Name="ImageConverterView" Grid.Row="1" Visibility="Collapsed" Margin="44,18,52,38">
                                 <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                                 <StackPanel>
                                     <TextBlock FontSize="30" FontWeight="SemiBold" Text="转换器工作台" />
@@ -632,7 +683,7 @@
                             </Grid>
 
                             <!-- 音频处理页：文件队列、媒体信息、音质预设与高级参数由独立控件承载。 -->
-                            <Grid x:Name="AudioConverterView" Visibility="Collapsed" Margin="44,42,52,38">
+                            <Grid x:Name="AudioConverterView" Grid.Row="1" Visibility="Collapsed" Margin="44,18,52,38">
                                 <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                                 <StackPanel>
                                     <TextBlock FontSize="30" FontWeight="SemiBold" Text="转换器工作台" />
@@ -645,7 +696,7 @@
                             </Grid>
 
                             <!-- 视频处理页：转换、压缩、提取音频和 GIF 共享同一异步任务链路。 -->
-                            <Grid x:Name="VideoConverterView" Visibility="Collapsed" Margin="44,42,52,38">
+                            <Grid x:Name="VideoConverterView" Grid.Row="1" Visibility="Collapsed" Margin="44,18,52,38">
                                 <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                                 <StackPanel>
                                     <TextBlock FontSize="30" FontWeight="SemiBold" Text="转换器工作台" />
@@ -658,7 +709,7 @@
                             </Grid>
 
                             <!-- 转 PDF：图片由工具本地生成，办公文档按 Office、WPS、LibreOffice 顺序调用。 -->
-                            <Grid x:Name="PdfConverterView" Visibility="Collapsed" Margin="44,42,52,38">
+                            <Grid x:Name="PdfConverterView" Grid.Row="1" Visibility="Collapsed" Margin="44,18,52,38">
                                 <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                                 <StackPanel>
                                     <TextBlock FontSize="30" FontWeight="SemiBold" Text="转换器工作台" />
@@ -671,7 +722,7 @@
                             </Grid>
 
                             <!-- 编码转换：所有编码、解析与生成均在本地执行。 -->
-                            <Grid x:Name="EncodingConverterView" Visibility="Collapsed" Margin="44,42,52,38">
+                            <Grid x:Name="EncodingConverterView" Grid.Row="1" Visibility="Collapsed" Margin="44,18,52,38">
                                 <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                                 <StackPanel>
                                     <TextBlock FontSize="30" FontWeight="SemiBold" Text="转换器工作台" />
@@ -684,7 +735,7 @@
                             </Grid>
 
                             <!-- 二维码：生成与识别全部在本地完成，无网络依赖。 -->
-                            <Grid x:Name="QrCodeConverterView" Visibility="Collapsed" Margin="44,42,52,38">
+                            <Grid x:Name="QrCodeConverterView" Grid.Row="1" Visibility="Collapsed" Margin="44,18,52,38">
                                 <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                                 <StackPanel>
                                     <TextBlock FontSize="30" FontWeight="SemiBold" Text="转换器工作台" />
@@ -697,7 +748,7 @@
                             </Grid>
 
                             <!-- 统一剪贴板页：截图相关内容与外部复制内容集中回看。 -->
-                            <Grid x:Name="HistoryView" Visibility="Collapsed" Margin="58,32,48,38">
+                            <Grid x:Name="HistoryView" Grid.Row="1" Visibility="Collapsed" Margin="58,32,48,38">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="10" />
@@ -893,15 +944,15 @@
                             </Grid>
 
                             <!-- 本地文件批处理与增强搜索。 -->
-                            <fileWorkbench:FileWorkbenchView x:Name="FileWorkbenchView" Visibility="Collapsed" />
-                            <networkWorkbench:NetworkWorkbenchView x:Name="NetworkWorkbenchView" Visibility="Collapsed" />
-                            <systemTools:SystemToolsView x:Name="ResourceManagementView" Visibility="Collapsed" />
-                            <systemTools:SystemToolsView x:Name="SystemToolsView" EnvironmentOnly="True" Visibility="Collapsed" />
-                            <developerTools:DeveloperToolsView x:Name="DeveloperToolsView" Visibility="Collapsed" />
-                            <informationVault:InformationVaultView x:Name="InformationVaultPage" Visibility="Collapsed" />
-                            <collaboration:CollaborationView x:Name="CollaborationView" Visibility="Collapsed" />
+                            <fileWorkbench:FileWorkbenchView x:Name="FileWorkbenchView" Grid.Row="1" Visibility="Collapsed" />
+                            <networkWorkbench:NetworkWorkbenchView x:Name="NetworkWorkbenchView" Grid.Row="1" Visibility="Collapsed" />
+                            <systemTools:SystemToolsView x:Name="ResourceManagementView" Grid.Row="1" Visibility="Collapsed" />
+                            <systemTools:SystemToolsView x:Name="SystemToolsView" Grid.Row="1" EnvironmentOnly="True" Visibility="Collapsed" />
+                            <developerTools:DeveloperToolsView x:Name="DeveloperToolsView" Grid.Row="1" Visibility="Collapsed" />
+                            <informationVault:InformationVaultView x:Name="InformationVaultPage" Grid.Row="1" Visibility="Collapsed" />
+                            <collaboration:CollaborationView x:Name="CollaborationView" Grid.Row="1" Visibility="Collapsed" />
                             <!-- 设置页 -->
-                            <Grid x:Name="SettingsView" Visibility="Collapsed" Margin="58,44">
+                            <Grid x:Name="SettingsView" Grid.Row="1" Visibility="Collapsed" Margin="58,44">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="14" />
@@ -1071,7 +1122,7 @@
                             </Grid>
 
                             <!-- 轻量状态提示 -->
-                            <Border x:Name="ToastBorder" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                            <Border x:Name="ToastBorder" Grid.RowSpan="2" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Bottom"
                                     Margin="0,0,0,22" Padding="18,11" Background="#D9222933"
                                     BorderBrush="#48FFFFFF" BorderThickness="1" CornerRadius="11">
                                 <StackPanel Orientation="Horizontal">

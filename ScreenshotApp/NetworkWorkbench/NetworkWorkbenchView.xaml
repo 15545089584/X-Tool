@@ -53,7 +53,7 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid Margin="44,42,24,38">
+    <Grid Margin="44,18,24,38">
         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="42" /><RowDefinition Height="16" /><RowDefinition Height="*" /></Grid.RowDefinitions>
         <Grid>
             <StackPanel>

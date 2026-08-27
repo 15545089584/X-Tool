@@ -41,7 +41,7 @@
         </Style>
         <Style TargetType="ScrollBar" BasedOn="{StaticResource FileGlassScrollBar}" />
     </UserControl.Resources>
-    <Grid Margin="44,42,52,38">
+    <Grid Margin="44,18,52,38">
         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="Auto" /><RowDefinition Height="14" /><RowDefinition Height="*" /></Grid.RowDefinitions>
         <StackPanel>
             <TextBlock FontSize="30" FontWeight="SemiBold" Text="文件工作台" />
