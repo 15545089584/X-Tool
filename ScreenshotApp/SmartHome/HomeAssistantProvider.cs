@@ -11,7 +11,7 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
 {
     private static readonly HashSet<string> SupportedDomains = new(StringComparer.Ordinal)
     {
-        "light", "switch", "climate", "cover", "fan", "sensor", "binary_sensor"
+        "camera", "light", "switch", "climate", "cover", "fan", "sensor", "binary_sensor"
     };
 
     private readonly Uri _serverUri;
@@ -264,6 +264,7 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
                 .OrderBy(EntityPriority)
                 .ThenBy(entity => entity.EntityId, StringComparer.Ordinal)
                 .First();
+            if (!ShouldIncludeDevice(device, primary)) continue;
             var areaId = primary.AreaId ?? device?.AreaId;
             smartDevices.Add(new SmartDevice
             {
@@ -363,15 +364,30 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
 
     private static int DomainPriority(string domain) => domain switch
     {
-        "climate" => 0,
-        "cover" => 1,
-        "fan" => 2,
-        "light" => 3,
-        "switch" => 4,
-        "binary_sensor" => 5,
-        "sensor" => 6,
+        "camera" => 0,
+        "climate" => 1,
+        "cover" => 2,
+        "fan" => 3,
+        "light" => 4,
+        "switch" => 5,
+        "binary_sensor" => 6,
+        "sensor" => 7,
         _ => 100
     };
+
+    private static bool ShouldIncludeDevice(DeviceRegistryItem? device, SmartEntity primary)
+    {
+        if (primary.AreaId is not null || device?.AreaId is not null) return true;
+        if (primary.Domain is "camera" or "light" or "switch" or "climate" or "cover" or "fan") return true;
+
+        // Backup、Sun 等内建系统实体没有物理设备、房间、设备类别或单位，不作为家电卡片展示。
+        var hasPhysicalMetadata = !string.IsNullOrWhiteSpace(device?.Manufacturer) &&
+                                  !string.Equals(device.Manufacturer, "Home Assistant", StringComparison.OrdinalIgnoreCase);
+        var deviceClass = primary.GetText("device_class");
+        var isSystemOnlyClass = deviceClass is "enum" or "timestamp" or "date";
+        return hasPhysicalMetadata || (!isSystemOnlyClass &&
+               (!string.IsNullOrWhiteSpace(deviceClass) || !string.IsNullOrWhiteSpace(primary.GetText("unit_of_measurement"))));
+    }
 
     private static int EntityPriority(SmartEntity entity)
     {

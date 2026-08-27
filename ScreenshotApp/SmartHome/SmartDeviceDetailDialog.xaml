@@ -1,0 +1,247 @@
+<UserControl x:Class="ScreenshotApp.SmartHome.SmartDeviceDetailDialog"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Name="Root"
+             Width="680" MaxHeight="690">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+        <Style x:Key="DetailButtonStyle" TargetType="Button">
+            <Setter Property="Height" Value="38" />
+            <Setter Property="Padding" Value="16,0" />
+            <Setter Property="Background" Value="#EAF1F7" />
+            <Setter Property="Foreground" Value="#36536C" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Surface" Background="{TemplateBinding Background}" CornerRadius="12">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              TextElement.Foreground="{TemplateBinding Foreground}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Surface" Property="Opacity" Value="0.82" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Surface" Property="Opacity" Value="0.65" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Surface" Property="Opacity" Value="0.42" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="DetailComboBoxStyle" TargetType="ComboBox">
+            <Setter Property="Height" Value="38" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Background" Value="#F4F8FB" />
+            <Setter Property="Foreground" Value="#2F4A61" />
+            <Setter Property="BorderBrush" Value="#C9DCE9" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+        <Style x:Key="SectionCardStyle" TargetType="Border">
+            <Setter Property="Margin" Value="0,0,0,12" />
+            <Setter Property="Padding" Value="18,16" />
+            <Setter Property="Background" Value="#A8F5F9FC" />
+            <Setter Property="BorderBrush" Value="#BFFFFFFF" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="16" />
+        </Style>
+    </UserControl.Resources>
+
+    <Border Padding="26,24" Background="#F4FCFEFF" BorderBrush="#D5FFFFFF" BorderThickness="1" CornerRadius="26"
+            DataContext="{Binding Device, ElementName=Root}">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="44" ShadowDepth="12" Direction="270" Opacity="0.30" Color="#263D52" />
+        </Border.Effect>
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="18" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="14" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="64" />
+                    <ColumnDefinition Width="14" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Border Width="62" Height="62" Background="{Binding AccentBackground}" CornerRadius="19">
+                    <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons"
+                               FontSize="28" Foreground="{Binding AccentBrush}" Text="{Binding IconGlyph}" />
+                </Border>
+                <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                    <TextBlock FontSize="21" FontWeight="SemiBold" Foreground="#172B3C" Text="{Binding Name}"
+                               TextTrimming="CharacterEllipsis" />
+                    <StackPanel Margin="0,6,0,0" Orientation="Horizontal">
+                        <Ellipse Width="7" Height="7" Margin="0,0,7,0" VerticalAlignment="Center">
+                            <Ellipse.Style>
+                                <Style TargetType="Ellipse">
+                                    <Setter Property="Fill" Value="#20B486" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsAvailable}" Value="False">
+                                            <Setter Property="Fill" Value="#A8B3BC" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Ellipse.Style>
+                        </Ellipse>
+                        <TextBlock FontSize="11.5" Foreground="#71869A">
+                            <Run Text="{Binding StatusText, Mode=OneWay}" /><Run Text="  ·  " /><Run Text="{Binding AreaName, Mode=OneWay}" />
+                        </TextBlock>
+                    </StackPanel>
+                </StackPanel>
+                <Button Grid.Column="3" Width="38" Height="38" Padding="0" Style="{StaticResource DetailButtonStyle}"
+                        Click="Close_Click" AutomationProperties.Name="关闭设备详情">
+                    <TextBlock FontFamily="Segoe Fluent Icons" FontSize="14" Text="&#xE711;" />
+                </Button>
+            </Grid>
+
+            <Border Grid.Row="2" Padding="18,14" Background="#BFEAF2F8" CornerRadius="16">
+                <Grid>
+                    <StackPanel>
+                        <TextBlock FontSize="11" Foreground="#6B8195" Text="当前状态" />
+                        <TextBlock Margin="0,4,0,0" FontSize="22" FontWeight="SemiBold" Foreground="#20394E"
+                                   Text="{Binding MainState}" />
+                        <TextBlock Margin="0,5,0,0" FontSize="10.5" Foreground="#768B9D" Text="{Binding SupportingSummary}"
+                                   TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <Button Width="96" Height="42" HorizontalAlignment="Right" VerticalAlignment="Center"
+                            Style="{StaticResource DetailButtonStyle}" Background="{Binding AccentBrush}" Foreground="White"
+                            Content="{Binding ToggleLabel}" Click="Toggle_Click" IsEnabled="{Binding CanInteract}"
+                            Visibility="{Binding CanToggle, Converter={StaticResource BoolToVisibility}}" />
+                </Grid>
+            </Border>
+
+            <ScrollViewer Grid.Row="4" MaxHeight="430" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel>
+                    <Border Style="{StaticResource SectionCardStyle}"
+                            Visibility="{Binding SupportsBrightness, Converter={StaticResource BoolToVisibility}}">
+                        <StackPanel>
+                            <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#294359" Text="灯光亮度" />
+                            <Grid Margin="0,13,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" /><ColumnDefinition Width="56" />
+                                </Grid.ColumnDefinitions>
+                                <Slider x:Name="BrightnessSlider" Minimum="0" Maximum="100" Value="{Binding BrightnessPercent, Mode=OneWay}"
+                                        IsEnabled="{Binding CanInteract}" AutomationProperties.Name="亮度"
+                                        PreviewMouseLeftButtonUp="BrightnessSlider_Commit" KeyUp="BrightnessSlider_KeyUp" />
+                                <TextBlock Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12"
+                                           Foreground="#5D768C" Text="{Binding BrightnessPercent, StringFormat={}{0:0}%}" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource SectionCardStyle}"
+                            Visibility="{Binding IsClimate, Converter={StaticResource BoolToVisibility}}">
+                        <StackPanel>
+                            <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#294359" Text="空调控制" />
+                            <Grid Margin="0,13,0,0" Visibility="{Binding SupportsTargetTemperature, Converter={StaticResource BoolToVisibility}}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" /><ColumnDefinition Width="42" />
+                                    <ColumnDefinition Width="92" /><ColumnDefinition Width="42" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock VerticalAlignment="Center" FontSize="11.5" Foreground="#5D768C" Text="目标温度" />
+                                <Button Grid.Column="1" Style="{StaticResource DetailButtonStyle}" Content="−" Click="DecreaseTemperature_Click"
+                                        IsEnabled="{Binding CanInteract}" />
+                                <TextBlock Grid.Column="2" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="17"
+                                           FontWeight="SemiBold" Foreground="#20394E" Text="{Binding TargetTemperatureText}" />
+                                <Button Grid.Column="3" Style="{StaticResource DetailButtonStyle}" Content="+" Click="IncreaseTemperature_Click"
+                                        IsEnabled="{Binding CanInteract}" />
+                            </Grid>
+                            <Grid Margin="0,12,0,0" Visibility="{Binding SupportsHvacMode, Converter={StaticResource BoolToVisibility}}">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="92" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <TextBlock VerticalAlignment="Center" FontSize="11.5" Foreground="#5D768C" Text="运行模式" />
+                                <ComboBox Grid.Column="1" Style="{StaticResource DetailComboBoxStyle}" ItemsSource="{Binding HvacModeOptions}"
+                                          DisplayMemberPath="DisplayName" SelectedValuePath="Value" SelectedValue="{Binding CurrentHvacMode, Mode=OneWay}"
+                                          IsEnabled="{Binding CanInteract}" SelectionChanged="HvacModeComboBox_SelectionChanged" />
+                            </Grid>
+                            <Grid Margin="0,10,0,0" Visibility="{Binding SupportsFanMode, Converter={StaticResource BoolToVisibility}}">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="92" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <TextBlock VerticalAlignment="Center" FontSize="11.5" Foreground="#5D768C" Text="空调风速" />
+                                <ComboBox Grid.Column="1" Style="{StaticResource DetailComboBoxStyle}" ItemsSource="{Binding FanModeOptions}"
+                                          DisplayMemberPath="DisplayName" SelectedValuePath="Value" SelectedValue="{Binding CurrentFanMode, Mode=OneWay}"
+                                          IsEnabled="{Binding CanInteract}" SelectionChanged="FanModeComboBox_SelectionChanged" />
+                            </Grid>
+                            <Grid Margin="0,10,0,0" Visibility="{Binding SupportsSwingMode, Converter={StaticResource BoolToVisibility}}">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="92" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <TextBlock VerticalAlignment="Center" FontSize="11.5" Foreground="#5D768C" Text="摆风方式" />
+                                <ComboBox Grid.Column="1" Style="{StaticResource DetailComboBoxStyle}" ItemsSource="{Binding SwingModeOptions}"
+                                          DisplayMemberPath="DisplayName" SelectedValuePath="Value" SelectedValue="{Binding CurrentSwingMode, Mode=OneWay}"
+                                          IsEnabled="{Binding CanInteract}" SelectionChanged="SwingModeComboBox_SelectionChanged" />
+                            </Grid>
+                            <Grid Margin="0,10,0,0" Visibility="{Binding SupportsPreset, Converter={StaticResource BoolToVisibility}}">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="92" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <TextBlock VerticalAlignment="Center" FontSize="11.5" Foreground="#5D768C" Text="预设模式" />
+                                <ComboBox Grid.Column="1" Style="{StaticResource DetailComboBoxStyle}" ItemsSource="{Binding PresetModeOptions}"
+                                          DisplayMemberPath="DisplayName" SelectedValuePath="Value" SelectedValue="{Binding CurrentPresetMode, Mode=OneWay}"
+                                          IsEnabled="{Binding CanInteract}" SelectionChanged="PresetComboBox_SelectionChanged" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource SectionCardStyle}"
+                            Visibility="{Binding IsFan, Converter={StaticResource BoolToVisibility}}">
+                        <StackPanel>
+                            <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#294359" Text="风扇控制" />
+                            <Grid Margin="0,13,0,0" Visibility="{Binding SupportsFanPercentage, Converter={StaticResource BoolToVisibility}}">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="56" /></Grid.ColumnDefinitions>
+                                <Slider x:Name="FanSlider" Minimum="0" Maximum="100" Value="{Binding FanPercentage, Mode=OneWay}"
+                                        IsEnabled="{Binding CanInteract}" AutomationProperties.Name="风速"
+                                        PreviewMouseLeftButtonUp="FanSlider_Commit" KeyUp="FanSlider_KeyUp" />
+                                <TextBlock Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12"
+                                           Foreground="#5D768C" Text="{Binding FanPercentage, StringFormat={}{0:0}%}" />
+                            </Grid>
+                            <Grid Margin="0,12,0,0" Visibility="{Binding SupportsPreset, Converter={StaticResource BoolToVisibility}}">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="92" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <TextBlock VerticalAlignment="Center" FontSize="11.5" Foreground="#5D768C" Text="风类模式" />
+                                <ComboBox Grid.Column="1" Style="{StaticResource DetailComboBoxStyle}" ItemsSource="{Binding PresetModeOptions}"
+                                          DisplayMemberPath="DisplayName" SelectedValuePath="Value" SelectedValue="{Binding CurrentPresetMode, Mode=OneWay}"
+                                          IsEnabled="{Binding CanInteract}" SelectionChanged="PresetComboBox_SelectionChanged" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource SectionCardStyle}"
+                            Visibility="{Binding SupportsCoverPosition, Converter={StaticResource BoolToVisibility}}">
+                        <StackPanel>
+                            <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#294359" Text="窗帘位置" />
+                            <Grid Margin="0,13,0,0">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="56" /></Grid.ColumnDefinitions>
+                                <Slider x:Name="CoverSlider" Minimum="0" Maximum="100" Value="{Binding CoverPosition, Mode=OneWay}"
+                                        IsEnabled="{Binding CanInteract}" AutomationProperties.Name="窗帘位置"
+                                        PreviewMouseLeftButtonUp="CoverSlider_Commit" KeyUp="CoverSlider_KeyUp" />
+                                <TextBlock Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12"
+                                           Foreground="#5D768C" Text="{Binding CoverPosition, StringFormat={}{0:0}%}" />
+                            </Grid>
+                            <Grid Margin="0,12,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" /><ColumnDefinition Width="10" />
+                                    <ColumnDefinition Width="*" /><ColumnDefinition Width="10" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Button Style="{StaticResource DetailButtonStyle}" Content="打开" Tag="Open" Click="CoverAction_Click" IsEnabled="{Binding CanInteract}" />
+                                <Button Grid.Column="2" Style="{StaticResource DetailButtonStyle}" Content="停止" Tag="Stop" Click="CoverAction_Click" IsEnabled="{Binding CanInteract}" />
+                                <Button Grid.Column="4" Style="{StaticResource DetailButtonStyle}" Content="关闭" Tag="Close" Click="CoverAction_Click" IsEnabled="{Binding CanInteract}" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Margin="2,0,2,2" FontSize="10.5" Foreground="#B45D69" Text="{Binding OperationMessage}"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </Border>
+</UserControl>

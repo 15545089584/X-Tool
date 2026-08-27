@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Net.Http;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 
 namespace ScreenshotApp.SmartHome;
@@ -13,13 +14,13 @@ public partial class SmartHomeView : UserControl
     private readonly SmartHomeService _service = SmartHomeService.Instance;
     private readonly Dictionary<string, SmartDeviceViewModel> _deviceById = new(StringComparer.Ordinal);
     private bool _initialized;
-    private string _selectedAreaId = "__all";
+    private string _selectedAreaId = "__online";
 
     public SmartHomeView()
     {
         InitializeComponent();
         DataContext = this;
-        AreaFilters.Add(new SmartAreaFilterItem("__all", "全部", 0));
+        AreaFilters.Add(new SmartAreaFilterItem("__online", "在线", 0));
         _service.ConnectionStateChanged += Service_ConnectionStateChanged;
         _service.SnapshotChanged += Service_SnapshotChanged;
         Loaded += SmartHomeView_Loaded;
@@ -163,6 +164,8 @@ public partial class SmartHomeView : UserControl
 
         var selected = _selectedAreaId;
         AreaFilters.Clear();
+        AreaFilters.Add(new SmartAreaFilterItem("__online", "在线", snapshot.Devices.Count(device => device.PrimaryEntity?.Available == true)));
+        AreaFilters.Add(new SmartAreaFilterItem("__offline", "离线", snapshot.Devices.Count(device => device.PrimaryEntity?.Available != true)));
         AreaFilters.Add(new SmartAreaFilterItem("__all", "全部", snapshot.Devices.Count));
         foreach (var area in snapshot.Areas)
         {
@@ -185,13 +188,20 @@ public partial class SmartHomeView : UserControl
     {
         var keyword = DeviceSearchTextBox.Text.Trim();
         var filtered = _deviceById.Values
-            .Where(device => _selectedAreaId == "__all" ||
+            .Where(device => _selectedAreaId switch
+            {
+                "__online" => device.IsAvailable,
+                "__offline" => !device.IsAvailable,
+                "__all" => true,
+                _ =>
                              (_selectedAreaId == "__unassigned" ? device.AreaId is null :
-                                 string.Equals(device.AreaId, _selectedAreaId, StringComparison.Ordinal)))
+                                 string.Equals(device.AreaId, _selectedAreaId, StringComparison.Ordinal))
+            })
             .Where(device => keyword.Length == 0 ||
                              device.Name.Contains(keyword, StringComparison.CurrentCultureIgnoreCase) ||
                              device.AreaName.Contains(keyword, StringComparison.CurrentCultureIgnoreCase))
-            .OrderBy(device => device.AreaName, StringComparer.CurrentCulture)
+            .OrderByDescending(device => device.IsAvailable)
+            .ThenBy(device => device.AreaName, StringComparer.CurrentCulture)
             .ThenBy(device => device.Name, StringComparer.CurrentCulture)
             .ToArray();
 
@@ -199,6 +209,13 @@ public partial class SmartHomeView : UserControl
         foreach (var device in filtered) VisibleDevices.Add(device);
         EmptyState.Visibility = VisibleDevices.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         SearchPlaceholder.Visibility = keyword.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        EmptyStateTitle.Text = _selectedAreaId switch
+        {
+            "__online" => "当前没有在线设备",
+            "__offline" => "当前没有离线设备",
+            _ => "没有匹配的设备"
+        };
+        EmptyStateHint.Text = keyword.Length > 0 ? "清除搜索关键词后再试" : "切换分类或刷新设备状态";
     }
 
     private void AreaFilterList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -216,7 +233,13 @@ public partial class SmartHomeView : UserControl
         ApplyFilter();
     }
 
-    private async void DeviceCard_CommandRequested(object? sender, SmartHomeControlRequest request)
+    private async void DeviceCard_CommandRequested(object? sender, SmartHomeControlRequest request) =>
+        await ExecuteDeviceCommandAsync(request);
+
+    private async void DeviceDetailDialog_CommandRequested(object? sender, SmartHomeControlRequest request) =>
+        await ExecuteDeviceCommandAsync(request);
+
+    private async Task ExecuteDeviceCommandAsync(SmartHomeControlRequest request)
     {
         if (_deviceById.Values.FirstOrDefault(device => device.EntityId == request.EntityId) is not { } device || device.IsBusy)
         {
@@ -233,6 +256,33 @@ public partial class SmartHomeView : UserControl
         {
             device.Rollback(FriendlyError(exception));
         }
+    }
+
+    private void DeviceCard_DetailRequested(object? sender, SmartDeviceViewModel device)
+    {
+        DeviceDetailDialog.Device = device;
+        DeviceDetailOverlay.Visibility = Visibility.Visible;
+        DeviceDetailOverlay.Focus();
+    }
+
+    private void DeviceDetailDialog_CloseRequested(object? sender, EventArgs e) => CloseDeviceDetail();
+
+    private void DeviceDetailOverlay_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (ReferenceEquals(e.OriginalSource, DeviceDetailOverlay)) CloseDeviceDetail();
+    }
+
+    private void DeviceDetailOverlay_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Escape) return;
+        e.Handled = true;
+        CloseDeviceDetail();
+    }
+
+    private void CloseDeviceDetail()
+    {
+        DeviceDetailOverlay.Visibility = Visibility.Collapsed;
+        DeviceDetailDialog.Device = null;
     }
 
     private static async Task RollbackIfUnconfirmedAsync(SmartDeviceViewModel device)

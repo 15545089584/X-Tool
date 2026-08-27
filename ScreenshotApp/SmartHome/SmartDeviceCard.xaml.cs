@@ -1,6 +1,8 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media;
 
 namespace ScreenshotApp.SmartHome;
 
@@ -25,97 +27,49 @@ public partial class SmartDeviceCard : UserControl
 
     public event Action<object?, SmartHomeControlRequest>? CommandRequested;
 
+    public event Action<object?, SmartDeviceViewModel>? DetailRequested;
+
     private void Toggle_Click(object sender, RoutedEventArgs e)
     {
-        if (Device is not { IsAvailable: true } device) return;
-        Raise(device.IsOn ? SmartHomeControlAction.TurnOff : SmartHomeControlAction.TurnOn);
+        e.Handled = true;
+        if (Device is not { CanInteract: true } device || string.IsNullOrWhiteSpace(device.EntityId)) return;
+        CommandRequested?.Invoke(this, new SmartHomeControlRequest(
+            device.EntityId,
+            device.IsOn ? SmartHomeControlAction.TurnOff : SmartHomeControlAction.TurnOn));
     }
 
-    private void BrightnessSlider_Commit(object sender, MouseButtonEventArgs e) =>
-        Raise(SmartHomeControlAction.SetBrightness, BrightnessSlider.Value);
-
-    private void BrightnessSlider_KeyUp(object sender, KeyEventArgs e)
+    private void OpenDetails_Click(object sender, RoutedEventArgs e)
     {
-        if (e.Key is Key.Left or Key.Right or Key.Up or Key.Down)
+        e.Handled = true;
+        OpenDetail();
+    }
+
+    private void CardSurface_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (FindInteractiveAncestor(e.OriginalSource as DependencyObject)) return;
+        OpenDetail();
+    }
+
+    private void CardSurface_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key is not (Key.Enter or Key.Space)) return;
+        e.Handled = true;
+        OpenDetail();
+    }
+
+    private void OpenDetail()
+    {
+        if (Device is { } device) DetailRequested?.Invoke(this, device);
+    }
+
+    private static bool FindInteractiveAncestor(DependencyObject? source)
+    {
+        while (source is not null)
         {
-            Raise(SmartHomeControlAction.SetBrightness, BrightnessSlider.Value);
-        }
-    }
-
-    private void FanSlider_Commit(object sender, MouseButtonEventArgs e) =>
-        Raise(SmartHomeControlAction.SetFanPercentage, FanSlider.Value);
-
-    private void FanSlider_KeyUp(object sender, KeyEventArgs e)
-    {
-        if (e.Key is Key.Left or Key.Right or Key.Up or Key.Down)
-        {
-            Raise(SmartHomeControlAction.SetFanPercentage, FanSlider.Value);
-        }
-    }
-
-    private void CoverSlider_Commit(object sender, MouseButtonEventArgs e) =>
-        Raise(SmartHomeControlAction.SetCoverPosition, CoverSlider.Value);
-
-    private void CoverSlider_KeyUp(object sender, KeyEventArgs e)
-    {
-        if (e.Key is Key.Left or Key.Right or Key.Up or Key.Down)
-        {
-            Raise(SmartHomeControlAction.SetCoverPosition, CoverSlider.Value);
-        }
-    }
-
-    private void DecreaseTemperature_Click(object sender, RoutedEventArgs e)
-    {
-        if (Device is not { } device) return;
-        Raise(SmartHomeControlAction.SetTargetTemperature,
-            Math.Max(device.MinimumTemperature, device.TargetTemperature - device.TemperatureStep));
-    }
-
-    private void IncreaseTemperature_Click(object sender, RoutedEventArgs e)
-    {
-        if (Device is not { } device) return;
-        Raise(SmartHomeControlAction.SetTargetTemperature,
-            Math.Min(device.MaximumTemperature, device.TargetTemperature + device.TemperatureStep));
-    }
-
-    private void CoverAction_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is not Button { Tag: string action }) return;
-        Raise(action switch
-        {
-            "Open" => SmartHomeControlAction.OpenCover,
-            "Stop" => SmartHomeControlAction.StopCover,
-            _ => SmartHomeControlAction.CloseCover
-        });
-    }
-
-    private void HvacModeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
-        RaiseSelection(sender, SmartHomeControlAction.SetHvacMode, Device?.CurrentHvacMode);
-
-    private void FanModeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
-        RaiseSelection(sender, SmartHomeControlAction.SetFanMode, Device?.CurrentFanMode);
-
-    private void SwingModeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
-        RaiseSelection(sender, SmartHomeControlAction.SetSwingMode, Device?.CurrentSwingMode);
-
-    private void PresetComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
-        RaiseSelection(sender, SmartHomeControlAction.SetPreset, Device?.CurrentPresetMode);
-
-    private void RaiseSelection(object sender, SmartHomeControlAction action, string? currentValue)
-    {
-        if (!IsLoaded || sender is not ComboBox { SelectedValue: string value } ||
-            Device is not { IsAvailable: true, IsBusy: false } ||
-            string.IsNullOrWhiteSpace(value) || string.Equals(value, currentValue, StringComparison.Ordinal))
-        {
-            return;
+            if (source is ButtonBase or Slider or ComboBox) return true;
+            source = VisualTreeHelper.GetParent(source);
         }
 
-        Raise(action, textValue: value);
-    }
-
-    private void Raise(SmartHomeControlAction action, double? value = null, string? textValue = null)
-    {
-        if (Device is not { IsAvailable: true } device || string.IsNullOrWhiteSpace(device.EntityId)) return;
-        CommandRequested?.Invoke(this, new SmartHomeControlRequest(device.EntityId, action, value, textValue));
+        return false;
     }
 }

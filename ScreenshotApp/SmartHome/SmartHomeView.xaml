@@ -67,21 +67,23 @@
             <Setter Property="FontSize" Value="13" />
         </Style>
         <Style x:Key="AreaChipStyle" TargetType="ListBoxItem">
-            <Setter Property="Padding" Value="14,8" />
+            <Setter Property="Padding" Value="15,9" />
             <Setter Property="Margin" Value="0,0,8,0" />
             <Setter Property="Foreground" Value="#5A748B" />
-            <Setter Property="Background" Value="#D8EDF3F8" />
+            <Setter Property="Background" Value="#A8F4F8FB" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListBoxItem">
-                        <Border x:Name="Chip" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}" CornerRadius="11">
+                        <Border x:Name="Chip" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}"
+                                BorderBrush="#A8FFFFFF" BorderThickness="1" CornerRadius="15">
                             <ContentPresenter />
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chip" Property="Background" Value="#D9E8FF" /></Trigger>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chip" Property="Background" Value="#DCE9F7" /></Trigger>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Chip" Property="Background" Value="#557DF4" />
+                                <Setter TargetName="Chip" Property="Background" Value="#456FE8" />
+                                <Setter TargetName="Chip" Property="BorderBrush" Value="#7F9BF3" />
                                 <Setter Property="Foreground" Value="White" />
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -126,14 +128,12 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="18" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="14" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
             <Grid>
                 <StackPanel>
-                    <TextBlock FontSize="28" FontWeight="SemiBold" Text="智能家居" />
+                    <TextBlock FontSize="28" FontWeight="SemiBold" Foreground="#172B3C" Text="智能家居" />
                     <StackPanel Margin="0,7,0,0" Orientation="Horizontal">
                         <Ellipse x:Name="ConnectionStatusDot" Width="8" Height="8" Margin="0,0,7,0" VerticalAlignment="Center" Fill="#B0BAC4" />
                         <TextBlock x:Name="ConnectionStatusText" VerticalAlignment="Center" FontSize="12" Foreground="#607A91" Text="正在准备连接…" />
@@ -146,57 +146,77 @@
                 </StackPanel>
             </Grid>
 
-            <Grid Grid.Row="2">
-                <ScrollViewer Margin="0,0,330,0" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled">
-                    <ListBox x:Name="AreaFilterList" ItemsSource="{Binding AreaFilters}" SelectedIndex="0"
-                             Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                             SelectionChanged="AreaFilterList_SelectionChanged">
-                        <ListBox.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ListBox.ItemsPanel>
-                        <ListBox.ItemContainerStyle><StaticResource ResourceKey="AreaChipStyle" /></ListBox.ItemContainerStyle>
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock FontSize="12" FontWeight="SemiBold" Text="{Binding Name}" />
-                                    <TextBlock Margin="6,0,0,0" FontSize="10" Opacity="0.72" Text="{Binding Count}" />
-                                </StackPanel>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
-                </ScrollViewer>
-                <Border Width="306" Height="38" HorizontalAlignment="Right" Background="#D8FFFFFF" BorderBrush="#C7DAE9" BorderThickness="1" CornerRadius="11">
-                    <Grid>
-                        <TextBlock Margin="12,0,0,0" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="#7A91A6" Text="&#xE721;" />
-                        <TextBox x:Name="DeviceSearchTextBox" Margin="38,0,10,0" VerticalContentAlignment="Center" Background="Transparent" BorderThickness="0"
-                                 FontSize="12" TextChanged="DeviceSearchTextBox_TextChanged" />
-                        <TextBlock x:Name="SearchPlaceholder" Margin="39,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False"
-                                   FontSize="12" Foreground="#9AA9B7" Text="搜索设备" />
-                    </Grid>
-                </Border>
-            </Grid>
+            <Border Grid.Row="2" Padding="18" Background="#62FFFFFF" BorderBrush="#8FFFFFFF" BorderThickness="1" CornerRadius="24">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="28" ShadowDepth="8" Direction="270" Opacity="0.10" Color="#4A6B82" />
+                </Border.Effect>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="15" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
 
-            <Grid Grid.Row="4">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                    <ItemsControl ItemsSource="{Binding VisibleDevices}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><WrapPanel HorizontalAlignment="Left" /></ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <local:SmartDeviceCard Device="{Binding}" CommandRequested="DeviceCard_CommandRequested" />
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer>
-                <Border x:Name="EmptyState" Background="#82FFFFFF" CornerRadius="18" Visibility="Collapsed">
-                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <Border Width="62" Height="62" HorizontalAlignment="Center" Background="#E7EEFF" CornerRadius="19">
-                            <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="27" Foreground="#557DF4" Text="&#xE772;" />
+                    <Grid>
+                        <ScrollViewer Margin="0,0,318,0" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled">
+                            <ListBox x:Name="AreaFilterList" ItemsSource="{Binding AreaFilters}" SelectedIndex="0"
+                                     Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                     SelectionChanged="AreaFilterList_SelectionChanged">
+                                <ListBox.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ListBox.ItemsPanel>
+                                <ListBox.ItemContainerStyle><StaticResource ResourceKey="AreaChipStyle" /></ListBox.ItemContainerStyle>
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock FontSize="12" FontWeight="SemiBold" Text="{Binding Name}" />
+                                            <TextBlock Margin="6,0,0,0" FontSize="10" Opacity="0.74" Text="{Binding Count}" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </ScrollViewer>
+                        <Border Width="294" Height="38" HorizontalAlignment="Right" Background="#C7FFFFFF"
+                                BorderBrush="#B9D6E5F0" BorderThickness="1" CornerRadius="14">
+                            <Grid>
+                                <TextBlock Margin="13,0,0,0" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons"
+                                           FontSize="14" Foreground="#7A91A6" Text="&#xE721;" />
+                                <TextBox x:Name="DeviceSearchTextBox" Margin="39,0,11,0" VerticalContentAlignment="Center"
+                                         Background="Transparent" BorderThickness="0" FontSize="12"
+                                         TextChanged="DeviceSearchTextBox_TextChanged" />
+                                <TextBlock x:Name="SearchPlaceholder" Margin="40,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False"
+                                           FontSize="12" Foreground="#9AA9B7" Text="搜索设备" />
+                            </Grid>
                         </Border>
-                        <TextBlock Margin="0,15,0,0" HorizontalAlignment="Center" FontSize="17" FontWeight="SemiBold" Text="没有匹配的设备" />
-                        <TextBlock Margin="0,6,0,0" HorizontalAlignment="Center" FontSize="11" Foreground="#768A9D" Text="调整房间筛选或搜索关键词" />
-                    </StackPanel>
-                </Border>
-            </Grid>
+                    </Grid>
+
+                    <Grid Grid.Row="2">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl ItemsSource="{Binding VisibleDevices}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><WrapPanel HorizontalAlignment="Left" /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <local:SmartDeviceCard Device="{Binding}" CommandRequested="DeviceCard_CommandRequested"
+                                                               DetailRequested="DeviceCard_DetailRequested" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                        <Border x:Name="EmptyState" Background="#70FFFFFF" CornerRadius="18" Visibility="Collapsed">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Border Width="62" Height="62" HorizontalAlignment="Center" Background="#E7EEFF" CornerRadius="19">
+                                    <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons"
+                                               FontSize="27" Foreground="#557DF4" Text="&#xE772;" />
+                                </Border>
+                                <TextBlock x:Name="EmptyStateTitle" Margin="0,15,0,0" HorizontalAlignment="Center"
+                                           FontSize="17" FontWeight="SemiBold" Text="没有匹配的设备" />
+                                <TextBlock x:Name="EmptyStateHint" Margin="0,6,0,0" HorizontalAlignment="Center"
+                                           FontSize="11" Foreground="#768A9D" Text="调整分类或搜索关键词" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </Border>
         </Grid>
 
         <Grid x:Name="ConnectionSettingsOverlay" Background="#4A40546A" Visibility="Collapsed">
@@ -230,6 +250,14 @@
                     </Grid>
                 </StackPanel>
             </Border>
+        </Grid>
+
+        <Grid x:Name="DeviceDetailOverlay" Background="#56344759" Visibility="Collapsed" Focusable="True"
+              PreviewMouseLeftButtonDown="DeviceDetailOverlay_PreviewMouseLeftButtonDown"
+              PreviewKeyDown="DeviceDetailOverlay_PreviewKeyDown">
+            <local:SmartDeviceDetailDialog x:Name="DeviceDetailDialog" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           CommandRequested="DeviceDetailDialog_CommandRequested"
+                                           CloseRequested="DeviceDetailDialog_CloseRequested" />
         </Grid>
     </Grid>
 </UserControl>

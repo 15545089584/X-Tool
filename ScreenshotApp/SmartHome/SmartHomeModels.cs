@@ -153,13 +153,14 @@ public sealed record SmartDevice
     private static int GetDomainPriority(string domain) => domain switch
     {
         // 设备可能同时暴露指示灯或辅助开关；专用控制实体必须优先。
-        "climate" => 0,
-        "cover" => 1,
-        "fan" => 2,
-        "light" => 3,
-        "switch" => 4,
-        "binary_sensor" => 5,
-        "sensor" => 6,
+        "camera" => 0,
+        "climate" => 1,
+        "cover" => 2,
+        "fan" => 3,
+        "light" => 4,
+        "switch" => 5,
+        "binary_sensor" => 6,
+        "sensor" => 7,
         _ => 100
     };
 
