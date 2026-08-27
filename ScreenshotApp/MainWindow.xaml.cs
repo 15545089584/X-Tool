@@ -558,6 +558,7 @@ public partial class MainWindow : Window
             "NetworkWorkbench" or "ResourceManagement" or "SystemTools" => SystemCenterNav,
             "DeveloperTools" => DeveloperToolsNav,
             "InformationVault" => InformationVaultNav,
+            "SmartHome" => SmartHomeNav,
             "Collaboration" => CollaborationNav,
             _ => HomeNav
         };
@@ -719,6 +720,7 @@ public partial class MainWindow : Window
         "SystemTools" => SystemToolsView,
         "DeveloperTools" => DeveloperToolsView,
         "InformationVault" => InformationVaultPage,
+        "SmartHome" => SmartHomePage,
         "Collaboration" => CollaborationView,
         "History" => HistoryView,
         _ => null
@@ -740,6 +742,7 @@ public partial class MainWindow : Window
         SystemToolsView,
         DeveloperToolsView,
         InformationVaultPage,
+        SmartHomePage,
         CollaborationView,
         HistoryView
     ];
@@ -761,7 +764,8 @@ public partial class MainWindow : Window
         "SystemTools" => 60,
         "DeveloperTools" => 70,
         "InformationVault" => 80,
-        "Collaboration" => 90,
+        "SmartHome" => 90,
+        "Collaboration" => 100,
         _ => 0
     };
 

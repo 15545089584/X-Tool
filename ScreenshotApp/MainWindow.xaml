@@ -12,6 +12,7 @@
         xmlns:networkWorkbench="clr-namespace:ScreenshotApp.NetworkWorkbench"
         xmlns:developerTools="clr-namespace:ScreenshotApp.DeveloperTools"
         xmlns:informationVault="clr-namespace:ScreenshotApp.InformationVault"
+        xmlns:smartHome="clr-namespace:ScreenshotApp.SmartHome"
         mc:Ignorable="d"
         Title="X-Tool"
         Icon="Assets/XTool.png"
@@ -454,6 +455,15 @@
                                 <TextBlock Style="{StaticResource IconTextStyle}" FontSize="17" Text="&#xE72E;" Foreground="#626971" />
                             </Border>
                             <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" FontSize="15" Text="信息库" />
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="SmartHomeNav" GroupName="Navigation" Style="{StaticResource NavItemStyle}"
+                                 Tag="SmartHome" Checked="NavButton_Checked">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Width="34" Height="34" Background="#F7F8FA" CornerRadius="9">
+                                <TextBlock Style="{StaticResource IconTextStyle}" FontSize="17" Text="&#xE774;" Foreground="#626971" />
+                            </Border>
+                            <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" FontSize="15" Text="智能家居" />
                         </StackPanel>
                     </RadioButton>
                     <RadioButton x:Name="CollaborationNav" GroupName="Navigation" Style="{StaticResource NavItemStyle}"
@@ -950,6 +960,7 @@
                             <systemTools:SystemToolsView x:Name="SystemToolsView" Grid.Row="1" EnvironmentOnly="True" Visibility="Collapsed" />
                             <developerTools:DeveloperToolsView x:Name="DeveloperToolsView" Grid.Row="1" Visibility="Collapsed" />
                             <informationVault:InformationVaultView x:Name="InformationVaultPage" Grid.Row="1" Visibility="Collapsed" />
+                            <smartHome:SmartHomeView x:Name="SmartHomePage" Grid.Row="1" Visibility="Collapsed" />
                             <collaboration:CollaborationView x:Name="CollaborationView" Grid.Row="1" Visibility="Collapsed" />
                             <!-- 设置页 -->
                             <Grid x:Name="SettingsView" Grid.Row="1" Visibility="Collapsed" Margin="58,44">
