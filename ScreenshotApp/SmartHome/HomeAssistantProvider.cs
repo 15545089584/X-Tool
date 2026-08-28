@@ -11,7 +11,7 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
 {
     private static readonly HashSet<string> SupportedDomains = new(StringComparer.Ordinal)
     {
-        "camera", "light", "switch", "climate", "cover", "fan", "sensor", "binary_sensor"
+        "camera", "light", "switch", "climate", "cover", "fan", "select", "number", "sensor", "binary_sensor"
     };
 
     private readonly Uri _serverUri;
@@ -108,6 +108,7 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
             SmartHomeControlAction.SetHvacMode => "set_hvac_mode",
             SmartHomeControlAction.SetFanMode => "set_fan_mode",
             SmartHomeControlAction.SetSwingMode => "set_swing_mode",
+            SmartHomeControlAction.SelectOption => "select_option",
             _ => throw new ArgumentOutOfRangeException(nameof(request), "不支持的智能家居控制操作。")
         };
 
@@ -141,6 +142,22 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
             case SmartHomeControlAction.SetSwingMode:
                 body["swing_mode"] = request.TextValue;
                 break;
+            case SmartHomeControlAction.SelectOption:
+                body["option"] = request.TextValue;
+                break;
+        }
+
+        if (_webSocket is not null)
+        {
+            body.Remove("entity_id");
+            await _webSocket.SendCommandAsync("call_service", new Dictionary<string, object?>
+            {
+                ["domain"] = domain,
+                ["service"] = service,
+                ["service_data"] = body,
+                ["target"] = new Dictionary<string, object?> { ["entity_id"] = request.EntityId }
+            }, cancellationToken).ConfigureAwait(false);
+            return;
         }
 
         using var response = await _httpClient.PostAsJsonAsync(
@@ -149,7 +166,79 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
         {
             throw new HomeAssistantAuthenticationException("Home Assistant Access Token 已失效。");
         }
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+        {
+            var detail = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            throw new InvalidOperationException(string.IsNullOrWhiteSpace(detail)
+                ? $"Home Assistant 控制失败（HTTP {(int)response.StatusCode}）。"
+                : $"Home Assistant 控制失败：{detail}");
+        }
+    }
+
+    public async Task<SmartDeviceInsights> GetInsightsAsync(
+        SmartDevice device,
+        CancellationToken cancellationToken)
+    {
+        var climate = device.Entities.FirstOrDefault(entity => entity.Domain == "climate" && entity.Available);
+        if (climate is null)
+        {
+            return new SmartDeviceInsights { Message = "当前设备没有可读取的环境历史。" };
+        }
+
+        try
+        {
+            var now = DateTimeOffset.Now;
+            var monthStart = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, now.Offset);
+            var historyStart = now.AddHours(-24);
+            var energyEntity = device.Entities.FirstOrDefault(IsEnergyEntity);
+
+            var temperatureTask = LoadHistoryAsync(climate.EntityId, historyStart, cancellationToken);
+            var energyTask = energyEntity is null
+                ? Task.FromResult<IReadOnlyList<HistoryState>>(Array.Empty<HistoryState>())
+                : LoadHistoryAsync(energyEntity.EntityId, monthStart, cancellationToken);
+            var energyStatisticsTask = energyEntity is null
+                ? Task.FromResult<IReadOnlyList<EnergyStatistic>>(Array.Empty<EnergyStatistic>())
+                : LoadEnergyStatisticsAsync(energyEntity.EntityId, monthStart, now, cancellationToken);
+            await Task.WhenAll(temperatureTask, energyTask, energyStatisticsTask).ConfigureAwait(false);
+
+            var temperaturePoints = Downsample(temperatureTask.Result
+                .Select(item => item.CurrentTemperature is null
+                    ? null
+                    : new SmartHistoryPoint(item.Timestamp, ToCelsius(item.CurrentTemperature.Value)))
+                .Where(item => item is not null)
+                .Cast<SmartHistoryPoint>()
+                .OrderBy(item => item.Timestamp)
+                .ToArray(), 48);
+
+            var energyHistory = energyTask.Result
+                .Where(item => item.NumericState is not null)
+                .OrderBy(item => item.Timestamp)
+                .ToArray();
+            var energyStatistics = energyStatisticsTask.Result;
+            var todayStart = new DateTimeOffset(now.Year, now.Month, now.Day, 0, 0, 0, now.Offset);
+            var currentTemperature = climate.GetNumber("current_temperature");
+            var humidityEntity = device.Entities.FirstOrDefault(IsHumidityEntity);
+            var humidity = climate.GetNumber("current_humidity") ?? climate.GetNumber("humidity") ??
+                           GetEntityStateNumber(humidityEntity);
+
+            return new SmartDeviceInsights
+            {
+                TemperaturePoints = temperaturePoints,
+                IndoorTemperatureCelsius = currentTemperature is null ? null : ToCelsius(currentTemperature.Value),
+                IndoorHumidityPercent = humidity,
+                TodayEnergyKwh = CalculateStatisticsUsage(energyStatistics, todayStart) ??
+                                 CalculateEnergyUsage(energyHistory, todayStart),
+                MonthEnergyKwh = CalculateStatisticsUsage(energyStatistics, monthStart) ??
+                                 CalculateEnergyUsage(energyHistory, monthStart),
+                Message = temperaturePoints.Count == 0 && energyHistory.Length == 0 && energyStatistics.Count == 0
+                    ? "Home Assistant 暂无可用的历史记录。"
+                    : string.Empty
+            };
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or JsonException)
+        {
+            return new SmartDeviceInsights { Message = "历史数据暂时不可用，设备控制不受影响。" };
+        }
     }
 
     private void WebSocket_EventReceived(JsonElement message)
@@ -340,6 +429,178 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
         return "°C";
     }
 
+    private async Task<IReadOnlyList<HistoryState>> LoadHistoryAsync(
+        string entityId,
+        DateTimeOffset start,
+        CancellationToken cancellationToken)
+    {
+        var timestamp = Uri.EscapeDataString(start.ToString("O"));
+        var filter = Uri.EscapeDataString(entityId);
+        using var response = await _httpClient.GetAsync(
+            $"api/history/period/{timestamp}?filter_entity_id={filter}", cancellationToken).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        using var document = JsonDocument.Parse(
+            await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false));
+        if (document.RootElement.ValueKind != JsonValueKind.Array || document.RootElement.GetArrayLength() == 0 ||
+            document.RootElement[0].ValueKind != JsonValueKind.Array)
+        {
+            return Array.Empty<HistoryState>();
+        }
+
+        var items = new List<HistoryState>();
+        foreach (var state in document.RootElement[0].EnumerateArray())
+        {
+            var timestampText = GetString(state, "last_updated") ?? GetString(state, "last_changed");
+            if (!DateTimeOffset.TryParse(timestampText, out var stateTimestamp)) continue;
+
+            double? numericState = null;
+            var stateText = GetString(state, "state");
+            if (double.TryParse(stateText, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var parsedState))
+            {
+                numericState = parsedState;
+            }
+
+            double? currentTemperature = null;
+            if (state.TryGetProperty("attributes", out var attributes) &&
+                attributes.ValueKind == JsonValueKind.Object)
+            {
+                if (attributes.TryGetProperty("current_temperature", out var currentElement) &&
+                    currentElement.ValueKind == JsonValueKind.Number && currentElement.TryGetDouble(out var parsedTemperature))
+                {
+                    currentTemperature = parsedTemperature;
+                }
+                if (numericState is not null && attributes.TryGetProperty("unit_of_measurement", out var unitElement) &&
+                    unitElement.ValueKind == JsonValueKind.String && unitElement.GetString() is { } unit &&
+                    string.Equals(unit, "Wh", StringComparison.OrdinalIgnoreCase))
+                {
+                    numericState /= 1000d;
+                }
+            }
+
+            items.Add(new HistoryState(stateTimestamp, numericState, currentTemperature));
+        }
+        return items;
+    }
+
+    private async Task<IReadOnlyList<EnergyStatistic>> LoadEnergyStatisticsAsync(
+        string entityId,
+        DateTimeOffset start,
+        DateTimeOffset end,
+        CancellationToken cancellationToken)
+    {
+        if (_webSocket is null) return Array.Empty<EnergyStatistic>();
+        try
+        {
+            var result = await _webSocket.SendCommandAsync(
+                "recorder/statistics_during_period",
+                new Dictionary<string, object?>
+                {
+                    ["start_time"] = start.ToUniversalTime().ToString("O"),
+                    ["end_time"] = end.ToUniversalTime().ToString("O"),
+                    ["statistic_ids"] = new[] { entityId },
+                    ["period"] = "hour",
+                    ["types"] = new[] { "change" },
+                    ["units"] = new Dictionary<string, object?> { ["energy"] = "kWh" }
+                },
+                cancellationToken).ConfigureAwait(false);
+            if (result.ValueKind != JsonValueKind.Object || !result.TryGetProperty(entityId, out var rows) ||
+                rows.ValueKind != JsonValueKind.Array)
+            {
+                return Array.Empty<EnergyStatistic>();
+            }
+
+            var statistics = new List<EnergyStatistic>();
+            foreach (var row in rows.EnumerateArray())
+            {
+                if (!row.TryGetProperty("change", out var changeElement) ||
+                    changeElement.ValueKind != JsonValueKind.Number || !changeElement.TryGetDouble(out var change) ||
+                    !row.TryGetProperty("start", out var startElement)) continue;
+
+                DateTimeOffset timestamp;
+                if (startElement.ValueKind == JsonValueKind.Number && startElement.TryGetInt64(out var milliseconds))
+                {
+                    timestamp = DateTimeOffset.FromUnixTimeMilliseconds(milliseconds).ToLocalTime();
+                }
+                else if (startElement.ValueKind == JsonValueKind.String &&
+                         DateTimeOffset.TryParse(startElement.GetString(), out var parsedTimestamp))
+                {
+                    timestamp = parsedTimestamp.ToLocalTime();
+                }
+                else
+                {
+                    continue;
+                }
+                if (change >= 0) statistics.Add(new EnergyStatistic(timestamp, change));
+            }
+            return statistics;
+        }
+        catch
+        {
+            // 部分实体没有长期统计；调用方继续回退到普通历史记录。
+            return Array.Empty<EnergyStatistic>();
+        }
+    }
+
+    private double ToCelsius(double value) => _temperatureUnit.Contains("F", StringComparison.OrdinalIgnoreCase)
+        ? (value - 32d) * 5d / 9d
+        : value;
+
+    private static IReadOnlyList<SmartHistoryPoint> Downsample(
+        IReadOnlyList<SmartHistoryPoint> points,
+        int maximumCount)
+    {
+        if (points.Count <= maximumCount) return points;
+        var result = new List<SmartHistoryPoint>(maximumCount);
+        for (var index = 0; index < maximumCount; index++)
+        {
+            var sourceIndex = (int)Math.Round(index * (points.Count - 1d) / (maximumCount - 1d));
+            result.Add(points[sourceIndex]);
+        }
+        return result;
+    }
+
+    private static double? CalculateEnergyUsage(
+        IReadOnlyList<HistoryState> history,
+        DateTimeOffset start)
+    {
+        var values = history
+            .Where(item => item.Timestamp >= start && item.NumericState is not null)
+            .Select(item => item.NumericState!.Value)
+            .ToArray();
+        if (values.Length < 2) return null;
+
+        var total = 0d;
+        for (var index = 1; index < values.Length; index++)
+        {
+            var delta = values[index] - values[index - 1];
+            if (delta >= 0) total += delta;
+        }
+        return Math.Round(total, 2);
+    }
+
+    private static double? CalculateStatisticsUsage(
+        IReadOnlyList<EnergyStatistic> statistics,
+        DateTimeOffset start)
+    {
+        var values = statistics.Where(item => item.Timestamp >= start).Select(item => item.ChangeKwh).ToArray();
+        return values.Length == 0 ? null : Math.Round(values.Sum(), 2);
+    }
+
+    private static bool IsEnergyEntity(SmartEntity entity) => entity.Domain == "sensor" &&
+        (string.Equals(entity.GetText("device_class"), "energy", StringComparison.OrdinalIgnoreCase) ||
+         entity.GetText("unit_of_measurement") is "kWh" or "Wh");
+
+    private static bool IsHumidityEntity(SmartEntity entity) => entity.Domain == "sensor" &&
+        (string.Equals(entity.GetText("device_class"), "humidity", StringComparison.OrdinalIgnoreCase) ||
+         entity.GetText("unit_of_measurement") == "%" && entity.Name.Contains("湿度", StringComparison.Ordinal));
+
+    private static double? GetEntityStateNumber(SmartEntity? entity) => entity is not null &&
+        double.TryParse(entity.State, System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out var value)
+        ? value
+        : null;
+
     private static Dictionary<string, JsonElement> ReadAttributes(JsonElement state)
     {
         var attributes = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
@@ -371,7 +632,9 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
         "light" => 4,
         "switch" => 5,
         "binary_sensor" => 6,
-        "sensor" => 7,
+        "select" => 7,
+        "number" => 8,
+        "sensor" => 9,
         _ => 100
     };
 
@@ -430,4 +693,13 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
         string? DeviceId,
         string? AreaId,
         string? Name);
+
+    private sealed record HistoryState(
+        DateTimeOffset Timestamp,
+        double? NumericState,
+        double? CurrentTemperature);
+
+    private sealed record EnergyStatistic(
+        DateTimeOffset Timestamp,
+        double ChangeKwh);
 }

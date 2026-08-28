@@ -6,6 +6,20 @@ namespace ScreenshotApp.SmartHome;
 
 public sealed record SmartModeOption(string Value, string DisplayName);
 
+public sealed record SmartFeatureOption(
+    string EntityId,
+    string DisplayName,
+    string IconGlyph,
+    bool IsOn,
+    bool IsAvailable);
+
+public sealed record SmartSelectControl(
+    string EntityId,
+    string DisplayName,
+    string SelectedValue,
+    IReadOnlyList<string> Options,
+    bool IsAvailable);
+
 public sealed class SmartDeviceViewModel : INotifyPropertyChanged
 {
     private SmartDevice _device;
@@ -17,6 +31,10 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
     private string? _optimisticFanMode;
     private string? _optimisticSwingMode;
     private string? _optimisticPresetMode;
+    private readonly Dictionary<string, bool> _optimisticEntityStates = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _optimisticEntitySelections = new(StringComparer.Ordinal);
+    private SmartDeviceInsights _insights = new();
+    private bool _isInsightsLoading;
 
     public SmartDeviceViewModel(SmartDevice device)
     {
@@ -24,6 +42,8 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
     }
 
     public string Id => _device.Id;
+
+    internal SmartDevice SourceDevice => _device;
 
     public string Name => _device.Name;
 
@@ -73,18 +93,61 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
 
     public double FanPercentage => _optimisticValue ?? Math.Clamp(Primary?.GetNumber("percentage") ?? 0, 0, 100);
 
-    public string TemperatureUnit => _device.TemperatureUnit;
+    public string TemperatureUnit => "°C";
 
-    public double TargetTemperature => _optimisticValue ?? Primary?.GetNumber("temperature") ??
-        (TemperatureUnit == "°F" ? 75 : 24);
+    public double TargetTemperature => Math.Round(
+        ToCelsius(_optimisticValue ?? Primary?.GetNumber("temperature") ?? 24) * 2,
+        MidpointRounding.AwayFromZero) / 2;
 
-    public double MinimumTemperature => Primary?.GetNumber("min_temp") ?? (TemperatureUnit == "°F" ? 60 : 16);
+    public double MinimumTemperature => Math.Ceiling(ToCelsius(Primary?.GetNumber("min_temp") ?? 16) * 2) / 2;
 
-    public double MaximumTemperature => Primary?.GetNumber("max_temp") ?? (TemperatureUnit == "°F" ? 86 : 30);
+    public double MaximumTemperature => Math.Floor(ToCelsius(Primary?.GetNumber("max_temp") ?? 30) * 2) / 2;
 
-    public double TemperatureStep => Math.Max(0.5, Primary?.GetNumber("target_temp_step") ?? 1);
+    public double TemperatureStep => 0.5;
 
     public string TargetTemperatureText => $"{TargetTemperature:0.#}{TemperatureUnit}";
+
+    public string CurrentTemperatureText => Primary?.GetNumber("current_temperature") is { } value
+        ? $"{ToCelsius(value):0.#}°C"
+        : "--";
+
+    public IReadOnlyList<SmartFeatureOption> FeatureControls => BuildFeatureControls();
+
+    public IReadOnlyList<SmartSelectControl> AuxiliarySelects => BuildAuxiliarySelects();
+
+    public bool HasFeatureControls => FeatureControls.Count > 0;
+
+    public bool HasAuxiliarySelects => AuxiliarySelects.Count > 0;
+
+    public IReadOnlyList<SmartHistoryPoint> TemperaturePoints => _insights.TemperaturePoints;
+
+    public bool HasTemperatureHistory => TemperaturePoints.Count > 1;
+
+    public bool HasEnergyData => _insights.TodayEnergyKwh is not null || _insights.MonthEnergyKwh is not null;
+
+    public string IndoorTemperatureText => _insights.IndoorTemperatureCelsius is { } value
+        ? $"{value:0.#}°C"
+        : CurrentTemperatureText;
+
+    public string IndoorHumidityText => _insights.IndoorHumidityPercent is { } value ? $"{value:0.#}%" : "未上报";
+
+    public string TodayEnergyText => _insights.TodayEnergyKwh is { } value ? $"{value:0.##} kWh" : "暂无记录";
+
+    public string MonthEnergyText => _insights.MonthEnergyKwh is { } value ? $"{value:0.##} kWh" : "暂无记录";
+
+    public string InsightsMessage => IsInsightsLoading ? "正在读取 Home Assistant 历史记录…" : _insights.Message;
+
+    public bool IsInsightsLoading
+    {
+        get => _isInsightsLoading;
+        private set
+        {
+            if (_isInsightsLoading == value) return;
+            _isInsightsLoading = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(InsightsMessage));
+        }
+    }
 
     public IReadOnlyList<SmartModeOption> HvacModeOptions => BuildModeOptions(
         Primary?.GetTextList("hvac_modes"), TranslateHvacMode);
@@ -190,6 +253,8 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
         _optimisticFanMode = null;
         _optimisticSwingMode = null;
         _optimisticPresetMode = null;
+        _optimisticEntityStates.Clear();
+        _optimisticEntitySelections.Clear();
         IsBusy = false;
         OperationMessage = string.Empty;
         NotifyAll();
@@ -197,6 +262,22 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
 
     public void ApplyOptimistic(SmartHomeControlRequest request)
     {
+        if (!string.Equals(request.EntityId, EntityId, StringComparison.Ordinal))
+        {
+            if (request.Action is SmartHomeControlAction.TurnOn or SmartHomeControlAction.TurnOff)
+            {
+                _optimisticEntityStates[request.EntityId] = request.Action == SmartHomeControlAction.TurnOn;
+            }
+            else if (request.Action == SmartHomeControlAction.SelectOption && request.TextValue is { } selection)
+            {
+                _optimisticEntitySelections[request.EntityId] = selection;
+            }
+            IsBusy = true;
+            OperationMessage = "正在同步真实状态…";
+            NotifyAll();
+            return;
+        }
+
         _optimisticIsOn = request.Action switch
         {
             SmartHomeControlAction.TurnOn => true,
@@ -233,12 +314,35 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
         _optimisticFanMode = null;
         _optimisticSwingMode = null;
         _optimisticPresetMode = null;
+        _optimisticEntityStates.Clear();
+        _optimisticEntitySelections.Clear();
         IsBusy = false;
         OperationMessage = message;
         NotifyAll();
     }
 
     private SmartEntity? Primary => _device.PrimaryEntity;
+
+    public bool ContainsEntity(string entityId) => _device.Entities.Any(entity =>
+        string.Equals(entity.EntityId, entityId, StringComparison.Ordinal));
+
+    public double ToSourceTemperature(double celsius) => IsSourceFahrenheit
+        ? celsius * 9d / 5d + 32d
+        : celsius;
+
+    public void BeginInsightsLoad()
+    {
+        _insights = new SmartDeviceInsights();
+        IsInsightsLoading = true;
+        NotifyInsights();
+    }
+
+    public void ApplyInsights(SmartDeviceInsights insights)
+    {
+        _insights = insights;
+        IsInsightsLoading = false;
+        NotifyInsights();
+    }
 
     private bool GetActualIsOn()
     {
@@ -271,7 +375,7 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
             "climate" => BuildClimateState(entity),
             "cover" => $"{CoverPosition:0}% · {TranslateState(entity.State)}",
             "fan" => IsOn ? $"运行中 · {FanPercentage:0}%" : "已关闭",
-            "sensor" => $"{entity.State}{entity.GetText("unit_of_measurement")}",
+            "sensor" => BuildSensorState(entity),
             "binary_sensor" => TranslateBinarySensor(entity),
             _ => TranslateState(entity.State)
         };
@@ -305,7 +409,90 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
     {
         var current = entity.GetNumber("current_temperature");
         var mode = TranslateHvacMode(CurrentHvacMode);
-        return current is null ? mode : $"{current:0.#}{TemperatureUnit} · {mode}";
+        return current is null ? mode : $"{ToCelsius(current.Value):0.#}°C · {mode}";
+    }
+
+    private string BuildSensorState(SmartEntity entity)
+    {
+        var unit = entity.GetText("unit_of_measurement") ?? string.Empty;
+        var isTemperature = string.Equals(entity.GetText("device_class"), "temperature", StringComparison.OrdinalIgnoreCase) ||
+                            unit is "°F" or "°C" or "℃";
+        if (!isTemperature || !double.TryParse(entity.State, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var value))
+        {
+            return $"{entity.State}{unit}";
+        }
+
+        var celsius = unit.Contains("F", StringComparison.OrdinalIgnoreCase)
+            ? (value - 32d) * 5d / 9d
+            : value;
+        return $"{celsius:0.#}°C";
+    }
+
+    private bool IsSourceFahrenheit => _device.TemperatureUnit.Contains("F", StringComparison.OrdinalIgnoreCase);
+
+    private double ToCelsius(double value) => IsSourceFahrenheit ? (value - 32d) * 5d / 9d : value;
+
+    private IReadOnlyList<SmartFeatureOption> BuildFeatureControls()
+    {
+        if (!IsClimate) return Array.Empty<SmartFeatureOption>();
+        var controls = new List<SmartFeatureOption>();
+        foreach (var entity in _device.Entities.Where(entity => entity.Domain is "switch" or "light"))
+        {
+            var definition = ResolveFeatureDefinition(entity.EntityId);
+            if (definition is null) continue;
+            var isOn = _optimisticEntityStates.TryGetValue(entity.EntityId, out var optimistic)
+                ? optimistic
+                : string.Equals(entity.State, "on", StringComparison.OrdinalIgnoreCase);
+            controls.Add(new SmartFeatureOption(
+                entity.EntityId,
+                definition.Value.Label,
+                definition.Value.Glyph,
+                isOn,
+                entity.Available));
+        }
+        return controls.Take(8).ToArray();
+    }
+
+    private IReadOnlyList<SmartSelectControl> BuildAuxiliarySelects()
+    {
+        if (!IsClimate) return Array.Empty<SmartSelectControl>();
+        return _device.Entities
+            .Where(entity => entity.Domain == "select" && entity.EntityId.Contains("vertical_angle", StringComparison.OrdinalIgnoreCase))
+            .Select(entity => new SmartSelectControl(
+                entity.EntityId,
+                "风感方向",
+                _optimisticEntitySelections.TryGetValue(entity.EntityId, out var optimistic) ? optimistic : entity.State,
+                entity.GetTextList("options"),
+                entity.Available))
+            .Where(control => control.Options.Count > 0)
+            .ToArray();
+    }
+
+    private static (string Label, string Glyph)? ResolveFeatureDefinition(string entityId)
+    {
+        if (entityId.Contains("eco_", StringComparison.OrdinalIgnoreCase)) return ("节能", "\uE8BE");
+        if (entityId.Contains("heater_", StringComparison.OrdinalIgnoreCase)) return ("辅热", "\uE9CA");
+        if (entityId.Contains("dryer_", StringComparison.OrdinalIgnoreCase)) return ("干燥", "\uE9CE");
+        if (entityId.Contains("sleep_mode", StringComparison.OrdinalIgnoreCase)) return ("睡眠", "\uE708");
+        if (entityId.Contains("un_straight_blowing", StringComparison.OrdinalIgnoreCase)) return ("防直吹", "\uE9A9");
+        if (entityId.Contains("favorite_on", StringComparison.OrdinalIgnoreCase)) return ("喜好", "\uE734");
+        if (entityId.Contains("indicator_light", StringComparison.OrdinalIgnoreCase)) return ("灯光", "\uE706");
+        if (entityId.Contains("alarm_", StringComparison.OrdinalIgnoreCase)) return ("提示音", "\uE995");
+        return null;
+    }
+
+    private void NotifyInsights()
+    {
+        foreach (var property in new[]
+                 {
+                     nameof(TemperaturePoints), nameof(HasTemperatureHistory), nameof(HasEnergyData),
+                     nameof(IndoorTemperatureText), nameof(IndoorHumidityText), nameof(TodayEnergyText),
+                     nameof(MonthEnergyText), nameof(InsightsMessage), nameof(IsInsightsLoading)
+                 })
+        {
+            OnPropertyChanged(property);
+        }
     }
 
     private static IReadOnlyList<SmartModeOption> BuildModeOptions(
@@ -387,6 +574,8 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
                      nameof(IsFan), nameof(BrightnessPercent), nameof(CoverPosition), nameof(FanPercentage),
                      nameof(TemperatureUnit), nameof(TargetTemperature), nameof(TargetTemperatureText),
                      nameof(MinimumTemperature), nameof(MaximumTemperature), nameof(TemperatureStep),
+                     nameof(CurrentTemperatureText), nameof(FeatureControls), nameof(AuxiliarySelects),
+                     nameof(HasFeatureControls), nameof(HasAuxiliarySelects),
                      nameof(HvacModeOptions), nameof(FanModeOptions), nameof(SwingModeOptions),
                      nameof(PresetModeOptions), nameof(CurrentHvacMode), nameof(CurrentFanMode),
                      nameof(CurrentSwingMode), nameof(CurrentPresetMode), nameof(MainState),

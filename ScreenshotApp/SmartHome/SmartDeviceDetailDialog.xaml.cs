@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 
 namespace ScreenshotApp.SmartHome;
@@ -105,9 +106,33 @@ public partial class SmartDeviceDetailDialog : UserControl
     private void PresetComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
         RaiseSelection(sender, SmartHomeControlAction.SetPreset, Device?.CurrentPresetMode);
 
+    private void AuxiliarySelectComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded || sender is not ComboBox
+            {
+                DataContext: SmartSelectControl control,
+                SelectedValue: string value
+            } || Device is not { CanInteract: true } || string.IsNullOrWhiteSpace(value) ||
+            string.Equals(value, control.SelectedValue, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        RaiseForEntity(control.EntityId, SmartHomeControlAction.SelectOption, textValue: value);
+    }
+
+    private void FeatureToggle_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { DataContext: SmartFeatureOption feature } ||
+            Device is not { CanInteract: true }) return;
+        RaiseForEntity(
+            feature.EntityId,
+            feature.IsOn ? SmartHomeControlAction.TurnOff : SmartHomeControlAction.TurnOn);
+    }
+
     private void RaiseSelection(object sender, SmartHomeControlAction action, string? currentValue)
     {
-        if (!IsLoaded || sender is not ComboBox { SelectedValue: string value } ||
+        if (!IsLoaded || sender is not Selector { SelectedValue: string value } ||
             Device is not { CanInteract: true } || string.IsNullOrWhiteSpace(value) ||
             string.Equals(value, currentValue, StringComparison.Ordinal))
         {
@@ -120,6 +145,19 @@ public partial class SmartDeviceDetailDialog : UserControl
     private void Raise(SmartHomeControlAction action, double? value = null, string? textValue = null)
     {
         if (Device is not { CanInteract: true } device || string.IsNullOrWhiteSpace(device.EntityId)) return;
-        CommandRequested?.Invoke(this, new SmartHomeControlRequest(device.EntityId, action, value, textValue));
+        var effectiveValue = action == SmartHomeControlAction.SetTargetTemperature && value is not null
+            ? device.ToSourceTemperature(value.Value)
+            : value;
+        RaiseForEntity(device.EntityId, action, effectiveValue, textValue);
+    }
+
+    private void RaiseForEntity(
+        string entityId,
+        SmartHomeControlAction action,
+        double? value = null,
+        string? textValue = null)
+    {
+        if (Device is not { CanInteract: true } || string.IsNullOrWhiteSpace(entityId)) return;
+        CommandRequested?.Invoke(this, new SmartHomeControlRequest(entityId, action, value, textValue));
     }
 }

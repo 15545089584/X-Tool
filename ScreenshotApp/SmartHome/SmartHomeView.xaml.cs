@@ -241,7 +241,7 @@ public partial class SmartHomeView : UserControl
 
     private async Task ExecuteDeviceCommandAsync(SmartHomeControlRequest request)
     {
-        if (_deviceById.Values.FirstOrDefault(device => device.EntityId == request.EntityId) is not { } device || device.IsBusy)
+        if (_deviceById.Values.FirstOrDefault(device => device.ContainsEntity(request.EntityId)) is not { } device || device.IsBusy)
         {
             return;
         }
@@ -258,11 +258,16 @@ public partial class SmartHomeView : UserControl
         }
     }
 
-    private void DeviceCard_DetailRequested(object? sender, SmartDeviceViewModel device)
+    private async void DeviceCard_DetailRequested(object? sender, SmartDeviceViewModel device)
     {
         DeviceDetailDialog.Device = device;
         DeviceDetailOverlay.Visibility = Visibility.Visible;
         DeviceDetailOverlay.Focus();
+        if (!device.IsClimate) return;
+
+        device.BeginInsightsLoad();
+        var insights = await _service.GetInsightsAsync(device.SourceDevice);
+        if (ReferenceEquals(DeviceDetailDialog.Device, device)) device.ApplyInsights(insights);
     }
 
     private void DeviceDetailDialog_CloseRequested(object? sender, EventArgs e) => CloseDeviceDetail();

@@ -122,6 +122,19 @@ public sealed class SmartHomeService
         await provider.ExecuteAsync(request, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<SmartDeviceInsights> GetInsightsAsync(
+        SmartDevice device,
+        CancellationToken cancellationToken = default)
+    {
+        var provider = _provider;
+        if (provider is null || ConnectionState != SmartHomeConnectionState.Connected)
+        {
+            return new SmartDeviceInsights { Message = "连接 Home Assistant 后可查看历史趋势。" };
+        }
+
+        return await provider.GetInsightsAsync(device, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task ForgetAsync()
     {
         _manualDisconnect = true;

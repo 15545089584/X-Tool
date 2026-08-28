@@ -11,4 +11,6 @@ public interface ISmartHomeProvider : IAsyncDisposable
     Task ConnectAsync(CancellationToken cancellationToken);
 
     Task ExecuteAsync(SmartHomeControlRequest request, CancellationToken cancellationToken);
+
+    Task<SmartDeviceInsights> GetInsightsAsync(SmartDevice device, CancellationToken cancellationToken);
 }

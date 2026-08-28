@@ -46,7 +46,8 @@ public enum SmartHomeControlAction
     SetPreset,
     SetHvacMode,
     SetFanMode,
-    SetSwingMode
+    SetSwingMode,
+    SelectOption
 }
 
 /// <summary>由设备卡片发出的抽象控制请求，UI 不直接拼接 Home Assistant 接口。</summary>
@@ -59,6 +60,25 @@ public sealed record SmartHomeControlRequest(
 public sealed record SmartArea(
     string Id,
     string Name);
+
+public sealed record SmartHistoryPoint(
+    DateTimeOffset Timestamp,
+    double Value);
+
+public sealed record SmartDeviceInsights
+{
+    public IReadOnlyList<SmartHistoryPoint> TemperaturePoints { get; init; } = Array.Empty<SmartHistoryPoint>();
+
+    public double? IndoorTemperatureCelsius { get; init; }
+
+    public double? IndoorHumidityPercent { get; init; }
+
+    public double? TodayEnergyKwh { get; init; }
+
+    public double? MonthEnergyKwh { get; init; }
+
+    public string Message { get; init; } = string.Empty;
+}
 
 public sealed record SmartEntity
 {
@@ -160,7 +180,9 @@ public sealed record SmartDevice
         "light" => 4,
         "switch" => 5,
         "binary_sensor" => 6,
-        "sensor" => 7,
+        "select" => 7,
+        "number" => 8,
+        "sensor" => 9,
         _ => 100
     };
 
