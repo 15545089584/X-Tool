@@ -42,8 +42,8 @@ public partial class SmartDeviceDetailDialog : UserControl
     /// <summary>拖动过程中的实时控制命令；绕过 IsBusy 防抖，由视图直接下发 Home Assistant。</summary>
     public event Action<object?, SmartHomeControlRequest>? LiveCommandRequested;
 
-    /// <summary>用电统计月份导航（monthOffset：0=本月，1=上个月……）。</summary>
-    public event Action<object?, int>? InsightsMonthNavigate;
+    /// <summary>用电统计月份/年份导航（monthOffset：0=本月……；yearOffset：0=今年……）。</summary>
+    public event Action<object?, int, int>? InsightsMonthNavigate;
 
     public event Action<object?, string>? RenameRequested;
 
@@ -99,6 +99,9 @@ public partial class SmartDeviceDetailDialog : UserControl
     private double _lastSentKelvin = -1;
     private bool _suppressSelectionChanged;
     private int _energyMonthOffset;
+    private int _energyYearOffset;
+    private bool _energyMonthTabIsMonth;
+    private bool _isDraggingFanMode;
 
     private void EnergyDayTab_Click(object sender, RoutedEventArgs e)
     {
@@ -108,6 +111,8 @@ public partial class SmartDeviceDetailDialog : UserControl
         EnergyMonthTab.Foreground = new SolidColorBrush(Color.FromRgb(0x64, 0x75, 0x8C));
         EnergyDailyPanel.Visibility = Visibility.Visible;
         EnergyMonthlyPanel.Visibility = Visibility.Collapsed;
+        _energyMonthTabIsMonth = false;
+        UpdateEnergyNavLabels();
     }
 
     private void EnergyMonthTab_Click(object sender, RoutedEventArgs e)
@@ -118,20 +123,44 @@ public partial class SmartDeviceDetailDialog : UserControl
         EnergyDayTab.Foreground = new SolidColorBrush(Color.FromRgb(0x64, 0x75, 0x8C));
         EnergyDailyPanel.Visibility = Visibility.Collapsed;
         EnergyMonthlyPanel.Visibility = Visibility.Visible;
-        if (_energyMonthOffset != 0) RequestInsights(0);
+        _energyMonthTabIsMonth = true;
+        UpdateEnergyNavLabels();
+        if (_energyYearOffset != 0)
+        {
+            _energyYearOffset = 0;
+            RequestInsights(_energyMonthOffset, 0);
+        }
     }
 
-    private void PreviousEnergyMonth_Click(object sender, RoutedEventArgs e) => RequestInsights(_energyMonthOffset + 1);
-
-    private void NextEnergyMonth_Click(object sender, RoutedEventArgs e)
+    private void PreviousEnergyPeriod_Click(object sender, RoutedEventArgs e)
     {
-        if (_energyMonthOffset > 0) RequestInsights(_energyMonthOffset - 1);
+        if (_energyMonthTabIsMonth) RequestInsights(_energyMonthOffset, _energyYearOffset + 1);
+        else RequestInsights(_energyMonthOffset + 1, _energyYearOffset);
     }
 
-    private void RequestInsights(int monthOffset)
+    private void NextEnergyPeriod_Click(object sender, RoutedEventArgs e)
+    {
+        if (_energyMonthTabIsMonth)
+        {
+            if (_energyYearOffset > 0) RequestInsights(_energyMonthOffset, _energyYearOffset - 1);
+        }
+        else if (_energyMonthOffset > 0)
+        {
+            RequestInsights(_energyMonthOffset - 1, _energyYearOffset);
+        }
+    }
+
+    private void UpdateEnergyNavLabels()
+    {
+        EnergyMonthNavLabel.Visibility = _energyMonthTabIsMonth ? Visibility.Collapsed : Visibility.Visible;
+        EnergyYearNavLabel.Visibility = _energyMonthTabIsMonth ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void RequestInsights(int monthOffset, int yearOffset)
     {
         _energyMonthOffset = monthOffset;
-        InsightsMonthNavigate?.Invoke(this, monthOffset);
+        _energyYearOffset = yearOffset;
+        InsightsMonthNavigate?.Invoke(this, monthOffset, yearOffset);
     }
 
     private void BrightnessBar_SizeChanged(object sender, SizeChangedEventArgs e) => UpdateBrightnessFill();
@@ -271,6 +300,89 @@ public partial class SmartDeviceDetailDialog : UserControl
     {
         UpdateBrightnessFill();
         UpdateColorTempIndicator();
+        UpdateFanModeBar();
+    }
+
+    private void FanModeBar_SizeChanged(object sender, SizeChangedEventArgs e) => UpdateFanModeBar();
+
+    private void FanModeBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (Device is not { SupportsFanMode: true, CanInteract: true }) return;
+        _isDraggingFanMode = true;
+        FanModeBar.CaptureMouse();
+        PreviewFanModeFromPointer(e.GetPosition(FanModeBar).X);
+    }
+
+    private void FanModeBar_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (!_isDraggingFanMode) return;
+        PreviewFanModeFromPointer(e.GetPosition(FanModeBar).X);
+    }
+
+    private void FanModeBar_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!_isDraggingFanMode) return;
+        _isDraggingFanMode = false;
+        FanModeBar.ReleaseMouseCapture();
+        CommitFanModeFromBar();
+    }
+
+    private SmartFanModeLevel? LevelFromPointer(double x)
+    {
+        var width = FanModeBar.ActualWidth;
+        if (width <= 0 || Device is not { SupportsFanMode: true } device) return null;
+        var levels = device.FanModeLevels;
+        if (levels.Count == 0) return null;
+        var ratio = Math.Clamp(x / width, 0, 1);
+        var index = Math.Clamp((int)Math.Round(ratio * (levels.Count - 1)), 0, levels.Count - 1);
+        return levels[index];
+    }
+
+    private void PreviewFanModeFromPointer(double x)
+    {
+        var level = LevelFromPointer(x);
+        if (level is null) return;
+        FanModeFill.Width = level.Percent / 100d * FanModeBar.ActualWidth;
+        FanModeFillLabel.SetCurrentValue(TextBlock.TextProperty, level.Name);
+    }
+
+    private void CommitFanModeFromBar()
+    {
+        var width = FanModeBar.ActualWidth;
+        if (width <= 0 || Device is not { SupportsFanMode: true, IsAvailable: true } device) return;
+        var levels = device.FanModeLevels;
+        if (levels.Count == 0) return;
+        var ratio = Math.Clamp(FanModeFill.Width / width, 0, 1);
+        var level = levels[Math.Clamp((int)Math.Round(ratio * (levels.Count - 1)), 0, levels.Count - 1)];
+        if (string.Equals(level.Value, device.CurrentFanMode, StringComparison.Ordinal)) return;
+        var request = new SmartHomeControlRequest(device.EntityId, SmartHomeControlAction.SetFanMode, null, level.Value);
+        device.ApplyOptimistic(request);
+        LiveCommandRequested?.Invoke(this, request);
+    }
+
+    private void FanAutoMode_Click(object sender, RoutedEventArgs e)
+    {
+        if (Device is not { SupportsFanMode: true, IsAvailable: true } device || device.FanAutoModeValue is not { } auto) return;
+        if (string.Equals(device.CurrentFanMode, auto, StringComparison.Ordinal)) return;
+        var request = new SmartHomeControlRequest(device.EntityId, SmartHomeControlAction.SetFanMode, null, auto);
+        device.ApplyOptimistic(request);
+        LiveCommandRequested?.Invoke(this, request);
+    }
+
+    /// <summary>按设备当前 fan_mode 刷新风速条填充与标签；“自动”等非手动档显示为空条。</summary>
+    private void UpdateFanModeBar()
+    {
+        if (FanModeBar.ActualWidth <= 0 || Device is not { SupportsFanMode: true } device) return;
+        var current = device.FanModeLevels.FirstOrDefault(level => level.IsCurrent);
+        if (current is null)
+        {
+            FanModeFill.Width = 0;
+            FanModeFillLabel.SetCurrentValue(TextBlock.TextProperty, device.CurrentFanModeText);
+            return;
+        }
+
+        FanModeFill.Width = current.Percent / 100d * FanModeBar.ActualWidth;
+        FanModeFillLabel.SetCurrentValue(TextBlock.TextProperty, current.Name);
     }
 
     private void FanPresetList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -328,9 +440,6 @@ public partial class SmartDeviceDetailDialog : UserControl
 
     private void HvacModeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
         RaiseSelection(sender, SmartHomeControlAction.SetHvacMode, Device?.CurrentHvacMode);
-
-    private void FanModeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
-        RaiseSelection(sender, SmartHomeControlAction.SetFanMode, Device?.CurrentFanMode);
 
     private void SwingModeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
         RaiseSelection(sender, SmartHomeControlAction.SetSwingMode, Device?.CurrentSwingMode);

@@ -246,6 +246,66 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
 
     public string EnergyMonthLabel => _insights.EnergyMonthLabel;
 
+    public string EnergyYearLabel => _insights.EnergyYearLabel;
+
+    /// <summary>年度用电十二宫格：1–12 月固定顺序，有数据的月份显示用电（度）。</summary>
+    public IReadOnlyList<SmartMonthEnergyCell> EnergyMonthCells
+    {
+        get
+        {
+            if (!int.TryParse(_insights.EnergyYearLabel, out var year)) return Array.Empty<SmartMonthEnergyCell>();
+            var byMonth = new Dictionary<int, double>();
+            foreach (var point in _insights.MonthlyEnergy)
+            {
+                var separator = point.Label.IndexOf('/');
+                if (separator > 0 && int.TryParse(point.Label[(separator + 1)..], out var month) &&
+                    int.TryParse(point.Label[..separator], out var pointYear) && pointYear == year)
+                {
+                    byMonth[month] = point.Kwh;
+                }
+            }
+
+            return Enumerable.Range(1, 12)
+                .Select(month => byMonth.TryGetValue(month, out var kwh)
+                    ? new SmartMonthEnergyCell($"{month}月", $"{kwh:0.##} 度", true)
+                    : new SmartMonthEnergyCell($"{month}月", string.Empty, false))
+                .ToArray();
+        }
+    }
+
+    /// <summary>空调风速条档位：fan_mode 列表剔除“自动”后的手动挡，按列表顺序铺满长条。</summary>
+    public IReadOnlyList<SmartFanModeLevel> FanModeLevels
+    {
+        get
+        {
+            var manual = FanModeOptions.Where(option => option.Value != FanAutoModeValue).ToArray();
+            var count = manual.Length;
+            return manual.Select((option, index) => new SmartFanModeLevel(
+                option.Value,
+                option.DisplayName,
+                count <= 1 ? 100 : Math.Round(index * 100d / (count - 1), 2),
+                string.Equals(option.Value, CurrentFanMode, StringComparison.Ordinal))).ToArray();
+        }
+    }
+
+    public bool HasFanModeLevels => FanModeLevels.Count > 0;
+
+    public string? FanAutoModeValue => FanModeOptions.FirstOrDefault(option =>
+        option.Value.Contains("自动", StringComparison.Ordinal) ||
+        option.Value.Contains("auto", StringComparison.OrdinalIgnoreCase))?.Value;
+
+    public bool HasFanAutoMode => FanAutoModeValue is not null;
+
+    public string CurrentFanModeText
+    {
+        get
+        {
+            var mode = FanModeOptions.FirstOrDefault(option =>
+                string.Equals(option.Value, CurrentFanMode, StringComparison.Ordinal));
+            return mode?.DisplayName ?? CurrentFanMode;
+        }
+    }
+
     public bool HasDailyEnergy => _insights.DailyEnergy.Count > 0;
 
     public bool HasMonthlyEnergy => _insights.MonthlyEnergy.Count > 0;
@@ -767,6 +827,8 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
                      nameof(IndoorTemperatureText), nameof(IndoorHumidityText), nameof(TodayEnergyText),
                      nameof(MonthEnergyText), nameof(EnergyMonthLabel), nameof(EnergyCalendarCells),
                      nameof(HasDailyEnergy), nameof(MonthlyEnergyRows), nameof(HasMonthlyEnergy), nameof(IsNotClimate),
+                     nameof(EnergyYearLabel), nameof(EnergyMonthCells), nameof(FanModeLevels), nameof(HasFanModeLevels),
+                     nameof(HasFanAutoMode), nameof(CurrentFanModeText),
                      nameof(InsightsMessage), nameof(IsInsightsLoading)
                  })
         {

@@ -81,6 +81,9 @@ public sealed record SmartDeviceInsights
     /// <summary>用电统计当前月份标签（yyyy/M）。</summary>
     public string EnergyMonthLabel { get; init; } = string.Empty;
 
+    /// <summary>用电统计当前年份标签（yyyy）。</summary>
+    public string EnergyYearLabel { get; init; } = string.Empty;
+
     public IReadOnlyList<SmartEnergyDayPoint> DailyEnergy { get; init; } = Array.Empty<SmartEnergyDayPoint>();
 
     public IReadOnlyList<SmartMonthEnergyPoint> MonthlyEnergy { get; init; } = Array.Empty<SmartMonthEnergyPoint>();
@@ -96,6 +99,12 @@ public sealed record SmartMonthEnergyPoint(string Label, double Kwh);
 
 /// <summary>用电月历单元格；DayNumber 为空表示占位空白。</summary>
 public sealed record SmartEnergyCalendarCell(string DayNumber, string UsageText, bool HasUsage, bool IsFuture);
+
+/// <summary>年度用电十二宫格单元格。</summary>
+public sealed record SmartMonthEnergyCell(string Label, string UsageText, bool HasUsage);
+
+/// <summary>空调风速条上的一个档位（来自 climate 实体的 fan_mode 列表，剔除“自动”）。</summary>
+public sealed record SmartFanModeLevel(string Value, string Name, double Percent, bool IsCurrent);
 
 public sealed record SmartEntity
 {

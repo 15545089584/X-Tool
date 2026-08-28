@@ -284,6 +284,7 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
     public async Task<SmartDeviceInsights> GetInsightsAsync(
         SmartDevice device,
         int monthOffset,
+        int yearOffset,
         CancellationToken cancellationToken)
     {
         var climate = device.Entities.FirstOrDefault(entity => entity.Domain == "climate" && entity.Available);
@@ -307,8 +308,12 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
             var energyStatisticsTask = energyEntity is null || monthStart > now
                 ? Task.FromResult<IReadOnlyList<EnergyStatistic>>(Array.Empty<EnergyStatistic>())
                 : LoadEnergyStatisticsAsync(energyEntity.EntityId, monthStart, monthEnd, cancellationToken);
-            var yearlyStatisticsTask = monthOffset == 0 && energyEntity is not null
-                ? LoadEnergyStatisticsAsync(energyEntity.EntityId, new DateTimeOffset(now.Year, 1, 1, 0, 0, 0, now.Offset), now, cancellationToken)
+            var yearlyStatisticsTask = energyEntity is not null
+                ? LoadEnergyStatisticsAsync(
+                    energyEntity.EntityId,
+                    new DateTimeOffset(now.Year, 1, 1, 0, 0, 0, now.Offset).AddYears(-Math.Max(0, yearOffset)),
+                    now,
+                    cancellationToken)
                 : Task.FromResult<IReadOnlyList<EnergyStatistic>>(Array.Empty<EnergyStatistic>());
             await Task.WhenAll(temperatureTask, energyTask, energyStatisticsTask, yearlyStatisticsTask).ConfigureAwait(false);
 
@@ -353,6 +358,7 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
                 MonthEnergyKwh = CalculateStatisticsUsage(energyStatistics, monthStart) ??
                                  CalculateEnergyUsage(energyHistory, monthStart),
                 EnergyMonthLabel = $"{monthStart.Year}/{monthStart.Month}",
+                EnergyYearLabel = $"{now.Year - Math.Max(0, yearOffset)}",
                 DailyEnergy = dailyEnergy,
                 MonthlyEnergy = monthlyEnergy,
                 Message = temperaturePoints.Count == 0 && energyHistory.Length == 0 && energyStatistics.Count == 0

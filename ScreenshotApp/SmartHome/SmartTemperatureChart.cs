@@ -6,8 +6,9 @@ using System.Windows.Media;
 namespace ScreenshotApp.SmartHome;
 
 /// <summary>
-/// 绘制最近二十四小时室温趋势：坐标轴刻度标注、鼠标十字虚线对齐与悬停位置温度读数。
-/// 不为轻量图表引入大型图表依赖。
+/// 绘制最近二十四小时室温趋势，样式对齐系统中心存储页的用量历史曲线：
+/// 渐变面积、采样节点圆点、右侧温度刻度与底部时间刻度，鼠标悬停时以
+/// 虚线十字对齐最近采样点并弹出该位置的温度读数。
 /// </summary>
 public sealed class SmartTemperatureChart : FrameworkElement
 {
@@ -46,9 +47,9 @@ public sealed class SmartTemperatureChart : FrameworkElement
         var bounds = new Rect(0, 0, ActualWidth, ActualHeight);
         if (bounds.Width < 80 || bounds.Height < 80) return;
 
-        const double gutterLeft = 44;
         const double gutterBottom = 26;
-        var plot = new Rect(gutterLeft, 14, bounds.Width - gutterLeft - 14, bounds.Height - 14 - gutterBottom);
+        const double gutterRight = 52;
+        var plot = new Rect(12, 12, bounds.Width - 12 - gutterRight, bounds.Height - 12 - gutterBottom);
 
         var points = Points?.Where(point => !double.IsNaN(point.Value) && !double.IsInfinity(point.Value))
             .OrderBy(point => point.Timestamp)
@@ -71,54 +72,76 @@ public sealed class SmartTemperatureChart : FrameworkElement
         double X(double seconds) => plot.Left + seconds / duration * plot.Width;
         double Y(double value) => plot.Bottom - (value - min) / (max - min) * plot.Height;
 
-        // 纵轴：水平网格线与温度刻度。
-        var gridPen = FrozenPen(Color.FromArgb(48, 119, 151, 177), 1);
+        var axisPen = FrozenPen(Color.FromArgb(40, 119, 151, 177), 1);
         for (var index = 0; index <= 4; index++)
         {
             var value = min + (max - min) * index / 4d;
             var y = plot.Bottom - plot.Height * index / 4d;
-            drawingContext.DrawLine(gridPen, new Point(plot.Left, y), new Point(plot.Right, y));
+            drawingContext.DrawLine(axisPen, new Point(plot.Left, y), new Point(plot.Right, y));
             var label = $"{value:0.#}°";
             var formatted = FormatText(label, 9.5, Color.FromRgb(139, 158, 174));
-            drawingContext.DrawText(formatted, new Point(plot.Left - 8 - formatted.Width, y - formatted.Height / 2));
+            drawingContext.DrawText(formatted, new Point(plot.Right + 8, y - formatted.Height / 2));
         }
 
-        drawingContext.DrawLine(FrozenPen(Color.FromArgb(96, 119, 151, 177), 1),
-            new Point(plot.Left, plot.Top), new Point(plot.Left, plot.Bottom));
-
-        // 横轴：时间刻度。
         for (var index = 0; index <= 4; index++)
         {
             var seconds = duration * index / 4d;
             var x = X(seconds);
-            drawingContext.DrawLine(gridPen, new Point(x, plot.Bottom), new Point(x, plot.Bottom + 4));
             var label = start.AddSeconds(seconds).LocalDateTime.ToString("HH:mm", CultureInfo.CurrentCulture);
             var formatted = FormatText(label, 9.5, Color.FromRgb(139, 158, 174));
             drawingContext.DrawText(formatted, new Point(x - formatted.Width / 2, plot.Bottom + 7));
         }
 
-        DrawText(drawingContext, "°C", 9.5, Color.FromRgb(139, 158, 174), new Point(6, 0));
-
-        var geometry = new StreamGeometry();
-        using (var context = geometry.Open())
+        // 折线与其下方的柔和渐变面积。
+        var lineGeometry = new StreamGeometry();
+        using (var context = lineGeometry.Open())
         {
             for (var index = 0; index < points.Length; index++)
             {
-                var point = points[index];
-                var x = X((point.Timestamp - start).TotalSeconds);
-                var y = Y(point.Value);
+                var x = X((points[index].Timestamp - start).TotalSeconds);
+                var y = Y(points[index].Value);
                 if (index == 0) context.BeginFigure(new Point(x, y), false, false);
                 else context.LineTo(new Point(x, y), true, false);
             }
         }
-        geometry.Freeze();
-        drawingContext.DrawGeometry(null, FrozenPen(Color.FromRgb(61, 146, 214), 2.2), geometry);
+        lineGeometry.Freeze();
+        drawingContext.DrawGeometry(null, FrozenPen(Color.FromRgb(61, 146, 214), 2.2), lineGeometry);
 
-        var last = points[^1];
-        var lastPoint = new Point(X((last.Timestamp - start).TotalSeconds), Y(last.Value));
-        drawingContext.DrawEllipse(FrozenBrush(Color.FromRgb(61, 146, 214)), null, lastPoint, 4, 4);
+        var areaGeometry = new StreamGeometry();
+        using (var context = areaGeometry.Open())
+        {
+            context.BeginFigure(new Point(plot.Left, plot.Bottom), true, true);
+            for (var index = 0; index < points.Length; index++)
+            {
+                context.LineTo(new Point(X((points[index].Timestamp - start).TotalSeconds), Y(points[index].Value)), true, false);
+            }
 
-        // 鼠标十字虚线对齐最近采样点，并给出该位置的温度读数。
+            context.LineTo(new Point(X((points[^1].Timestamp - start).TotalSeconds), plot.Bottom), true, false);
+        }
+        areaGeometry.Freeze();
+        var areaBrush = new LinearGradientBrush
+        {
+            StartPoint = new Point(0, 0),
+            EndPoint = new Point(0, 1),
+            GradientStops = new GradientStopCollection
+            {
+                new GradientStop(Color.FromArgb(90, 61, 146, 214), 0),
+                new GradientStop(Color.FromArgb(12, 61, 146, 214), 1)
+            }
+        };
+        areaBrush.Freeze();
+        drawingContext.DrawGeometry(areaBrush, null, areaGeometry);
+
+        // 采样节点圆点。
+        var nodeFill = FrozenBrush(Colors.White);
+        var nodePen = FrozenPen(Color.FromRgb(61, 146, 214), 1.8);
+        foreach (var point in points)
+        {
+            drawingContext.DrawEllipse(nodeFill, nodePen,
+                new Point(X((point.Timestamp - start).TotalSeconds), Y(point.Value)), 3.2, 3.2);
+        }
+
+        // 悬停：虚线十字对齐最近采样点，并弹出时间与温度读数。
         if (_mousePosition is { } mouse && mouse.X >= plot.Left && mouse.X <= plot.Right &&
             mouse.Y >= plot.Top && mouse.Y <= plot.Bottom)
         {
@@ -136,18 +159,21 @@ public sealed class SmartTemperatureChart : FrameworkElement
             dashPen.Freeze();
             drawingContext.DrawLine(dashPen, new Point(snapX, plot.Top), new Point(snapX, plot.Bottom));
             drawingContext.DrawLine(dashPen, new Point(plot.Left, snapY), new Point(plot.Right, snapY));
-            drawingContext.DrawEllipse(FrozenBrush(Color.FromRgb(77, 124, 254)), null, new Point(snapX, snapY), 3.5, 3.5);
+            drawingContext.DrawEllipse(FrozenBrush(Color.FromRgb(77, 124, 254)), null, new Point(snapX, snapY), 4, 4);
 
-            var readout = $"{nearest.Timestamp.LocalDateTime:HH:mm}  {nearest.Value:0.##}°C";
-            var readoutText = FormatText(readout, 11, Color.FromRgb(32, 53, 74));
-            var boxWidth = readoutText.Width + 14;
-            var boxHeight = readoutText.Height + 8;
-            var boxX = Math.Clamp(snapX + 10, plot.Left, plot.Right - boxWidth);
-            var boxY = Math.Clamp(snapY - boxHeight - 8, plot.Top, plot.Bottom - boxHeight);
+            var lineOne = FormatText("指向位置", 10, Color.FromRgb(113, 132, 154));
+            var lineTwo = FormatText($"{nearest.Value:0.##}°C", 12.5, Color.FromRgb(32, 53, 74));
+            var lineThree = FormatText(nearest.Timestamp.LocalDateTime.ToString("HH:mm", CultureInfo.CurrentCulture), 10, Color.FromRgb(113, 132, 154));
+            var boxWidth = Math.Max(Math.Max(lineOne.Width, lineTwo.Width), lineThree.Width) + 18;
+            var boxHeight = lineOne.Height + lineTwo.Height + lineThree.Height + 14;
+            var boxX = Math.Clamp(snapX + 12, plot.Left, plot.Right - boxWidth);
+            var boxY = Math.Clamp(snapY - boxHeight - 10, plot.Top, plot.Bottom - boxHeight);
             var box = new Rect(new Point(boxX, boxY), new Size(boxWidth, boxHeight));
             drawingContext.DrawRoundedRectangle(FrozenBrush(Color.FromRgb(0xFA, 0xFF, 0xFF)),
-                FrozenPen(Color.FromRgb(77, 124, 254), 1), box, 6, 6);
-            drawingContext.DrawText(readoutText, new Point(boxX + 7, boxY + 4));
+                FrozenPen(Color.FromRgb(77, 124, 254), 1), box, 8, 8);
+            drawingContext.DrawText(lineOne, new Point(boxX + 9, boxY + 5));
+            drawingContext.DrawText(lineTwo, new Point(boxX + 9, boxY + 5 + lineOne.Height + 2));
+            drawingContext.DrawText(lineThree, new Point(boxX + 9, boxY + 5 + lineOne.Height + lineTwo.Height + 4));
         }
     }
 

@@ -259,11 +259,11 @@ public partial class SmartHomeView : UserControl
         }
     }
 
-    private async void DeviceDetailDialog_InsightsMonthNavigate(object? sender, int monthOffset)
+    private async void DeviceDetailDialog_InsightsMonthNavigate(object? sender, int monthOffset, int yearOffset)
     {
         if (DeviceDetailDialog.Device is not { IsClimate: true } device) return;
         device.BeginInsightsLoad();
-        var insights = await _service.GetInsightsAsync(device.SourceDevice, monthOffset);
+        var insights = await _service.GetInsightsAsync(device.SourceDevice, monthOffset, yearOffset);
         if (ReferenceEquals(DeviceDetailDialog.Device, device)) device.ApplyInsights(insights);
     }
 

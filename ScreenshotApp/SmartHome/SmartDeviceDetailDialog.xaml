@@ -393,7 +393,7 @@
                                                         </Style.Triggers>
                                                     </Style>
                                                 </Border.Style>
-                                                <iconPacks:PackIconMaterial Width="28" Height="28" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                <iconPacks:PackIconMaterial Width="32" Height="32" HorizontalAlignment="Center" VerticalAlignment="Center"
                                                                             Kind="{Binding IconKind}">
                                                     <iconPacks:PackIconMaterial.Style>
                                                         <Style TargetType="iconPacks:PackIconMaterial">
@@ -428,8 +428,22 @@
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="14" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                                 <StackPanel Visibility="{Binding SupportsFanMode, Converter={StaticResource BoolToVisibility}}">
                                     <TextBlock Margin="2,0,0,7" FontSize="10.5" Foreground="#71849A" Text="空调风速" />
-                                    <ComboBox Style="{StaticResource DetailComboBoxStyle}" ItemsSource="{Binding FanModeOptions}" DisplayMemberPath="DisplayName" SelectedValuePath="Value"
-                                              SelectedValue="{Binding CurrentFanMode, Mode=OneWay}" IsEnabled="{Binding CanInteract}" SelectionChanged="FanModeComboBox_SelectionChanged" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="10" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <Grid x:Name="FanModeBar" Height="42" ClipToBounds="True" Cursor="Hand" Background="Transparent"
+                                              MouseLeftButtonDown="FanModeBar_MouseLeftButtonDown" MouseMove="FanModeBar_MouseMove"
+                                              MouseLeftButtonUp="FanModeBar_MouseLeftButtonUp" SizeChanged="FanModeBar_SizeChanged"
+                                              Visibility="{Binding HasFanModeLevels, Converter={StaticResource BoolToVisibility}}">
+                                            <Border Background="#E4E9F0F8" BorderBrush="#AFFFFFFF" BorderThickness="1" CornerRadius="21" />
+                                            <Border x:Name="FanModeFill" Background="#4D7CFE" CornerRadius="21" HorizontalAlignment="Left" Width="0" />
+                                            <TextBlock x:Name="FanModeFillLabel" Margin="18,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center"
+                                                       FontSize="12.5" FontWeight="SemiBold" Foreground="White"
+                                                       Text="{Binding CurrentFanModeText, Mode=OneWay}" />
+                                        </Grid>
+                                        <Button Grid.Column="2" Width="84" Height="42" Content="自动" Style="{StaticResource SoftButtonStyle}"
+                                                Click="FanAutoMode_Click"
+                                                Visibility="{Binding HasFanAutoMode, Converter={StaticResource BoolToVisibility}}" />
+                                    </Grid>
                                 </StackPanel>
                                 <StackPanel Grid.Column="2" Visibility="{Binding SupportsSwingMode, Converter={StaticResource BoolToVisibility}}">
                                     <TextBlock Margin="2,0,0,7" FontSize="10.5" Foreground="#71849A" Text="摆风方式" />
@@ -771,21 +785,23 @@
                                 </ItemsControl>
                             </StackPanel>
                             <StackPanel x:Name="EnergyMonthlyPanel" Margin="0,12,0,0" Visibility="Collapsed">
-                                <ItemsControl ItemsSource="{Binding MonthlyEnergyRows}">
+                                <ItemsControl ItemsSource="{Binding EnergyMonthCells}">
+                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="4" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Grid Margin="0,5">
-                                                <TextBlock FontSize="12.5" FontWeight="SemiBold" Foreground="#53667D" Text="{Binding Label}" />
-                                                <TextBlock HorizontalAlignment="Right" FontSize="12.5" FontWeight="SemiBold" Foreground="#4D7CFE" Text="{Binding Kwh, StringFormat={}{0:0.##} 度}" />
-                                            </Grid>
+                                            <StackPanel Margin="2,14" HorizontalAlignment="Center" MinHeight="48">
+                                                <TextBlock HorizontalAlignment="Center" FontSize="14" FontWeight="SemiBold" Foreground="#53667D" Text="{Binding Label}" />
+                                                <TextBlock Margin="0,6,0,0" HorizontalAlignment="Center" FontSize="11" Foreground="#4D7CFE" Text="{Binding UsageText}" />
+                                            </StackPanel>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
                             </StackPanel>
                             <Grid Margin="0,10,0,0">
-                                <Button Width="40" Height="36" HorizontalAlignment="Left" Content="‹" Style="{StaticResource SoftButtonStyle}" Click="PreviousEnergyMonth_Click" />
-                                <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="14" FontWeight="SemiBold" Foreground="#20394E" Text="{Binding EnergyMonthLabel}" />
-                                <Button Width="40" Height="36" HorizontalAlignment="Right" Content="›" Style="{StaticResource SoftButtonStyle}" Click="NextEnergyMonth_Click" />
+                                <Button Width="40" Height="36" HorizontalAlignment="Left" Content="‹" Style="{StaticResource SoftButtonStyle}" Click="PreviousEnergyPeriod_Click" />
+                                <TextBlock x:Name="EnergyMonthNavLabel" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="14" FontWeight="SemiBold" Foreground="#20394E" Text="{Binding EnergyMonthLabel}" />
+                                <TextBlock x:Name="EnergyYearNavLabel" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="14" FontWeight="SemiBold" Foreground="#20394E" Text="{Binding EnergyYearLabel}" Visibility="Collapsed" />
+                                <Button Width="40" Height="36" HorizontalAlignment="Right" Content="›" Style="{StaticResource SoftButtonStyle}" Click="NextEnergyPeriod_Click" />
                             </Grid>
                             <TextBlock Margin="0,10,0,0" FontSize="10" Foreground="#8497A8" Text="{Binding InsightsMessage}" TextWrapping="Wrap" />
                         </StackPanel>

@@ -137,12 +137,21 @@ public sealed class SmartHomeService
         SmartDevice device,
         CancellationToken cancellationToken = default)
     {
-        return GetInsightsAsync(device, 0, cancellationToken);
+        return GetInsightsAsync(device, 0, 0, cancellationToken);
+    }
+
+    public Task<SmartDeviceInsights> GetInsightsAsync(
+        SmartDevice device,
+        int monthOffset,
+        CancellationToken cancellationToken = default)
+    {
+        return GetInsightsAsync(device, monthOffset, 0, cancellationToken);
     }
 
     public async Task<SmartDeviceInsights> GetInsightsAsync(
         SmartDevice device,
         int monthOffset,
+        int yearOffset,
         CancellationToken cancellationToken = default)
     {
         var provider = _provider;
@@ -151,7 +160,7 @@ public sealed class SmartHomeService
             return new SmartDeviceInsights { Message = "连接 Home Assistant 后可查看历史趋势。" };
         }
 
-        return await provider.GetInsightsAsync(device, monthOffset, cancellationToken).ConfigureAwait(false);
+        return await provider.GetInsightsAsync(device, monthOffset, yearOffset, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task ForgetAsync()
