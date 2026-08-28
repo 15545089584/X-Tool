@@ -49,6 +49,8 @@
     <PackageReference Include="System.Diagnostics.EventLog" Version="6.0.0" />
     <!-- Windows Search 的只读 OLE DB 查询接口；索引不可用时文件工作台会自动回退到本地扫描。 -->
     <PackageReference Include="System.Data.OleDb" Version="6.0.1" />
+    <!-- Home Assistant 同源的 Material Design Icons，通过 WPF 矢量控件离线渲染。 -->
+    <PackageReference Include="MahApps.Metro.IconPacks.Material" Version="6.2.1" />
   </ItemGroup>
 
   <ItemGroup>
@@ -69,6 +71,8 @@
     <Resource Include="Assets\XToolLogo.png" />
     <Resource Include="Assets\Toolchains\*.png" />
     <Resource Include="Assets\InformationVault\*.png" />
+    <!-- 智能家居设备插画由用户原创，并作为离线 WPF 资源随程序分发。 -->
+    <Resource Include="Assets\SmartHome\Devices\*.png" />
   </ItemGroup>
 
   <ItemGroup>

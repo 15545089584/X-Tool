@@ -1,0 +1,253 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- 智能家居专用的浅彩玻璃设计令牌，与 X-Tool 主窗口的冷灰蓝背景保持连续。 -->
+    <LinearGradientBrush x:Key="SmartHomeBackdropBrush" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Offset="0" Color="#F7F4F3" />
+        <GradientStop Offset="0.44" Color="#EEF2F8" />
+        <GradientStop Offset="1" Color="#DDE8F8" />
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="SmartHomeBackdropVeilBrush" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Offset="0" Color="#66FFF8F1" />
+        <GradientStop Offset="0.52" Color="#42F4F6FD" />
+        <GradientStop Offset="1" Color="#52D8E8FB" />
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="SmartHomeGlassPanelBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Offset="0" Color="#86FFFFFF" />
+        <GradientStop Offset="1" Color="#58E4EAF4" />
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="SmartHomeGlassCardBrush" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Offset="0" Color="#F2FFFFFF" />
+        <GradientStop Offset="0.55" Color="#E3F9FAFF" />
+        <GradientStop Offset="1" Color="#D5EEF3FA" />
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="SmartHomeGlassCardHoverBrush" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Offset="0" Color="#FAFFFFFF" />
+        <GradientStop Offset="1" Color="#E9F1F5FF" />
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="SmartHomeGlassControlBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Offset="0" Color="#F0FFFFFF" />
+        <GradientStop Offset="1" Color="#CFE6EBF6" />
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="SmartHomeGlassSectionBrush" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Offset="0" Color="#B8FFFFFF" />
+        <GradientStop Offset="1" Color="#8DE9EFFA" />
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="SmartHomeStatusSurfaceBrush" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Offset="0" Color="#A8FFF9F4" />
+        <GradientStop Offset="0.48" Color="#A8F4F0FF" />
+        <GradientStop Offset="1" Color="#9EDDEEFF" />
+    </LinearGradientBrush>
+
+    <SolidColorBrush x:Key="SmartHomePrimaryBrush" Color="#6A74D3" />
+    <SolidColorBrush x:Key="SmartHomePrimaryHoverBrush" Color="#7B85E2" />
+    <SolidColorBrush x:Key="SmartHomePrimarySoftBrush" Color="#DDE0FA" />
+    <SolidColorBrush x:Key="SmartHomeTextPrimaryBrush" Color="#252B48" />
+    <SolidColorBrush x:Key="SmartHomeTextSecondaryBrush" Color="#65708A" />
+    <SolidColorBrush x:Key="SmartHomeTextMutedBrush" Color="#8791A8" />
+    <SolidColorBrush x:Key="SmartHomeGlassBorderBrush" Color="#AFFFFFFF" />
+    <SolidColorBrush x:Key="SmartHomeGlassBorderStrongBrush" Color="#D2FFFFFF" />
+    <SolidColorBrush x:Key="SmartHomeDividerBrush" Color="#66FFFFFF" />
+    <SolidColorBrush x:Key="SmartHomeSuccessBrush" Color="#20BE95" />
+    <SolidColorBrush x:Key="SmartHomeWarningBrush" Color="#FF901F" />
+    <SolidColorBrush x:Key="SmartHomeCyanBrush" Color="#11B8CC" />
+    <SolidColorBrush x:Key="SmartHomeDangerBrush" Color="#D96376" />
+    <SolidColorBrush x:Key="SmartHomeRoomRailBrush" Color="#34FFFFFF" />
+    <SolidColorBrush x:Key="SmartHomeInactiveTrackBrush" Color="#8D9AA9BA" />
+
+    <!-- WPF 不在每张卡片上做实时背景模糊，以避免软件渲染和文字发虚。 -->
+    <DropShadowEffect x:Key="SmartHomePanelShadow"
+                      BlurRadius="30" ShadowDepth="8" Direction="270"
+                      Opacity="0.16" Color="#485079" />
+    <DropShadowEffect x:Key="SmartHomeCardShadow"
+                      BlurRadius="18" ShadowDepth="5" Direction="270"
+                      Opacity="0.14" Color="#4B5376" />
+    <DropShadowEffect x:Key="SmartHomeDialogShadow"
+                      BlurRadius="46" ShadowDepth="14" Direction="270"
+                      Opacity="0.30" Color="#333B5B" />
+
+    <Style x:Key="SmartHomeSummaryChipStyle" TargetType="Border">
+        <Setter Property="Height" Value="38" />
+        <Setter Property="Padding" Value="14,0" />
+        <Setter Property="Margin" Value="0,0,8,0" />
+        <Setter Property="Background" Value="{StaticResource SmartHomeGlassControlBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource SmartHomeGlassBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="19" />
+        <Setter Property="Effect" Value="{StaticResource SmartHomeCardShadow}" />
+    </Style>
+
+    <!-- 设备卡片中的紧凑滑块，使用自绘轨道与圆形拖拽点，避免落回 Windows 原生样式。 -->
+    <Style x:Key="SmartHomeCardHorizontalSliderStyle" TargetType="Slider">
+        <Setter Property="Height" Value="22" />
+        <Setter Property="Minimum" Value="0" />
+        <Setter Property="Maximum" Value="100" />
+        <Setter Property="IsMoveToPointEnabled" Value="True" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Slider">
+                    <Grid VerticalAlignment="Center">
+                        <Track x:Name="PART_Track" Height="5" VerticalAlignment="Center">
+                            <Track.DecreaseRepeatButton>
+                                <RepeatButton Command="{x:Static Slider.DecreaseLarge}" Focusable="False">
+                                    <RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="#526FAD" CornerRadius="3" /></ControlTemplate></RepeatButton.Template>
+                                </RepeatButton>
+                            </Track.DecreaseRepeatButton>
+                            <Track.IncreaseRepeatButton>
+                                <RepeatButton Command="{x:Static Slider.IncreaseLarge}" Focusable="False">
+                                    <RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="#B8C2D0DD" CornerRadius="3" /></ControlTemplate></RepeatButton.Template>
+                                </RepeatButton>
+                            </Track.IncreaseRepeatButton>
+                            <Track.Thumb>
+                                <Thumb Width="15" Height="15" Focusable="False">
+                                    <Thumb.Template><ControlTemplate TargetType="Thumb"><Border Background="#FCFFFFFF" BorderBrush="#526FAD" BorderThickness="1.5" CornerRadius="8" Effect="{StaticResource SmartHomeCardShadow}" /></ControlTemplate></Thumb.Template>
+                                </Thumb>
+                            </Track.Thumb>
+                        </Track>
+                    </Grid>
+                    <ControlTemplate.Triggers><Trigger Property="IsEnabled" Value="False"><Setter TargetName="PART_Track" Property="Opacity" Value="0.32" /></Trigger></ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="SmartHomeCardVerticalSliderStyle" TargetType="Slider">
+        <Setter Property="Width" Value="22" />
+        <Setter Property="Minimum" Value="0" />
+        <Setter Property="Maximum" Value="100" />
+        <Setter Property="Orientation" Value="Vertical" />
+        <Setter Property="IsDirectionReversed" Value="False" />
+        <Setter Property="IsMoveToPointEnabled" Value="True" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Slider">
+                    <Grid HorizontalAlignment="Center">
+                        <Track x:Name="PART_Track" Width="5" HorizontalAlignment="Center" Orientation="Vertical" IsDirectionReversed="{TemplateBinding IsDirectionReversed}">
+                            <Track.DecreaseRepeatButton>
+                                <RepeatButton Command="{x:Static Slider.DecreaseLarge}" Focusable="False">
+                                    <RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="#526FAD" CornerRadius="3" /></ControlTemplate></RepeatButton.Template>
+                                </RepeatButton>
+                            </Track.DecreaseRepeatButton>
+                            <Track.IncreaseRepeatButton>
+                                <RepeatButton Command="{x:Static Slider.IncreaseLarge}" Focusable="False">
+                                    <RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="#B8C2D0DD" CornerRadius="3" /></ControlTemplate></RepeatButton.Template>
+                                </RepeatButton>
+                            </Track.IncreaseRepeatButton>
+                            <Track.Thumb>
+                                <Thumb Width="15" Height="15" Focusable="False">
+                                    <Thumb.Template><ControlTemplate TargetType="Thumb"><Border Background="#FCFFFFFF" BorderBrush="#526FAD" BorderThickness="1.5" CornerRadius="8" Effect="{StaticResource SmartHomeCardShadow}" /></ControlTemplate></Thumb.Template>
+                                </Thumb>
+                            </Track.Thumb>
+                        </Track>
+                    </Grid>
+                    <ControlTemplate.Triggers><Trigger Property="IsEnabled" Value="False"><Setter TargetName="PART_Track" Property="Opacity" Value="0.32" /></Trigger></ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="SmartHomeSliderStyle" TargetType="Slider">
+        <Setter Property="Height" Value="30" />
+        <Setter Property="Minimum" Value="0" />
+        <Setter Property="Maximum" Value="100" />
+        <Setter Property="IsMoveToPointEnabled" Value="True" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Slider">
+                    <Grid Margin="2,0" VerticalAlignment="Center">
+                        <Track x:Name="PART_Track" Height="8" VerticalAlignment="Center">
+                            <Track.DecreaseRepeatButton>
+                                <RepeatButton Command="{x:Static Slider.DecreaseLarge}" Focusable="False">
+                                    <RepeatButton.Template>
+                                        <ControlTemplate TargetType="RepeatButton">
+                                            <Border Background="{StaticResource SmartHomePrimaryBrush}" CornerRadius="4" />
+                                        </ControlTemplate>
+                                    </RepeatButton.Template>
+                                </RepeatButton>
+                            </Track.DecreaseRepeatButton>
+                            <Track.IncreaseRepeatButton>
+                                <RepeatButton Command="{x:Static Slider.IncreaseLarge}" Focusable="False">
+                                    <RepeatButton.Template>
+                                        <ControlTemplate TargetType="RepeatButton">
+                                            <Border Background="#76FFFFFF" BorderBrush="#55FFFFFF"
+                                                    BorderThickness="1" CornerRadius="4" />
+                                        </ControlTemplate>
+                                    </RepeatButton.Template>
+                                </RepeatButton>
+                            </Track.IncreaseRepeatButton>
+                            <Track.Thumb>
+                                <Thumb Width="20" Height="20" Focusable="False">
+                                    <Thumb.Template>
+                                        <ControlTemplate TargetType="Thumb">
+                                            <Border Background="#FAFFFFFF" BorderBrush="{StaticResource SmartHomePrimaryBrush}"
+                                                    BorderThickness="2" CornerRadius="10"
+                                                    Effect="{StaticResource SmartHomeCardShadow}" />
+                                        </ControlTemplate>
+                                    </Thumb.Template>
+                                </Thumb>
+                            </Track.Thumb>
+                        </Track>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="PART_Track" Property="Opacity" Value="0.42" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 仅在智能家居视图作用域内替换系统滚动条。 -->
+    <Style TargetType="ScrollBar">
+        <Setter Property="Width" Value="9" />
+        <Setter Property="Height" Value="Auto" />
+        <Setter Property="Margin" Value="2" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ScrollBar">
+                    <Grid Background="Transparent">
+                        <Track x:Name="PART_Track" Margin="2,1" Orientation="{TemplateBinding Orientation}"
+                               IsDirectionReversed="True">
+                            <Track.DecreaseRepeatButton>
+                                <RepeatButton Focusable="False" IsHitTestVisible="False" Opacity="0" />
+                            </Track.DecreaseRepeatButton>
+                            <Track.IncreaseRepeatButton>
+                                <RepeatButton Focusable="False" IsHitTestVisible="False" Opacity="0" />
+                            </Track.IncreaseRepeatButton>
+                            <Track.Thumb>
+                                <Thumb MinHeight="32" MinWidth="32" Background="#69939BB5">
+                                    <Thumb.Template>
+                                        <ControlTemplate TargetType="Thumb">
+                                            <Border x:Name="ThumbSurface" Margin="1" Background="{TemplateBinding Background}"
+                                                    BorderBrush="#58FFFFFF" BorderThickness="1" CornerRadius="4" />
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="ThumbSurface" Property="Background" Value="#976A74D3" />
+                                                </Trigger>
+                                                <Trigger Property="IsDragging" Value="True">
+                                                    <Setter TargetName="ThumbSurface" Property="Background" Value="{StaticResource SmartHomePrimaryBrush}" />
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Thumb.Template>
+                                </Thumb>
+                            </Track.Thumb>
+                        </Track>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="Orientation" Value="Horizontal">
+                            <Setter Property="Width" Value="Auto" />
+                            <Setter Property="Height" Value="9" />
+                            <Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="False" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+</ResourceDictionary>

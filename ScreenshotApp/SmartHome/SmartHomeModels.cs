@@ -37,6 +37,7 @@ public enum SmartHomeControlAction
     TurnOn,
     TurnOff,
     SetBrightness,
+    SetColorTemperature,
     SetTargetTemperature,
     OpenCover,
     CloseCover,

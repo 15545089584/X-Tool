@@ -4,23 +4,24 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using MahApps.Metro.IconPacks;
 
 namespace ScreenshotApp.SmartHome;
 
-public sealed record SmartAreaFilterItem(string Id, string Name, int Count);
+public sealed record SmartAreaFilterItem(string Id, string Name, int Count, PackIconMaterialKind IconKind);
 
 public partial class SmartHomeView : UserControl
 {
     private readonly SmartHomeService _service = SmartHomeService.Instance;
     private readonly Dictionary<string, SmartDeviceViewModel> _deviceById = new(StringComparer.Ordinal);
     private bool _initialized;
-    private string _selectedAreaId = "__online";
+    private string _selectedAreaId = "__all";
 
     public SmartHomeView()
     {
         InitializeComponent();
         DataContext = this;
-        AreaFilters.Add(new SmartAreaFilterItem("__online", "在线", 0));
+        AreaFilters.Add(new SmartAreaFilterItem("__all", "全屋", 0, PackIconMaterialKind.HomeOutline));
         _service.ConnectionStateChanged += Service_ConnectionStateChanged;
         _service.SnapshotChanged += Service_SnapshotChanged;
         Loaded += SmartHomeView_Loaded;
@@ -164,15 +165,15 @@ public partial class SmartHomeView : UserControl
 
         var selected = _selectedAreaId;
         AreaFilters.Clear();
-        AreaFilters.Add(new SmartAreaFilterItem("__online", "在线", snapshot.Devices.Count(device => device.PrimaryEntity?.Available == true)));
-        AreaFilters.Add(new SmartAreaFilterItem("__offline", "离线", snapshot.Devices.Count(device => device.PrimaryEntity?.Available != true)));
-        AreaFilters.Add(new SmartAreaFilterItem("__all", "全部", snapshot.Devices.Count));
+        AreaFilters.Add(new SmartAreaFilterItem("__all", "全屋", snapshot.Devices.Count, PackIconMaterialKind.HomeOutline));
         foreach (var area in snapshot.Areas)
         {
             var count = area.Id == "__unassigned"
                 ? snapshot.Devices.Count(device => device.AreaId is null)
                 : snapshot.Devices.Count(device => device.AreaId == area.Id);
-            AreaFilters.Add(new SmartAreaFilterItem(area.Id, area.Name, count));
+            if (count == 0) continue;
+            var displayName = area.Id == "__unassigned" ? "其他" : area.Name;
+            AreaFilters.Add(new SmartAreaFilterItem(area.Id, displayName, count, ResolveRoomIconKind(displayName)));
         }
         var selectedIndex = Math.Max(0, AreaFilters.ToList().FindIndex(item => item.Id == selected));
         AreaFilterList.SelectedIndex = selectedIndex;
@@ -186,36 +187,23 @@ public partial class SmartHomeView : UserControl
 
     private void ApplyFilter()
     {
-        var keyword = DeviceSearchTextBox.Text.Trim();
         var filtered = _deviceById.Values
             .Where(device => _selectedAreaId switch
             {
-                "__online" => device.IsAvailable,
-                "__offline" => !device.IsAvailable,
                 "__all" => true,
                 _ =>
                              (_selectedAreaId == "__unassigned" ? device.AreaId is null :
                                  string.Equals(device.AreaId, _selectedAreaId, StringComparison.Ordinal))
             })
-            .Where(device => keyword.Length == 0 ||
-                             device.Name.Contains(keyword, StringComparison.CurrentCultureIgnoreCase) ||
-                             device.AreaName.Contains(keyword, StringComparison.CurrentCultureIgnoreCase))
             .OrderByDescending(device => device.IsAvailable)
-            .ThenBy(device => device.AreaName, StringComparer.CurrentCulture)
             .ThenBy(device => device.Name, StringComparer.CurrentCulture)
             .ToArray();
 
         VisibleDevices.Clear();
         foreach (var device in filtered) VisibleDevices.Add(device);
         EmptyState.Visibility = VisibleDevices.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        SearchPlaceholder.Visibility = keyword.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
-        EmptyStateTitle.Text = _selectedAreaId switch
-        {
-            "__online" => "当前没有在线设备",
-            "__offline" => "当前没有离线设备",
-            _ => "没有匹配的设备"
-        };
-        EmptyStateHint.Text = keyword.Length > 0 ? "清除搜索关键词后再试" : "切换分类或刷新设备状态";
+        EmptyStateTitle.Text = _selectedAreaId == "__all" ? "当前没有可显示的设备" : "这个房间还没有设备";
+        EmptyStateHint.Text = "切换到其他房间或刷新设备状态";
     }
 
     private void AreaFilterList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -225,12 +213,6 @@ public partial class SmartHomeView : UserControl
             _selectedAreaId = item.Id;
             ApplyFilter();
         }
-    }
-
-    private void DeviceSearchTextBox_TextChanged(object sender, TextChangedEventArgs e)
-    {
-        if (!IsLoaded) return;
-        ApplyFilter();
     }
 
     private async void DeviceCard_CommandRequested(object? sender, SmartHomeControlRequest request) =>
@@ -367,5 +349,21 @@ public partial class SmartHomeView : UserControl
             TaskCanceledException => "连接 Home Assistant 超时，请稍后重试。",
             _ => string.IsNullOrWhiteSpace(root.Message) ? "智能家居操作失败，请稍后重试。" : root.Message
         };
+    }
+
+    private static PackIconMaterialKind ResolveRoomIconKind(string roomName)
+    {
+        if (roomName.Contains("客厅", StringComparison.CurrentCultureIgnoreCase) ||
+            roomName.Contains("起居", StringComparison.CurrentCultureIgnoreCase)) return PackIconMaterialKind.SofaOutline;
+        if (roomName.Contains("卧室", StringComparison.CurrentCultureIgnoreCase) ||
+            roomName.Contains("寝室", StringComparison.CurrentCultureIgnoreCase) ||
+            roomName.Contains("床", StringComparison.CurrentCultureIgnoreCase)) return PackIconMaterialKind.BedKingOutline;
+        if (roomName.Contains("厨房", StringComparison.CurrentCultureIgnoreCase) ||
+            roomName.Contains("餐厅", StringComparison.CurrentCultureIgnoreCase)) return PackIconMaterialKind.SilverwareForkKnife;
+        if (roomName.Contains("洗手", StringComparison.CurrentCultureIgnoreCase) ||
+            roomName.Contains("卫生", StringComparison.CurrentCultureIgnoreCase) ||
+            roomName.Contains("浴", StringComparison.CurrentCultureIgnoreCase)) return PackIconMaterialKind.ShowerHead;
+        if (roomName.Contains("阳台", StringComparison.CurrentCultureIgnoreCase)) return PackIconMaterialKind.Balcony;
+        return PackIconMaterialKind.DoorOpen;
     }
 }

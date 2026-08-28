@@ -98,6 +98,7 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
             SmartHomeControlAction.TurnOn => "turn_on",
             SmartHomeControlAction.TurnOff => "turn_off",
             SmartHomeControlAction.SetBrightness => "turn_on",
+            SmartHomeControlAction.SetColorTemperature => "turn_on",
             SmartHomeControlAction.SetTargetTemperature => "set_temperature",
             SmartHomeControlAction.OpenCover => "open_cover",
             SmartHomeControlAction.CloseCover => "close_cover",
@@ -120,6 +121,9 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
         {
             case SmartHomeControlAction.SetBrightness:
                 body["brightness_pct"] = Math.Clamp((int)Math.Round(request.NumericValue ?? 0), 0, 100);
+                break;
+            case SmartHomeControlAction.SetColorTemperature:
+                body["color_temp_kelvin"] = Math.Clamp((int)Math.Round(request.NumericValue ?? 2700), 1000, 12000);
                 break;
             case SmartHomeControlAction.SetTargetTemperature:
                 body["temperature"] = request.NumericValue;

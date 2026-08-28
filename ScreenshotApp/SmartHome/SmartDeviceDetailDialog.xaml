@@ -2,16 +2,21 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:ScreenshotApp.SmartHome"
+             xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks"
              x:Name="Root"
              Width="760" MaxHeight="760">
     <UserControl.Resources>
+        <ResourceDictionary>
+        <ResourceDictionary.MergedDictionaries>
+            <ResourceDictionary Source="/XTool;component/SmartHome/SmartHomeFrostedTheme.xaml" />
+        </ResourceDictionary.MergedDictionaries>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
         <local:SmartComboSelectionConverter x:Key="SmartComboSelectionConverter" />
         <Style x:Key="DetailButtonStyle" TargetType="Button">
             <Setter Property="Height" Value="38" />
             <Setter Property="Padding" Value="16,0" />
-            <Setter Property="Background" Value="#EAF1F7" />
-            <Setter Property="Foreground" Value="#36536C" />
+            <Setter Property="Background" Value="{StaticResource SmartHomeGlassControlBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource SmartHomeTextPrimaryBrush}" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="FontSize" Value="12" />
             <Setter Property="FontWeight" Value="SemiBold" />
@@ -19,7 +24,8 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="Surface" Background="{TemplateBinding Background}" CornerRadius="12">
+                        <Border x:Name="Surface" Background="{TemplateBinding Background}"
+                                BorderBrush="#7FFFFFFF" BorderThickness="1" CornerRadius="13">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
                                               TextElement.Foreground="{TemplateBinding Foreground}" />
                         </Border>
@@ -33,6 +39,9 @@
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter TargetName="Surface" Property="Opacity" Value="0.42" />
                             </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Surface" Property="BorderBrush" Value="{StaticResource SmartHomePrimaryBrush}" />
+                            </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -41,16 +50,16 @@
         <Style x:Key="DetailComboBoxStyle" TargetType="ComboBox">
             <Setter Property="Height" Value="42" />
             <Setter Property="Padding" Value="13,0" />
-            <Setter Property="Background" Value="#C9F4F8FB" />
-            <Setter Property="Foreground" Value="#2F4A61" />
-            <Setter Property="BorderBrush" Value="#AFCFDFEB" />
+            <Setter Property="Background" Value="{StaticResource SmartHomeGlassControlBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource SmartHomeTextPrimaryBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource SmartHomeGlassBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="FontSize" Value="12" />
             <Setter Property="ItemContainerStyle">
                 <Setter.Value>
                     <Style TargetType="ComboBoxItem">
                         <Setter Property="Padding" Value="13,9" />
-                        <Setter Property="Foreground" Value="#2F4A61" />
+                        <Setter Property="Foreground" Value="{StaticResource SmartHomeTextPrimaryBrush}" />
                         <Setter Property="Background" Value="Transparent" />
                         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                         <Setter Property="Template">
@@ -62,11 +71,11 @@
                                     </Border>
                                     <ControlTemplate.Triggers>
                                         <Trigger Property="IsHighlighted" Value="True">
-                                            <Setter TargetName="ItemSurface" Property="Background" Value="#E3EFF8" />
+                                            <Setter TargetName="ItemSurface" Property="Background" Value="#DCE2F8" />
                                         </Trigger>
                                         <Trigger Property="IsSelected" Value="True">
-                                            <Setter TargetName="ItemSurface" Property="Background" Value="#D9E9F8" />
-                                            <Setter Property="Foreground" Value="#276CA5" />
+                                            <Setter TargetName="ItemSurface" Property="Background" Value="{StaticResource SmartHomePrimarySoftBrush}" />
+                                            <Setter Property="Foreground" Value="{StaticResource SmartHomePrimaryBrush}" />
                                         </Trigger>
                                     </ControlTemplate.Triggers>
                                 </ControlTemplate>
@@ -88,7 +97,7 @@
                                                Text="{Binding SelectedItem, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource SmartComboSelectionConverter}}"
                                                TextTrimming="CharacterEllipsis" />
                                     <TextBlock Margin="0,0,14,0" HorizontalAlignment="Right" VerticalAlignment="Center"
-                                               FontFamily="Segoe Fluent Icons" FontSize="11" Foreground="#72899D" Text="&#xE70D;" />
+                                               FontFamily="Segoe Fluent Icons" FontSize="11" Foreground="{StaticResource SmartHomeTextSecondaryBrush}" Text="&#xE70D;" />
                                 </Grid>
                             </Border>
                             <ToggleButton Background="Transparent" BorderThickness="0" Focusable="False"
@@ -100,9 +109,8 @@
                             <Popup x:Name="PART_Popup" Margin="0,6,0,0" AllowsTransparency="True" Focusable="False"
                                    IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" PopupAnimation="Fade">
                                 <Border MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
-                                        MaxHeight="250" Padding="2" Background="#FCFFFFFF" BorderBrush="#BDD5E4EE"
-                                        BorderThickness="1" CornerRadius="13">
-                                    <Border.Effect><DropShadowEffect BlurRadius="18" ShadowDepth="5" Opacity="0.18" Color="#29445B" /></Border.Effect>
+                                        MaxHeight="250" Padding="2" Background="#F4FFFFFF" BorderBrush="{StaticResource SmartHomeGlassBorderStrongBrush}"
+                                        BorderThickness="1" CornerRadius="13" Effect="{StaticResource SmartHomeCardShadow}">
                                     <ScrollViewer CanContentScroll="True" VerticalScrollBarVisibility="Auto">
                                         <ItemsPresenter />
                                     </ScrollViewer>
@@ -110,8 +118,8 @@
                             </Popup>
                         </Grid>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ComboSurface" Property="BorderBrush" Value="#75A9CBE3" /></Trigger>
-                            <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="ComboSurface" Property="BorderBrush" Value="#4D8DD2FF" /></Trigger>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ComboSurface" Property="BorderBrush" Value="{StaticResource SmartHomeGlassBorderStrongBrush}" /></Trigger>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="ComboSurface" Property="BorderBrush" Value="{StaticResource SmartHomePrimaryBrush}" /></Trigger>
                             <Trigger Property="IsEnabled" Value="False"><Setter TargetName="ComboSurface" Property="Opacity" Value="0.5" /></Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -121,20 +129,20 @@
         <Style x:Key="ModePillStyle" TargetType="ListBoxItem">
             <Setter Property="Padding" Value="13,9" />
             <Setter Property="Margin" Value="0,0,8,0" />
-            <Setter Property="Background" Value="#C9EDF3F8" />
-            <Setter Property="Foreground" Value="#526D83" />
+            <Setter Property="Background" Value="{StaticResource SmartHomeGlassControlBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource SmartHomeTextSecondaryBrush}" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListBoxItem">
                         <Border x:Name="ModeSurface" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}"
-                                BorderBrush="#8FFFFFFF" BorderThickness="1" CornerRadius="13">
+                                BorderBrush="{StaticResource SmartHomeGlassBorderBrush}" BorderThickness="1" CornerRadius="14">
                             <ContentPresenter HorizontalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}" />
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ModeSurface" Property="Background" Value="#DCEAF5" /></Trigger>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ModeSurface" Property="Background" Value="#E8FFFFFF" /></Trigger>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="ModeSurface" Property="Background" Value="#378FD2" />
+                                <Setter TargetName="ModeSurface" Property="Background" Value="{StaticResource SmartHomePrimaryBrush}" />
                                 <Setter Property="Foreground" Value="White" />
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -148,29 +156,28 @@
             <Setter Property="Margin" Value="0,0,9,9" />
             <Setter Property="Padding" Value="12" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-            <Setter Property="Background" Value="#C9EEF3F7" />
+            <Setter Property="Background" Value="{StaticResource SmartHomeGlassControlBrush}" />
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsOn}" Value="True">
-                    <Setter Property="Background" Value="#D9E8F5FF" />
-                    <Setter Property="Foreground" Value="#2078B8" />
+                    <Setter Property="Background" Value="{StaticResource SmartHomePrimarySoftBrush}" />
+                    <Setter Property="Foreground" Value="{StaticResource SmartHomePrimaryBrush}" />
                 </DataTrigger>
             </Style.Triggers>
         </Style>
         <Style x:Key="SectionCardStyle" TargetType="Border">
             <Setter Property="Margin" Value="0,0,0,12" />
             <Setter Property="Padding" Value="18,16" />
-            <Setter Property="Background" Value="#A8F5F9FC" />
-            <Setter Property="BorderBrush" Value="#BFFFFFFF" />
+            <Setter Property="Background" Value="{StaticResource SmartHomeGlassSectionBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource SmartHomeGlassBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="16" />
+            <Setter Property="CornerRadius" Value="18" />
         </Style>
+        </ResourceDictionary>
     </UserControl.Resources>
 
-    <Border Padding="26,24" Background="#F4FCFEFF" BorderBrush="#D5FFFFFF" BorderThickness="1" CornerRadius="26"
-            DataContext="{Binding Device, ElementName=Root}">
-        <Border.Effect>
-            <DropShadowEffect BlurRadius="44" ShadowDepth="12" Direction="270" Opacity="0.30" Color="#263D52" />
-        </Border.Effect>
+    <Border Padding="26,24" Background="{StaticResource SmartHomeGlassCardBrush}"
+            BorderBrush="{StaticResource SmartHomeGlassBorderStrongBrush}" BorderThickness="1" CornerRadius="26"
+            DataContext="{Binding Device, ElementName=Root}" Effect="{StaticResource SmartHomeDialogShadow}">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
@@ -188,11 +195,28 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <Border Width="62" Height="62" Background="{Binding AccentBackground}" CornerRadius="19">
-                    <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons"
-                               FontSize="28" Foreground="{Binding AccentBrush}" Text="{Binding IconGlyph}" />
+                    <Grid>
+                        <Image Margin="5" Stretch="Uniform" Source="{Binding DeviceArtworkUri}" RenderOptions.BitmapScalingMode="HighQuality">
+                            <Image.Style>
+                                <Style TargetType="Image">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers><DataTrigger Binding="{Binding HasDeviceArtwork}" Value="True"><Setter Property="Visibility" Value="Visible" /></DataTrigger></Style.Triggers>
+                                </Style>
+                            </Image.Style>
+                        </Image>
+                        <iconPacks:PackIconMaterial Width="30" Height="30" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                    Foreground="{Binding AccentBrush}" Kind="{Binding IconKind}">
+                            <iconPacks:PackIconMaterial.Style>
+                                <Style TargetType="iconPacks:PackIconMaterial">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                    <Style.Triggers><DataTrigger Binding="{Binding HasDeviceArtwork}" Value="True"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger></Style.Triggers>
+                                </Style>
+                            </iconPacks:PackIconMaterial.Style>
+                        </iconPacks:PackIconMaterial>
+                    </Grid>
                 </Border>
                 <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                    <TextBlock FontSize="21" FontWeight="SemiBold" Foreground="#172B3C" Text="{Binding Name}"
+                    <TextBlock FontSize="21" FontWeight="SemiBold" Foreground="{StaticResource SmartHomeTextPrimaryBrush}" Text="{Binding Name}"
                                TextTrimming="CharacterEllipsis" />
                     <StackPanel Margin="0,6,0,0" Orientation="Horizontal">
                         <Ellipse Width="7" Height="7" Margin="0,0,7,0" VerticalAlignment="Center">
@@ -207,7 +231,7 @@
                                 </Style>
                             </Ellipse.Style>
                         </Ellipse>
-                        <TextBlock FontSize="11.5" Foreground="#71869A">
+                        <TextBlock FontSize="11.5" Foreground="{StaticResource SmartHomeTextSecondaryBrush}">
                             <Run Text="{Binding StatusText, Mode=OneWay}" /><Run Text="  ·  " /><Run Text="{Binding AreaName, Mode=OneWay}" />
                         </TextBlock>
                     </StackPanel>
@@ -218,11 +242,12 @@
                 </Button>
             </Grid>
 
-            <Border Grid.Row="2" Padding="18,14" Background="#BFEAF2F8" CornerRadius="16">
+            <Border Grid.Row="2" Padding="18,14" Background="{StaticResource SmartHomeStatusSurfaceBrush}"
+                    BorderBrush="{StaticResource SmartHomeGlassBorderBrush}" BorderThickness="1" CornerRadius="18">
                 <Grid>
                     <StackPanel>
                         <TextBlock FontSize="11" Foreground="#6B8195" Text="当前状态" />
-                        <TextBlock Margin="0,4,0,0" FontSize="22" FontWeight="SemiBold" Foreground="#20394E"
+                        <TextBlock Margin="0,4,0,0" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource SmartHomeTextPrimaryBrush}"
                                    Text="{Binding MainState}" />
                         <TextBlock Margin="0,5,0,0" FontSize="10.5" Foreground="#768B9D" Text="{Binding SupportingSummary}"
                                    TextTrimming="CharacterEllipsis" />
@@ -245,11 +270,27 @@
                                     <ColumnDefinition Width="*" /><ColumnDefinition Width="56" />
                                 </Grid.ColumnDefinitions>
                                 <Slider x:Name="BrightnessSlider" Minimum="0" Maximum="100" Value="{Binding BrightnessPercent, Mode=OneWay}"
+                                        Style="{StaticResource SmartHomeSliderStyle}"
                                         IsEnabled="{Binding CanInteract}" AutomationProperties.Name="亮度"
                                         PreviewMouseLeftButtonUp="BrightnessSlider_Commit" KeyUp="BrightnessSlider_KeyUp" />
                                 <TextBlock Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12"
                                            Foreground="#5D768C" Text="{Binding BrightnessPercent, StringFormat={}{0:0}%}" />
                             </Grid>
+                            <StackPanel Margin="0,14,0,0" Visibility="{Binding SupportsColorTemperature, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock FontSize="11.5" FontWeight="SemiBold" Foreground="#526A7F" Text="色温" />
+                                <Grid Margin="0,7,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" /><ColumnDefinition Width="56" />
+                                    </Grid.ColumnDefinitions>
+                                    <Slider x:Name="DetailColorTemperatureSlider" Minimum="0" Maximum="100"
+                                            Value="{Binding ColorTemperaturePercent, Mode=OneWay}"
+                                            Style="{StaticResource SmartHomeSliderStyle}" IsEnabled="{Binding CanInteract}"
+                                            PreviewMouseLeftButtonUp="DetailColorTemperatureSlider_Commit"
+                                            KeyUp="DetailColorTemperatureSlider_KeyUp" AutomationProperties.Name="色温" />
+                                    <TextBlock Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12"
+                                               Foreground="#5D768C" Text="{Binding ColorTemperaturePercent, StringFormat={}{0:0}%}" />
+                                </Grid>
+                            </StackPanel>
                         </StackPanel>
                     </Border>
 
@@ -413,6 +454,7 @@
                             <Grid Margin="0,13,0,0" Visibility="{Binding SupportsFanPercentage, Converter={StaticResource BoolToVisibility}}">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="56" /></Grid.ColumnDefinitions>
                                 <Slider x:Name="FanSlider" Minimum="0" Maximum="100" Value="{Binding FanPercentage, Mode=OneWay}"
+                                        Style="{StaticResource SmartHomeSliderStyle}"
                                         IsEnabled="{Binding CanInteract}" AutomationProperties.Name="风速"
                                         PreviewMouseLeftButtonUp="FanSlider_Commit" KeyUp="FanSlider_KeyUp" />
                                 <TextBlock Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12"
@@ -435,6 +477,7 @@
                             <Grid Margin="0,13,0,0">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="56" /></Grid.ColumnDefinitions>
                                 <Slider x:Name="CoverSlider" Minimum="0" Maximum="100" Value="{Binding CoverPosition, Mode=OneWay}"
+                                        Style="{StaticResource SmartHomeSliderStyle}"
                                         IsEnabled="{Binding CanInteract}" AutomationProperties.Name="窗帘位置"
                                         PreviewMouseLeftButtonUp="CoverSlider_Commit" KeyUp="CoverSlider_KeyUp" />
                                 <TextBlock Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12"

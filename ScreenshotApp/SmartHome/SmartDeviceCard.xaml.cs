@@ -44,6 +44,48 @@ public partial class SmartDeviceCard : UserControl
         OpenDetail();
     }
 
+    private void CardBrightnessSlider_Commit(object sender, MouseButtonEventArgs e)
+    {
+        CommitBrightness();
+    }
+
+    private void CardBrightnessSlider_KeyUp(object sender, KeyEventArgs e)
+    {
+        if (e.Key is not (Key.Left or Key.Right or Key.Up or Key.Down)) return;
+        e.Handled = true;
+        CommitBrightness();
+    }
+
+    private void CommitBrightness()
+    {
+        if (Device is not { CanInteract: true, SupportsBrightness: true } device) return;
+        CommandRequested?.Invoke(this, new SmartHomeControlRequest(
+            device.EntityId,
+            SmartHomeControlAction.SetBrightness,
+            CardBrightnessSlider.Value));
+    }
+
+    private void ColorTemperatureSlider_Commit(object sender, MouseButtonEventArgs e)
+    {
+        CommitColorTemperature();
+    }
+
+    private void ColorTemperatureSlider_KeyUp(object sender, KeyEventArgs e)
+    {
+        if (e.Key is not (Key.Left or Key.Right or Key.Up or Key.Down)) return;
+        e.Handled = true;
+        CommitColorTemperature();
+    }
+
+    private void CommitColorTemperature()
+    {
+        if (Device is not { CanInteract: true, SupportsColorTemperature: true } device) return;
+        CommandRequested?.Invoke(this, new SmartHomeControlRequest(
+            device.EntityId,
+            SmartHomeControlAction.SetColorTemperature,
+            device.ToColorTemperatureKelvin(ColorTemperatureSlider.Value)));
+    }
+
     private void CardSurface_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         if (FindInteractiveAncestor(e.OriginalSource as DependencyObject)) return;

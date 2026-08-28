@@ -28,6 +28,13 @@
 - 许可证：Apache License 2.0。
 - 项目与许可证：<https://www.nuget.org/packages/ZXing.Net/0.16.11>。
 
+## MahApps.Metro.IconPacks.Material 6.2.1
+
+- 用途：智能家居房间导航、菜单以及没有专用设备插画时的矢量后备图标。
+- 引用方式：NuGet `MahApps.Metro.IconPacks.Material` 6.2.1。
+- 组件许可证：MIT License；Material Design Icons 图标数据遵循其上游许可证。
+- 项目与许可证：<https://www.nuget.org/packages/MahApps.Metro.IconPacks.Material/6.2.1>。
+
 ## sherpa-onnx 1.13.4 与 SenseVoice int8 模型
 
 - 用途：本地离线语音输入的麦克风语音识别。

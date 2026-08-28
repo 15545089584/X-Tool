@@ -47,6 +47,21 @@ public partial class SmartDeviceDetailDialog : UserControl
         }
     }
 
+    private void DetailColorTemperatureSlider_Commit(object sender, MouseButtonEventArgs e)
+    {
+        if (Device is not { SupportsColorTemperature: true } device) return;
+        Raise(SmartHomeControlAction.SetColorTemperature,
+            device.ToColorTemperatureKelvin(DetailColorTemperatureSlider.Value));
+    }
+
+    private void DetailColorTemperatureSlider_KeyUp(object sender, KeyEventArgs e)
+    {
+        if (e.Key is not (Key.Left or Key.Right or Key.Up or Key.Down) ||
+            Device is not { SupportsColorTemperature: true } device) return;
+        Raise(SmartHomeControlAction.SetColorTemperature,
+            device.ToColorTemperatureKelvin(DetailColorTemperatureSlider.Value));
+    }
+
     private void FanSlider_Commit(object sender, MouseButtonEventArgs e) =>
         Raise(SmartHomeControlAction.SetFanPercentage, FanSlider.Value);
 

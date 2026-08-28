@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Media;
+using MahApps.Metro.IconPacks;
 
 namespace ScreenshotApp.SmartHome;
 
@@ -27,6 +28,7 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
     private string _operationMessage = string.Empty;
     private bool? _optimisticIsOn;
     private double? _optimisticValue;
+    private double? _optimisticColorTemperatureKelvin;
     private string? _optimisticHvacMode;
     private string? _optimisticFanMode;
     private string? _optimisticSwingMode;
@@ -61,6 +63,23 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
 
     public bool IsOn => _optimisticIsOn ?? GetActualIsOn();
 
+    public bool IsWorking
+    {
+        get
+        {
+            if (!IsAvailable) return false;
+            var state = Primary?.State?.ToLowerInvariant() ?? string.Empty;
+            return Domain switch
+            {
+                "camera" => state is "streaming" or "recording",
+                "climate" => state is not ("off" or "idle" or "unavailable" or "unknown" or ""),
+                "cover" => state is "opening" or "closing",
+                "light" or "switch" or "fan" => IsOn,
+                _ => false
+            };
+        }
+    }
+
     public bool IsCameraLike => ContainsAny(
         string.Join(' ', new[] { Primary?.GetText("icon"), Name, _device.Model }.Where(value => !string.IsNullOrWhiteSpace(value))),
         "camera", "摄像", "监控");
@@ -68,6 +87,8 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
     public bool CanToggle => !IsCameraLike && (_device.Capabilities & SmartDeviceCapabilities.Toggle) != 0;
 
     public bool SupportsBrightness => !IsCameraLike && (_device.Capabilities & SmartDeviceCapabilities.Brightness) != 0;
+
+    public bool SupportsColorTemperature => !IsCameraLike && (_device.Capabilities & SmartDeviceCapabilities.ColorTemperature) != 0;
 
     public bool SupportsTargetTemperature => (_device.Capabilities & SmartDeviceCapabilities.TargetTemperature) != 0;
 
@@ -88,6 +109,17 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
     public bool IsFan => Domain == "fan";
 
     public double BrightnessPercent => _optimisticValue ?? Math.Clamp((Primary?.GetNumber("brightness") ?? 0) / 2.55, 0, 100);
+
+    public double ColorTemperaturePercent
+    {
+        get
+        {
+            var minimum = MinimumColorTemperatureKelvin;
+            var maximum = MaximumColorTemperatureKelvin;
+            var current = Math.Clamp(_optimisticColorTemperatureKelvin ?? CurrentColorTemperatureKelvin, minimum, maximum);
+            return maximum <= minimum ? 50 : (current - minimum) / (maximum - minimum) * 100;
+        }
+    }
 
     public double CoverPosition => _optimisticValue ?? Math.Clamp(Primary?.GetNumber("current_position") ?? 0, 0, 100);
 
@@ -110,6 +142,28 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
     public string CurrentTemperatureText => Primary?.GetNumber("current_temperature") is { } value
         ? $"{ToCelsius(value):0.#}°C"
         : "--";
+
+    public string LiveTemperatureText => ResolveLiveTemperatureText();
+
+    public string LiveHumidityText => ResolveLiveHumidityText();
+
+    public string? DeviceArtworkUri => ResolveDeviceArtworkUri();
+
+    public bool HasDeviceArtwork => DeviceArtworkUri is not null;
+
+    public bool IsLightArtwork => DeviceArtworkUri?.EndsWith("/bulb.png", StringComparison.Ordinal) == true;
+
+    public bool IsClimateArtwork => DeviceArtworkUri?.EndsWith("/air-conditioner.png", StringComparison.Ordinal) == true;
+
+    public bool IsThermoHygrometerArtwork => DeviceArtworkUri?.EndsWith("/thermo-hygrometer.png", StringComparison.Ordinal) == true;
+
+    public double ArtworkOpacity => IsLightArtwork
+        ? IsOn ? 0.58 + BrightnessPercent / 100d * 0.42 : 0.38
+        : IsAvailable ? 1 : 0.62;
+
+    public double ArtworkScale => IsLightArtwork
+        ? IsOn ? 0.88 + BrightnessPercent / 100d * 0.12 : 0.84
+        : 1;
 
     public IReadOnlyList<SmartFeatureOption> FeatureControls => BuildFeatureControls();
 
@@ -192,31 +246,15 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
         _ => "智能设备"
     };
 
-    public string IconGlyph => ResolveIconGlyph();
+    public PackIconMaterialKind IconKind => ResolveIconKind();
 
-    public Brush AccentBrush => CreateBrush(Domain switch
-    {
-        "camera" => "#E5A522",
-        "light" => "#E7A62A",
-        "climate" => "#398CCB",
-        "cover" => "#8264C8",
-        "fan" => "#31A17C",
-        "binary_sensor" => "#D56A78",
-        "sensor" => "#3C93A6",
-        _ => "#5B78C9"
-    });
+    public Brush AccentBrush => CreateBrush(!IsAvailable
+        ? "#9CA6B4"
+        : IsOn ? "#526FAD" : "#72819A");
 
-    public Brush AccentBackground => CreateBrush(Domain switch
-    {
-        "camera" => "#FFF3D8",
-        "light" => "#FFF3D8",
-        "climate" => "#E4F4FF",
-        "cover" => "#F0E9FF",
-        "fan" => "#E2F7EF",
-        "binary_sensor" => "#FCE9ED",
-        "sensor" => "#E3F6F7",
-        _ => "#E8EEFF"
-    });
+    public Brush AccentBackground => CreateBrush(!IsAvailable
+        ? "#EEF0F4"
+        : IsOn ? "#E4EAF7" : "#EDF1F6");
 
     public bool IsBusy
     {
@@ -249,6 +287,7 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
         _device = device;
         _optimisticIsOn = null;
         _optimisticValue = null;
+        _optimisticColorTemperatureKelvin = null;
         _optimisticHvacMode = null;
         _optimisticFanMode = null;
         _optimisticSwingMode = null;
@@ -284,9 +323,16 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
             SmartHomeControlAction.TurnOff => false,
             _ => _optimisticIsOn
         };
-        if (request.NumericValue is not null) _optimisticValue = request.NumericValue;
+        if (request.NumericValue is not null && request.Action != SmartHomeControlAction.SetColorTemperature)
+        {
+            _optimisticValue = request.NumericValue;
+        }
         switch (request.Action)
         {
+            case SmartHomeControlAction.SetColorTemperature:
+                _optimisticColorTemperatureKelvin = request.NumericValue;
+                _optimisticIsOn = true;
+                break;
             case SmartHomeControlAction.SetHvacMode:
                 _optimisticHvacMode = request.TextValue;
                 _optimisticIsOn = !string.Equals(request.TextValue, "off", StringComparison.OrdinalIgnoreCase);
@@ -310,6 +356,7 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
     {
         _optimisticIsOn = null;
         _optimisticValue = null;
+        _optimisticColorTemperatureKelvin = null;
         _optimisticHvacMode = null;
         _optimisticFanMode = null;
         _optimisticSwingMode = null;
@@ -329,6 +376,12 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
     public double ToSourceTemperature(double celsius) => IsSourceFahrenheit
         ? celsius * 9d / 5d + 32d
         : celsius;
+
+    public double ToColorTemperatureKelvin(double percent)
+    {
+        var normalized = Math.Clamp(percent, 0, 100) / 100d;
+        return MinimumColorTemperatureKelvin + normalized * (MaximumColorTemperatureKelvin - MinimumColorTemperatureKelvin);
+    }
 
     public void BeginInsightsLoad()
     {
@@ -432,6 +485,71 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
     private bool IsSourceFahrenheit => _device.TemperatureUnit.Contains("F", StringComparison.OrdinalIgnoreCase);
 
     private double ToCelsius(double value) => IsSourceFahrenheit ? (value - 32d) * 5d / 9d : value;
+
+    private double MinimumColorTemperatureKelvin =>
+        Primary?.GetNumber("min_color_temp_kelvin") ??
+        MiredToKelvin(Primary?.GetNumber("max_mireds")) ??
+        2200;
+
+    private double MaximumColorTemperatureKelvin =>
+        Primary?.GetNumber("max_color_temp_kelvin") ??
+        MiredToKelvin(Primary?.GetNumber("min_mireds")) ??
+        6500;
+
+    private double CurrentColorTemperatureKelvin =>
+        Primary?.GetNumber("color_temp_kelvin") ??
+        MiredToKelvin(Primary?.GetNumber("color_temp")) ??
+        4000;
+
+    private static double? MiredToKelvin(double? mired) => mired is > 0 ? 1_000_000d / mired.Value : null;
+
+    private string ResolveLiveTemperatureText()
+    {
+        if (Primary?.GetNumber("current_temperature") is { } climateValue)
+        {
+            return $"{ToCelsius(climateValue):0.#}°C";
+        }
+
+        var sensor = _device.Entities.FirstOrDefault(entity =>
+            string.Equals(entity.GetText("device_class"), "temperature", StringComparison.OrdinalIgnoreCase) ||
+            entity.GetText("unit_of_measurement") is "℃" or "°C" or "°F");
+        if (sensor is null || !double.TryParse(sensor.State, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var value)) return "--°C";
+        var unit = sensor.GetText("unit_of_measurement") ?? string.Empty;
+        var celsius = unit.Contains("F", StringComparison.OrdinalIgnoreCase) ? (value - 32d) * 5d / 9d : value;
+        return $"{celsius:0.#}°C";
+    }
+
+    private string ResolveLiveHumidityText()
+    {
+        var sensor = _device.Entities.FirstOrDefault(entity =>
+            string.Equals(entity.GetText("device_class"), "humidity", StringComparison.OrdinalIgnoreCase) ||
+            entity.GetText("unit_of_measurement") == "%");
+        return sensor is null ? "--%" : $"{sensor.State}%";
+    }
+
+    private string? ResolveDeviceArtworkUri()
+    {
+        var hint = BuildDeviceHint();
+        var file = ContainsAny(hint, "camera", "摄像", "监控") ? "camera.png"
+            : ContainsAny(hint, "air-conditioner", "thermostat", "空调") ? "air-conditioner.png"
+            : ContainsAny(hint, "ceiling-fan", "fan", "风扇") ? "fan.png"
+            : ContainsAny(hint, "lightbulb", "bulb", "lamp", "吸顶", "灯泡", "灯") ? "bulb.png"
+            : ContainsAny(hint, "speaker", "音箱", "音响", "小爱") ? "smart-speaker.png"
+            : ContainsAny(hint, "router", "路由") ? "router.png"
+            : ContainsAny(hint, "temperature", "thermometer", "humidity", "温度", "湿度") ? "thermo-hygrometer.png"
+            : null;
+        return file is null ? null : $"/XTool;component/Assets/SmartHome/Devices/{file}";
+    }
+
+    private string BuildDeviceHint() => string.Join(' ', new[]
+    {
+        Primary?.GetText("icon"),
+        Primary?.GetText("device_class"),
+        Name,
+        _device.Model,
+        Domain
+    }.Where(value => !string.IsNullOrWhiteSpace(value))).ToLowerInvariant();
 
     private IReadOnlyList<SmartFeatureOption> BuildFeatureControls()
     {
@@ -568,7 +686,10 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
         foreach (var property in new[]
                  {
                      nameof(Name), nameof(AreaName), nameof(AreaId), nameof(EntityId), nameof(Domain), nameof(IsAvailable),
-                     nameof(CanInteract), nameof(IsCameraLike), nameof(IsOn), nameof(CanToggle), nameof(SupportsBrightness), nameof(SupportsTargetTemperature),
+                     nameof(CanInteract), nameof(IsCameraLike), nameof(IsOn), nameof(IsWorking), nameof(CanToggle), nameof(SupportsBrightness), nameof(SupportsTargetTemperature),
+                     nameof(SupportsColorTemperature), nameof(ColorTemperaturePercent), nameof(LiveTemperatureText), nameof(LiveHumidityText),
+                     nameof(DeviceArtworkUri), nameof(HasDeviceArtwork), nameof(IsLightArtwork), nameof(IsClimateArtwork), nameof(IsThermoHygrometerArtwork),
+                     nameof(ArtworkOpacity), nameof(ArtworkScale),
                      nameof(SupportsCoverPosition), nameof(SupportsFanPercentage), nameof(SupportsHvacMode),
                      nameof(SupportsFanMode), nameof(SupportsSwingMode), nameof(SupportsPreset), nameof(IsClimate),
                      nameof(IsFan), nameof(BrightnessPercent), nameof(CoverPosition), nameof(FanPercentage),
@@ -580,7 +701,7 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
                      nameof(PresetModeOptions), nameof(CurrentHvacMode), nameof(CurrentFanMode),
                      nameof(CurrentSwingMode), nameof(CurrentPresetMode), nameof(MainState),
                      nameof(SupportingSummary), nameof(StatusText), nameof(CompactState), nameof(DeviceTypeLabel),
-                     nameof(ToggleLabel), nameof(IconGlyph), nameof(AccentBrush), nameof(AccentBackground)
+                     nameof(ToggleLabel), nameof(IconKind), nameof(AccentBrush), nameof(AccentBackground)
                  })
         {
             OnPropertyChanged(property);
@@ -597,39 +718,35 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
         return brush;
     }
 
-    private string ResolveIconGlyph()
+    private PackIconMaterialKind ResolveIconKind()
     {
-        var hint = string.Join(' ', new[]
-        {
-            Primary?.GetText("icon"),
-            Primary?.GetText("device_class"),
-            Name,
-            _device.Model,
-            Domain
-        }.Where(value => !string.IsNullOrWhiteSpace(value))).ToLowerInvariant();
+        var hint = BuildDeviceHint();
 
-        // 优先尊重 Home Assistant 暴露的原生图标语义，再按设备名称与领域回退。
-        if (ContainsAny(hint, "camera", "摄像", "监控")) return "\uE722";
-        if (ContainsAny(hint, "air-conditioner", "thermostat", "空调")) return "\uE9CA";
-        if (ContainsAny(hint, "ceiling-fan", "fan", "风扇")) return "\uE9A9";
-        if (ContainsAny(hint, "lightbulb", "bulb", "lamp", "灯泡", "灯")) return "\uE706";
-        if (ContainsAny(hint, "speaker", "音箱", "音响")) return "\uE8D6";
-        if (ContainsAny(hint, "router", "路由")) return "\uE839";
-        if (ContainsAny(hint, "temperature", "thermometer", "温度", "湿度")) return "\uE9CA";
-        if (ContainsAny(hint, "plug", "outlet", "socket", "插座")) return "\uE7E8";
-        if (ContainsAny(hint, "curtain", "blind", "cover", "窗帘")) return "\uE7E7";
+        // Home Assistant 同样使用 Material Design Icons；优先按设备语义选择具体家电图标。
+        if (ContainsAny(hint, "air-purifier", "purifier", "净化")) return PackIconMaterialKind.AirPurifier;
+        if (ContainsAny(hint, "camera", "摄像", "监控")) return PackIconMaterialKind.CameraOutline;
+        if (ContainsAny(hint, "air-conditioner", "thermostat", "空调")) return PackIconMaterialKind.AirConditioner;
+        if (ContainsAny(hint, "ceiling-fan", "fan", "风扇")) return PackIconMaterialKind.CeilingFan;
+        if (ContainsAny(hint, "ceiling-light", "吸顶")) return PackIconMaterialKind.CeilingLight;
+        if (ContainsAny(hint, "lightbulb", "bulb", "lamp", "灯泡", "灯")) return PackIconMaterialKind.LightbulbOutline;
+        if (ContainsAny(hint, "speaker", "音箱", "音响")) return PackIconMaterialKind.SpeakerWireless;
+        if (ContainsAny(hint, "router", "路由")) return PackIconMaterialKind.RouterWireless;
+        if (ContainsAny(hint, "temperature", "thermometer", "温度", "湿度")) return PackIconMaterialKind.HomeThermometerOutline;
+        if (ContainsAny(hint, "plug", "outlet", "socket", "插座")) return PackIconMaterialKind.PowerSocket;
+        if (ContainsAny(hint, "curtain", "blind", "cover", "窗帘")) return PackIconMaterialKind.Curtains;
+        if (ContainsAny(hint, "door", "window", "门窗")) return IsOn ? PackIconMaterialKind.DoorOpen : PackIconMaterialKind.DoorClosed;
 
         return Domain switch
         {
-            "camera" => "\uE722",
-            "light" => "\uE706",
-            "switch" => "\uE7E8",
-            "climate" => "\uE9CA",
-            "cover" => "\uE7E7",
-            "fan" => "\uE9A9",
-            "binary_sensor" => "\uE81E",
-            "sensor" => "\uE9D9",
-            _ => "\uE772"
+            "camera" => PackIconMaterialKind.CameraOutline,
+            "light" => PackIconMaterialKind.LightbulbOutline,
+            "switch" => PackIconMaterialKind.ToggleSwitchOutline,
+            "climate" => PackIconMaterialKind.AirConditioner,
+            "cover" => PackIconMaterialKind.Curtains,
+            "fan" => PackIconMaterialKind.CeilingFan,
+            "binary_sensor" => PackIconMaterialKind.CheckCircleOutline,
+            "sensor" => PackIconMaterialKind.Gauge,
+            _ => PackIconMaterialKind.HomeAutomation
         };
     }
 
