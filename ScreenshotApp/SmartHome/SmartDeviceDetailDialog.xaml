@@ -424,33 +424,33 @@
                                 </ListBox.ItemTemplate>
                             </ListBox>
 
-                            <Grid Margin="0,18,0,0">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="14" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                                <StackPanel Visibility="{Binding SupportsFanMode, Converter={StaticResource BoolToVisibility}}">
-                                    <TextBlock Margin="2,0,0,7" FontSize="10.5" Foreground="#71849A" Text="空调风速" />
-                                    <Grid>
-                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="10" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                                        <Grid x:Name="FanModeBar" Height="42" ClipToBounds="True" Cursor="Hand" Background="Transparent"
-                                              MouseLeftButtonDown="FanModeBar_MouseLeftButtonDown" MouseMove="FanModeBar_MouseMove"
-                                              MouseLeftButtonUp="FanModeBar_MouseLeftButtonUp" SizeChanged="FanModeBar_SizeChanged"
-                                              Visibility="{Binding HasFanModeLevels, Converter={StaticResource BoolToVisibility}}">
-                                            <Border Background="#E4E9F0F8" BorderBrush="#AFFFFFFF" BorderThickness="1" CornerRadius="21" />
-                                            <Border x:Name="FanModeFill" Background="#4D7CFE" CornerRadius="21" HorizontalAlignment="Left" Width="0" />
-                                            <TextBlock x:Name="FanModeFillLabel" Margin="18,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center"
-                                                       FontSize="12.5" FontWeight="SemiBold" Foreground="White"
-                                                       Text="{Binding CurrentFanModeText, Mode=OneWay}" />
-                                        </Grid>
-                                        <Button Grid.Column="2" Width="84" Height="42" Content="自动" Style="{StaticResource SoftButtonStyle}"
-                                                Click="FanAutoMode_Click"
-                                                Visibility="{Binding HasFanAutoMode, Converter={StaticResource BoolToVisibility}}" />
+                            <StackPanel Margin="0,18,0,0" HorizontalAlignment="Center" MaxWidth="620"
+                                        Visibility="{Binding SupportsFanMode, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Margin="2,0,0,7" FontSize="10.5" Foreground="#71849A" Text="空调风速" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="12" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <Grid x:Name="FanModeBar" Height="42" ClipToBounds="True" Cursor="Hand" Background="Transparent"
+                                          MouseLeftButtonDown="FanModeBar_MouseLeftButtonDown" MouseMove="FanModeBar_MouseMove"
+                                          MouseLeftButtonUp="FanModeBar_MouseLeftButtonUp" SizeChanged="FanModeBar_SizeChanged"
+                                          Visibility="{Binding HasFanModeLevels, Converter={StaticResource BoolToVisibility}}">
+                                        <Border Background="#E4E9F0F8" BorderBrush="#AFFFFFFF" BorderThickness="1" CornerRadius="21" />
+                                        <Border x:Name="FanModeFill" Background="#4D7CFE" CornerRadius="21" HorizontalAlignment="Left" Width="0" />
+                                        <TextBlock x:Name="FanModeFillLabel" Margin="18,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center"
+                                                   FontSize="12.5" FontWeight="SemiBold" Foreground="White"
+                                                   Text="{Binding CurrentFanModeText, Mode=OneWay}" />
                                     </Grid>
-                                </StackPanel>
-                                <StackPanel Grid.Column="2" Visibility="{Binding SupportsSwingMode, Converter={StaticResource BoolToVisibility}}">
-                                    <TextBlock Margin="2,0,0,7" FontSize="10.5" Foreground="#71849A" Text="摆风方式" />
-                                    <ComboBox Style="{StaticResource DetailComboBoxStyle}" ItemsSource="{Binding SwingModeOptions}" DisplayMemberPath="DisplayName" SelectedValuePath="Value"
-                                              SelectedValue="{Binding CurrentSwingMode, Mode=OneWay}" IsEnabled="{Binding CanInteract}" SelectionChanged="SwingModeComboBox_SelectionChanged" />
-                                </StackPanel>
-                            </Grid>
+                                    <Button Grid.Column="2" Width="96" Height="42" Content="自动" Style="{StaticResource SoftButtonStyle}"
+                                            Click="FanAutoMode_Click"
+                                            Visibility="{Binding HasFanAutoMode, Converter={StaticResource BoolToVisibility}}" />
+                                </Grid>
+                            </StackPanel>
+
+                            <StackPanel Margin="0,16,0,0" HorizontalAlignment="Center" MaxWidth="620"
+                                        Visibility="{Binding SupportsSwingMode, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Margin="2,0,0,7" FontSize="10.5" Foreground="#71849A" Text="摆风方式" />
+                                <ComboBox MaxWidth="620" HorizontalAlignment="Stretch" Style="{StaticResource DetailComboBoxStyle}" ItemsSource="{Binding SwingModeOptions}" DisplayMemberPath="DisplayName" SelectedValuePath="Value"
+                                          SelectedValue="{Binding CurrentSwingMode, Mode=OneWay}" IsEnabled="{Binding CanInteract}" SelectionChanged="SwingModeComboBox_SelectionChanged" />
+                            </StackPanel>
 
                             <ItemsControl Margin="0,14,0,0" ItemsSource="{Binding AuxiliarySelects}" Visibility="{Binding HasAuxiliarySelects, Converter={StaticResource BoolToVisibility}}">
                                 <ItemsControl.ItemTemplate>
@@ -764,21 +764,21 @@
                             <StackPanel x:Name="EnergyDailyPanel" Margin="0,12,0,0"
                                         Visibility="{Binding HasDailyEnergy, Converter={StaticResource BoolToVisibility}}">
                                 <UniformGrid Columns="7" Margin="0,0,0,4">
-                                    <TextBlock HorizontalAlignment="Center" FontSize="10" Foreground="#9AA9B8" Text="日" />
-                                    <TextBlock HorizontalAlignment="Center" FontSize="10" Foreground="#9AA9B8" Text="一" />
-                                    <TextBlock HorizontalAlignment="Center" FontSize="10" Foreground="#9AA9B8" Text="二" />
-                                    <TextBlock HorizontalAlignment="Center" FontSize="10" Foreground="#9AA9B8" Text="三" />
-                                    <TextBlock HorizontalAlignment="Center" FontSize="10" Foreground="#9AA9B8" Text="四" />
-                                    <TextBlock HorizontalAlignment="Center" FontSize="10" Foreground="#9AA9B8" Text="五" />
-                                    <TextBlock HorizontalAlignment="Center" FontSize="10" Foreground="#9AA9B8" Text="六" />
+                                    <TextBlock HorizontalAlignment="Center" FontSize="11" Foreground="#9AA9B8" Text="日" />
+                                    <TextBlock HorizontalAlignment="Center" FontSize="11" Foreground="#9AA9B8" Text="一" />
+                                    <TextBlock HorizontalAlignment="Center" FontSize="11" Foreground="#9AA9B8" Text="二" />
+                                    <TextBlock HorizontalAlignment="Center" FontSize="11" Foreground="#9AA9B8" Text="三" />
+                                    <TextBlock HorizontalAlignment="Center" FontSize="11" Foreground="#9AA9B8" Text="四" />
+                                    <TextBlock HorizontalAlignment="Center" FontSize="11" Foreground="#9AA9B8" Text="五" />
+                                    <TextBlock HorizontalAlignment="Center" FontSize="11" Foreground="#9AA9B8" Text="六" />
                                 </UniformGrid>
                                 <ItemsControl ItemsSource="{Binding EnergyCalendarCells}">
                                     <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="7" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <StackPanel Margin="1,5" HorizontalAlignment="Center" MinHeight="40">
-                                                <TextBlock HorizontalAlignment="Center" FontSize="12" FontWeight="SemiBold" Foreground="#53667D" Text="{Binding DayNumber}" />
-                                                <TextBlock Margin="0,2,0,0" HorizontalAlignment="Center" FontSize="9.5" Foreground="#4D7CFE" Text="{Binding UsageText}" />
+                                            <StackPanel Margin="1,7" HorizontalAlignment="Center" MinHeight="48">
+                                                <TextBlock HorizontalAlignment="Center" FontSize="14" FontWeight="SemiBold" Foreground="#53667D" Text="{Binding DayNumber}" />
+                                                <TextBlock Margin="0,3,0,0" HorizontalAlignment="Center" FontSize="11.5" Foreground="#4D7CFE" Text="{Binding UsageText}" />
                                             </StackPanel>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>

@@ -317,14 +317,18 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
                 : Task.FromResult<IReadOnlyList<EnergyStatistic>>(Array.Empty<EnergyStatistic>());
             await Task.WhenAll(temperatureTask, energyTask, energyStatisticsTask, yearlyStatisticsTask).ConfigureAwait(false);
 
-            var temperaturePoints = Downsample(temperatureTask.Result
-                .Select(item => item.CurrentTemperature is null
-                    ? null
-                    : new SmartHistoryPoint(item.Timestamp, ToCelsius(item.CurrentTemperature.Value)))
-                .Where(item => item is not null)
-                .Cast<SmartHistoryPoint>()
+            // 每小时聚合一个采样点：24 小时曲线固定 24 个点，按最接近整点的记录取值。
+            var temperaturePoints = temperatureTask.Result
+                .Where(item => item.CurrentTemperature is not null)
+                .GroupBy(item => new DateTimeOffset(
+                    item.Timestamp.LocalDateTime.Year, item.Timestamp.LocalDateTime.Month,
+                    item.Timestamp.LocalDateTime.Day, item.Timestamp.LocalDateTime.Hour, 0, 0, item.Timestamp.Offset))
+                .Select(group => group
+                    .OrderBy(item => Math.Abs((item.Timestamp - group.Key).TotalMinutes))
+                    .First())
+                .Select(item => new SmartHistoryPoint(item.Timestamp, ToCelsius(item.CurrentTemperature!.Value)))
                 .OrderBy(item => item.Timestamp)
-                .ToArray(), 48);
+                .ToArray();
 
             var energyHistory = energyTask.Result
                 .Where(item => item.NumericState is not null)
@@ -361,7 +365,7 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
                 EnergyYearLabel = $"{now.Year - Math.Max(0, yearOffset)}",
                 DailyEnergy = dailyEnergy,
                 MonthlyEnergy = monthlyEnergy,
-                Message = temperaturePoints.Count == 0 && energyHistory.Length == 0 && energyStatistics.Count == 0
+                Message = temperaturePoints.Length == 0 && energyHistory.Length == 0 && energyStatistics.Count == 0
                     ? "Home Assistant 暂无可用的历史记录。"
                     : string.Empty
             };
