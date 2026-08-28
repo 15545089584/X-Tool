@@ -3,375 +3,276 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:ScreenshotApp.SmartHome"
              xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks"
-             x:Name="Root"
-             Width="760" MaxHeight="760">
+             x:Name="Root" Width="900" MaxHeight="790">
     <UserControl.Resources>
         <ResourceDictionary>
-        <ResourceDictionary.MergedDictionaries>
-            <ResourceDictionary Source="/XTool;component/SmartHome/SmartHomeFrostedTheme.xaml" />
-        </ResourceDictionary.MergedDictionaries>
-        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
-        <local:SmartComboSelectionConverter x:Key="SmartComboSelectionConverter" />
-        <Style x:Key="DetailButtonStyle" TargetType="Button">
-            <Setter Property="Height" Value="38" />
-            <Setter Property="Padding" Value="16,0" />
-            <Setter Property="Background" Value="{StaticResource SmartHomeGlassControlBrush}" />
-            <Setter Property="Foreground" Value="{StaticResource SmartHomeTextPrimaryBrush}" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="Surface" Background="{TemplateBinding Background}"
-                                BorderBrush="#7FFFFFFF" BorderThickness="1" CornerRadius="13">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
-                                              TextElement.Foreground="{TemplateBinding Foreground}" />
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Surface" Property="Opacity" Value="0.82" />
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Surface" Property="Opacity" Value="0.65" />
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter TargetName="Surface" Property="Opacity" Value="0.42" />
-                            </Trigger>
-                            <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter TargetName="Surface" Property="BorderBrush" Value="{StaticResource SmartHomePrimaryBrush}" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-        <Style x:Key="DetailComboBoxStyle" TargetType="ComboBox">
-            <Setter Property="Height" Value="42" />
-            <Setter Property="Padding" Value="13,0" />
-            <Setter Property="Background" Value="{StaticResource SmartHomeGlassControlBrush}" />
-            <Setter Property="Foreground" Value="{StaticResource SmartHomeTextPrimaryBrush}" />
-            <Setter Property="BorderBrush" Value="{StaticResource SmartHomeGlassBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="ItemContainerStyle">
-                <Setter.Value>
-                    <Style TargetType="ComboBoxItem">
-                        <Setter Property="Padding" Value="13,9" />
-                        <Setter Property="Foreground" Value="{StaticResource SmartHomeTextPrimaryBrush}" />
-                        <Setter Property="Background" Value="Transparent" />
-                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                        <Setter Property="Template">
-                            <Setter.Value>
-                                <ControlTemplate TargetType="ComboBoxItem">
-                                    <Border x:Name="ItemSurface" Margin="4,2" Padding="{TemplateBinding Padding}"
-                                            Background="{TemplateBinding Background}" CornerRadius="9">
-                                        <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}" />
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsHighlighted" Value="True">
-                                            <Setter TargetName="ItemSurface" Property="Background" Value="#DCE2F8" />
-                                        </Trigger>
-                                        <Trigger Property="IsSelected" Value="True">
-                                            <Setter TargetName="ItemSurface" Property="Background" Value="{StaticResource SmartHomePrimarySoftBrush}" />
-                                            <Setter Property="Foreground" Value="{StaticResource SmartHomePrimaryBrush}" />
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </Setter.Value>
-                        </Setter>
-                    </Style>
-                </Setter.Value>
-            </Setter>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ComboBox">
-                        <Grid>
-                            <Border x:Name="ComboSurface" Background="{TemplateBinding Background}"
-                                    BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
-                                    CornerRadius="12">
-                                <Grid>
-                                    <TextBlock Margin="13,0,40,0" VerticalAlignment="Center"
-                                               Foreground="{TemplateBinding Foreground}"
-                                               Text="{Binding SelectedItem, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource SmartComboSelectionConverter}}"
-                                               TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Margin="0,0,14,0" HorizontalAlignment="Right" VerticalAlignment="Center"
-                                               FontFamily="Segoe Fluent Icons" FontSize="11" Foreground="{StaticResource SmartHomeTextSecondaryBrush}" Text="&#xE70D;" />
-                                </Grid>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/XTool;component/SmartHome/SmartHomeFrostedTheme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+            <local:SmartComboSelectionConverter x:Key="SmartComboSelectionConverter" />
+
+            <Style x:Key="SoftButtonStyle" TargetType="Button">
+                <Setter Property="Height" Value="42" />
+                <Setter Property="Padding" Value="16,0" />
+                <Setter Property="Background" Value="#C6EFF3F8" />
+                <Setter Property="Foreground" Value="{StaticResource SmartHomeTextPrimaryBrush}" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Surface" Background="{TemplateBinding Background}" BorderBrush="#AFFFFFFF"
+                                    BorderThickness="1" CornerRadius="15">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                  TextElement.Foreground="{TemplateBinding Foreground}" />
                             </Border>
-                            <ToggleButton Background="Transparent" BorderThickness="0" Focusable="False"
-                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
-                                <ToggleButton.Template>
-                                    <ControlTemplate TargetType="ToggleButton"><Border Background="Transparent" /></ControlTemplate>
-                                </ToggleButton.Template>
-                            </ToggleButton>
-                            <Popup x:Name="PART_Popup" Margin="0,6,0,0" AllowsTransparency="True" Focusable="False"
-                                   IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" PopupAnimation="Fade">
-                                <Border MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
-                                        MaxHeight="250" Padding="2" Background="#F4FFFFFF" BorderBrush="{StaticResource SmartHomeGlassBorderStrongBrush}"
-                                        BorderThickness="1" CornerRadius="13" Effect="{StaticResource SmartHomeCardShadow}">
-                                    <ScrollViewer CanContentScroll="True" VerticalScrollBarVisibility="Auto">
-                                        <ItemsPresenter />
-                                    </ScrollViewer>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Surface" Property="Background" Value="#F4FFFFFF" /></Trigger>
+                                <Trigger Property="IsPressed" Value="True"><Setter TargetName="Surface" Property="Opacity" Value="0.68" /></Trigger>
+                                <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Surface" Property="Opacity" Value="0.38" /></Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <Style x:Key="RoundButtonStyle" TargetType="Button" BasedOn="{StaticResource SoftButtonStyle}">
+                <Setter Property="Width" Value="58" />
+                <Setter Property="Height" Value="58" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Surface" Width="{TemplateBinding Width}" Height="{TemplateBinding Height}"
+                                    Background="{TemplateBinding Background}" BorderBrush="#B7FFFFFF"
+                                    BorderThickness="1" CornerRadius="29">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                  TextElement.Foreground="{TemplateBinding Foreground}" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Surface" Property="Background" Value="#F8FFFFFF" /></Trigger>
+                                <Trigger Property="IsPressed" Value="True"><Setter TargetName="Surface" Property="Opacity" Value="0.65" /></Trigger>
+                                <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Surface" Property="Opacity" Value="0.36" /></Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <Style x:Key="DetailComboBoxStyle" TargetType="ComboBox">
+                <Setter Property="Height" Value="42" />
+                <Setter Property="Padding" Value="13,0" />
+                <Setter Property="Background" Value="#CDEEF3F8" />
+                <Setter Property="Foreground" Value="{StaticResource SmartHomeTextPrimaryBrush}" />
+                <Setter Property="BorderBrush" Value="#B0FFFFFF" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="ItemContainerStyle">
+                    <Setter.Value>
+                        <Style TargetType="ComboBoxItem">
+                            <Setter Property="Padding" Value="13,9" />
+                            <Setter Property="Foreground" Value="{StaticResource SmartHomeTextPrimaryBrush}" />
+                            <Setter Property="Background" Value="Transparent" />
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ComboBoxItem">
+                                        <Border x:Name="ItemSurface" Margin="4,2" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}" CornerRadius="10">
+                                            <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}" />
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="ItemSurface" Property="Background" Value="#E5EAF6" /></Trigger>
+                                            <Trigger Property="IsSelected" Value="True"><Setter TargetName="ItemSurface" Property="Background" Value="{StaticResource SmartHomePrimarySoftBrush}" /><Setter Property="Foreground" Value="{StaticResource SmartHomePrimaryBrush}" /></Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Setter.Value>
+                </Setter>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ComboBox">
+                            <Grid>
+                                <Border x:Name="ComboSurface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="14">
+                                    <Grid>
+                                        <TextBlock Margin="13,0,40,0" VerticalAlignment="Center" Foreground="{TemplateBinding Foreground}"
+                                                   Text="{Binding SelectedItem, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource SmartComboSelectionConverter}}" TextTrimming="CharacterEllipsis" />
+                                        <iconPacks:PackIconMaterial Width="16" Height="16" Margin="0,0,13,0" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="#6E8098" Kind="ChevronDown" />
+                                    </Grid>
                                 </Border>
-                            </Popup>
-                        </Grid>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ComboSurface" Property="BorderBrush" Value="{StaticResource SmartHomeGlassBorderStrongBrush}" /></Trigger>
-                            <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="ComboSurface" Property="BorderBrush" Value="{StaticResource SmartHomePrimaryBrush}" /></Trigger>
-                            <Trigger Property="IsEnabled" Value="False"><Setter TargetName="ComboSurface" Property="Opacity" Value="0.5" /></Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-        <Style x:Key="ModePillStyle" TargetType="ListBoxItem">
-            <Setter Property="Padding" Value="13,9" />
-            <Setter Property="Margin" Value="0,0,8,0" />
-            <Setter Property="Background" Value="{StaticResource SmartHomeGlassControlBrush}" />
-            <Setter Property="Foreground" Value="{StaticResource SmartHomeTextSecondaryBrush}" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ListBoxItem">
-                        <Border x:Name="ModeSurface" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}"
-                                BorderBrush="{StaticResource SmartHomeGlassBorderBrush}" BorderThickness="1" CornerRadius="14">
-                            <ContentPresenter HorizontalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}" />
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ModeSurface" Property="Background" Value="#E8FFFFFF" /></Trigger>
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="ModeSurface" Property="Background" Value="{StaticResource SmartHomePrimaryBrush}" />
-                                <Setter Property="Foreground" Value="White" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-        <Style x:Key="FeatureButtonStyle" TargetType="Button" BasedOn="{StaticResource DetailButtonStyle}">
-            <Setter Property="Width" Value="132" />
-            <Setter Property="Height" Value="68" />
-            <Setter Property="Margin" Value="0,0,9,9" />
-            <Setter Property="Padding" Value="12" />
-            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-            <Setter Property="Background" Value="{StaticResource SmartHomeGlassControlBrush}" />
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding IsOn}" Value="True">
-                    <Setter Property="Background" Value="{StaticResource SmartHomePrimarySoftBrush}" />
-                    <Setter Property="Foreground" Value="{StaticResource SmartHomePrimaryBrush}" />
-                </DataTrigger>
-            </Style.Triggers>
-        </Style>
-        <Style x:Key="SectionCardStyle" TargetType="Border">
-            <Setter Property="Margin" Value="0,0,0,12" />
-            <Setter Property="Padding" Value="18,16" />
-            <Setter Property="Background" Value="{StaticResource SmartHomeGlassSectionBrush}" />
-            <Setter Property="BorderBrush" Value="{StaticResource SmartHomeGlassBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="18" />
-        </Style>
+                                <ToggleButton Background="Transparent" BorderThickness="0" Focusable="False" IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                                    <ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><Border Background="Transparent" /></ControlTemplate></ToggleButton.Template>
+                                </ToggleButton>
+                                <Popup x:Name="PART_Popup" Margin="0,6,0,0" AllowsTransparency="True" Focusable="False" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" PopupAnimation="Fade">
+                                    <Border MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" MaxHeight="250" Padding="2"
+                                            Background="#F8FFFFFF" BorderBrush="#D3DCE9" BorderThickness="1" CornerRadius="14" Effect="{StaticResource SmartHomeCardShadow}">
+                                        <ScrollViewer CanContentScroll="True" VerticalScrollBarVisibility="Auto"><ItemsPresenter /></ScrollViewer>
+                                    </Border>
+                                </Popup>
+                            </Grid>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ComboSurface" Property="BorderBrush" Value="{StaticResource SmartHomeGlassBorderStrongBrush}" /></Trigger>
+                                <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="ComboSurface" Property="BorderBrush" Value="{StaticResource SmartHomePrimaryBrush}" /></Trigger>
+                                <Trigger Property="IsEnabled" Value="False"><Setter TargetName="ComboSurface" Property="Opacity" Value="0.45" /></Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <Style x:Key="ModeButtonStyle" TargetType="ListBoxItem">
+                <Setter Property="Width" Value="76" />
+                <Setter Property="Height" Value="84" />
+                <Setter Property="Margin" Value="0,0,12,0" />
+                <Setter Property="Foreground" Value="#64758C" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ListBoxItem">
+                            <StackPanel HorizontalAlignment="Center">
+                                <Border x:Name="ModeCircle" Width="58" Height="58" Background="#C7EEF2F7" BorderBrush="#B0FFFFFF" BorderThickness="1" CornerRadius="29">
+                                    <iconPacks:PackIconMaterial Width="25" Height="25" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                Foreground="{TemplateBinding Foreground}" Kind="WeatherSnowy" />
+                                </Border>
+                                <ContentPresenter Margin="0,7,0,0" HorizontalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}" />
+                            </StackPanel>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ModeCircle" Property="Background" Value="#F4FFFFFF" /></Trigger>
+                                <Trigger Property="IsSelected" Value="True"><Setter TargetName="ModeCircle" Property="Background" Value="#526FAD" /><Setter Property="Foreground" Value="White" /></Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <Style x:Key="SectionCardStyle" TargetType="Border">
+                <Setter Property="Margin" Value="0,0,0,13" />
+                <Setter Property="Padding" Value="20,18" />
+                <Setter Property="Background" Value="#BDF6F8FC" />
+                <Setter Property="BorderBrush" Value="#AFFFFFFF" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="22" />
+            </Style>
         </ResourceDictionary>
     </UserControl.Resources>
 
-    <Border Padding="26,24" Background="{StaticResource SmartHomeGlassCardBrush}"
-            BorderBrush="{StaticResource SmartHomeGlassBorderStrongBrush}" BorderThickness="1" CornerRadius="26"
-            DataContext="{Binding Device, ElementName=Root}" Effect="{StaticResource SmartHomeDialogShadow}">
+    <Border Padding="24,22" Background="#F4F7F9FD" BorderBrush="#E2FFFFFF" BorderThickness="1"
+            CornerRadius="28" DataContext="{Binding Device, ElementName=Root}" Effect="{StaticResource SmartHomeDialogShadow}">
         <Grid>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="18" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="14" />
-                <RowDefinition Height="*" />
-            </Grid.RowDefinitions>
+            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="14" /><RowDefinition Height="*" /></Grid.RowDefinitions>
 
             <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="64" />
-                    <ColumnDefinition Width="14" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <Border Width="62" Height="62" Background="{Binding AccentBackground}" CornerRadius="19">
-                    <Grid>
-                        <Image Margin="5" Stretch="Uniform" Source="{Binding DeviceArtworkUri}" RenderOptions.BitmapScalingMode="HighQuality">
-                            <Image.Style>
-                                <Style TargetType="Image">
-                                    <Setter Property="Visibility" Value="Collapsed" />
-                                    <Style.Triggers><DataTrigger Binding="{Binding HasDeviceArtwork}" Value="True"><Setter Property="Visibility" Value="Visible" /></DataTrigger></Style.Triggers>
-                                </Style>
-                            </Image.Style>
-                        </Image>
-                        <iconPacks:PackIconMaterial Width="30" Height="30" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                    Foreground="{Binding AccentBrush}" Kind="{Binding IconKind}">
-                            <iconPacks:PackIconMaterial.Style>
-                                <Style TargetType="iconPacks:PackIconMaterial">
-                                    <Setter Property="Visibility" Value="Visible" />
-                                    <Style.Triggers><DataTrigger Binding="{Binding HasDeviceArtwork}" Value="True"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger></Style.Triggers>
-                                </Style>
-                            </iconPacks:PackIconMaterial.Style>
-                        </iconPacks:PackIconMaterial>
-                    </Grid>
-                </Border>
-                <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                    <TextBlock FontSize="21" FontWeight="SemiBold" Foreground="{StaticResource SmartHomeTextPrimaryBrush}" Text="{Binding Name}"
-                               TextTrimming="CharacterEllipsis" />
-                    <StackPanel Margin="0,6,0,0" Orientation="Horizontal">
+                <StackPanel>
+                    <TextBlock MaxWidth="760" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource SmartHomeTextPrimaryBrush}"
+                               Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                    <StackPanel Margin="1,6,0,0" Orientation="Horizontal">
                         <Ellipse Width="7" Height="7" Margin="0,0,7,0" VerticalAlignment="Center">
-                            <Ellipse.Style>
-                                <Style TargetType="Ellipse">
-                                    <Setter Property="Fill" Value="#20B486" />
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsAvailable}" Value="False">
-                                            <Setter Property="Fill" Value="#A8B3BC" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Ellipse.Style>
+                            <Ellipse.Style><Style TargetType="Ellipse"><Setter Property="Fill" Value="#28B486" /><Style.Triggers><DataTrigger Binding="{Binding IsAvailable}" Value="False"><Setter Property="Fill" Value="#A8B3BC" /></DataTrigger></Style.Triggers></Style></Ellipse.Style>
                         </Ellipse>
-                        <TextBlock FontSize="11.5" Foreground="{StaticResource SmartHomeTextSecondaryBrush}">
-                            <Run Text="{Binding StatusText, Mode=OneWay}" /><Run Text="  ·  " /><Run Text="{Binding AreaName, Mode=OneWay}" />
-                        </TextBlock>
+                        <TextBlock FontSize="11" Foreground="{StaticResource SmartHomeTextSecondaryBrush}"><Run Text="{Binding StatusText, Mode=OneWay}" /><Run Text="  ·  " /><Run Text="{Binding AreaName, Mode=OneWay}" /></TextBlock>
                     </StackPanel>
                 </StackPanel>
-                <Button Grid.Column="3" Width="38" Height="38" Padding="0" Style="{StaticResource DetailButtonStyle}"
-                        Click="Close_Click" AutomationProperties.Name="关闭设备详情">
-                    <TextBlock FontFamily="Segoe Fluent Icons" FontSize="14" Text="&#xE711;" />
+                <Button Width="40" Height="40" Padding="0" HorizontalAlignment="Right" Style="{StaticResource SoftButtonStyle}" Click="Close_Click" AutomationProperties.Name="关闭设备详情">
+                    <iconPacks:PackIconMaterial Width="18" Height="18" Kind="Close" />
                 </Button>
             </Grid>
 
-            <Border Grid.Row="2" Padding="18,14" Background="{StaticResource SmartHomeStatusSurfaceBrush}"
-                    BorderBrush="{StaticResource SmartHomeGlassBorderBrush}" BorderThickness="1" CornerRadius="18">
-                <Grid>
-                    <StackPanel>
-                        <TextBlock FontSize="11" Foreground="#6B8195" Text="当前状态" />
-                        <TextBlock Margin="0,4,0,0" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource SmartHomeTextPrimaryBrush}"
-                                   Text="{Binding MainState}" />
-                        <TextBlock Margin="0,5,0,0" FontSize="10.5" Foreground="#768B9D" Text="{Binding SupportingSummary}"
-                                   TextTrimming="CharacterEllipsis" />
-                    </StackPanel>
-                    <Button Width="96" Height="42" HorizontalAlignment="Right" VerticalAlignment="Center"
-                            Style="{StaticResource DetailButtonStyle}" Background="{Binding AccentBrush}" Foreground="White"
-                            Content="{Binding ToggleLabel}" Click="Toggle_Click" IsEnabled="{Binding CanInteract}"
-                            Visibility="{Binding CanToggle, Converter={StaticResource BoolToVisibility}}" />
-                </Grid>
-            </Border>
-
-            <ScrollViewer Grid.Row="4" MaxHeight="430" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                <StackPanel>
-                    <Border Style="{StaticResource SectionCardStyle}"
-                            Visibility="{Binding SupportsBrightness, Converter={StaticResource BoolToVisibility}}">
-                        <StackPanel>
-                            <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#294359" Text="灯光亮度" />
-                            <Grid Margin="0,13,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" /><ColumnDefinition Width="56" />
-                                </Grid.ColumnDefinitions>
-                                <Slider x:Name="BrightnessSlider" Minimum="0" Maximum="100" Value="{Binding BrightnessPercent, Mode=OneWay}"
-                                        Style="{StaticResource SmartHomeSliderStyle}"
-                                        IsEnabled="{Binding CanInteract}" AutomationProperties.Name="亮度"
-                                        PreviewMouseLeftButtonUp="BrightnessSlider_Commit" KeyUp="BrightnessSlider_KeyUp" />
-                                <TextBlock Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12"
-                                           Foreground="#5D768C" Text="{Binding BrightnessPercent, StringFormat={}{0:0}%}" />
+            <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Margin="0,0,5,0">
+                    <Border Height="250" Style="{StaticResource SectionCardStyle}" Background="#B8EEF3FA">
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="44*" /><ColumnDefinition Width="56*" /></Grid.ColumnDefinitions>
+                            <Grid Margin="4,0,20,0">
+                                <Image MaxWidth="320" MaxHeight="205" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Stretch="Uniform" Source="{Binding DeviceArtworkUri}" RenderOptions.BitmapScalingMode="HighQuality">
+                                    <Image.Style><Style TargetType="Image"><Setter Property="Visibility" Value="Collapsed" /><Style.Triggers><DataTrigger Binding="{Binding HasDeviceArtwork}" Value="True"><Setter Property="Visibility" Value="Visible" /></DataTrigger></Style.Triggers></Style></Image.Style>
+                                </Image>
+                                <Grid>
+                                    <Grid.Style><Style TargetType="Grid"><Setter Property="Visibility" Value="Visible" /><Style.Triggers><DataTrigger Binding="{Binding HasDeviceArtwork}" Value="True"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger></Style.Triggers></Style></Grid.Style>
+                                    <Ellipse Width="138" Height="138" Fill="{Binding AccentBackground}" />
+                                    <iconPacks:PackIconMaterial Width="76" Height="76" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{Binding AccentBrush}" Kind="{Binding IconKind}" />
+                                </Grid>
+                                <Border Width="82" Height="78" Margin="0,-5,0,0" HorizontalAlignment="Center" VerticalAlignment="Center" Background="#F5D2DCDD" BorderBrush="#51616B70" BorderThickness="1" CornerRadius="7">
+                                    <Border.Style><Style TargetType="Border"><Setter Property="Visibility" Value="Collapsed" /><Style.Triggers><DataTrigger Binding="{Binding IsThermoHygrometerArtwork}" Value="True"><Setter Property="Visibility" Value="Visible" /></DataTrigger></Style.Triggers></Style></Border.Style>
+                                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <TextBlock HorizontalAlignment="Center" FontSize="18" FontWeight="Bold" Foreground="#26343B" Text="{Binding LiveTemperatureText}" />
+                                        <Border Height="1" Margin="9,4" Background="#727A8185" />
+                                        <TextBlock HorizontalAlignment="Center" FontSize="15" FontWeight="SemiBold" Foreground="#32434B" Text="{Binding LiveHumidityText}" />
+                                    </StackPanel>
+                                </Border>
                             </Grid>
-                            <StackPanel Margin="0,14,0,0" Visibility="{Binding SupportsColorTemperature, Converter={StaticResource BoolToVisibility}}">
-                                <TextBlock FontSize="11.5" FontWeight="SemiBold" Foreground="#526A7F" Text="色温" />
-                                <Grid Margin="0,7,0,0">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" /><ColumnDefinition Width="56" />
-                                    </Grid.ColumnDefinitions>
-                                    <Slider x:Name="DetailColorTemperatureSlider" Minimum="0" Maximum="100"
-                                            Value="{Binding ColorTemperaturePercent, Mode=OneWay}"
-                                            Style="{StaticResource SmartHomeSliderStyle}" IsEnabled="{Binding CanInteract}"
-                                            PreviewMouseLeftButtonUp="DetailColorTemperatureSlider_Commit"
-                                            KeyUp="DetailColorTemperatureSlider_KeyUp" AutomationProperties.Name="色温" />
-                                    <TextBlock Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12"
-                                               Foreground="#5D768C" Text="{Binding ColorTemperaturePercent, StringFormat={}{0:0}%}" />
+
+                            <StackPanel Grid.Column="1" Margin="18,10,8,10" VerticalAlignment="Center">
+                                <TextBlock FontSize="11" Foreground="#71849A" Text="当前状态" />
+                                <TextBlock Margin="0,5,0,0" FontSize="28" FontWeight="SemiBold" Foreground="#20354A" Text="{Binding MainState}" TextWrapping="Wrap" />
+                                <TextBlock Margin="0,7,0,0" MaxWidth="400" FontSize="10.5" Foreground="#7A8DA0" Text="{Binding SupportingSummary}" TextTrimming="CharacterEllipsis" />
+                                <Grid Margin="0,20,0,0">
+                                    <StackPanel Orientation="Horizontal">
+                                        <StackPanel Margin="0,0,30,0">
+                                            <TextBlock FontSize="10" Foreground="#8293A4" Text="室内温度" />
+                                            <TextBlock Margin="0,3,0,0" FontSize="20" FontWeight="SemiBold" Foreground="#526FAD" Text="{Binding IndoorTemperatureText}" />
+                                        </StackPanel>
+                                        <StackPanel>
+                                            <TextBlock FontSize="10" Foreground="#8293A4" Text="室内湿度" />
+                                            <TextBlock Margin="0,3,0,0" FontSize="20" FontWeight="SemiBold" Foreground="#526FAD" Text="{Binding IndoorHumidityText}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                    <Button Width="98" Height="44" HorizontalAlignment="Right" Style="{StaticResource SoftButtonStyle}" Background="#526FAD" Foreground="White"
+                                            Content="{Binding ToggleLabel}" Click="Toggle_Click" IsEnabled="{Binding CanInteract}"
+                                            Visibility="{Binding CanToggle, Converter={StaticResource BoolToVisibility}}" />
                                 </Grid>
                             </StackPanel>
-                        </StackPanel>
+                        </Grid>
                     </Border>
 
-                    <Border Style="{StaticResource SectionCardStyle}"
-                            Visibility="{Binding IsClimate, Converter={StaticResource BoolToVisibility}}">
+                    <Border Style="{StaticResource SectionCardStyle}" Visibility="{Binding IsClimate, Converter={StaticResource BoolToVisibility}}">
                         <StackPanel>
-                            <Grid>
-                                <StackPanel>
-                                    <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#294359" Text="舒适控制" />
-                                    <TextBlock Margin="0,4,0,0" FontSize="10.5" Foreground="#8396A7" Text="温度统一按摄氏度显示" />
+                            <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="#294359" Text="空调控制" />
+                            <Grid Margin="0,14,0,0" Visibility="{Binding SupportsTargetTemperature, Converter={StaticResource BoolToVisibility}}">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <Button Width="58" Height="58" HorizontalAlignment="Right" Style="{StaticResource RoundButtonStyle}" FontSize="24" Content="−" Click="DecreaseTemperature_Click" IsEnabled="{Binding CanInteract}" />
+                                <StackPanel Grid.Column="1" Width="150" HorizontalAlignment="Center">
+                                    <TextBlock HorizontalAlignment="Center" FontSize="10.5" Foreground="#7A8DA0" Text="目标温度" />
+                                    <TextBlock Margin="0,2,0,0" HorizontalAlignment="Center" FontSize="34" FontWeight="SemiBold" Foreground="#20354A" Text="{Binding TargetTemperatureText}" />
                                 </StackPanel>
-                                <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
-                                    <StackPanel Margin="0,0,24,0">
-                                        <TextBlock HorizontalAlignment="Center" FontSize="10" Foreground="#8396A7" Text="室内温度" />
-                                        <TextBlock Margin="0,2,0,0" HorizontalAlignment="Center" FontSize="18" FontWeight="SemiBold"
-                                                   Foreground="#2B7FB8" Text="{Binding IndoorTemperatureText}" />
-                                    </StackPanel>
-                                    <StackPanel>
-                                        <TextBlock HorizontalAlignment="Center" FontSize="10" Foreground="#8396A7" Text="室内湿度" />
-                                        <TextBlock Margin="0,2,0,0" HorizontalAlignment="Center" FontSize="18" FontWeight="SemiBold"
-                                                   Foreground="#36536C" Text="{Binding IndoorHumidityText}" />
-                                    </StackPanel>
-                                </StackPanel>
+                                <Button Grid.Column="2" Width="58" Height="58" HorizontalAlignment="Left" Style="{StaticResource RoundButtonStyle}" FontSize="21" Content="+" Click="IncreaseTemperature_Click" IsEnabled="{Binding CanInteract}" />
                             </Grid>
 
-                            <Border Margin="0,15,0,0" Padding="16,13" Background="#B8EAF3FA" CornerRadius="15"
-                                    Visibility="{Binding SupportsTargetTemperature, Converter={StaticResource BoolToVisibility}}">
-                                <Grid>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock FontSize="10.5" Foreground="#6D8498" Text="目标温度" />
-                                        <TextBlock Margin="0,2,0,0" FontSize="25" FontWeight="SemiBold" Foreground="#20394E"
-                                                   Text="{Binding TargetTemperatureText}" />
-                                    </StackPanel>
-                                    <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal">
-                                        <Button Width="46" Height="46" Padding="0" Style="{StaticResource DetailButtonStyle}" Content="−"
-                                                FontSize="20" Click="DecreaseTemperature_Click" IsEnabled="{Binding CanInteract}" />
-                                        <Button Width="46" Height="46" Margin="9,0,0,0" Padding="0" Style="{StaticResource DetailButtonStyle}" Content="+"
-                                                FontSize="18" Click="IncreaseTemperature_Click" IsEnabled="{Binding CanInteract}" />
-                                    </StackPanel>
-                                </Grid>
-                            </Border>
+                            <ListBox x:Name="HvacModeList" Margin="0,18,0,0" HorizontalAlignment="Center" ItemsSource="{Binding HvacModeOptions}"
+                                     SelectedValuePath="Value" SelectedValue="{Binding CurrentHvacMode, Mode=OneWay}" Background="Transparent" BorderThickness="0"
+                                     SelectionChanged="HvacModeComboBox_SelectionChanged" Visibility="{Binding SupportsHvacMode, Converter={StaticResource BoolToVisibility}}">
+                                <ListBox.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ListBox.ItemsPanel>
+                                <ListBox.ItemContainerStyle><StaticResource ResourceKey="ModeButtonStyle" /></ListBox.ItemContainerStyle>
+                                <ListBox.ItemTemplate><DataTemplate><TextBlock FontSize="10.5" FontWeight="SemiBold" Text="{Binding DisplayName}" /></DataTemplate></ListBox.ItemTemplate>
+                            </ListBox>
 
-                            <StackPanel Margin="0,14,0,0" Visibility="{Binding SupportsHvacMode, Converter={StaticResource BoolToVisibility}}">
-                                <TextBlock Margin="1,0,0,8" FontSize="10.5" Foreground="#6D8498" Text="运行模式" />
-                                <ListBox x:Name="HvacModeList" ItemsSource="{Binding HvacModeOptions}"
-                                         SelectedValuePath="Value" SelectedValue="{Binding CurrentHvacMode, Mode=OneWay}"
-                                         Background="Transparent" BorderThickness="0" SelectionChanged="HvacModeComboBox_SelectionChanged">
-                                    <ListBox.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ListBox.ItemsPanel>
-                                    <ListBox.ItemContainerStyle><StaticResource ResourceKey="ModePillStyle" /></ListBox.ItemContainerStyle>
-                                    <ListBox.ItemTemplate>
-                                        <DataTemplate><TextBlock FontSize="11.5" FontWeight="SemiBold" Text="{Binding DisplayName}" /></DataTemplate>
-                                    </ListBox.ItemTemplate>
-                                </ListBox>
-                            </StackPanel>
-
-                            <Grid Margin="0,14,0,0">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="12" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                            <Grid Margin="0,18,0,0">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="14" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                                 <StackPanel Visibility="{Binding SupportsFanMode, Converter={StaticResource BoolToVisibility}}">
-                                    <TextBlock Margin="1,0,0,7" FontSize="10.5" Foreground="#6D8498" Text="空调风速" />
-                                    <ComboBox Style="{StaticResource DetailComboBoxStyle}" ItemsSource="{Binding FanModeOptions}"
-                                              DisplayMemberPath="DisplayName" SelectedValuePath="Value" SelectedValue="{Binding CurrentFanMode, Mode=OneWay}"
-                                              IsEnabled="{Binding CanInteract}" SelectionChanged="FanModeComboBox_SelectionChanged" />
+                                    <TextBlock Margin="2,0,0,7" FontSize="10.5" Foreground="#71849A" Text="空调风速" />
+                                    <ComboBox Style="{StaticResource DetailComboBoxStyle}" ItemsSource="{Binding FanModeOptions}" DisplayMemberPath="DisplayName" SelectedValuePath="Value"
+                                              SelectedValue="{Binding CurrentFanMode, Mode=OneWay}" IsEnabled="{Binding CanInteract}" SelectionChanged="FanModeComboBox_SelectionChanged" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="2" Visibility="{Binding SupportsSwingMode, Converter={StaticResource BoolToVisibility}}">
-                                    <TextBlock Margin="1,0,0,7" FontSize="10.5" Foreground="#6D8498" Text="摆风方式" />
-                                    <ComboBox Style="{StaticResource DetailComboBoxStyle}" ItemsSource="{Binding SwingModeOptions}"
-                                              DisplayMemberPath="DisplayName" SelectedValuePath="Value" SelectedValue="{Binding CurrentSwingMode, Mode=OneWay}"
-                                              IsEnabled="{Binding CanInteract}" SelectionChanged="SwingModeComboBox_SelectionChanged" />
+                                    <TextBlock Margin="2,0,0,7" FontSize="10.5" Foreground="#71849A" Text="摆风方式" />
+                                    <ComboBox Style="{StaticResource DetailComboBoxStyle}" ItemsSource="{Binding SwingModeOptions}" DisplayMemberPath="DisplayName" SelectedValuePath="Value"
+                                              SelectedValue="{Binding CurrentSwingMode, Mode=OneWay}" IsEnabled="{Binding CanInteract}" SelectionChanged="SwingModeComboBox_SelectionChanged" />
                                 </StackPanel>
                             </Grid>
 
-                            <ItemsControl Margin="0,12,0,0" ItemsSource="{Binding AuxiliarySelects}"
-                                          Visibility="{Binding HasAuxiliarySelects, Converter={StaticResource BoolToVisibility}}">
+                            <ItemsControl Margin="0,14,0,0" ItemsSource="{Binding AuxiliarySelects}" Visibility="{Binding HasAuxiliarySelects, Converter={StaticResource BoolToVisibility}}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Grid>
-                                            <Grid.ColumnDefinitions><ColumnDefinition Width="112" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                                            <TextBlock VerticalAlignment="Center" FontSize="11" Foreground="#6D8498" Text="{Binding DisplayName}" />
-                                            <ComboBox Grid.Column="1" Style="{StaticResource DetailComboBoxStyle}" ItemsSource="{Binding Options}"
-                                                      SelectedValue="{Binding SelectedValue, Mode=OneWay}" IsEnabled="{Binding IsAvailable}"
-                                                      SelectionChanged="AuxiliarySelectComboBox_SelectionChanged" />
+                                        <Grid Margin="0,0,0,8"><Grid.ColumnDefinitions><ColumnDefinition Width="112" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                            <TextBlock VerticalAlignment="Center" FontSize="11" Foreground="#71849A" Text="{Binding DisplayName}" />
+                                            <ComboBox Grid.Column="1" Style="{StaticResource DetailComboBoxStyle}" ItemsSource="{Binding Options}" SelectedValue="{Binding SelectedValue, Mode=OneWay}"
+                                                      IsEnabled="{Binding IsAvailable}" SelectionChanged="AuxiliarySelectComboBox_SelectionChanged" />
                                         </Grid>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
@@ -379,32 +280,21 @@
                         </StackPanel>
                     </Border>
 
-                    <Border Style="{StaticResource SectionCardStyle}"
-                            Visibility="{Binding HasFeatureControls, Converter={StaticResource BoolToVisibility}}">
+                    <Border Style="{StaticResource SectionCardStyle}" Visibility="{Binding HasFeatureControls, Converter={StaticResource BoolToVisibility}}">
                         <StackPanel>
-                            <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#294359" Text="扩展功能" />
-                            <TextBlock Margin="0,4,0,12" FontSize="10.5" Foreground="#8396A7" Text="仅显示这台设备真实暴露的控制能力" />
-                            <ItemsControl ItemsSource="{Binding FeatureControls}">
+                            <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="#294359" Text="设备功能" />
+                            <ItemsControl Margin="0,16,0,0" ItemsSource="{Binding FeatureControls}">
                                 <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Button Style="{StaticResource FeatureButtonStyle}" Click="FeatureToggle_Click" IsEnabled="{Binding IsAvailable}">
-                                            <Grid>
-                                                <TextBlock HorizontalAlignment="Left" VerticalAlignment="Top" FontFamily="Segoe Fluent Icons"
-                                                           FontSize="18" Foreground="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}"
-                                                           Text="{Binding IconGlyph}" />
-                                                <StackPanel HorizontalAlignment="Right" VerticalAlignment="Bottom">
-                                                    <TextBlock HorizontalAlignment="Right" FontSize="11.5" FontWeight="SemiBold" Text="{Binding DisplayName}" />
-                                                    <TextBlock Margin="0,3,0,0" HorizontalAlignment="Right" FontSize="9.5" Opacity="0.72">
-                                                        <TextBlock.Style>
-                                                            <Style TargetType="TextBlock">
-                                                                <Setter Property="Text" Value="已关闭" />
-                                                                <Style.Triggers><DataTrigger Binding="{Binding IsOn}" Value="True"><Setter Property="Text" Value="已开启" /></DataTrigger></Style.Triggers>
-                                                            </Style>
-                                                        </TextBlock.Style>
-                                                    </TextBlock>
-                                                </StackPanel>
-                                            </Grid>
+                                        <Button Width="92" Height="100" Margin="0,0,12,10" Padding="0" Background="Transparent" BorderThickness="0" Cursor="Hand"
+                                                Click="FeatureToggle_Click" IsEnabled="{Binding IsAvailable}">
+                                            <StackPanel HorizontalAlignment="Center">
+                                                <Border Width="58" Height="58" Background="#C8EEF2F7" BorderBrush="#B5FFFFFF" BorderThickness="1" CornerRadius="29">
+                                                    <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="23" Foreground="#63758D" Text="{Binding IconGlyph}" />
+                                                </Border>
+                                                <TextBlock Margin="0,7,0,0" HorizontalAlignment="Center" FontSize="10.5" FontWeight="SemiBold" Foreground="#53667D" Text="{Binding DisplayName}" />
+                                            </StackPanel>
                                         </Button>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
@@ -412,92 +302,74 @@
                         </StackPanel>
                     </Border>
 
-                    <Border Style="{StaticResource SectionCardStyle}"
-                            Visibility="{Binding IsClimate, Converter={StaticResource BoolToVisibility}}">
+                    <Border Style="{StaticResource SectionCardStyle}" Visibility="{Binding SupportsBrightness, Converter={StaticResource BoolToVisibility}}">
                         <StackPanel>
-                            <Grid>
-                                <StackPanel>
-                                    <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#294359" Text="室内温度趋势" />
-                                    <TextBlock Margin="0,4,0,0" FontSize="10.5" Foreground="#8396A7" Text="最近 24 小时 · 数据来自 Home Assistant 历史记录" />
-                                </StackPanel>
-                                <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="22" FontWeight="SemiBold"
-                                           Foreground="#2B7FB8" Text="{Binding IndoorTemperatureText}" />
+                            <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="#294359" Text="灯光控制" />
+                            <Grid Margin="0,15,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="58" /></Grid.ColumnDefinitions>
+                                <Slider x:Name="BrightnessSlider" Minimum="0" Maximum="100" Value="{Binding BrightnessPercent, Mode=OneWay}" Style="{StaticResource SmartHomeSliderStyle}"
+                                        IsEnabled="{Binding CanInteract}" PreviewMouseLeftButtonUp="BrightnessSlider_Commit" KeyUp="BrightnessSlider_KeyUp" AutomationProperties.Name="亮度" />
+                                <TextBlock Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12" Foreground="#5D768C" Text="{Binding BrightnessPercent, StringFormat={}{0:0}%}" />
                             </Grid>
-                            <local:SmartTemperatureChart Height="142" Margin="0,12,0,0" Points="{Binding TemperaturePoints}" />
+                            <Grid Margin="0,14,0,0" Visibility="{Binding SupportsColorTemperature, Converter={StaticResource BoolToVisibility}}"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="58" /></Grid.ColumnDefinitions>
+                                <Slider x:Name="DetailColorTemperatureSlider" Minimum="0" Maximum="100" Value="{Binding ColorTemperaturePercent, Mode=OneWay}" Style="{StaticResource SmartHomeSliderStyle}"
+                                        IsEnabled="{Binding CanInteract}" PreviewMouseLeftButtonUp="DetailColorTemperatureSlider_Commit" KeyUp="DetailColorTemperatureSlider_KeyUp" AutomationProperties.Name="色温" />
+                                <TextBlock Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12" Foreground="#5D768C" Text="{Binding ColorTemperaturePercent, StringFormat={}{0:0}%}" />
+                            </Grid>
                         </StackPanel>
                     </Border>
 
-                    <Border Style="{StaticResource SectionCardStyle}"
-                            Visibility="{Binding IsClimate, Converter={StaticResource BoolToVisibility}}">
+                    <Border Style="{StaticResource SectionCardStyle}" Visibility="{Binding IsFan, Converter={StaticResource BoolToVisibility}}">
                         <StackPanel>
-                            <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#294359" Text="用电统计" />
-                            <Grid Margin="0,14,0,0">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="1" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                                <StackPanel Margin="8,0,18,0">
-                                    <TextBlock FontSize="10.5" Foreground="#8396A7" Text="今日用电" />
-                                    <TextBlock Margin="0,5,0,0" FontSize="22" FontWeight="SemiBold" Foreground="#20394E" Text="{Binding TodayEnergyText}" />
-                                </StackPanel>
+                            <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="#294359" Text="风扇控制" />
+                            <Grid Margin="0,15,0,0" Visibility="{Binding SupportsFanPercentage, Converter={StaticResource BoolToVisibility}}"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="58" /></Grid.ColumnDefinitions>
+                                <Slider x:Name="FanSlider" Minimum="0" Maximum="100" Value="{Binding FanPercentage, Mode=OneWay}" Style="{StaticResource SmartHomeSliderStyle}"
+                                        IsEnabled="{Binding CanInteract}" PreviewMouseLeftButtonUp="FanSlider_Commit" KeyUp="FanSlider_KeyUp" AutomationProperties.Name="风速" />
+                                <TextBlock Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12" Foreground="#5D768C" Text="{Binding FanPercentage, StringFormat={}{0:0}%}" />
+                            </Grid>
+                            <ComboBox Margin="0,14,0,0" Style="{StaticResource DetailComboBoxStyle}" ItemsSource="{Binding PresetModeOptions}" DisplayMemberPath="DisplayName" SelectedValuePath="Value"
+                                      SelectedValue="{Binding CurrentPresetMode, Mode=OneWay}" IsEnabled="{Binding CanInteract}" SelectionChanged="PresetComboBox_SelectionChanged"
+                                      Visibility="{Binding SupportsPreset, Converter={StaticResource BoolToVisibility}}" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource SectionCardStyle}" Visibility="{Binding SupportsCoverPosition, Converter={StaticResource BoolToVisibility}}">
+                        <StackPanel>
+                            <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="#294359" Text="窗帘控制" />
+                            <Grid Margin="0,15,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="58" /></Grid.ColumnDefinitions>
+                                <Slider x:Name="CoverSlider" Minimum="0" Maximum="100" Value="{Binding CoverPosition, Mode=OneWay}" Style="{StaticResource SmartHomeSliderStyle}"
+                                        IsEnabled="{Binding CanInteract}" PreviewMouseLeftButtonUp="CoverSlider_Commit" KeyUp="CoverSlider_KeyUp" AutomationProperties.Name="窗帘位置" />
+                                <TextBlock Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12" Foreground="#5D768C" Text="{Binding CoverPosition, StringFormat={}{0:0}%}" />
+                            </Grid>
+                            <UniformGrid Margin="0,14,0,0" Columns="3">
+                                <Button Margin="0,0,6,0" Style="{StaticResource SoftButtonStyle}" Content="打开" Tag="Open" Click="CoverAction_Click" IsEnabled="{Binding CanInteract}" />
+                                <Button Margin="3,0" Style="{StaticResource SoftButtonStyle}" Content="停止" Tag="Stop" Click="CoverAction_Click" IsEnabled="{Binding CanInteract}" />
+                                <Button Margin="6,0,0,0" Style="{StaticResource SoftButtonStyle}" Content="关闭" Tag="Close" Click="CoverAction_Click" IsEnabled="{Binding CanInteract}" />
+                            </UniformGrid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource SectionCardStyle}" Visibility="{Binding IsClimate, Converter={StaticResource BoolToVisibility}}">
+                        <StackPanel>
+                            <Grid><StackPanel><TextBlock FontSize="14" FontWeight="SemiBold" Foreground="#294359" Text="室内温度趋势" /><TextBlock Margin="0,4,0,0" FontSize="10.5" Foreground="#8396A7" Text="最近 24 小时 · 来自 Home Assistant 历史记录" /></StackPanel>
+                                <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="22" FontWeight="SemiBold" Foreground="#526FAD" Text="{Binding IndoorTemperatureText}" />
+                            </Grid>
+                            <local:SmartTemperatureChart Height="140" Margin="0,13,0,0" Points="{Binding TemperaturePoints}" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource SectionCardStyle}" Visibility="{Binding IsClimate, Converter={StaticResource BoolToVisibility}}">
+                        <StackPanel>
+                            <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="#294359" Text="用电统计" />
+                            <Grid Margin="0,15,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="1" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <StackPanel Margin="8,0,20,0"><TextBlock FontSize="10.5" Foreground="#8396A7" Text="今日用电" /><TextBlock Margin="0,5,0,0" FontSize="22" FontWeight="SemiBold" Foreground="#20394E" Text="{Binding TodayEnergyText}" /></StackPanel>
                                 <Border Grid.Column="1" Background="#D8E5EDF3" />
-                                <StackPanel Grid.Column="2" Margin="24,0,8,0">
-                                    <TextBlock FontSize="10.5" Foreground="#8396A7" Text="本月用电" />
-                                    <TextBlock Margin="0,5,0,0" FontSize="22" FontWeight="SemiBold" Foreground="#20394E" Text="{Binding MonthEnergyText}" />
-                                </StackPanel>
+                                <StackPanel Grid.Column="2" Margin="24,0,8,0"><TextBlock FontSize="10.5" Foreground="#8396A7" Text="本月用电" /><TextBlock Margin="0,5,0,0" FontSize="22" FontWeight="SemiBold" Foreground="#20394E" Text="{Binding MonthEnergyText}" /></StackPanel>
                             </Grid>
                             <TextBlock Margin="8,12,8,0" FontSize="10" Foreground="#8497A8" Text="{Binding InsightsMessage}" TextWrapping="Wrap" />
                         </StackPanel>
                     </Border>
 
-                    <Border Style="{StaticResource SectionCardStyle}"
-                            Visibility="{Binding IsFan, Converter={StaticResource BoolToVisibility}}">
-                        <StackPanel>
-                            <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#294359" Text="风扇控制" />
-                            <Grid Margin="0,13,0,0" Visibility="{Binding SupportsFanPercentage, Converter={StaticResource BoolToVisibility}}">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="56" /></Grid.ColumnDefinitions>
-                                <Slider x:Name="FanSlider" Minimum="0" Maximum="100" Value="{Binding FanPercentage, Mode=OneWay}"
-                                        Style="{StaticResource SmartHomeSliderStyle}"
-                                        IsEnabled="{Binding CanInteract}" AutomationProperties.Name="风速"
-                                        PreviewMouseLeftButtonUp="FanSlider_Commit" KeyUp="FanSlider_KeyUp" />
-                                <TextBlock Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12"
-                                           Foreground="#5D768C" Text="{Binding FanPercentage, StringFormat={}{0:0}%}" />
-                            </Grid>
-                            <Grid Margin="0,12,0,0" Visibility="{Binding SupportsPreset, Converter={StaticResource BoolToVisibility}}">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="92" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                                <TextBlock VerticalAlignment="Center" FontSize="11.5" Foreground="#5D768C" Text="风类模式" />
-                                <ComboBox Grid.Column="1" Style="{StaticResource DetailComboBoxStyle}" ItemsSource="{Binding PresetModeOptions}"
-                                          DisplayMemberPath="DisplayName" SelectedValuePath="Value" SelectedValue="{Binding CurrentPresetMode, Mode=OneWay}"
-                                          IsEnabled="{Binding CanInteract}" SelectionChanged="PresetComboBox_SelectionChanged" />
-                            </Grid>
-                        </StackPanel>
-                    </Border>
-
-                    <Border Style="{StaticResource SectionCardStyle}"
-                            Visibility="{Binding SupportsCoverPosition, Converter={StaticResource BoolToVisibility}}">
-                        <StackPanel>
-                            <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#294359" Text="窗帘位置" />
-                            <Grid Margin="0,13,0,0">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="56" /></Grid.ColumnDefinitions>
-                                <Slider x:Name="CoverSlider" Minimum="0" Maximum="100" Value="{Binding CoverPosition, Mode=OneWay}"
-                                        Style="{StaticResource SmartHomeSliderStyle}"
-                                        IsEnabled="{Binding CanInteract}" AutomationProperties.Name="窗帘位置"
-                                        PreviewMouseLeftButtonUp="CoverSlider_Commit" KeyUp="CoverSlider_KeyUp" />
-                                <TextBlock Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12"
-                                           Foreground="#5D768C" Text="{Binding CoverPosition, StringFormat={}{0:0}%}" />
-                            </Grid>
-                            <Grid Margin="0,12,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" /><ColumnDefinition Width="10" />
-                                    <ColumnDefinition Width="*" /><ColumnDefinition Width="10" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <Button Style="{StaticResource DetailButtonStyle}" Content="打开" Tag="Open" Click="CoverAction_Click" IsEnabled="{Binding CanInteract}" />
-                                <Button Grid.Column="2" Style="{StaticResource DetailButtonStyle}" Content="停止" Tag="Stop" Click="CoverAction_Click" IsEnabled="{Binding CanInteract}" />
-                                <Button Grid.Column="4" Style="{StaticResource DetailButtonStyle}" Content="关闭" Tag="Close" Click="CoverAction_Click" IsEnabled="{Binding CanInteract}" />
-                            </Grid>
-                        </StackPanel>
-                    </Border>
-
-                    <TextBlock Margin="2,0,2,2" FontSize="10.5" Foreground="#B45D69" Text="{Binding OperationMessage}"
-                               TextWrapping="Wrap" />
+                    <TextBlock Margin="4,0,4,3" FontSize="10.5" Foreground="#B45D69" Text="{Binding OperationMessage}" TextWrapping="Wrap" />
                 </StackPanel>
             </ScrollViewer>
         </Grid>

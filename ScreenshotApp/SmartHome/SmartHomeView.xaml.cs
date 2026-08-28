@@ -15,13 +15,13 @@ public partial class SmartHomeView : UserControl
     private readonly SmartHomeService _service = SmartHomeService.Instance;
     private readonly Dictionary<string, SmartDeviceViewModel> _deviceById = new(StringComparer.Ordinal);
     private bool _initialized;
-    private string _selectedAreaId = "__all";
+    private string _selectedAreaId = "__online";
 
     public SmartHomeView()
     {
         InitializeComponent();
         DataContext = this;
-        AreaFilters.Add(new SmartAreaFilterItem("__all", "全屋", 0, PackIconMaterialKind.HomeOutline));
+        AreaFilters.Add(new SmartAreaFilterItem("__online", "在线", 0, PackIconMaterialKind.WifiCheck));
         _service.ConnectionStateChanged += Service_ConnectionStateChanged;
         _service.SnapshotChanged += Service_SnapshotChanged;
         Loaded += SmartHomeView_Loaded;
@@ -165,6 +165,7 @@ public partial class SmartHomeView : UserControl
 
         var selected = _selectedAreaId;
         AreaFilters.Clear();
+        AreaFilters.Add(new SmartAreaFilterItem("__online", "在线", snapshot.Devices.Count(device => device.PrimaryEntity?.Available == true), PackIconMaterialKind.WifiCheck));
         AreaFilters.Add(new SmartAreaFilterItem("__all", "全屋", snapshot.Devices.Count, PackIconMaterialKind.HomeOutline));
         foreach (var area in snapshot.Areas)
         {
@@ -190,6 +191,7 @@ public partial class SmartHomeView : UserControl
         var filtered = _deviceById.Values
             .Where(device => _selectedAreaId switch
             {
+                "__online" => device.IsAvailable,
                 "__all" => true,
                 _ =>
                              (_selectedAreaId == "__unassigned" ? device.AreaId is null :
@@ -202,8 +204,13 @@ public partial class SmartHomeView : UserControl
         VisibleDevices.Clear();
         foreach (var device in filtered) VisibleDevices.Add(device);
         EmptyState.Visibility = VisibleDevices.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        EmptyStateTitle.Text = _selectedAreaId == "__all" ? "当前没有可显示的设备" : "这个房间还没有设备";
-        EmptyStateHint.Text = "切换到其他房间或刷新设备状态";
+        EmptyStateTitle.Text = _selectedAreaId switch
+        {
+            "__online" => "当前没有在线设备",
+            "__all" => "当前没有可显示的设备",
+            _ => "这个房间还没有设备"
+        };
+        EmptyStateHint.Text = "使用底部导航切换范围，或刷新设备状态";
     }
 
     private void AreaFilterList_SelectionChanged(object sender, SelectionChangedEventArgs e)
