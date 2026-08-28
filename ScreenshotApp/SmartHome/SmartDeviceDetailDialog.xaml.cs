@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media;
 
 namespace ScreenshotApp.SmartHome;
 
@@ -40,6 +41,9 @@ public partial class SmartDeviceDetailDialog : UserControl
 
     /// <summary>拖动过程中的实时控制命令；绕过 IsBusy 防抖，由视图直接下发 Home Assistant。</summary>
     public event Action<object?, SmartHomeControlRequest>? LiveCommandRequested;
+
+    /// <summary>用电统计月份导航（monthOffset：0=本月，1=上个月……）。</summary>
+    public event Action<object?, int>? InsightsMonthNavigate;
 
     public event Action<object?, string>? RenameRequested;
 
@@ -94,6 +98,41 @@ public partial class SmartDeviceDetailDialog : UserControl
     private double _lastSentBrightness = -1;
     private double _lastSentKelvin = -1;
     private bool _suppressSelectionChanged;
+    private int _energyMonthOffset;
+
+    private void EnergyDayTab_Click(object sender, RoutedEventArgs e)
+    {
+        EnergyDayTab.Background = new SolidColorBrush(Colors.White);
+        EnergyDayTab.Foreground = new SolidColorBrush(Color.FromRgb(0x20, 0x39, 0x4E));
+        EnergyMonthTab.Background = Brushes.Transparent;
+        EnergyMonthTab.Foreground = new SolidColorBrush(Color.FromRgb(0x64, 0x75, 0x8C));
+        EnergyDailyPanel.Visibility = Visibility.Visible;
+        EnergyMonthlyPanel.Visibility = Visibility.Collapsed;
+    }
+
+    private void EnergyMonthTab_Click(object sender, RoutedEventArgs e)
+    {
+        EnergyMonthTab.Background = new SolidColorBrush(Colors.White);
+        EnergyMonthTab.Foreground = new SolidColorBrush(Color.FromRgb(0x20, 0x39, 0x4E));
+        EnergyDayTab.Background = Brushes.Transparent;
+        EnergyDayTab.Foreground = new SolidColorBrush(Color.FromRgb(0x64, 0x75, 0x8C));
+        EnergyDailyPanel.Visibility = Visibility.Collapsed;
+        EnergyMonthlyPanel.Visibility = Visibility.Visible;
+        if (_energyMonthOffset != 0) RequestInsights(0);
+    }
+
+    private void PreviousEnergyMonth_Click(object sender, RoutedEventArgs e) => RequestInsights(_energyMonthOffset + 1);
+
+    private void NextEnergyMonth_Click(object sender, RoutedEventArgs e)
+    {
+        if (_energyMonthOffset > 0) RequestInsights(_energyMonthOffset - 1);
+    }
+
+    private void RequestInsights(int monthOffset)
+    {
+        _energyMonthOffset = monthOffset;
+        InsightsMonthNavigate?.Invoke(this, monthOffset);
+    }
 
     private void BrightnessBar_SizeChanged(object sender, SizeChangedEventArgs e) => UpdateBrightnessFill();
 

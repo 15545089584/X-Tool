@@ -238,9 +238,58 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
             (string.Equals(entity.GetText("device_class"), "humidity", StringComparison.OrdinalIgnoreCase) ||
              entity.GetText("unit_of_measurement") == "%"));
 
-    public string TodayEnergyText => _insights.TodayEnergyKwh is { } value ? $"{value:0.##} kWh" : "暂无记录";
+    public string TodayEnergyText => _insights.TodayEnergyKwh is { } value ? $"{value:0.##} 度" : "暂无记录";
 
-    public string MonthEnergyText => _insights.MonthEnergyKwh is { } value ? $"{value:0.##} kWh" : "暂无记录";
+    public string MonthEnergyText => _insights.MonthEnergyKwh is { } value ? $"{value:0.##} 度" : "暂无记录";
+
+    public bool IsNotClimate => !IsClimate;
+
+    public string EnergyMonthLabel => _insights.EnergyMonthLabel;
+
+    public bool HasDailyEnergy => _insights.DailyEnergy.Count > 0;
+
+    public bool HasMonthlyEnergy => _insights.MonthlyEnergy.Count > 0;
+
+    public IReadOnlyList<SmartMonthEnergyPoint> MonthlyEnergyRows => _insights.MonthlyEnergy;
+
+    /// <summary>用电月历单元格：周日起头、前置占位，每日显示当天用电（度）。</summary>
+    public IReadOnlyList<SmartEnergyCalendarCell> EnergyCalendarCells
+    {
+        get
+        {
+            var label = _insights.EnergyMonthLabel;
+            var separator = label.IndexOf('/');
+            if (separator <= 0 ||
+                !int.TryParse(label[..separator], out var year) ||
+                !int.TryParse(label[(separator + 1)..], out var month))
+            {
+                return Array.Empty<SmartEnergyCalendarCell>();
+            }
+
+            var offset = DateTimeOffset.Now.Offset;
+            var firstDay = new DateTimeOffset(year, month, 1, 0, 0, 0, offset);
+            var today = DateTimeOffset.Now.Date;
+            var usageByDay = _insights.DailyEnergy.ToDictionary(point => point.Date.Date, point => point.Kwh);
+            var cells = new List<SmartEnergyCalendarCell>();
+            for (var lead = 0; lead < ((int)firstDay.DayOfWeek + 7) % 7; lead++)
+            {
+                cells.Add(new SmartEnergyCalendarCell(string.Empty, string.Empty, false, false));
+            }
+
+            foreach (var day in Enumerable.Range(1, DateTime.DaysInMonth(year, month)))
+            {
+                var date = new DateTime(year, month, day);
+                var hasUsage = usageByDay.TryGetValue(date, out var kwh);
+                cells.Add(new SmartEnergyCalendarCell(
+                    day.ToString(),
+                    hasUsage ? $"{kwh:0.##} 度" : string.Empty,
+                    hasUsage,
+                    date > today));
+            }
+
+            return cells;
+        }
+    }
 
     public string InsightsMessage => IsInsightsLoading ? "正在读取 Home Assistant 历史记录…" : _insights.Message;
 
@@ -509,6 +558,8 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
 
     private string BuildSupportingSummary()
     {
+        // 空调的传感器大多为故障码/功率参数等诊断信息，摘要行只保留型号，避免噪音。
+        if (IsClimate) return string.IsNullOrWhiteSpace(_device.Model) ? "空调与恒温设备" : _device.Model;
         var values = _device.Entities
             .Where(entity => !ReferenceEquals(entity, Primary) && entity.Available && entity.Domain == "sensor")
             .Where(entity => !string.IsNullOrWhiteSpace(entity.State))
@@ -714,7 +765,9 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
                  {
                      nameof(TemperaturePoints), nameof(HasTemperatureHistory), nameof(HasEnergyData),
                      nameof(IndoorTemperatureText), nameof(IndoorHumidityText), nameof(TodayEnergyText),
-                     nameof(MonthEnergyText), nameof(InsightsMessage), nameof(IsInsightsLoading)
+                     nameof(MonthEnergyText), nameof(EnergyMonthLabel), nameof(EnergyCalendarCells),
+                     nameof(HasDailyEnergy), nameof(MonthlyEnergyRows), nameof(HasMonthlyEnergy), nameof(IsNotClimate),
+                     nameof(InsightsMessage), nameof(IsInsightsLoading)
                  })
         {
             OnPropertyChanged(property);

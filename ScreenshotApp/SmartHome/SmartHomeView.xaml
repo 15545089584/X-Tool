@@ -366,6 +366,7 @@
             <local:SmartDeviceDetailDialog x:Name="DeviceDetailDialog" HorizontalAlignment="Center" VerticalAlignment="Center"
                                            CommandRequested="DeviceDetailDialog_CommandRequested"
                                            LiveCommandRequested="DeviceDetailDialog_LiveCommandRequested"
+                                           InsightsMonthNavigate="DeviceDetailDialog_InsightsMonthNavigate"
                                            RenameRequested="DeviceDetailDialog_RenameRequested"
                                            CloseRequested="DeviceDetailDialog_CloseRequested" />
         </Grid>

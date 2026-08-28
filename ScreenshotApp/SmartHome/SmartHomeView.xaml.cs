@@ -197,7 +197,8 @@ public partial class SmartHomeView : UserControl
                              (_selectedAreaId == "__unassigned" ? device.AreaId is null :
                                  string.Equals(device.AreaId, _selectedAreaId, StringComparison.Ordinal))
             })
-            .OrderByDescending(device => device.IsAvailable)
+            .OrderByDescending(device => device.IsWorking)
+            .ThenByDescending(device => device.IsAvailable)
             .ThenBy(device => device.Name, StringComparer.CurrentCulture)
             .ToArray();
 
@@ -256,6 +257,14 @@ public partial class SmartHomeView : UserControl
             MessageBox.Show($"设备重命名失败：{exception.Message}", "X-Tool 智能家居",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
+    }
+
+    private async void DeviceDetailDialog_InsightsMonthNavigate(object? sender, int monthOffset)
+    {
+        if (DeviceDetailDialog.Device is not { IsClimate: true } device) return;
+        device.BeginInsightsLoad();
+        var insights = await _service.GetInsightsAsync(device.SourceDevice, monthOffset);
+        if (ReferenceEquals(DeviceDetailDialog.Device, device)) device.ApplyInsights(insights);
     }
 
     private async Task ExecuteDeviceCommandAsync(SmartHomeControlRequest request)

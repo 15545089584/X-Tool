@@ -78,8 +78,24 @@ public sealed record SmartDeviceInsights
 
     public double? MonthEnergyKwh { get; init; }
 
+    /// <summary>用电统计当前月份标签（yyyy/M）。</summary>
+    public string EnergyMonthLabel { get; init; } = string.Empty;
+
+    public IReadOnlyList<SmartEnergyDayPoint> DailyEnergy { get; init; } = Array.Empty<SmartEnergyDayPoint>();
+
+    public IReadOnlyList<SmartMonthEnergyPoint> MonthlyEnergy { get; init; } = Array.Empty<SmartMonthEnergyPoint>();
+
     public string Message { get; init; } = string.Empty;
 }
+
+/// <summary>单日用电量（度）。</summary>
+public sealed record SmartEnergyDayPoint(DateTimeOffset Date, double Kwh);
+
+/// <summary>月度用电量（度）。</summary>
+public sealed record SmartMonthEnergyPoint(string Label, double Kwh);
+
+/// <summary>用电月历单元格；DayNumber 为空表示占位空白。</summary>
+public sealed record SmartEnergyCalendarCell(string DayNumber, string UsageText, bool HasUsage, bool IsFuture);
 
 public sealed record SmartEntity
 {

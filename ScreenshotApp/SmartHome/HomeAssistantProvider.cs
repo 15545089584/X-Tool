@@ -24,6 +24,7 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
     private JsonElement _entities = JsonDocument.Parse("[]").RootElement.Clone();
     private string _temperatureUnit = "°C";
     private HomeAssistantWebSocketClient? _webSocket;
+    private readonly Dictionary<string, string> _deviceNameOverrides = new(StringComparer.Ordinal);
     private PeriodicTimer? _statePollTimer;
     private CancellationTokenSource? _statePollSource;
 
@@ -269,10 +270,20 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
             var detail = result.TryGetProperty("error", out var error) ? error.ToString() : "未知错误";
             throw new InvalidOperationException($"Home Assistant 拒绝了设备重命名：{detail}");
         }
+
+        // 立即用新名称重建并发布快照：外部卡片不必等待重连或下一次轮询。
+        _deviceNameOverrides[deviceId] = name;
+        SmartHomeSnapshot? renamedSnapshot;
+        lock (_snapshotSync)
+        {
+            CurrentSnapshot = renamedSnapshot = BuildSnapshot();
+        }
+        SnapshotChanged?.Invoke(renamedSnapshot);
     }
 
     public async Task<SmartDeviceInsights> GetInsightsAsync(
         SmartDevice device,
+        int monthOffset,
         CancellationToken cancellationToken)
     {
         var climate = device.Entities.FirstOrDefault(entity => entity.Domain == "climate" && entity.Available);
@@ -284,18 +295,22 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
         try
         {
             var now = DateTimeOffset.Now;
-            var monthStart = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, now.Offset);
+            var monthStart = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, now.Offset).AddMonths(-Math.Max(0, monthOffset));
+            var monthEnd = monthStart.AddMonths(1) > now ? now : monthStart.AddMonths(1);
             var historyStart = now.AddHours(-24);
             var energyEntity = device.Entities.FirstOrDefault(IsEnergyEntity);
 
             var temperatureTask = LoadHistoryAsync(climate.EntityId, historyStart, cancellationToken);
-            var energyTask = energyEntity is null
+            var energyTask = energyEntity is null || monthStart > now
                 ? Task.FromResult<IReadOnlyList<HistoryState>>(Array.Empty<HistoryState>())
                 : LoadHistoryAsync(energyEntity.EntityId, monthStart, cancellationToken);
-            var energyStatisticsTask = energyEntity is null
+            var energyStatisticsTask = energyEntity is null || monthStart > now
                 ? Task.FromResult<IReadOnlyList<EnergyStatistic>>(Array.Empty<EnergyStatistic>())
-                : LoadEnergyStatisticsAsync(energyEntity.EntityId, monthStart, now, cancellationToken);
-            await Task.WhenAll(temperatureTask, energyTask, energyStatisticsTask).ConfigureAwait(false);
+                : LoadEnergyStatisticsAsync(energyEntity.EntityId, monthStart, monthEnd, cancellationToken);
+            var yearlyStatisticsTask = monthOffset == 0 && energyEntity is not null
+                ? LoadEnergyStatisticsAsync(energyEntity.EntityId, new DateTimeOffset(now.Year, 1, 1, 0, 0, 0, now.Offset), now, cancellationToken)
+                : Task.FromResult<IReadOnlyList<EnergyStatistic>>(Array.Empty<EnergyStatistic>());
+            await Task.WhenAll(temperatureTask, energyTask, energyStatisticsTask, yearlyStatisticsTask).ConfigureAwait(false);
 
             var temperaturePoints = Downsample(temperatureTask.Result
                 .Select(item => item.CurrentTemperature is null
@@ -317,6 +332,17 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
             var humidity = climate.GetNumber("current_humidity") ?? climate.GetNumber("humidity") ??
                            GetEntityStateNumber(humidityEntity);
 
+            var dailyEnergy = energyStatistics
+                .GroupBy(item => item.Timestamp.Date)
+                .Select(group => new SmartEnergyDayPoint(group.Key, Math.Round(group.Sum(item => item.ChangeKwh), 2)))
+                .OrderBy(item => item.Date)
+                .ToArray();
+            var monthlyEnergy = yearlyStatisticsTask.Result
+                .GroupBy(item => new { item.Timestamp.Year, item.Timestamp.Month })
+                .Select(group => new SmartMonthEnergyPoint($"{group.Key.Year}/{group.Key.Month}", Math.Round(group.Sum(item => item.ChangeKwh), 2)))
+                .OrderBy(item => item.Label)
+                .ToArray();
+
             return new SmartDeviceInsights
             {
                 TemperaturePoints = temperaturePoints,
@@ -326,6 +352,9 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
                                  CalculateEnergyUsage(energyHistory, todayStart),
                 MonthEnergyKwh = CalculateStatisticsUsage(energyStatistics, monthStart) ??
                                  CalculateEnergyUsage(energyHistory, monthStart),
+                EnergyMonthLabel = $"{monthStart.Year}/{monthStart.Month}",
+                DailyEnergy = dailyEnergy,
+                MonthlyEnergy = monthlyEnergy,
                 Message = temperaturePoints.Count == 0 && energyHistory.Length == 0 && energyStatistics.Count == 0
                     ? "Home Assistant 暂无可用的历史记录。"
                     : string.Empty
@@ -452,10 +481,14 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
                 .First();
             if (!ShouldIncludeDevice(device, primary)) continue;
             var areaId = primary.AreaId ?? device?.AreaId;
+            var deviceName = _deviceNameOverrides.TryGetValue(pair.Key, out var nameOverride) &&
+                             !string.IsNullOrWhiteSpace(nameOverride)
+                ? nameOverride
+                : string.IsNullOrWhiteSpace(device?.Name) ? primary.Name : device.Name;
             smartDevices.Add(new SmartDevice
             {
                 Id = pair.Key,
-                Name = string.IsNullOrWhiteSpace(device?.Name) ? primary.Name : device.Name,
+                Name = deviceName,
                 Manufacturer = device?.Manufacturer ?? string.Empty,
                 Model = device?.Model ?? string.Empty,
                 AreaId = areaId,
