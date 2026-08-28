@@ -41,6 +41,10 @@ public sealed class SmartTemperatureChart : FrameworkElement
         };
     }
 
+    /// <summary>FrameworkElement 无背景时透明区域不可命中；重写命中测试让整个图面都能接收鼠标移动。</summary>
+    protected override HitTestResult? HitTestCore(PointHitTestParameters parameters) =>
+        new PointHitTestResult(this, parameters.HitPoint);
+
     protected override void OnRender(DrawingContext drawingContext)
     {
         base.OnRender(drawingContext);
