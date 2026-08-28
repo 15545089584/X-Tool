@@ -5,7 +5,9 @@ using MahApps.Metro.IconPacks;
 
 namespace ScreenshotApp.SmartHome;
 
-public sealed record SmartModeOption(string Value, string DisplayName);
+public sealed record SmartModeOption(string Value, string DisplayName, string IconKind = "");
+
+public sealed record SmartFanLevelOption(int Level, string Label, double Percent, bool IsCurrent);
 
 public sealed record SmartFeatureOption(
     string EntityId,
@@ -57,7 +59,7 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
 
     public string Domain => Primary?.Domain ?? string.Empty;
 
-    public bool IsAvailable => Primary?.Available == true;
+    public bool IsAvailable => _device.IsAvailable;
 
     public bool CanInteract => IsAvailable && !IsBusy;
 
@@ -68,6 +70,7 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
         get
         {
             if (!IsAvailable) return false;
+            if (IsSpeakerLike) return true;
             var state = Primary?.State?.ToLowerInvariant() ?? string.Empty;
             return Domain switch
             {
@@ -75,6 +78,8 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
                 "climate" => state is not ("off" or "idle" or "unavailable" or "unknown" or ""),
                 "cover" => state is "opening" or "closing",
                 "light" or "switch" or "fan" => IsOn,
+                "media_player" => state is "playing",
+                "sensor" => state is "playing" or "播放中",
                 _ => false
             };
         }
@@ -83,6 +88,13 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
     public bool IsCameraLike => ContainsAny(
         string.Join(' ', new[] { Primary?.GetText("icon"), Name, _device.Model }.Where(value => !string.IsNullOrWhiteSpace(value))),
         "camera", "摄像", "监控");
+
+    /// <summary>音箱类设备没有独立的电源开关，通电即可控即可视为在线运行，与是否在播放无关。</summary>
+    public bool IsSpeakerLike => ContainsAny(
+        string.Join(' ', new[] { Primary?.GetText("icon"), Name, _device.Model }.Where(value => !string.IsNullOrWhiteSpace(value))),
+        "speaker", "音箱", "音响", "小爱");
+
+    public bool CanRename => !_device.Id.StartsWith("entity:", StringComparison.Ordinal);
 
     public bool CanToggle => !IsCameraLike && (_device.Capabilities & SmartDeviceCapabilities.Toggle) != 0;
 
@@ -124,6 +136,36 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
     public double CoverPosition => _optimisticValue ?? Math.Clamp(Primary?.GetNumber("current_position") ?? 0, 0, 100);
 
     public double FanPercentage => _optimisticValue ?? Math.Clamp(Primary?.GetNumber("percentage") ?? 0, 0, 100);
+
+    /// <summary>风机档位数量：优先取实体上报的 percentage_step，缺失时按三挡处理。</summary>
+    public int FanLevelCount
+    {
+        get
+        {
+            var step = Primary?.GetNumber("percentage_step");
+            return step is > 0.5 ? Math.Clamp((int)Math.Round(100d / step.Value), 2, 6) : 3;
+        }
+    }
+
+    public IReadOnlyList<SmartFanLevelOption> FanLevels
+    {
+        get
+        {
+            string[] labels = ["一挡", "二挡", "三挡", "四挡", "五挡", "六挡"];
+            var count = FanLevelCount;
+            // 档位百分比取整数（33/67/100）：部分集成按整型档位映射，浮点值（66.67）会被拒绝。
+            return Enumerable.Range(1, count)
+                .Select(level => new SmartFanLevelOption(
+                    level,
+                    labels[level - 1],
+                    Math.Round(level * 100d / count),
+                    level == CurrentFanLevel))
+                .ToArray();
+        }
+    }
+
+    public int CurrentFanLevel => Math.Clamp(
+        (int)Math.Round(FanPercentage / (100d / FanLevelCount), MidpointRounding.AwayFromZero), 0, FanLevelCount);
 
     public string TemperatureUnit => "°C";
 
@@ -181,9 +223,20 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
 
     public string IndoorTemperatureText => _insights.IndoorTemperatureCelsius is { } value
         ? $"{value:0.#}°C"
-        : CurrentTemperatureText;
+        : ResolveLiveTemperatureText();
 
-    public string IndoorHumidityText => _insights.IndoorHumidityPercent is { } value ? $"{value:0.#}%" : "未上报";
+    public string IndoorHumidityText => _insights.IndoorHumidityPercent is { } value ? $"{value:0.#}%" : ResolveLiveHumidityText();
+
+    // 环境指标只在设备真的上报温湿度时显示，避免音箱等设备借用空调面板出现占位文案。
+    public bool HasIndoorTemperature => Primary?.GetNumber("current_temperature") is not null ||
+        _device.Entities.Any(entity => entity.Domain == "sensor" &&
+            (string.Equals(entity.GetText("device_class"), "temperature", StringComparison.OrdinalIgnoreCase) ||
+             entity.GetText("unit_of_measurement") is "℃" or "°C" or "°F"));
+
+    public bool HasIndoorHumidity => Primary?.HasAttribute("humidity") == true ||
+        _device.Entities.Any(entity => entity.Domain == "sensor" &&
+            (string.Equals(entity.GetText("device_class"), "humidity", StringComparison.OrdinalIgnoreCase) ||
+             entity.GetText("unit_of_measurement") == "%"));
 
     public string TodayEnergyText => _insights.TodayEnergyKwh is { } value ? $"{value:0.##} kWh" : "暂无记录";
 
@@ -227,11 +280,11 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
 
     public string SupportingSummary => BuildSupportingSummary();
 
-    public string StatusText => !IsAvailable ? "离线" : IsBusy ? "正在同步" : "在线";
+    public string StatusText => !IsAvailable ? (_device.IsTelemetryStale ? "数据过期" : "离线") : IsBusy ? "正在同步" : "在线";
 
     public string ToggleLabel => IsOn ? "关闭" : "开启";
 
-    public string CompactState => !IsAvailable ? "设备离线" : IsCameraLike ? "在线" : MainState;
+    public string CompactState => !IsAvailable ? (_device.IsTelemetryStale ? "数据已过期" : "设备离线") : (IsCameraLike || IsSpeakerLike) ? "在线" : MainState;
 
     public string DeviceTypeLabel => IsCameraLike ? "摄像机" : Domain switch
     {
@@ -250,7 +303,7 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
 
     public Brush AccentBrush => CreateBrush(!IsAvailable
         ? "#9CA6B4"
-        : IsOn ? "#526FAD" : "#72819A");
+        : IsOn ? "#4D7CFE" : "#72819A");
 
     public Brush AccentBackground => CreateBrush(!IsAvailable
         ? "#EEF0F4"
@@ -347,8 +400,19 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
                 _optimisticPresetMode = request.TextValue;
                 break;
         }
-        IsBusy = true;
-        OperationMessage = "正在同步真实状态…";
+
+        // 亮度/色温属于拖动连续调整：只应用乐观值，不进入“正在同步”状态，避免电源键与状态文字闪烁。
+        if (request.Action is SmartHomeControlAction.SetBrightness or SmartHomeControlAction.SetColorTemperature)
+        {
+            IsBusy = false;
+            OperationMessage = string.Empty;
+        }
+        else
+        {
+            IsBusy = true;
+            OperationMessage = "正在同步真实状态…";
+        }
+
         NotifyAll();
     }
 
@@ -376,6 +440,8 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
     public double ToSourceTemperature(double celsius) => IsSourceFahrenheit
         ? celsius * 9d / 5d + 32d
         : celsius;
+
+    public string ColorTemperatureKelvinText => $"{ToColorTemperatureKelvin(ColorTemperaturePercent):0}K";
 
     public double ToColorTemperatureKelvin(double percent)
     {
@@ -411,8 +477,8 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
 
     private string BuildMainState()
     {
-        if (!IsAvailable) return "设备不可用";
-        if (IsCameraLike) return "在线";
+        if (!IsAvailable) return _device.IsTelemetryStale ? "数据已过期" : "设备不可用";
+        if (IsCameraLike || IsSpeakerLike) return "在线";
         var entity = Primary;
         if (entity is null) return "暂无状态";
         return Domain switch
@@ -428,6 +494,13 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
             "climate" => BuildClimateState(entity),
             "cover" => $"{CoverPosition:0}% · {TranslateState(entity.State)}",
             "fan" => IsOn ? $"运行中 · {FanPercentage:0}%" : "已关闭",
+            "media_player" => entity.State.ToLowerInvariant() switch
+            {
+                "playing" => "播放中",
+                "paused" => "已暂停",
+                "buffering" => "缓冲中",
+                _ => TranslateState(entity.State)
+            },
             "sensor" => BuildSensorState(entity),
             "binary_sensor" => TranslateBinarySensor(entity),
             _ => TranslateState(entity.State)
@@ -438,7 +511,8 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
     {
         var values = _device.Entities
             .Where(entity => !ReferenceEquals(entity, Primary) && entity.Available && entity.Domain == "sensor")
-            .Select(entity => $"{entity.Name} {entity.State}{entity.GetText("unit_of_measurement")}")
+            .Where(entity => !string.IsNullOrWhiteSpace(entity.State))
+            .Select(entity => $"{entity.Name.Trim()} {entity.State}{entity.GetText("unit_of_measurement")}")
             .Take(2)
             .ToArray();
         if (values.Length > 0) return string.Join(" · ", values);
@@ -452,6 +526,7 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
             "climate" => "空调与恒温设备",
             "cover" => "窗帘与遮罩设备",
             "fan" => "风扇与净化设备",
+            "media_player" => "音箱与媒体设备",
             "sensor" => "环境传感器",
             "binary_sensor" => "状态传感器",
             _ => "智能家居设备"
@@ -473,7 +548,9 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
         if (!isTemperature || !double.TryParse(entity.State, System.Globalization.NumberStyles.Float,
                 System.Globalization.CultureInfo.InvariantCulture, out var value))
         {
-            return $"{entity.State}{unit}";
+            var text = $"{entity.State}{unit}";
+            // 状态为空的传感器不能渲染成空行；此时设备在线语义优先。
+            return string.IsNullOrWhiteSpace(text) ? "在线" : text;
         }
 
         var celsius = unit.Contains("F", StringComparison.OrdinalIgnoreCase)
@@ -553,23 +630,54 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
 
     private IReadOnlyList<SmartFeatureOption> BuildFeatureControls()
     {
-        if (!IsClimate) return Array.Empty<SmartFeatureOption>();
         var controls = new List<SmartFeatureOption>();
-        foreach (var entity in _device.Entities.Where(entity => entity.Domain is "switch" or "light"))
+        if (IsClimate)
         {
-            var definition = ResolveFeatureDefinition(entity.EntityId);
-            if (definition is null) continue;
-            var isOn = _optimisticEntityStates.TryGetValue(entity.EntityId, out var optimistic)
-                ? optimistic
-                : string.Equals(entity.State, "on", StringComparison.OrdinalIgnoreCase);
+            foreach (var entity in _device.Entities.Where(entity => entity.Domain is "switch" or "light"))
+            {
+                var definition = ResolveFeatureDefinition(entity.EntityId);
+                if (definition is null) continue;
+                var isOn = _optimisticEntityStates.TryGetValue(entity.EntityId, out var optimistic)
+                    ? optimistic
+                    : string.Equals(entity.State, "on", StringComparison.OrdinalIgnoreCase);
+                controls.Add(new SmartFeatureOption(
+                    entity.EntityId,
+                    definition.Value.Label,
+                    definition.Value.Glyph,
+                    isOn,
+                    entity.Available));
+            }
+        }
+
+        // button 实体是“按一下执行”的一次性能力（播放、暂停、跳曲等），任何设备都可能暴露。
+        foreach (var entity in _device.Entities.Where(entity => entity.Domain == "button"))
+        {
             controls.Add(new SmartFeatureOption(
                 entity.EntityId,
-                definition.Value.Label,
-                definition.Value.Glyph,
-                isOn,
-                entity.Available));
+                BuildButtonLabel(entity),
+                ResolveButtonGlyph(entity.EntityId),
+                false,
+                true));
         }
+
         return controls.Take(8).ToArray();
+    }
+
+    private static string BuildButtonLabel(SmartEntity entity)
+    {
+        var name = entity.Name.Trim();
+        return string.IsNullOrWhiteSpace(name) ? entity.EntityId[(entity.EntityId.IndexOf('.') + 1)..] : name;
+    }
+
+    private static string ResolveButtonGlyph(string entityId)
+    {
+        if (entityId.Contains("pause", StringComparison.OrdinalIgnoreCase)) return "\uE769";
+        if (entityId.Contains("previous", StringComparison.OrdinalIgnoreCase) || entityId.Contains("prev", StringComparison.OrdinalIgnoreCase)) return "\uE892";
+        if (entityId.Contains("next", StringComparison.OrdinalIgnoreCase)) return "\uE893";
+        if (entityId.Contains("alarm", StringComparison.OrdinalIgnoreCase)) return "\uE7A7";
+        if (entityId.Contains("radio", StringComparison.OrdinalIgnoreCase) || entityId.Contains("music", StringComparison.OrdinalIgnoreCase)) return "\uE8D6";
+        if (entityId.Contains("play", StringComparison.OrdinalIgnoreCase)) return "\uE768";
+        return "\uE8D6";
     }
 
     private IReadOnlyList<SmartSelectControl> BuildAuxiliarySelects()
@@ -618,7 +726,24 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
         Func<string, string> translate)
     {
         if (values is null || values.Count == 0) return Array.Empty<SmartModeOption>();
-        return values.Select(value => new SmartModeOption(value, translate(value))).ToArray();
+        return values.Select(value => new SmartModeOption(value, translate(value), ResolveModeIcon(value))).ToArray();
+    }
+
+    /// <summary>按模式语义选择 Material 图标，供详情页圆形模式按钮使用。</summary>
+    private static string ResolveModeIcon(string value)
+    {
+        var text = value.ToLowerInvariant();
+        if (text.Contains("睡眠") || text.Contains("sleep")) return "WeatherNight";
+        if (text.Contains("自然") || text.Contains("natural")) return "Leaf";
+        if (text.Contains("直吹") || text.Contains("direct")) return "WeatherWindy";
+        if (text.Contains("摆风") || text.Contains("左右") || text.Contains("swing")) return "ArrowLeftRight";
+        if (text.Contains("制冷") || text.Contains("cool")) return "Snowflake";
+        if (text.Contains("制热") || text.Contains("heat")) return "Fire";
+        if (text.Contains("除湿") || text.Contains("dry")) return "Water";
+        if (text.Contains("送风") || text.Contains("fan_only")) return "Fan";
+        if (text.Contains("自动") || text.Contains("auto")) return "Autorenew";
+        if (text.Contains("情绪") || text.Contains("音乐") || text.Contains("music")) return "MusicNote";
+        return "Fan";
     }
 
     private static string TranslateHvacMode(string value) => value.ToLowerInvariant() switch
@@ -686,8 +811,8 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
         foreach (var property in new[]
                  {
                      nameof(Name), nameof(AreaName), nameof(AreaId), nameof(EntityId), nameof(Domain), nameof(IsAvailable),
-                     nameof(CanInteract), nameof(IsCameraLike), nameof(IsOn), nameof(IsWorking), nameof(CanToggle), nameof(SupportsBrightness), nameof(SupportsTargetTemperature),
-                     nameof(SupportsColorTemperature), nameof(ColorTemperaturePercent), nameof(LiveTemperatureText), nameof(LiveHumidityText),
+                     nameof(CanInteract), nameof(IsCameraLike), nameof(IsSpeakerLike), nameof(IsOn), nameof(IsWorking), nameof(CanToggle), nameof(SupportsBrightness), nameof(SupportsTargetTemperature),
+                     nameof(SupportsColorTemperature), nameof(ColorTemperaturePercent), nameof(ColorTemperatureKelvinText), nameof(LiveTemperatureText), nameof(LiveHumidityText),
                      nameof(DeviceArtworkUri), nameof(HasDeviceArtwork), nameof(IsLightArtwork), nameof(IsClimateArtwork), nameof(IsThermoHygrometerArtwork),
                      nameof(ArtworkOpacity), nameof(ArtworkScale),
                      nameof(SupportsCoverPosition), nameof(SupportsFanPercentage), nameof(SupportsHvacMode),
@@ -699,8 +824,10 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
                      nameof(HasFeatureControls), nameof(HasAuxiliarySelects),
                      nameof(HvacModeOptions), nameof(FanModeOptions), nameof(SwingModeOptions),
                      nameof(PresetModeOptions), nameof(CurrentHvacMode), nameof(CurrentFanMode),
+                     nameof(FanLevels), nameof(CurrentFanLevel),
                      nameof(CurrentSwingMode), nameof(CurrentPresetMode), nameof(MainState),
                      nameof(SupportingSummary), nameof(StatusText), nameof(CompactState), nameof(DeviceTypeLabel),
+                     nameof(HasIndoorTemperature), nameof(HasIndoorHumidity), nameof(CanRename),
                      nameof(ToggleLabel), nameof(IconKind), nameof(AccentBrush), nameof(AccentBackground)
                  })
         {

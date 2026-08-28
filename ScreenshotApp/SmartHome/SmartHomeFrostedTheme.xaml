@@ -91,7 +91,7 @@
                         <Track x:Name="PART_Track" Height="5" VerticalAlignment="Center">
                             <Track.DecreaseRepeatButton>
                                 <RepeatButton Command="{x:Static Slider.DecreaseLarge}" Focusable="False">
-                                    <RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="#526FAD" CornerRadius="3" /></ControlTemplate></RepeatButton.Template>
+                                    <RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="#4D7CFE" CornerRadius="3" /></ControlTemplate></RepeatButton.Template>
                                 </RepeatButton>
                             </Track.DecreaseRepeatButton>
                             <Track.IncreaseRepeatButton>
@@ -101,7 +101,7 @@
                             </Track.IncreaseRepeatButton>
                             <Track.Thumb>
                                 <Thumb Width="15" Height="15" Focusable="False">
-                                    <Thumb.Template><ControlTemplate TargetType="Thumb"><Border Background="#FCFFFFFF" BorderBrush="#526FAD" BorderThickness="1.5" CornerRadius="8" Effect="{StaticResource SmartHomeCardShadow}" /></ControlTemplate></Thumb.Template>
+                                    <Thumb.Template><ControlTemplate TargetType="Thumb"><Border Background="#FCFFFFFF" BorderBrush="#4D7CFE" BorderThickness="1.5" CornerRadius="8" Effect="{StaticResource SmartHomeCardShadow}" /></ControlTemplate></Thumb.Template>
                                 </Thumb>
                             </Track.Thumb>
                         </Track>
@@ -127,7 +127,7 @@
                         <Track x:Name="PART_Track" Width="5" HorizontalAlignment="Center" Orientation="Vertical" IsDirectionReversed="{TemplateBinding IsDirectionReversed}">
                             <Track.DecreaseRepeatButton>
                                 <RepeatButton Command="{x:Static Slider.DecreaseLarge}" Focusable="False">
-                                    <RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="#526FAD" CornerRadius="3" /></ControlTemplate></RepeatButton.Template>
+                                    <RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="#4D7CFE" CornerRadius="3" /></ControlTemplate></RepeatButton.Template>
                                 </RepeatButton>
                             </Track.DecreaseRepeatButton>
                             <Track.IncreaseRepeatButton>
@@ -137,7 +137,7 @@
                             </Track.IncreaseRepeatButton>
                             <Track.Thumb>
                                 <Thumb Width="15" Height="15" Focusable="False">
-                                    <Thumb.Template><ControlTemplate TargetType="Thumb"><Border Background="#FCFFFFFF" BorderBrush="#526FAD" BorderThickness="1.5" CornerRadius="8" Effect="{StaticResource SmartHomeCardShadow}" /></ControlTemplate></Thumb.Template>
+                                    <Thumb.Template><ControlTemplate TargetType="Thumb"><Border Background="#FCFFFFFF" BorderBrush="#4D7CFE" BorderThickness="1.5" CornerRadius="8" Effect="{StaticResource SmartHomeCardShadow}" /></ControlTemplate></Thumb.Template>
                                 </Thumb>
                             </Track.Thumb>
                         </Track>

@@ -165,7 +165,7 @@ public partial class SmartHomeView : UserControl
 
         var selected = _selectedAreaId;
         AreaFilters.Clear();
-        AreaFilters.Add(new SmartAreaFilterItem("__online", "在线", snapshot.Devices.Count(device => device.PrimaryEntity?.Available == true), PackIconMaterialKind.WifiCheck));
+        AreaFilters.Add(new SmartAreaFilterItem("__online", "在线", snapshot.Devices.Count(device => device.IsAvailable), PackIconMaterialKind.WifiCheck));
         AreaFilters.Add(new SmartAreaFilterItem("__all", "全屋", snapshot.Devices.Count, PackIconMaterialKind.HomeOutline));
         foreach (var area in snapshot.Areas)
         {
@@ -227,6 +227,36 @@ public partial class SmartHomeView : UserControl
 
     private async void DeviceDetailDialog_CommandRequested(object? sender, SmartHomeControlRequest request) =>
         await ExecuteDeviceCommandAsync(request);
+
+    /// <summary>拖动实时命令：不受 IsBusy 防抖限制，直接下发；失败时回滚乐观状态。</summary>
+    private async void DeviceDetailDialog_LiveCommandRequested(object? sender, SmartHomeControlRequest request)
+    {
+        if (_deviceById.Values.FirstOrDefault(device => device.ContainsEntity(request.EntityId)) is not { } device) return;
+        try
+        {
+            await _service.ExecuteAsync(request);
+            _ = RollbackIfUnconfirmedAsync(device);
+        }
+        catch (Exception exception)
+        {
+            device.Rollback(FriendlyError(exception));
+        }
+    }
+
+    private async void DeviceDetailDialog_RenameRequested(object? sender, string newName)
+    {
+        if (DeviceDetailDialog.Device is not { } device) return;
+        try
+        {
+            await _service.RenameDeviceAsync(device.SourceDevice.Id, newName);
+            await _service.RefreshAsync();
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show($"设备重命名失败：{exception.Message}", "X-Tool 智能家居",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
 
     private async Task ExecuteDeviceCommandAsync(SmartHomeControlRequest request)
     {

@@ -93,6 +93,9 @@ public sealed record SmartEntity
 
     public string? AreaId { get; init; }
 
+    /// <summary>Home Assistant 最近一次写入该实体状态的时间，用于纯遥测设备的失联判断。</summary>
+    public DateTimeOffset? LastUpdated { get; init; }
+
     public Dictionary<string, JsonElement> Attributes { get; init; } = new(StringComparer.Ordinal);
 
     [JsonIgnore]
@@ -171,31 +174,79 @@ public sealed record SmartDevice
     [JsonIgnore]
     public SmartDeviceCapabilities Capabilities => DetermineCapabilities(PrimaryEntity);
 
+    [JsonIgnore]
+    public bool IsAvailable => (PrimaryEntity?.Available ?? false) && !IsTelemetryStale;
+
+    /// <summary>纯遥测设备超过 24 小时没有任何实体更新时视为失联；受控设备不适用此判断。</summary>
+    [JsonIgnore]
+    public bool IsTelemetryStale
+    {
+        get
+        {
+            // 只有全部实体都是传感器的设备（温湿度计等）才预期周期性上报；小米Home 集成对失联的
+            // 蓝牙传感器不会标记 unavailable，只保留最后一次数值，必须靠 last_updated 判断。
+            // 开关/音箱等受控设备只有状态变化才刷新 last_updated，长期不变是正常现象，不做此判断。
+            if (Entities.Count == 0 ||
+                Entities.Any(entity => entity.Domain is not ("sensor" or "binary_sensor")))
+            {
+                return false;
+            }
+
+            DateTimeOffset? newest = null;
+            foreach (var entity in Entities)
+            {
+                if (entity.LastUpdated is not null &&
+                    (newest is null || entity.LastUpdated.Value > newest))
+                {
+                    newest = entity.LastUpdated;
+                }
+            }
+
+            return newest is not null && DateTimeOffset.Now - newest.Value > TimeSpan.FromHours(24);
+        }
+    }
+
     private static int GetDomainPriority(string domain) => domain switch
     {
         // 设备可能同时暴露指示灯或辅助开关；专用控制实体必须优先。
+        // media_player 优先于 switch：小爱音箱等设备的麦克风静音开关不能作为主实体。
         "camera" => 0,
         "climate" => 1,
         "cover" => 2,
         "fan" => 3,
         "light" => 4,
-        "switch" => 5,
-        "binary_sensor" => 6,
-        "select" => 7,
-        "number" => 8,
-        "sensor" => 9,
+        "media_player" => 5,
+        "switch" => 6,
+        "binary_sensor" => 7,
+        "select" => 8,
+        "number" => 9,
+        "sensor" => 10,
         _ => 100
     };
 
     private static int GetEntityPriority(SmartEntity entity)
     {
         var priority = GetDomainPriority(entity.Domain) * 10;
+        // 静音、睡眠等辅助开关描述的是局部功能，不能成为设备主实体或主控制。
+        if (entity.Domain is "switch" or "binary_sensor" && IsAuxiliaryControl(entity)) priority += 1000;
         if (entity.Domain != "sensor") return priority;
         var deviceClass = entity.GetText("device_class");
         var unit = entity.GetText("unit_of_measurement");
         if (deviceClass == "temperature" || unit is "℃" or "°C") return priority;
         if (deviceClass == "humidity" || unit == "%") return priority + 1;
         return priority + 2;
+    }
+
+    private static bool IsAuxiliaryControl(SmartEntity entity)
+    {
+        var text = $"{entity.EntityId} {entity.Name}".ToLowerInvariant();
+        return text.Contains("mute", StringComparison.Ordinal) || text.Contains("microphone", StringComparison.Ordinal) ||
+               text.Contains("_mic", StringComparison.Ordinal) || text.Contains("sleep", StringComparison.Ordinal) ||
+               text.Contains("indicator", StringComparison.Ordinal) || text.Contains("night_light", StringComparison.Ordinal) ||
+               text.Contains("child_lock", StringComparison.Ordinal) || text.Contains("physical_controls_locked", StringComparison.Ordinal) ||
+               text.Contains("alarm", StringComparison.Ordinal) || text.Contains("buzzer", StringComparison.Ordinal) ||
+               text.Contains("beep", StringComparison.Ordinal) || text.Contains("task_switch", StringComparison.Ordinal) ||
+               text.Contains("power_enable", StringComparison.Ordinal);
     }
 
     private static SmartDeviceCapabilities DetermineCapabilities(SmartEntity? entity)

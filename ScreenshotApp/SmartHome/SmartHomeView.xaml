@@ -127,10 +127,10 @@
             </Setter>
         </Style>
         <Style x:Key="RoomNavigationItemStyle" TargetType="ListBoxItem">
-            <Setter Property="MinWidth" Value="82" />
-            <Setter Property="Height" Value="58" />
-            <Setter Property="Margin" Value="4,0" />
-            <Setter Property="Padding" Value="12,6" />
+            <Setter Property="MinWidth" Value="90" />
+            <Setter Property="Height" Value="62" />
+            <Setter Property="Margin" Value="5,0" />
+            <Setter Property="Padding" Value="14,7" />
             <Setter Property="Foreground" Value="{StaticResource SmartHomeTextSecondaryBrush}" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Cursor" Value="Hand" />
@@ -228,8 +228,6 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="16" />
                 <RowDefinition Height="*" />
-                <RowDefinition Height="12" />
-                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <Grid>
@@ -262,12 +260,16 @@
             <Border Grid.Row="2" Background="{StaticResource SmartHomeGlassPanelBrush}"
                     BorderBrush="{StaticResource SmartHomeGlassBorderBrush}" BorderThickness="1" CornerRadius="25"
                     Effect="{StaticResource SmartHomePanelShadow}">
-                <Grid>
-                    <Grid Margin="18">
+                <Grid ClipToBounds="True">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid Margin="20,20,20,8">
                         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                            <ItemsControl ItemsSource="{Binding VisibleDevices}">
+                            <ItemsControl VerticalAlignment="Top" ItemsSource="{Binding VisibleDevices}">
                                 <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate><WrapPanel HorizontalAlignment="Left" /></ItemsPanelTemplate>
+                                    <ItemsPanelTemplate><UniformGrid Columns="3" /></ItemsPanelTemplate>
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
@@ -288,41 +290,40 @@
                             </StackPanel>
                         </Border>
                     </Grid>
+                    <Border Grid.Row="1" Margin="20,8,20,18" HorizontalAlignment="Center" Padding="12,9"
+                            Background="#D9E7EAF7" BorderBrush="#BFFFFFFF" BorderThickness="1"
+                            CornerRadius="23" Effect="{StaticResource SmartHomeCardShadow}">
+                        <ScrollViewer MaxWidth="980" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled">
+                            <ListBox x:Name="AreaFilterList" ItemsSource="{Binding AreaFilters}" SelectedIndex="0"
+                                     Background="Transparent" BorderThickness="0" SelectionChanged="AreaFilterList_SelectionChanged">
+                                <ListBox.ItemsPanel>
+                                    <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                </ListBox.ItemsPanel>
+                                <ListBox.ItemContainerStyle><StaticResource ResourceKey="RoomNavigationItemStyle" /></ListBox.ItemContainerStyle>
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel HorizontalAlignment="Center">
+                                            <Grid HorizontalAlignment="Center">
+                                                <iconPacks:PackIconMaterial Width="21" Height="21"
+                                                                            Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}"
+                                                                            Kind="{Binding IconKind}" />
+                                                <Border MinWidth="19" Height="19" Margin="19,-8,-15,0" Padding="4,0"
+                                                        HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                        Background="#78FFFFFF" CornerRadius="9.5">
+                                                    <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="9"
+                                                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}"
+                                                               Text="{Binding Count}" />
+                                                </Border>
+                                            </Grid>
+                                            <TextBlock Margin="0,5,0,0" FontSize="11.5" FontWeight="SemiBold" Text="{Binding Name}"
+                                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </ScrollViewer>
+                    </Border>
                 </Grid>
-            </Border>
-
-            <Border Grid.Row="4" HorizontalAlignment="Center" Padding="10,8"
-                    Background="#D9E7EAF7" BorderBrush="#BFFFFFFF" BorderThickness="1"
-                    CornerRadius="22" Effect="{StaticResource SmartHomePanelShadow}">
-                <ScrollViewer MaxWidth="940" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled">
-                    <ListBox x:Name="AreaFilterList" ItemsSource="{Binding AreaFilters}" SelectedIndex="0"
-                             Background="Transparent" BorderThickness="0" SelectionChanged="AreaFilterList_SelectionChanged">
-                        <ListBox.ItemsPanel>
-                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-                        </ListBox.ItemsPanel>
-                        <ListBox.ItemContainerStyle><StaticResource ResourceKey="RoomNavigationItemStyle" /></ListBox.ItemContainerStyle>
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <StackPanel HorizontalAlignment="Center">
-                                    <Grid HorizontalAlignment="Center">
-                                        <iconPacks:PackIconMaterial Width="19" Height="19"
-                                                                    Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}"
-                                                                    Kind="{Binding IconKind}" />
-                                        <Border MinWidth="18" Height="18" Margin="17,-8,-14,0" Padding="4,0"
-                                                HorizontalAlignment="Right" VerticalAlignment="Top"
-                                                Background="#78FFFFFF" CornerRadius="9">
-                                            <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="8.5"
-                                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}"
-                                                       Text="{Binding Count}" />
-                                        </Border>
-                                    </Grid>
-                                    <TextBlock Margin="0,5,0,0" FontSize="10.5" FontWeight="SemiBold" Text="{Binding Name}"
-                                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" />
-                                </StackPanel>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
-                </ScrollViewer>
             </Border>
         </Grid>
 
@@ -364,6 +365,8 @@
               PreviewKeyDown="DeviceDetailOverlay_PreviewKeyDown">
             <local:SmartDeviceDetailDialog x:Name="DeviceDetailDialog" HorizontalAlignment="Center" VerticalAlignment="Center"
                                            CommandRequested="DeviceDetailDialog_CommandRequested"
+                                           LiveCommandRequested="DeviceDetailDialog_LiveCommandRequested"
+                                           RenameRequested="DeviceDetailDialog_RenameRequested"
                                            CloseRequested="DeviceDetailDialog_CloseRequested" />
         </Grid>
     </Grid>

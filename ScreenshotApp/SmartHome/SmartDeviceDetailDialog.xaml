@@ -125,6 +125,32 @@
                 </Setter>
             </Style>
 
+            <!-- 详情页总开关：与卡片电源键一致的蓝底白色电源圆形按钮。 -->
+            <Style x:Key="PowerButtonStyle" TargetType="Button">
+                <Setter Property="Width" Value="56" />
+                <Setter Property="Height" Value="56" />
+                <Setter Property="Background" Value="#4D7CFE" />
+                <Setter Property="Foreground" Value="White" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Surface" Background="{TemplateBinding Background}" CornerRadius="28">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                  TextElement.Foreground="{TemplateBinding Foreground}" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Surface" Property="Background" Value="#6F90FE" /></Trigger>
+                                <Trigger Property="IsPressed" Value="True"><Setter TargetName="Surface" Property="Opacity" Value="0.68" /></Trigger>
+                                <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Surface" Property="Opacity" Value="0.36" /></Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
             <Style x:Key="ModeButtonStyle" TargetType="ListBoxItem">
                 <Setter Property="Width" Value="76" />
                 <Setter Property="Height" Value="84" />
@@ -144,7 +170,7 @@
                             </StackPanel>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ModeCircle" Property="Background" Value="#F4FFFFFF" /></Trigger>
-                                <Trigger Property="IsSelected" Value="True"><Setter TargetName="ModeCircle" Property="Background" Value="#526FAD" /><Setter Property="Foreground" Value="White" /></Trigger>
+                                <Trigger Property="IsSelected" Value="True"><Setter TargetName="ModeCircle" Property="Background" Value="#4D7CFE" /><Setter Property="Foreground" Value="White" /></Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
                     </Setter.Value>
@@ -152,8 +178,8 @@
             </Style>
 
             <Style x:Key="SectionCardStyle" TargetType="Border">
-                <Setter Property="Margin" Value="0,0,0,13" />
-                <Setter Property="Padding" Value="20,18" />
+                <Setter Property="Margin" Value="0,0,0,10" />
+                <Setter Property="Padding" Value="18,13" />
                 <Setter Property="Background" Value="#BDF6F8FC" />
                 <Setter Property="BorderBrush" Value="#AFFFFFFF" />
                 <Setter Property="BorderThickness" Value="1" />
@@ -162,16 +188,34 @@
         </ResourceDictionary>
     </UserControl.Resources>
 
-    <Border Padding="24,22" Background="#F4F7F9FD" BorderBrush="#E2FFFFFF" BorderThickness="1"
+    <Border Padding="22,16" Background="#F4F7F9FD" BorderBrush="#E2FFFFFF" BorderThickness="1"
             CornerRadius="28" DataContext="{Binding Device, ElementName=Root}" Effect="{StaticResource SmartHomeDialogShadow}">
         <Grid>
-            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="14" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="10" /><RowDefinition Height="*" /></Grid.RowDefinitions>
 
             <Grid>
                 <StackPanel>
-                    <TextBlock MaxWidth="760" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource SmartHomeTextPrimaryBrush}"
-                               Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-                    <StackPanel Margin="1,6,0,0" Orientation="Horizontal">
+                    <StackPanel x:Name="TitleRow" HorizontalAlignment="Center" Orientation="Horizontal">
+                        <TextBlock MaxWidth="720" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource SmartHomeTextPrimaryBrush}"
+                                   VerticalAlignment="Center" TextAlignment="Center"
+                                   Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                        <Button Width="30" Height="30" Margin="8,0,0,0" Padding="0" VerticalAlignment="Center"
+                                Style="{StaticResource SoftButtonStyle}" Click="Rename_Click"
+                                AutomationProperties.Name="重命名设备"
+                                Visibility="{Binding CanRename, Converter={StaticResource BoolToVisibility}}">
+                            <iconPacks:PackIconMaterial Width="14" Height="14" Kind="Pencil" Foreground="#71829A" />
+                        </Button>
+                    </StackPanel>
+                    <StackPanel x:Name="RenameRow" HorizontalAlignment="Center" Orientation="Horizontal" Visibility="Collapsed">
+                        <TextBox x:Name="RenameBox" Width="430" Height="36" FontSize="16" MaxLength="128"
+                                 VerticalContentAlignment="Center" Padding="10,0"
+                                 Background="#F2FFFFFF" BorderBrush="#9ACBD8E8" BorderThickness="1"
+                                 KeyDown="RenameBox_KeyDown" />
+                        <Button Width="64" Height="36" Margin="8,0,0,0" Content="保存" Style="{StaticResource SoftButtonStyle}"
+                                Background="#4D7CFE" Foreground="White" Click="ConfirmRename_Click" />
+                        <Button Width="64" Height="36" Margin="8,0,0,0" Content="取消" Style="{StaticResource SoftButtonStyle}" Background="#4D7CFE" Foreground="White" Click="CancelRename_Click" />
+                    </StackPanel>
+                    <StackPanel Margin="0,6,0,0" HorizontalAlignment="Center" Orientation="Horizontal">
                         <Ellipse Width="7" Height="7" Margin="0,0,7,0" VerticalAlignment="Center">
                             <Ellipse.Style><Style TargetType="Ellipse"><Setter Property="Fill" Value="#28B486" /><Style.Triggers><DataTrigger Binding="{Binding IsAvailable}" Value="False"><Setter Property="Fill" Value="#A8B3BC" /></DataTrigger></Style.Triggers></Style></Ellipse.Style>
                         </Ellipse>
@@ -185,14 +229,70 @@
 
             <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <StackPanel Margin="0,0,5,0">
-                    <Border Height="250" Style="{StaticResource SectionCardStyle}" Background="#B8EEF3FA">
+                    <Border Height="232" Style="{StaticResource SectionCardStyle}" Background="#B8EEF3FA">
                         <Grid>
                             <Grid.ColumnDefinitions><ColumnDefinition Width="44*" /><ColumnDefinition Width="56*" /></Grid.ColumnDefinitions>
                             <Grid Margin="4,0,20,0">
                                 <Image MaxWidth="320" MaxHeight="205" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                       Stretch="Uniform" Source="{Binding DeviceArtworkUri}" RenderOptions.BitmapScalingMode="HighQuality">
-                                    <Image.Style><Style TargetType="Image"><Setter Property="Visibility" Value="Collapsed" /><Style.Triggers><DataTrigger Binding="{Binding HasDeviceArtwork}" Value="True"><Setter Property="Visibility" Value="Visible" /></DataTrigger></Style.Triggers></Style></Image.Style>
+                                       Stretch="Uniform" Source="{Binding DeviceArtworkUri}" RenderOptions.BitmapScalingMode="HighQuality"
+                                       RenderTransformOrigin="0.5,0.5">
+                                    <Image.Style>
+                                        <Style TargetType="Image">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Setter Property="RenderTransform">
+                                                <Setter.Value><TranslateTransform X="0" /></Setter.Value>
+                                            </Setter>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding HasDeviceArtwork}" Value="True"><Setter Property="Visibility" Value="Visible" /></DataTrigger>
+                                                <!-- bulb.png 画布内容整体偏右约 9%，详情大图按高度缩放后向左补偿。 -->
+                                                <DataTrigger Binding="{Binding IsLightArtwork}" Value="True">
+                                                    <Setter Property="RenderTransform">
+                                                        <Setter.Value><TranslateTransform X="-17" /></Setter.Value>
+                                                    </Setter>
+                                                </DataTrigger>
+                                                <!-- 风扇改用下方“只显示机头”的旋转视图，不再展示含底座的整张素材。 -->
+                                                <MultiDataTrigger>
+                                                    <MultiDataTrigger.Conditions>
+                                                        <Condition Binding="{Binding IsFan}" Value="True" />
+                                                        <Condition Binding="{Binding HasDeviceArtwork}" Value="True" />
+                                                    </MultiDataTrigger.Conditions>
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </MultiDataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Image.Style>
                                 </Image>
+                                <!-- 风扇机头视图：圆形裁剪只保留机头，运行时机头（叶片）旋转，底座不参与。
+                                     几何来自 fan.png 实测：机头中心约 (358,330)、外笼半径约 274（720 画布）。 -->
+                                <Border Width="180" Height="180" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                        CornerRadius="90" ClipToBounds="True"
+                                        Visibility="{Binding IsFan, Converter={StaticResource BoolToVisibility}}">
+                                    <Image Width="236" Height="236" Stretch="Uniform" Source="{Binding DeviceArtworkUri}"
+                                           RenderOptions.BitmapScalingMode="HighQuality"
+                                           HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-28,-18,0,0">
+                                        <Image.RenderTransform>
+                                            <RotateTransform x:Name="FanHeadRotate" CenterX="118" CenterY="108" Angle="0" />
+                                        </Image.RenderTransform>
+                                        <Image.Style>
+                                            <Style TargetType="Image">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsOn}" Value="True">
+                                                        <DataTrigger.EnterActions>
+                                                            <BeginStoryboard x:Name="FanHeadSpin">
+                                                                <Storyboard>
+                                                                    <DoubleAnimation Storyboard.TargetProperty="RenderTransform.Angle" From="0" To="360" Duration="0:0:1.6" RepeatBehavior="Forever" />
+                                                                </Storyboard>
+                                                            </BeginStoryboard>
+                                                        </DataTrigger.EnterActions>
+                                                        <DataTrigger.ExitActions>
+                                                            <StopStoryboard BeginStoryboardName="FanHeadSpin" />
+                                                        </DataTrigger.ExitActions>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Image.Style>
+                                    </Image>
+                                </Border>
                                 <Grid>
                                     <Grid.Style><Style TargetType="Grid"><Setter Property="Visibility" Value="Visible" /><Style.Triggers><DataTrigger Binding="{Binding HasDeviceArtwork}" Value="True"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger></Style.Triggers></Style></Grid.Style>
                                     <Ellipse Width="138" Height="138" Fill="{Binding AccentBackground}" />
@@ -208,24 +308,29 @@
                                 </Border>
                             </Grid>
 
-                            <StackPanel Grid.Column="1" Margin="18,10,8,10" VerticalAlignment="Center">
-                                <TextBlock FontSize="11" Foreground="#71849A" Text="当前状态" />
-                                <TextBlock Margin="0,5,0,0" FontSize="28" FontWeight="SemiBold" Foreground="#20354A" Text="{Binding MainState}" TextWrapping="Wrap" />
-                                <TextBlock Margin="0,7,0,0" MaxWidth="400" FontSize="10.5" Foreground="#7A8DA0" Text="{Binding SupportingSummary}" TextTrimming="CharacterEllipsis" />
-                                <Grid Margin="0,20,0,0">
+                            <StackPanel Grid.Column="1" Margin="14,6,4,6" VerticalAlignment="Center">
+                                <TextBlock FontSize="11" Foreground="#71849A" Text="当前状态" HorizontalAlignment="Left" TextAlignment="Left" />
+                                <TextBlock Margin="0,5,0,0" FontSize="26" FontWeight="SemiBold" Foreground="#20354A" Text="{Binding MainState}" TextWrapping="Wrap"
+                                           HorizontalAlignment="Left" TextAlignment="Left" />
+                                <TextBlock Margin="0,7,0,0" MaxWidth="400" FontSize="10.5" Foreground="#7A8DA0" Text="{Binding SupportingSummary}" TextTrimming="CharacterEllipsis"
+                                           HorizontalAlignment="Left" TextAlignment="Left" />
+                                <Grid Margin="0,12,0,0">
                                     <StackPanel Orientation="Horizontal">
-                                        <StackPanel Margin="0,0,30,0">
+                                        <StackPanel Margin="0,0,30,0" Visibility="{Binding HasIndoorTemperature, Converter={StaticResource BoolToVisibility}}">
                                             <TextBlock FontSize="10" Foreground="#8293A4" Text="室内温度" />
-                                            <TextBlock Margin="0,3,0,0" FontSize="20" FontWeight="SemiBold" Foreground="#526FAD" Text="{Binding IndoorTemperatureText}" />
+                                            <TextBlock Margin="0,3,0,0" FontSize="20" FontWeight="SemiBold" Foreground="#4D7CFE" Text="{Binding IndoorTemperatureText}" />
                                         </StackPanel>
-                                        <StackPanel>
+                                        <StackPanel Visibility="{Binding HasIndoorHumidity, Converter={StaticResource BoolToVisibility}}">
                                             <TextBlock FontSize="10" Foreground="#8293A4" Text="室内湿度" />
-                                            <TextBlock Margin="0,3,0,0" FontSize="20" FontWeight="SemiBold" Foreground="#526FAD" Text="{Binding IndoorHumidityText}" />
+                                            <TextBlock Margin="0,3,0,0" FontSize="20" FontWeight="SemiBold" Foreground="#4D7CFE" Text="{Binding IndoorHumidityText}" />
                                         </StackPanel>
                                     </StackPanel>
-                                    <Button Width="98" Height="44" HorizontalAlignment="Right" Style="{StaticResource SoftButtonStyle}" Background="#526FAD" Foreground="White"
-                                            Content="{Binding ToggleLabel}" Click="Toggle_Click" IsEnabled="{Binding CanInteract}"
-                                            Visibility="{Binding CanToggle, Converter={StaticResource BoolToVisibility}}" />
+                                    <Button Width="56" Height="56" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                            Style="{StaticResource PowerButtonStyle}" Click="Toggle_Click" IsEnabled="{Binding CanInteract}"
+                                            AutomationProperties.Name="{Binding ToggleLabel, Mode=OneWay}"
+                                            Visibility="{Binding CanToggle, Converter={StaticResource BoolToVisibility}}">
+                                        <iconPacks:PackIconMaterial Width="24" Height="24" Foreground="White" Kind="Power" />
+                                    </Button>
                                 </Grid>
                             </StackPanel>
                         </Grid>
@@ -280,55 +385,252 @@
                         </StackPanel>
                     </Border>
 
-                    <Border Style="{StaticResource SectionCardStyle}" Visibility="{Binding HasFeatureControls, Converter={StaticResource BoolToVisibility}}">
-                        <StackPanel>
-                            <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="#294359" Text="设备功能" />
-                            <ItemsControl Margin="0,16,0,0" ItemsSource="{Binding FeatureControls}">
-                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Button Width="92" Height="100" Margin="0,0,12,10" Padding="0" Background="Transparent" BorderThickness="0" Cursor="Hand"
-                                                Click="FeatureToggle_Click" IsEnabled="{Binding IsAvailable}">
-                                            <StackPanel HorizontalAlignment="Center">
-                                                <Border Width="58" Height="58" Background="#C8EEF2F7" BorderBrush="#B5FFFFFF" BorderThickness="1" CornerRadius="29">
-                                                    <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="23" Foreground="#63758D" Text="{Binding IconGlyph}" />
-                                                </Border>
-                                                <TextBlock Margin="0,7,0,0" HorizontalAlignment="Center" FontSize="10.5" FontWeight="SemiBold" Foreground="#53667D" Text="{Binding DisplayName}" />
-                                            </StackPanel>
-                                        </Button>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                    </Border>
-
                     <Border Style="{StaticResource SectionCardStyle}" Visibility="{Binding SupportsBrightness, Converter={StaticResource BoolToVisibility}}">
                         <StackPanel>
                             <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="#294359" Text="灯光控制" />
-                            <Grid Margin="0,15,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="58" /></Grid.ColumnDefinitions>
-                                <Slider x:Name="BrightnessSlider" Minimum="0" Maximum="100" Value="{Binding BrightnessPercent, Mode=OneWay}" Style="{StaticResource SmartHomeSliderStyle}"
-                                        IsEnabled="{Binding CanInteract}" PreviewMouseLeftButtonUp="BrightnessSlider_Commit" KeyUp="BrightnessSlider_KeyUp" AutomationProperties.Name="亮度" />
-                                <TextBlock Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12" Foreground="#5D768C" Text="{Binding BrightnessPercent, StringFormat={}{0:0}%}" />
-                            </Grid>
-                            <Grid Margin="0,14,0,0" Visibility="{Binding SupportsColorTemperature, Converter={StaticResource BoolToVisibility}}"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="58" /></Grid.ColumnDefinitions>
-                                <Slider x:Name="DetailColorTemperatureSlider" Minimum="0" Maximum="100" Value="{Binding ColorTemperaturePercent, Mode=OneWay}" Style="{StaticResource SmartHomeSliderStyle}"
-                                        IsEnabled="{Binding CanInteract}" PreviewMouseLeftButtonUp="DetailColorTemperatureSlider_Commit" KeyUp="DetailColorTemperatureSlider_KeyUp" AutomationProperties.Name="色温" />
-                                <TextBlock Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12" Foreground="#5D768C" Text="{Binding ColorTemperaturePercent, StringFormat={}{0:0}%}" />
-                            </Grid>
+                            <StackPanel Margin="0,10,0,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock FontSize="11" Foreground="#71849A" Text="亮度" />
+                                    <TextBlock Margin="10,0,0,0" FontSize="11" FontWeight="SemiBold" Foreground="#4D7CFE"
+                                               Text="{Binding BrightnessPercent, StringFormat={}{0:0}%}" />
+                                </StackPanel>
+                                <Grid x:Name="BrightnessBar" Height="42" Margin="0,8,0,0" ClipToBounds="True" Cursor="Hand"
+                                      Background="Transparent"
+                                      MouseLeftButtonDown="BrightnessBar_MouseLeftButtonDown"
+                                      MouseMove="BrightnessBar_MouseMove"
+                                      MouseLeftButtonUp="BrightnessBar_MouseLeftButtonUp"
+                                      SizeChanged="BrightnessBar_SizeChanged"
+                                      AutomationProperties.Name="亮度调节">
+                                    <Border Background="#E4E9F0F8" BorderBrush="#AFFFFFFF" BorderThickness="1" CornerRadius="23" />
+                                    <Border x:Name="BrightnessFill" Background="#F7B733" CornerRadius="23" HorizontalAlignment="Left" Width="0" />
+                                    <iconPacks:PackIconMaterial Width="20" Height="20" Kind="LightbulbOutline" Foreground="#C8FFFFFF"
+                                                                HorizontalAlignment="Left" Margin="18,0,0,0" VerticalAlignment="Center" />
+                                    <iconPacks:PackIconMaterial Width="20" Height="20" Kind="Brightness5" Foreground="#8B9AAB"
+                                                                HorizontalAlignment="Right" Margin="0,0,18,0" VerticalAlignment="Center" />
+                                </Grid>
+                            </StackPanel>
+                            <StackPanel Margin="0,12,0,0" Visibility="{Binding SupportsColorTemperature, Converter={StaticResource BoolToVisibility}}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock FontSize="11" Foreground="#71849A" Text="色温" />
+                                    <TextBlock Margin="10,0,0,0" FontSize="11" FontWeight="SemiBold" Foreground="#4D7CFE"
+                                               Text="{Binding ColorTemperatureKelvinText, Mode=OneWay}" />
+                                </StackPanel>
+                                <Grid x:Name="ColorTempPalette" Height="146" Margin="0,8,0,0" ClipToBounds="True" Cursor="Cross"
+                                      MouseLeftButtonDown="ColorTempPalette_MouseLeftButtonDown"
+                                      MouseMove="ColorTempPalette_MouseMove"
+                                      MouseLeftButtonUp="ColorTempPalette_MouseLeftButtonUp"
+                                      SizeChanged="ColorTempPalette_SizeChanged"
+                                      AutomationProperties.Name="色温调节板">
+                                    <Border CornerRadius="18" BorderBrush="#AFFFFFFF" BorderThickness="1">
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0,1" EndPoint="1,0">
+                                                <GradientStop Color="#F2A93B" Offset="0" />
+                                                <GradientStop Color="#F9CE7A" Offset="0.38" />
+                                                <GradientStop Color="#FDF3DC" Offset="0.7" />
+                                                <GradientStop Color="#E9F2FE" Offset="1" />
+                                            </LinearGradientBrush>
+                                        </Border.Background>
+                                    </Border>
+                                    <Ellipse x:Name="ColorTempIndicator" Width="26" Height="26" Fill="#26FFFFFF"
+                                             Stroke="White" StrokeThickness="3" VerticalAlignment="Top"
+                                             HorizontalAlignment="Left" Margin="-13,-13,0,0" IsHitTestVisible="False" />
+                                </Grid>
+                            </StackPanel>
                         </StackPanel>
                     </Border>
 
                     <Border Style="{StaticResource SectionCardStyle}" Visibility="{Binding IsFan, Converter={StaticResource BoolToVisibility}}">
                         <StackPanel>
                             <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="#294359" Text="风扇控制" />
-                            <Grid Margin="0,15,0,0" Visibility="{Binding SupportsFanPercentage, Converter={StaticResource BoolToVisibility}}"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="58" /></Grid.ColumnDefinitions>
-                                <Slider x:Name="FanSlider" Minimum="0" Maximum="100" Value="{Binding FanPercentage, Mode=OneWay}" Style="{StaticResource SmartHomeSliderStyle}"
-                                        IsEnabled="{Binding CanInteract}" PreviewMouseLeftButtonUp="FanSlider_Commit" KeyUp="FanSlider_KeyUp" AutomationProperties.Name="风速" />
-                                <TextBlock Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12" Foreground="#5D768C" Text="{Binding FanPercentage, StringFormat={}{0:0}%}" />
-                            </Grid>
-                            <ComboBox Margin="0,14,0,0" Style="{StaticResource DetailComboBoxStyle}" ItemsSource="{Binding PresetModeOptions}" DisplayMemberPath="DisplayName" SelectedValuePath="Value"
-                                      SelectedValue="{Binding CurrentPresetMode, Mode=OneWay}" IsEnabled="{Binding CanInteract}" SelectionChanged="PresetComboBox_SelectionChanged"
-                                      Visibility="{Binding SupportsPreset, Converter={StaticResource BoolToVisibility}}" />
+                            <StackPanel Margin="0,12,0,0" Visibility="{Binding SupportsPreset, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock FontSize="11" Foreground="#71849A" Text="模式" />
+                            </StackPanel>
+                            <ListBox x:Name="FanPresetList" Margin="0,8,0,0" ItemsSource="{Binding PresetModeOptions}" SelectedValuePath="Value"
+                                     SelectedValue="{Binding CurrentPresetMode, Mode=OneWay}" Background="Transparent" BorderThickness="0"
+                                     HorizontalContentAlignment="Stretch"
+                                     SelectionChanged="FanPresetList_SelectionChanged"
+                                     Visibility="{Binding SupportsPreset, Converter={StaticResource BoolToVisibility}}">
+                                <ListBox.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="1" /></ItemsPanelTemplate></ListBox.ItemsPanel>
+                                <ListBox.ItemContainerStyle>
+                                    <Style TargetType="ListBoxItem">
+                                        <Setter Property="Cursor" Value="Hand" />
+                                        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                                        <Setter Property="Template">
+                                            <Setter.Value><ControlTemplate TargetType="ListBoxItem"><ContentPresenter /></ControlTemplate></Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </ListBox.ItemContainerStyle>
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel HorizontalAlignment="Center">
+                                            <Border Width="58" Height="58" CornerRadius="29" BorderBrush="#B0FFFFFF" BorderThickness="1">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Background" Value="#C7EEF2F7" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                                                                <Setter Property="Background" Value="#4D7CFE" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <iconPacks:PackIconMaterial Width="25" Height="25" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                            Kind="{Binding IconKind}">
+                                                    <iconPacks:PackIconMaterial.Style>
+                                                        <Style TargetType="iconPacks:PackIconMaterial">
+                                                            <Setter Property="Foreground" Value="#64758C" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                                                                    <Setter Property="Foreground" Value="White" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </iconPacks:PackIconMaterial.Style>
+                                                </iconPacks:PackIconMaterial>
+                                            </Border>
+                                            <TextBlock Margin="0,7,0,0" HorizontalAlignment="Center" FontSize="10.5" FontWeight="SemiBold" Text="{Binding DisplayName}">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Foreground" Value="#64758C" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                                                                <Setter Property="Foreground" Value="#294359" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                            <StackPanel Margin="0,12,0,0" Visibility="{Binding SupportsFanPercentage, Converter={StaticResource BoolToVisibility}}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock FontSize="11" Foreground="#71849A" Text="风机档位" />
+                                    <TextBlock Margin="10,0,0,0" FontSize="11" FontWeight="SemiBold" Foreground="#4D7CFE"
+                                               Text="{Binding CurrentFanLevel, StringFormat={}{0} 挡}" />
+                                </StackPanel>
+                                <ListBox x:Name="FanLevelList" Margin="0,8,0,0" ItemsSource="{Binding FanLevels}" SelectedValuePath="Percent"
+                                         Background="Transparent" BorderThickness="0"
+                                         HorizontalContentAlignment="Stretch"
+                                         SelectionChanged="FanLevelList_SelectionChanged"
+                                         Visibility="{Binding SupportsFanPercentage, Converter={StaticResource BoolToVisibility}}">
+                                    <ListBox.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="1" /></ItemsPanelTemplate></ListBox.ItemsPanel>
+                                    <ListBox.ItemContainerStyle>
+                                        <Style TargetType="ListBoxItem">
+                                            <Setter Property="Cursor" Value="Hand" />
+                                            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                                            <Setter Property="Template">
+                                                <Setter.Value><ControlTemplate TargetType="ListBoxItem"><ContentPresenter /></ControlTemplate></Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </ListBox.ItemContainerStyle>
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel HorizontalAlignment="Center">
+                                                <Border Width="58" Height="58" CornerRadius="29" BorderBrush="#B0FFFFFF" BorderThickness="1">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="Background" Value="#C7EEF2F7" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+                                                                    <Setter Property="Background" Value="#4D7CFE" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                    <TextBlock Text="{Binding Level}" FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Foreground" Value="#64758C" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+                                                                        <Setter Property="Foreground" Value="White" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                </Border>
+                                                <TextBlock Margin="0,7,0,0" HorizontalAlignment="Center" FontSize="10.5" FontWeight="SemiBold" Text="{Binding Label}">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Foreground" Value="#64758C" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+                                                                    <Setter Property="Foreground" Value="#294359" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </StackPanel>
+                            <StackPanel Margin="0,12,0,0" Visibility="{Binding SupportsSwingMode, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock FontSize="11" Foreground="#71849A" Text="摆风" />
+                            </StackPanel>
+                            <ListBox x:Name="FanSwingList" Margin="0,8,0,0" ItemsSource="{Binding SwingModeOptions}" SelectedValuePath="Value"
+                                     SelectedValue="{Binding CurrentSwingMode, Mode=OneWay}" Background="Transparent" BorderThickness="0"
+                                     HorizontalContentAlignment="Stretch"
+                                     SelectionChanged="FanSwingList_SelectionChanged"
+                                     Visibility="{Binding SupportsSwingMode, Converter={StaticResource BoolToVisibility}}">
+                                <ListBox.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="1" /></ItemsPanelTemplate></ListBox.ItemsPanel>
+                                <ListBox.ItemContainerStyle>
+                                    <Style TargetType="ListBoxItem">
+                                        <Setter Property="Cursor" Value="Hand" />
+                                        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                                        <Setter Property="Template">
+                                            <Setter.Value><ControlTemplate TargetType="ListBoxItem"><ContentPresenter /></ControlTemplate></Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </ListBox.ItemContainerStyle>
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel HorizontalAlignment="Center">
+                                            <Border Width="58" Height="58" CornerRadius="29" BorderBrush="#B0FFFFFF" BorderThickness="1">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Background" Value="#C7EEF2F7" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                                                                <Setter Property="Background" Value="#4D7CFE" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <iconPacks:PackIconMaterial Width="25" Height="25" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                            Kind="{Binding IconKind}">
+                                                    <iconPacks:PackIconMaterial.Style>
+                                                        <Style TargetType="iconPacks:PackIconMaterial">
+                                                            <Setter Property="Foreground" Value="#64758C" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                                                                    <Setter Property="Foreground" Value="White" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </iconPacks:PackIconMaterial.Style>
+                                                </iconPacks:PackIconMaterial>
+                                            </Border>
+                                            <TextBlock Margin="0,7,0,0" HorizontalAlignment="Center" FontSize="10.5" FontWeight="SemiBold" Text="{Binding DisplayName}">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Foreground" Value="#64758C" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                                                                <Setter Property="Foreground" Value="#294359" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
                         </StackPanel>
                     </Border>
 
@@ -351,7 +653,7 @@
                     <Border Style="{StaticResource SectionCardStyle}" Visibility="{Binding IsClimate, Converter={StaticResource BoolToVisibility}}">
                         <StackPanel>
                             <Grid><StackPanel><TextBlock FontSize="14" FontWeight="SemiBold" Foreground="#294359" Text="室内温度趋势" /><TextBlock Margin="0,4,0,0" FontSize="10.5" Foreground="#8396A7" Text="最近 24 小时 · 来自 Home Assistant 历史记录" /></StackPanel>
-                                <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="22" FontWeight="SemiBold" Foreground="#526FAD" Text="{Binding IndoorTemperatureText}" />
+                                <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="22" FontWeight="SemiBold" Foreground="#4D7CFE" Text="{Binding IndoorTemperatureText}" />
                             </Grid>
                             <local:SmartTemperatureChart Height="140" Margin="0,13,0,0" Points="{Binding TemperaturePoints}" />
                         </StackPanel>

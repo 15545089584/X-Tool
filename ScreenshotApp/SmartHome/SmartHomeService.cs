@@ -122,6 +122,17 @@ public sealed class SmartHomeService
         await provider.ExecuteAsync(request, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task RenameDeviceAsync(string deviceId, string newName, CancellationToken cancellationToken = default)
+    {
+        var provider = _provider;
+        if (provider is null || ConnectionState != SmartHomeConnectionState.Connected)
+        {
+            throw new InvalidOperationException("Home Assistant 当前未连接，无法重命名设备。");
+        }
+
+        await provider.RenameDeviceAsync(deviceId, newName, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<SmartDeviceInsights> GetInsightsAsync(
         SmartDevice device,
         CancellationToken cancellationToken = default)

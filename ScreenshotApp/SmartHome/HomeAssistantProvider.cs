@@ -11,7 +11,7 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
 {
     private static readonly HashSet<string> SupportedDomains = new(StringComparer.Ordinal)
     {
-        "camera", "light", "switch", "climate", "cover", "fan", "select", "number", "sensor", "binary_sensor"
+        "camera", "light", "switch", "climate", "cover", "fan", "media_player", "button", "select", "number", "sensor", "binary_sensor"
     };
 
     private readonly Uri _serverUri;
@@ -24,6 +24,8 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
     private JsonElement _entities = JsonDocument.Parse("[]").RootElement.Clone();
     private string _temperatureUnit = "°C";
     private HomeAssistantWebSocketClient? _webSocket;
+    private PeriodicTimer? _statePollTimer;
+    private CancellationTokenSource? _statePollSource;
 
     public HomeAssistantProvider(Uri serverUri, string token)
     {
@@ -87,7 +89,72 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
             ["event_type"] = "state_changed"
         }, cancellationToken).ConfigureAwait(false);
 
+        // WebSocket 事件之外再加 20 秒 REST 轮询兜底：WS 事件中断时设备状态仍能自动刷新。
+        StartStatePolling();
+
         SnapshotChanged?.Invoke(CurrentSnapshot);
+    }
+
+    private void StartStatePolling()
+    {
+        StopStatePollingCore();
+        _statePollSource = new CancellationTokenSource();
+        _statePollTimer = new PeriodicTimer(TimeSpan.FromSeconds(20));
+        _ = PollStatesAsync(_statePollTimer, _statePollSource.Token);
+    }
+
+    private async Task PollStatesAsync(PeriodicTimer timer, CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
+            {
+                try
+                {
+                    using var response = await _httpClient.GetAsync("api/states", cancellationToken).ConfigureAwait(false);
+                    if (!response.IsSuccessStatusCode) continue;
+                    using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
+                    SmartHomeSnapshot? snapshot = null;
+                    lock (_snapshotSync)
+                    {
+                        _states.Clear();
+                        if (document.RootElement.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var state in document.RootElement.EnumerateArray())
+                            {
+                                var entityId = GetString(state, "entity_id");
+                                if (!string.IsNullOrWhiteSpace(entityId)) _states[entityId] = state.Clone();
+                            }
+                        }
+
+                        CurrentSnapshot = snapshot = BuildSnapshot();
+                    }
+
+                    SnapshotChanged?.Invoke(snapshot);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch
+                {
+                    // 单次轮询失败不影响后续轮询。
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 停止轮询属于正常释放流程。
+        }
+    }
+
+    private void StopStatePollingCore()
+    {
+        _statePollSource?.Cancel();
+        _statePollSource?.Dispose();
+        _statePollSource = null;
+        _statePollTimer?.Dispose();
+        _statePollTimer = null;
     }
 
     public async Task ExecuteAsync(SmartHomeControlRequest request, CancellationToken cancellationToken)
@@ -112,6 +179,8 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
             SmartHomeControlAction.SelectOption => "select_option",
             _ => throw new ArgumentOutOfRangeException(nameof(request), "不支持的智能家居控制操作。")
         };
+        // button 实体只提供“按下”语义：界面发出的开关动作统一映射为 press。
+        if (domain == "button") service = "press";
 
         var body = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
@@ -176,6 +245,29 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
             throw new InvalidOperationException(string.IsNullOrWhiteSpace(detail)
                 ? $"Home Assistant 控制失败（HTTP {(int)response.StatusCode}）。"
                 : $"Home Assistant 控制失败：{detail}");
+        }
+    }
+
+    public async Task RenameDeviceAsync(string deviceId, string name, CancellationToken cancellationToken)
+    {
+        if (_webSocket is null)
+        {
+            throw new InvalidOperationException("当前连接不支持重命名设备（需要 WebSocket 连接）。");
+        }
+
+        // name_by_user 就是用户在 Home Assistant 里设置的设备名，写入后随下一次快照自然生效。
+        var result = await _webSocket.SendCommandAsync("config/device_registry/update", new Dictionary<string, object?>
+        {
+            ["device_id"] = deviceId,
+            ["name_by_user"] = name
+        }, cancellationToken).ConfigureAwait(false);
+
+        if (result.ValueKind == JsonValueKind.Object &&
+            result.TryGetProperty("success", out var success) &&
+            success.ValueKind == JsonValueKind.False)
+        {
+            var detail = result.TryGetProperty("error", out var error) ? error.ToString() : "未知错误";
+            throw new InvalidOperationException($"Home Assistant 拒绝了设备重命名：{detail}");
         }
     }
 
@@ -336,6 +428,7 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
                 EntityId = pair.Key,
                 Name = friendlyName,
                 State = GetString(pair.Value, "state") ?? "unknown",
+                LastUpdated = GetTimestamp(pair.Value, "last_updated") ?? GetTimestamp(pair.Value, "last_changed"),
                 DeviceId = registryItem?.DeviceId,
                 AreaId = registryItem?.AreaId,
                 Attributes = attributes
@@ -634,11 +727,13 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
         "cover" => 2,
         "fan" => 3,
         "light" => 4,
-        "switch" => 5,
-        "binary_sensor" => 6,
-        "select" => 7,
-        "number" => 8,
-        "sensor" => 9,
+        // 音箱等设备优先 media_player，避免麦克风静音开关被当作主控制实体。
+        "media_player" => 5,
+        "switch" => 6,
+        "binary_sensor" => 7,
+        "select" => 8,
+        "number" => 9,
+        "sensor" => 10,
         _ => 100
     };
 
@@ -659,6 +754,8 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
     private static int EntityPriority(SmartEntity entity)
     {
         var priority = DomainPriority(entity.Domain) * 10;
+        // 与 SmartHomeModels 保持一致：辅助开关不能成为快照侧的设备主实体。
+        if (entity.Domain is "switch" or "binary_sensor" && IsAuxiliaryControl(entity)) priority += 1000;
         if (entity.Domain != "sensor") return priority;
         var deviceClass = entity.GetText("device_class");
         var unit = entity.GetText("unit_of_measurement");
@@ -667,9 +764,28 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
         return priority + 2;
     }
 
+    private static bool IsAuxiliaryControl(SmartEntity entity)
+    {
+        var text = $"{entity.EntityId} {entity.Name}".ToLowerInvariant();
+        return text.Contains("mute", StringComparison.Ordinal) || text.Contains("microphone", StringComparison.Ordinal) ||
+               text.Contains("_mic", StringComparison.Ordinal) || text.Contains("sleep", StringComparison.Ordinal) ||
+               text.Contains("indicator", StringComparison.Ordinal) || text.Contains("night_light", StringComparison.Ordinal) ||
+               text.Contains("child_lock", StringComparison.Ordinal) || text.Contains("physical_controls_locked", StringComparison.Ordinal) ||
+               text.Contains("alarm", StringComparison.Ordinal) || text.Contains("buzzer", StringComparison.Ordinal) ||
+               text.Contains("beep", StringComparison.Ordinal) || text.Contains("task_switch", StringComparison.Ordinal) ||
+               text.Contains("power_enable", StringComparison.Ordinal);
+    }
+
     private static string? GetString(JsonElement element, string name) =>
         element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString()
+            : null;
+
+    private static DateTimeOffset? GetTimestamp(JsonElement element, string name) =>
+        element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String &&
+        DateTimeOffset.TryParse(value.GetString(), System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.RoundtripKind, out var timestamp)
+            ? timestamp
             : null;
 
     private static bool HasNonNullProperty(JsonElement element, string name) =>
@@ -677,6 +793,7 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
 
     public async ValueTask DisposeAsync()
     {
+        StopStatePollingCore();
         if (_webSocket is not null)
         {
             _webSocket.EventReceived -= WebSocket_EventReceived;
