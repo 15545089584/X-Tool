@@ -22,6 +22,8 @@ public partial class SmartHomeView : UserControl
         InitializeComponent();
         DataContext = this;
         RunningBadgesList.ItemsSource = _runningBadges;
+        ((System.Collections.Specialized.INotifyCollectionChanged)_runningBadges).CollectionChanged += (_, _) =>
+            Dispatcher.BeginInvoke(new Action(ApplyFanSpinAnimations), System.Windows.Threading.DispatcherPriority.Loaded);
         AreaFilters.Add(new SmartAreaFilterItem("__online", "在线", 0, PackIconMaterialKind.WifiCheck));
         _service.ConnectionStateChanged += Service_ConnectionStateChanged;
         _service.SnapshotChanged += Service_SnapshotChanged;
@@ -235,6 +237,8 @@ public partial class SmartHomeView : UserControl
         foreach (var device in snapshot.Devices.Select(item => _deviceById.GetValueOrDefault(item.Id)))
         {
             if (device is not { IsWorking: true }) continue;
+            // 摄像机等设备的指示灯（light 实体）常亮，不能把它们当成“运行中的灯”展示。
+            if (device.IsCameraLike) continue;
             var domain = device.Domain;
             if (domain is not ("fan" or "light" or "climate")) continue;
             _runningBadges.Add(new RunningDeviceBadge(
@@ -243,6 +247,46 @@ public partial class SmartHomeView : UserControl
                 PackIconMaterialKind.AirConditioner,
                 device.Name,
                 domain == "fan"));
+        }
+
+        RunningBadgesHost.Visibility = _runningBadges.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>徽标生成后由代码后置挂接旋转动画：数据模板内的变换会被自动冻结，无法用 XAML 动画驱动。</summary>
+    private void ApplyFanSpinAnimations()
+    {
+        for (var index = 0; index < RunningBadgesList.Items.Count; index++)
+        {
+            if (RunningBadgesList.ItemContainerGenerator.ContainerFromIndex(index) is not ContentPresenter presenter) continue;
+            foreach (var icon in FindVisualChildren<PackIconMaterial>(presenter))
+            {
+                if (icon.Tag is not true) continue;
+                var transform = new RotateTransform();
+                icon.RenderTransformOrigin = new Point(0.5, 0.5);
+                icon.RenderTransform = transform;
+                transform.BeginAnimation(RotateTransform.AngleProperty,
+                    new System.Windows.Media.Animation.DoubleAnimation(0, 360, TimeSpan.FromSeconds(1.6))
+                    {
+                        RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever
+                    });
+            }
+        }
+    }
+
+    private static IEnumerable<T> FindVisualChildren<T>(DependencyObject root) where T : DependencyObject
+    {
+        var queue = new Queue<DependencyObject>();
+        queue.Enqueue(root);
+        while (queue.Count > 0)
+        {
+            var current = queue.Dequeue();
+            var count = VisualTreeHelper.GetChildrenCount(current);
+            for (var index = 0; index < count; index++)
+            {
+                var child = VisualTreeHelper.GetChild(current, index);
+                if (child is T typed) yield return typed;
+                queue.Enqueue(child);
+            }
         }
     }
 

@@ -482,16 +482,33 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
         }
 
         SmartHomeWeather? weather = null;
-        var weatherEntity = groupedEntities.Values
+        var weatherEntities = groupedEntities.Values
             .SelectMany(entities => entities)
             .Where(entity => entity.Domain == "weather" && entity.Available)
             .OrderBy(entity => entity.EntityId, StringComparer.Ordinal)
-            .FirstOrDefault();
+            .ToArray();
+        static string WeatherLocationOf(SmartEntity entity) => entity.Name
+            .Replace("天气", string.Empty, StringComparison.Ordinal)
+            .Replace("Weather", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Trim();
+
+        // 优先选择带具体地名的天气实体，跳过“我的家/Forecast”等泛化命名。
+        var genericLocations = new HashSet<string>(StringComparer.Ordinal) { "我的家", "家", "室内", "home", "forecast" };
+        var weatherEntity = weatherEntities.FirstOrDefault(entity => !genericLocations.Contains(WeatherLocationOf(entity))) ??
+                            weatherEntities.FirstOrDefault();
         if (weatherEntity is not null)
         {
-            var location = weatherEntity.Name.Replace("天气", string.Empty, StringComparison.Ordinal).Trim();
+            var location = WeatherLocationOf(weatherEntity);
+            var temperature = weatherEntity.GetNumber("temperature");
+            var temperatureUnit = weatherEntity.GetText("temperature_unit");
+            if (temperature is not null && temperatureUnit is not null &&
+                temperatureUnit.Contains("F", StringComparison.OrdinalIgnoreCase))
+            {
+                temperature = (temperature.Value - 32d) * 5d / 9d;
+            }
+
             weather = new SmartHomeWeather(location, weatherEntity.State,
-                weatherEntity.GetNumber("temperature"), weatherEntity.GetNumber("humidity"));
+                temperature, weatherEntity.GetNumber("humidity"));
         }
 
         var smartDevices = new List<SmartDevice>();
@@ -503,6 +520,8 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
                 .ThenBy(entity => entity.EntityId, StringComparer.Ordinal)
                 .First();
             if (!ShouldIncludeDevice(device, primary)) continue;
+            // weather 实体只用于首页头部天气胶囊（其区域归属会绕过常规排除），不生成设备卡片。
+            if (primary.Domain == "weather") continue;
             var areaId = primary.AreaId ?? device?.AreaId;
             var deviceName = _deviceNameOverrides.TryGetValue(pair.Key, out var nameOverride) &&
                              !string.IsNullOrWhiteSpace(nameOverride)
