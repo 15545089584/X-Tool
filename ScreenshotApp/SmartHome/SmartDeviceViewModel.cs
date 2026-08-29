@@ -722,10 +722,12 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
         var file = ContainsAny(hint, "camera", "摄像", "监控") ? "camera.png"
             : ContainsAny(hint, "air-conditioner", "thermostat", "空调") ? "air-conditioner.png"
             : ContainsAny(hint, "ceiling-fan", "fan", "风扇") ? "fan.png"
-            : ContainsAny(hint, "lightbulb", "bulb", "lamp", "吸顶", "灯泡", "灯") ? "bulb.png"
+            : ContainsAny(hint, "台灯", "desk lamp", "desk-lamp") ? "desk-lamp.png"
+            : ContainsAny(hint, "lightbulb", "bulb", "lamp", "吸顶", "灯泡") ? "bulb.png"
             : ContainsAny(hint, "speaker", "音箱", "音响", "小爱") ? "smart-speaker.png"
             : ContainsAny(hint, "router", "路由") ? "router.png"
             : ContainsAny(hint, "temperature", "thermometer", "humidity", "温度", "湿度") ? "thermo-hygrometer.png"
+            : ContainsAny(hint, "蓝牙mesh", "mesh", "插座") ? "mesh-socket.png"
             : null;
         return file is null ? null : $"/XTool;component/Assets/SmartHome/Devices/{file}";
     }

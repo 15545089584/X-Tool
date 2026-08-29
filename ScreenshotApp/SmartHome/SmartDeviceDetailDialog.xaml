@@ -212,8 +212,8 @@
                                  Background="#F2FFFFFF" BorderBrush="#9ACBD8E8" BorderThickness="1"
                                  KeyDown="RenameBox_KeyDown" />
                         <Button Width="64" Height="36" Margin="8,0,0,0" Content="保存" Style="{StaticResource SoftButtonStyle}"
-                                Background="#4D7CFE" Foreground="White" Click="ConfirmRename_Click" />
-                        <Button Width="64" Height="36" Margin="8,0,0,0" Content="取消" Style="{StaticResource SoftButtonStyle}" Background="#4D7CFE" Foreground="White" Click="CancelRename_Click" />
+                                Background="#4D7CFE" Foreground="White" TextElement.Foreground="White" Click="ConfirmRename_Click" />
+                        <Button Width="64" Height="36" Margin="8,0,0,0" Content="取消" Style="{StaticResource SoftButtonStyle}" Background="#4D7CFE" Foreground="White" TextElement.Foreground="White" Click="CancelRename_Click" />
                     </StackPanel>
                     <StackPanel Margin="0,6,0,0" HorizontalAlignment="Center" Orientation="Horizontal">
                         <Ellipse Width="7" Height="7" Margin="0,0,7,0" VerticalAlignment="Center">
