@@ -30,8 +30,8 @@ public partial class SmartHomeView : UserControl
         Loaded += SmartHomeView_Loaded;
     }
 
-    /// <summary>首页头部“运行中设备”徽标（仅风扇/灯泡/空调三类运行时显示）。</summary>
-    public sealed record RunningDeviceBadge(PackIconMaterialKind Icon, string DeviceName, bool Spin);
+    /// <summary>首页头部“运行中设备”卡片（仅风扇/灯泡/空调三类运行时显示，样式对齐米家：上图标下状态文字）。</summary>
+    public sealed record RunningDeviceBadge(PackIconMaterialKind Icon, string Label, string DeviceName, bool Spin);
 
     private readonly System.Collections.ObjectModel.ObservableCollection<RunningDeviceBadge> _runningBadges = [];
 
@@ -241,10 +241,17 @@ public partial class SmartHomeView : UserControl
             if (device.IsCameraLike) continue;
             var domain = device.Domain;
             if (domain is not ("fan" or "light" or "climate")) continue;
+            var label = domain switch
+            {
+                "fan" => "吹风中",
+                "light" => "灯已开启",
+                _ => "空调运行中"
+            };
             _runningBadges.Add(new RunningDeviceBadge(
                 domain == "fan" ? PackIconMaterialKind.Fan :
                 domain == "light" ? PackIconMaterialKind.LightbulbOn :
                 PackIconMaterialKind.AirConditioner,
+                label,
                 device.Name,
                 domain == "fan"));
         }

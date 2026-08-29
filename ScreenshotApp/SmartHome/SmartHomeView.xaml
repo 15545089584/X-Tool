@@ -247,16 +247,20 @@
                     </StackPanel>
                 </StackPanel>
                 <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal">
-                    <Border x:Name="RunningBadgesHost" Margin="0,0,10,0" Padding="8,6" VerticalAlignment="Center" CornerRadius="19"
-                            Background="#C8EEF3FA" BorderBrush="#AFFFFFFF" BorderThickness="1" Visibility="Collapsed">
+                    <Border x:Name="RunningBadgesHost" Margin="0,0,10,0" VerticalAlignment="Center" Visibility="Collapsed">
                         <ItemsControl x:Name="RunningBadgesList" ItemsSource="{Binding RunningBadges}">
                             <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border Width="36" Height="36" Margin="3,0" CornerRadius="18" VerticalAlignment="Center"
-                                            Background="#F4FFFFFF" BorderBrush="#AFFFFFFF" BorderThickness="1" ToolTip="{Binding DeviceName}">
-                                        <iconPacks:PackIconMaterial Width="20" Height="20" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                                    Foreground="#4D7CFE" Kind="{Binding Icon}" Tag="{Binding Spin}" />
+                                    <Border Width="66" Height="60" Margin="0,0,10,0" CornerRadius="16" VerticalAlignment="Center"
+                                            Background="#E8F5F8FD" BorderBrush="#AFFFFFFF" BorderThickness="1"
+                                            Effect="{StaticResource SmartHomeCardShadow}" ToolTip="{Binding DeviceName}">
+                                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <iconPacks:PackIconMaterial Width="22" Height="22" HorizontalAlignment="Center"
+                                                                        Foreground="#4D7CFE" Kind="{Binding Icon}" Tag="{Binding Spin}" />
+                                            <TextBlock Margin="0,7,0,0" HorizontalAlignment="Center" FontSize="10.5" FontWeight="SemiBold"
+                                                       Foreground="#4D6683" Text="{Binding Label}" />
+                                        </StackPanel>
                                     </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
