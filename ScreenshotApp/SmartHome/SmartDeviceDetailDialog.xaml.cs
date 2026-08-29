@@ -23,11 +23,55 @@ public partial class SmartDeviceDetailDialog : UserControl
     {
         if (d is SmartDeviceDetailDialog dialog)
         {
+            if (dialog._subscribedDevice is { } previous)
+            {
+                previous.PropertyChanged -= dialog.Device_PropertyChanged;
+                dialog._subscribedDevice = null;
+            }
+
             dialog.ExitRenameMode();
             dialog.UpdateLightControlsLayout();
             // 设备切换时列表会重新求值并触发 SelectionChanged，短暂屏蔽避免误发控制命令（例如风扇进页响一声）。
             dialog._suppressSelectionChanged = true;
             dialog.Dispatcher.BeginInvoke(new Action(() => dialog._suppressSelectionChanged = false), System.Windows.Threading.DispatcherPriority.Loaded);
+            if (e.NewValue is SmartDeviceViewModel newDevice)
+            {
+                dialog._subscribedDevice = newDevice;
+                newDevice.PropertyChanged += dialog.Device_PropertyChanged;
+            }
+
+            dialog.UpdateFanSpinState();
+        }
+    }
+
+    private SmartDeviceViewModel? _subscribedDevice;
+    private bool _fanSpinActive;
+
+    private void Device_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(SmartDeviceViewModel.IsOn) or nameof(SmartDeviceViewModel.IsAvailable))
+        {
+            Dispatcher.BeginInvoke(UpdateFanSpinState);
+        }
+    }
+
+    /// <summary>风扇机头旋转随开关状态启停（代码后置驱动，避免 XAML 触发器在开合场景失效）。</summary>
+    private void UpdateFanSpinState()
+    {
+        var spinning = Device is { IsFan: true, IsOn: true };
+        if (spinning == _fanSpinActive) return;
+        _fanSpinActive = spinning;
+        if (spinning)
+        {
+            FanHeadRotate.BeginAnimation(RotateTransform.AngleProperty,
+                new System.Windows.Media.Animation.DoubleAnimation(0, 360, TimeSpan.FromSeconds(1.6))
+                {
+                    RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever
+                });
+        }
+        else
+        {
+            FanHeadRotate.BeginAnimation(RotateTransform.AngleProperty, null);
         }
     }
 

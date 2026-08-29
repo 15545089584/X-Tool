@@ -267,31 +267,31 @@
                                 <Border Width="180" Height="180" HorizontalAlignment="Center" VerticalAlignment="Center"
                                         CornerRadius="90" ClipToBounds="True"
                                         Visibility="{Binding IsFan, Converter={StaticResource BoolToVisibility}}">
-                                    <Image Width="236" Height="236" Stretch="Uniform" Source="{Binding DeviceArtworkUri}"
-                                           RenderOptions.BitmapScalingMode="HighQuality"
-                                           HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-28,-18,0,0">
-                                        <Image.RenderTransform>
-                                            <RotateTransform x:Name="FanHeadRotate" CenterX="118" CenterY="108" Angle="0" />
-                                        </Image.RenderTransform>
-                                        <Image.Style>
-                                            <Style TargetType="Image">
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding IsOn}" Value="True">
-                                                        <DataTrigger.EnterActions>
-                                                            <BeginStoryboard x:Name="FanHeadSpin">
-                                                                <Storyboard>
-                                                                    <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)" From="0" To="360" Duration="0:0:1.6" RepeatBehavior="Forever" />
-                                                                </Storyboard>
-                                                            </BeginStoryboard>
-                                                        </DataTrigger.EnterActions>
-                                                        <DataTrigger.ExitActions>
-                                                            <StopStoryboard BeginStoryboardName="FanHeadSpin" />
-                                                        </DataTrigger.ExitActions>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Image.Style>
-                                    </Image>
+                                    <Grid>
+                                        <Image Width="236" Height="236" Stretch="Uniform" Source="{Binding DeviceArtworkUri}"
+                                               RenderOptions.BitmapScalingMode="HighQuality"
+                                               HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-28,-18,0,0">
+                                            <Image.RenderTransform>
+                                                <RotateTransform x:Name="FanHeadRotate" CenterX="118" CenterY="108" Angle="0" />
+                                            </Image.RenderTransform>
+                                        </Image>
+                                        <!-- 静态外环覆盖层：从同一素材裁出外圈环带，旋转时机头叶片转动、外环保持静止。 -->
+                                        <Image Width="236" Height="236" Stretch="Uniform" Source="{Binding DeviceArtworkUri}"
+                                               RenderOptions.BitmapScalingMode="HighQuality"
+                                               HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-28,-18,0,0"
+                                               IsHitTestVisible="False">
+                                            <Image.Clip>
+                                                <CombinedGeometry GeometryCombineMode="Exclude">
+                                                    <CombinedGeometry.Geometry1>
+                                                        <EllipseGeometry Center="118,108" RadiusX="90" RadiusY="90" />
+                                                    </CombinedGeometry.Geometry1>
+                                                    <CombinedGeometry.Geometry2>
+                                                        <EllipseGeometry Center="118,108" RadiusX="76" RadiusY="76" />
+                                                    </CombinedGeometry.Geometry2>
+                                                </CombinedGeometry>
+                                            </Image.Clip>
+                                        </Image>
+                                    </Grid>
                                 </Border>
                                 <Grid>
                                     <Grid.Style><Style TargetType="Grid"><Setter Property="Visibility" Value="Visible" /><Style.Triggers><DataTrigger Binding="{Binding HasDeviceArtwork}" Value="True"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger></Style.Triggers></Style></Grid.Style>

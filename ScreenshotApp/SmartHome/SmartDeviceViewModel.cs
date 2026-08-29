@@ -159,7 +159,7 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
                     level,
                     labels[level - 1],
                     Math.Round(level * 100d / count),
-                    level == CurrentFanLevel))
+                    level == CurrentFanLevel && IsOn))
                 .ToArray();
         }
     }
