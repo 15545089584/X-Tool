@@ -341,6 +341,9 @@ public sealed record SmartDevice
     }
 }
 
+/// <summary>首页头部天气信息；来自 Home Assistant 实际暴露的 weather 实体，未暴露时为空。</summary>
+public sealed record SmartHomeWeather(string Location, string Condition, double? Temperature, double? Humidity);
+
 public sealed record SmartHomeSnapshot
 {
     public string HomeName { get; init; } = "Home Assistant";
@@ -348,6 +351,8 @@ public sealed record SmartHomeSnapshot
     public List<SmartArea> Areas { get; init; } = [];
 
     public List<SmartDevice> Devices { get; init; } = [];
+
+    public SmartHomeWeather? Weather { get; init; }
 
     public DateTimeOffset UpdatedAt { get; init; } = DateTimeOffset.Now;
 }

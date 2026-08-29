@@ -21,11 +21,19 @@ public partial class SmartHomeView : UserControl
     {
         InitializeComponent();
         DataContext = this;
+        RunningBadgesList.ItemsSource = _runningBadges;
         AreaFilters.Add(new SmartAreaFilterItem("__online", "在线", 0, PackIconMaterialKind.WifiCheck));
         _service.ConnectionStateChanged += Service_ConnectionStateChanged;
         _service.SnapshotChanged += Service_SnapshotChanged;
         Loaded += SmartHomeView_Loaded;
     }
+
+    /// <summary>首页头部“运行中设备”徽标（仅风扇/灯泡/空调三类运行时显示）。</summary>
+    public sealed record RunningDeviceBadge(PackIconMaterialKind Icon, string DeviceName, bool Spin);
+
+    private readonly System.Collections.ObjectModel.ObservableCollection<RunningDeviceBadge> _runningBadges = [];
+
+    public IReadOnlyList<RunningDeviceBadge> RunningBadges => _runningBadges;
 
     public ObservableCollection<SmartAreaFilterItem> AreaFilters { get; } = [];
 
@@ -179,11 +187,63 @@ public partial class SmartHomeView : UserControl
         var selectedIndex = Math.Max(0, AreaFilters.ToList().FindIndex(item => item.Id == selected));
         AreaFilterList.SelectedIndex = selectedIndex;
         _selectedAreaId = AreaFilters[selectedIndex].Id;
+        UpdateWeather(snapshot);
+        UpdateRunningBadges(snapshot);
         ApplyFilter();
 
         LastUpdatedText.Text = fromCache
             ? $"上次状态 · {snapshot.UpdatedAt.LocalDateTime:MM-dd HH:mm}"
             : $"更新于 {snapshot.UpdatedAt.LocalDateTime:HH:mm:ss}";
+    }
+
+    private void UpdateWeather(SmartHomeSnapshot snapshot)
+    {
+        var weather = snapshot.Weather;
+        if (weather is null || weather.Temperature is null)
+        {
+            WeatherPill.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var (text, icon) = DescribeWeather(weather.Condition);
+        WeatherPill.Visibility = Visibility.Visible;
+        WeatherIcon.Kind = icon;
+        WeatherText.Text = $"{weather.Temperature:0.#}°C {text}";
+        WeatherLocationText.Text = weather.Location;
+        WeatherLocationText.Visibility = string.IsNullOrWhiteSpace(weather.Location) ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private static (string Text, PackIconMaterialKind Icon) DescribeWeather(string condition) => condition.ToLowerInvariant() switch
+    {
+        "sunny" => ("晴", PackIconMaterialKind.WhiteBalanceSunny),
+        "clear" or "clear-night" => ("晴", PackIconMaterialKind.WeatherNight),
+        "partlycloudy" => ("多云", PackIconMaterialKind.WeatherPartlyCloudy),
+        "cloudy" => ("阴", PackIconMaterialKind.WeatherCloudy),
+        "rainy" => ("雨", PackIconMaterialKind.WeatherRainy),
+        "pouring" => ("大雨", PackIconMaterialKind.WeatherPouring),
+        "lightning" or "lightning-rainy" => ("雷雨", PackIconMaterialKind.WeatherLightning),
+        "snowy" or "snowy-heavy" => ("雪", PackIconMaterialKind.WeatherSnowy),
+        "hail" => ("冰雹", PackIconMaterialKind.WeatherHail),
+        "windy" or "windy-variant" => ("大风", PackIconMaterialKind.WeatherWindy),
+        "fog" => ("雾", PackIconMaterialKind.WeatherFog),
+        _ => (condition, PackIconMaterialKind.WeatherPartlyCloudy)
+    };
+
+    private void UpdateRunningBadges(SmartHomeSnapshot snapshot)
+    {
+        _runningBadges.Clear();
+        foreach (var device in snapshot.Devices.Select(item => _deviceById.GetValueOrDefault(item.Id)))
+        {
+            if (device is not { IsWorking: true }) continue;
+            var domain = device.Domain;
+            if (domain is not ("fan" or "light" or "climate")) continue;
+            _runningBadges.Add(new RunningDeviceBadge(
+                domain == "fan" ? PackIconMaterialKind.Fan :
+                domain == "light" ? PackIconMaterialKind.LightbulbOn :
+                PackIconMaterialKind.AirConditioner,
+                device.Name,
+                domain == "fan"));
+        }
     }
 
     private void ApplyFilter()

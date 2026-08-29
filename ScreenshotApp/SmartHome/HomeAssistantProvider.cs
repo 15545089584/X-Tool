@@ -11,7 +11,7 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
 {
     private static readonly HashSet<string> SupportedDomains = new(StringComparer.Ordinal)
     {
-        "camera", "light", "switch", "climate", "cover", "fan", "media_player", "button", "select", "number", "sensor", "binary_sensor"
+        "camera", "light", "switch", "climate", "cover", "fan", "media_player", "button", "select", "number", "sensor", "binary_sensor", "weather"
     };
 
     private readonly Uri _serverUri;
@@ -481,6 +481,19 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
             list.Add(smartEntity);
         }
 
+        SmartHomeWeather? weather = null;
+        var weatherEntity = groupedEntities.Values
+            .SelectMany(entities => entities)
+            .Where(entity => entity.Domain == "weather" && entity.Available)
+            .OrderBy(entity => entity.EntityId, StringComparer.Ordinal)
+            .FirstOrDefault();
+        if (weatherEntity is not null)
+        {
+            var location = weatherEntity.Name.Replace("天气", string.Empty, StringComparison.Ordinal).Trim();
+            weather = new SmartHomeWeather(location, weatherEntity.State,
+                weatherEntity.GetNumber("temperature"), weatherEntity.GetNumber("humidity"));
+        }
+
         var smartDevices = new List<SmartDevice>();
         foreach (var pair in groupedEntities)
         {
@@ -523,6 +536,7 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
         {
             HomeName = "Home Assistant",
             Areas = areas,
+            Weather = weather,
             Devices = smartDevices
                 .OrderBy(device => device.AreaName, StringComparer.CurrentCulture)
                 .ThenBy(device => device.Name, StringComparer.CurrentCulture)
