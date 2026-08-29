@@ -39,8 +39,8 @@
         <GradientStop Offset="1" Color="#9EDDEEFF" />
     </LinearGradientBrush>
 
-    <SolidColorBrush x:Key="SmartHomePrimaryBrush" Color="#6A74D3" />
-    <SolidColorBrush x:Key="SmartHomePrimaryHoverBrush" Color="#7B85E2" />
+    <SolidColorBrush x:Key="SmartHomePrimaryBrush" Color="#4D7CFE" />
+    <SolidColorBrush x:Key="SmartHomePrimaryHoverBrush" Color="#6F90FE" />
     <SolidColorBrush x:Key="SmartHomePrimarySoftBrush" Color="#DDE0FA" />
     <SolidColorBrush x:Key="SmartHomeTextPrimaryBrush" Color="#252B48" />
     <SolidColorBrush x:Key="SmartHomeTextSecondaryBrush" Color="#65708A" />

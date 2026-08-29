@@ -211,8 +211,9 @@ public partial class SmartHomeView : UserControl
         WeatherPill.Visibility = Visibility.Visible;
         WeatherIcon.Kind = icon;
         WeatherText.Text = $"{weather.Temperature:0.#}°";
-        WeatherLocationText.Text = weather.Location;
-        WeatherLocationText.Visibility = string.IsNullOrWhiteSpace(weather.Location) ? Visibility.Collapsed : Visibility.Visible;
+        var subText = text;
+        if (!string.IsNullOrWhiteSpace(weather.Location)) subText += $" · {weather.Location}";
+        WeatherLocationText.Text = subText;
         WeatherPill.ToolTip = string.IsNullOrWhiteSpace(weather.Location) ? text : $"{weather.Location} · {text}";
     }
 
@@ -403,6 +404,7 @@ public partial class SmartHomeView : UserControl
         DeviceDetailDialog.Device = device;
         DeviceDetailOverlay.Visibility = Visibility.Visible;
         DeviceDetailOverlay.Focus();
+        AnimateDetailIn();
         if (!device.IsClimate) return;
 
         device.BeginInsightsLoad();
@@ -426,8 +428,30 @@ public partial class SmartHomeView : UserControl
 
     private void CloseDeviceDetail()
     {
-        DeviceDetailOverlay.Visibility = Visibility.Collapsed;
-        DeviceDetailDialog.Device = null;
+        var closeAnimation = new System.Windows.Media.Animation.DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(140));
+        closeAnimation.Completed += (_, _) =>
+        {
+            DeviceDetailOverlay.BeginAnimation(OpacityProperty, null);
+            DeviceDetailOverlay.Visibility = Visibility.Collapsed;
+            DeviceDetailDialog.Device = null;
+        };
+        DeviceDetailOverlay.BeginAnimation(OpacityProperty, closeAnimation);
+    }
+
+    /// <summary>详情页打开动效：遮罩淡入 + 对话框缩放上浮。</summary>
+    private void AnimateDetailIn()
+    {
+        DeviceDetailOverlay.Opacity = 0;
+        DeviceDetailOverlay.BeginAnimation(OpacityProperty,
+            new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180)));
+        var transform = new ScaleTransform(0.94, 0.94);
+        DeviceDetailDialog.RenderTransformOrigin = new Point(0.5, 0.5);
+        DeviceDetailDialog.RenderTransform = transform;
+        var easing = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut };
+        var scaleX = new System.Windows.Media.Animation.DoubleAnimation(0.94, 1, TimeSpan.FromMilliseconds(230)) { EasingFunction = easing };
+        var scaleY = new System.Windows.Media.Animation.DoubleAnimation(0.94, 1, TimeSpan.FromMilliseconds(230)) { EasingFunction = easing };
+        transform.BeginAnimation(ScaleTransform.ScaleXProperty, scaleX);
+        transform.BeginAnimation(ScaleTransform.ScaleYProperty, scaleY);
     }
 
     private static async Task RollbackIfUnconfirmedAsync(SmartDeviceViewModel device)
@@ -494,6 +518,9 @@ public partial class SmartHomeView : UserControl
     {
         SetupPanel.Visibility = Visibility.Collapsed;
         DashboardPanel.Visibility = Visibility.Visible;
+        DashboardPanel.Opacity = 0;
+        DashboardPanel.BeginAnimation(OpacityProperty,
+            new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(220)));
     }
 
     private static string FriendlyError(Exception exception)

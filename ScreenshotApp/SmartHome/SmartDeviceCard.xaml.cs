@@ -33,6 +33,20 @@ public partial class SmartDeviceCard : UserControl
     {
         e.Handled = true;
         if (Device is not { CanInteract: true } device || string.IsNullOrWhiteSpace(device.EntityId)) return;
+        // 电源键脉冲反馈：按下后轻微收缩回弹，作为开关切换的过渡动效。
+        if (sender is Button button)
+        {
+            var transform = new System.Windows.Media.ScaleTransform(1, 1);
+            button.RenderTransformOrigin = new Point(0.5, 0.5);
+            button.RenderTransform = transform;
+            var frames = new System.Windows.Media.Animation.DoubleAnimationUsingKeyFrames();
+            frames.KeyFrames.Add(new System.Windows.Media.Animation.LinearDoubleKeyFrame(1, TimeSpan.Zero));
+            frames.KeyFrames.Add(new System.Windows.Media.Animation.LinearDoubleKeyFrame(0.86, TimeSpan.FromMilliseconds(90)));
+            frames.KeyFrames.Add(new System.Windows.Media.Animation.LinearDoubleKeyFrame(1, TimeSpan.FromMilliseconds(200)));
+            transform.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, frames);
+            transform.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, frames);
+        }
+
         CommandRequested?.Invoke(this, new SmartHomeControlRequest(
             device.EntityId,
             device.IsOn ? SmartHomeControlAction.TurnOff : SmartHomeControlAction.TurnOn));
