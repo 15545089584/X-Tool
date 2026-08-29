@@ -23,7 +23,8 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="Surface" Background="{TemplateBinding Background}"
-                                BorderBrush="#78FFFFFF" BorderThickness="1" CornerRadius="14">
+                                BorderBrush="#78FFFFFF" BorderThickness="1" CornerRadius="14"
+                                TextElement.Foreground="White">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
                                               TextElement.Foreground="{TemplateBinding Foreground}" />
                         </Border>
@@ -58,31 +59,34 @@
             </Setter>
         </Style>
         <Style x:Key="ConnectionTextBoxStyle" TargetType="TextBox">
-            <Setter Property="Height" Value="42" />
-            <Setter Property="Padding" Value="13,0" />
+            <Setter Property="Height" Value="44" />
+            <Setter Property="Padding" Value="14,0" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="Background" Value="{StaticResource SmartHomeGlassControlBrush}" />
-            <Setter Property="Foreground" Value="{StaticResource SmartHomeTextPrimaryBrush}" />
-            <Setter Property="BorderBrush" Value="{StaticResource SmartHomeGlassBorderBrush}" />
+            <Setter Property="Background" Value="#F2FAFCFD" />
+            <Setter Property="Foreground" Value="#20354A" />
+            <Setter Property="BorderBrush" Value="#C9E2EC" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="FontSize" Value="13" />
-            <Setter Property="CaretBrush" Value="{StaticResource SmartHomePrimaryBrush}" />
+            <Setter Property="CaretBrush" Value="#4D7CFE" />
+            <Setter Property="SelectionBrush" Value="#4D7CFE" />
             <Setter Property="FocusVisualStyle" Value="{x:Null}" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TextBox">
                         <Border x:Name="Surface" Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="14">
+                                CornerRadius="12">
                             <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"
                                           VerticalAlignment="Center" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Surface" Property="BorderBrush" Value="{StaticResource SmartHomeGlassBorderStrongBrush}" />
+                                <Setter TargetName="Surface" Property="BorderBrush" Value="#9FC6E8" />
+                                <Setter TargetName="Surface" Property="Background" Value="#F8FBFEFD" />
                             </Trigger>
                             <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter TargetName="Surface" Property="BorderBrush" Value="{StaticResource SmartHomePrimaryBrush}" />
+                                <Setter TargetName="Surface" Property="BorderBrush" Value="#4D7CFE" />
+                                <Setter TargetName="Surface" Property="Background" Value="#FFFFFF" />
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter TargetName="Surface" Property="Opacity" Value="0.50" />
@@ -93,31 +97,34 @@
             </Setter>
         </Style>
         <Style x:Key="ConnectionPasswordBoxStyle" TargetType="PasswordBox">
-            <Setter Property="Height" Value="42" />
-            <Setter Property="Padding" Value="13,0" />
+            <Setter Property="Height" Value="44" />
+            <Setter Property="Padding" Value="14,0" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="Background" Value="{StaticResource SmartHomeGlassControlBrush}" />
-            <Setter Property="Foreground" Value="{StaticResource SmartHomeTextPrimaryBrush}" />
-            <Setter Property="BorderBrush" Value="{StaticResource SmartHomeGlassBorderBrush}" />
+            <Setter Property="Background" Value="#F2FAFCFD" />
+            <Setter Property="Foreground" Value="#20354A" />
+            <Setter Property="BorderBrush" Value="#C9E2EC" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="FontSize" Value="13" />
-            <Setter Property="CaretBrush" Value="{StaticResource SmartHomePrimaryBrush}" />
+            <Setter Property="CaretBrush" Value="#4D7CFE" />
+            <Setter Property="SelectionBrush" Value="#4D7CFE" />
             <Setter Property="FocusVisualStyle" Value="{x:Null}" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="PasswordBox">
                         <Border x:Name="Surface" Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="14">
+                                CornerRadius="12">
                             <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"
                                           VerticalAlignment="Center" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Surface" Property="BorderBrush" Value="{StaticResource SmartHomeGlassBorderStrongBrush}" />
+                                <Setter TargetName="Surface" Property="BorderBrush" Value="#9FC6E8" />
+                                <Setter TargetName="Surface" Property="Background" Value="#F8FBFEFD" />
                             </Trigger>
                             <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter TargetName="Surface" Property="BorderBrush" Value="{StaticResource SmartHomePrimaryBrush}" />
+                                <Setter TargetName="Surface" Property="BorderBrush" Value="#4D7CFE" />
+                                <Setter TargetName="Surface" Property="Background" Value="#FFFFFF" />
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter TargetName="Surface" Property="Opacity" Value="0.50" />
