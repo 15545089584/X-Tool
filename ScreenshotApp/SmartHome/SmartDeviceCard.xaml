@@ -124,9 +124,34 @@
                 <Button Width="42" Height="42" HorizontalAlignment="Center" VerticalAlignment="Center" Background="Transparent"
                         BorderThickness="0" Cursor="Hand" Click="OpenDetails_Click" AutomationProperties.Name="打开设备详情">
                     <Button.Style>
-                        <Style TargetType="Button"><Setter Property="Visibility" Value="Visible" /><Style.Triggers><DataTrigger Binding="{Binding CanToggle}" Value="True"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger></Style.Triggers></Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Template">
+                                <Setter.Value><ControlTemplate TargetType="Button"><ContentPresenter /></ControlTemplate></Setter.Value>
+                            </Setter>
+                            <Setter Property="Visibility" Value="Visible" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding CanToggle}" Value="True"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger>
+                            </Style.Triggers>
+                        </Style>
                     </Button.Style>
-                    <iconPacks:PackIconMaterial Width="24" Height="24" Foreground="#71829A" Kind="ChevronRight" />
+                    <iconPacks:PackIconMaterial Width="24" Height="24" Kind="ChevronRight" RenderTransformOrigin="0.5,0.5">
+                        <iconPacks:PackIconMaterial.RenderTransform>
+                            <TranslateTransform X="0" />
+                        </iconPacks:PackIconMaterial.RenderTransform>
+                        <iconPacks:PackIconMaterial.Style>
+                            <Style TargetType="iconPacks:PackIconMaterial">
+                                <Setter Property="Foreground" Value="#71829A" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Button}}" Value="True">
+                                        <Setter Property="Foreground" Value="#4D7CFE" />
+                                        <Setter Property="RenderTransform">
+                                            <Setter.Value><TranslateTransform X="3" /></Setter.Value>
+                                        </Setter>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </iconPacks:PackIconMaterial.Style>
+                    </iconPacks:PackIconMaterial>
                 </Button>
             </Grid>
 

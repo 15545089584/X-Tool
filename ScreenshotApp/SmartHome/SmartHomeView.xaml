@@ -266,13 +266,16 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </Border>
-                    <Border x:Name="WeatherPill" Margin="0,0,10,0" Padding="12,7" VerticalAlignment="Center" CornerRadius="16"
-                            Background="#C8EEF3FA" BorderBrush="#AFFFFFFF" BorderThickness="1" Visibility="Collapsed"
-                            ToolTip="天气来自 Home Assistant 暴露的天气实体">
-                        <StackPanel Orientation="Horizontal">
-                            <iconPacks:PackIconMaterial x:Name="WeatherIcon" Width="18" Height="18" Foreground="#4D7CFE" Kind="WeatherSunny" />
-                            <TextBlock x:Name="WeatherText" Margin="8,0,0,0" VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold" Foreground="#20394E" />
-                            <TextBlock x:Name="WeatherLocationText" Margin="8,0,0,0" VerticalAlignment="Center" FontSize="11" Foreground="#71849A" />
+                    <Border x:Name="WeatherPill" Width="66" Height="60" Margin="0,0,10,0" CornerRadius="16" VerticalAlignment="Center"
+                            Background="#E8F5F8FD" BorderBrush="#AFFFFFFF" BorderThickness="1"
+                            Effect="{StaticResource SmartHomeCardShadow}" Visibility="Collapsed">
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <iconPacks:PackIconMaterial x:Name="WeatherIcon" Width="20" Height="20" HorizontalAlignment="Center"
+                                                        Foreground="#4D7CFE" Kind="WeatherSunny" />
+                            <TextBlock x:Name="WeatherText" Margin="0,5,0,0" HorizontalAlignment="Center" FontSize="13" FontWeight="SemiBold"
+                                       Foreground="#20394E" />
+                            <TextBlock x:Name="WeatherLocationText" Margin="0,2,0,0" HorizontalAlignment="Center" FontSize="9.5"
+                                       Foreground="#71849A" />
                         </StackPanel>
                     </Border>
                     <Button x:Name="RefreshButton" Style="{StaticResource HeaderIconButtonStyle}" Click="Refresh_Click"

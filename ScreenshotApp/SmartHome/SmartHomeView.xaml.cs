@@ -210,9 +210,10 @@ public partial class SmartHomeView : UserControl
         var (text, icon) = DescribeWeather(weather.Condition);
         WeatherPill.Visibility = Visibility.Visible;
         WeatherIcon.Kind = icon;
-        WeatherText.Text = $"{weather.Temperature:0.#}°C {text}";
+        WeatherText.Text = $"{weather.Temperature:0.#}°";
         WeatherLocationText.Text = weather.Location;
         WeatherLocationText.Visibility = string.IsNullOrWhiteSpace(weather.Location) ? Visibility.Collapsed : Visibility.Visible;
+        WeatherPill.ToolTip = string.IsNullOrWhiteSpace(weather.Location) ? text : $"{weather.Location} · {text}";
     }
 
     private static (string Text, PackIconMaterialKind Icon) DescribeWeather(string condition) => condition.ToLowerInvariant() switch
