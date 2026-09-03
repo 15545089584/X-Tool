@@ -19,13 +19,21 @@ internal static class NetworkEtwTrafficHelper
 {
     private const string SessionNamePrefix = "XTool.Network.";
     private const string SessionName = "XTool.Network.Persistent";
+    private const int MaxPendingFlowBuckets = 8192;
+    private const int MaxFlowSamplesPerFlush = 1024;
+    private const int MaxProcessIdentityCacheEntries = 4096;
+    private const int MaxHelperThreadCount = 256;
+    private const int MaxHelperHandleCount = 4096;
+    private const long MaxHelperPrivateMemoryBytes = 768L * 1024 * 1024;
+    private static readonly TimeSpan ProcessIdentityCacheLifetime = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan PipeWriteTimeout = TimeSpan.FromSeconds(5);
 
     public static int Run(string pipeName)
     {
         if (string.IsNullOrWhiteSpace(pipeName)) return 2;
         try
         {
-            using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.Out);
+            using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.Out, PipeOptions.Asynchronous);
             var connected = false;
             var waitDeadline = DateTime.UtcNow.AddSeconds(60);
             // 计划任务可能在 X-Tool 主程序之前启动；持续等待主程序创建管道，
@@ -41,19 +49,46 @@ internal static class NetworkEtwTrafficHelper
                 catch (IOException) { }
             }
             if (!connected) return 3;
-            using var writer = new StreamWriter(pipe, new UTF8Encoding(false)) { AutoFlush = true };
+            using var writer = new StreamWriter(pipe, new UTF8Encoding(false), 64 * 1024, leaveOpen: true);
             CleanupOrphanedSessions();
             using var session = new TraceEventSession(SessionName);
             session.StopOnDispose = true;
             session.EnableKernelProvider(KernelTraceEventParser.Keywords.NetworkTCPIP);
             var buckets = new ConcurrentDictionary<FlowKey, FlowBucket>();
+            var processIdentityCache = new ConcurrentDictionary<int, ProcessIdentityCacheEntry>();
+            using var writerCancellation = new CancellationTokenSource();
+            var pendingBucketCount = 0;
+            var droppedEventCount = 0L;
 
             void Add(int pid, string protocol, string local, string remote, long sent, long received)
             {
                 if (pid <= 0) return;
-                var startTicks = GetProcessStartTicks(pid);
+                var startTicks = GetCachedProcessStartTicks(pid, processIdentityCache);
                 var key = new FlowKey(pid, startTicks, protocol, local, remote);
-                var bucket = buckets.GetOrAdd(key, _ => new FlowBucket());
+                if (!buckets.TryGetValue(key, out var bucket))
+                {
+                    if (Interlocked.Increment(ref pendingBucketCount) > MaxPendingFlowBuckets)
+                    {
+                        Interlocked.Decrement(ref pendingBucketCount);
+                        Interlocked.Increment(ref droppedEventCount);
+                        return;
+                    }
+
+                    var candidate = new FlowBucket();
+                    if (buckets.TryAdd(key, candidate))
+                    {
+                        bucket = candidate;
+                    }
+                    else
+                    {
+                        Interlocked.Decrement(ref pendingBucketCount);
+                        if (!buckets.TryGetValue(key, out bucket))
+                        {
+                            Interlocked.Increment(ref droppedEventCount);
+                            return;
+                        }
+                    }
+                }
                 if (sent > 0) Interlocked.Add(ref bucket.SentBytes, sent);
                 if (received > 0) Interlocked.Add(ref bucket.ReceivedBytes, received);
             }
@@ -67,34 +102,159 @@ internal static class NetworkEtwTrafficHelper
             session.Source.Kernel.UdpIpSendIPV6 += data => Add(data.ProcessID, "UDP", Endpoint(data.saddr, data.sport), Endpoint(data.daddr, data.dport), data.size, 0);
             session.Source.Kernel.UdpIpRecvIPV6 += data => Add(data.ProcessID, "UDP", Endpoint(data.daddr, data.dport), Endpoint(data.saddr, data.sport), 0, data.size);
 
-            using var timer = new System.Threading.Timer(_ =>
-            {
-                try
-                {
-                    var capturedAt = DateTimeOffset.UtcNow;
-                    foreach (var (key, bucket) in buckets.ToArray())
-                    {
-                        if (!buckets.TryRemove(key, out var value)) continue;
-                        writer.WriteLine(JsonSerializer.Serialize(new NetworkFlowSample(key.ProcessId, key.ProcessStartTicks, key.Protocol,
-                            key.LocalEndpoint, key.RemoteEndpoint, Interlocked.Read(ref value.SentBytes),
-                            Interlocked.Read(ref value.ReceivedBytes), capturedAt)));
-                    }
-                    // 即使这一秒没有网络事件，也发送合法心跳，避免父进程因空对象反序列化而中止读取。
-                    writer.WriteLine(JsonSerializer.Serialize(new NetworkFlowSample(0, 0, string.Empty,
-                        string.Empty, string.Empty, 0, 0, capturedAt)));
-                }
-                catch
-                {
-                    session.Source.StopProcessing();
-                }
-            }, null, 250, 1000);
+            // 单一异步写循环确保管道写入绝不重入。旧实现的周期 Timer 会在写端阻塞时
+            // 不断叠加线程池回调，最终耗尽线程、句柄和虚拟内存。
+            var writerTask = RunWriterLoopAsync(
+                writer,
+                buckets,
+                processIdentityCache,
+                () => Volatile.Read(ref pendingBucketCount),
+                () => Interlocked.Exchange(ref droppedEventCount, 0),
+                () => session.Source.StopProcessing(),
+                writerCancellation.Token,
+                () => Interlocked.Decrement(ref pendingBucketCount));
 
-            session.Source.Process();
-            return 0;
+            try
+            {
+                session.Source.Process();
+            }
+            finally
+            {
+                writerCancellation.Cancel();
+            }
+
+            return writerTask.GetAwaiter().GetResult() ? 0 : 4;
         }
         catch
         {
             return 1;
+        }
+    }
+
+    internal static async Task<bool> RunWriterLoopAsync(
+        StreamWriter writer,
+        ConcurrentDictionary<FlowKey, FlowBucket> buckets,
+        ConcurrentDictionary<int, ProcessIdentityCacheEntry> processIdentityCache,
+        Func<int> getPendingBucketCount,
+        Func<long> takeDroppedEventCount,
+        Action stopProcessing,
+        CancellationToken cancellationToken,
+        Action bucketRemoved)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken).ConfigureAwait(false);
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                if (!HelperResourcesAreWithinLimits())
+                {
+                    stopProcessing();
+                    return false;
+                }
+
+                if (processIdentityCache.Count > MaxProcessIdentityCacheEntries)
+                {
+                    TrimProcessIdentityCache(processIdentityCache);
+                }
+
+                var capturedAt = DateTimeOffset.UtcNow;
+                var samples = new List<NetworkFlowSample>(Math.Min(getPendingBucketCount(), MaxFlowSamplesPerFlush) + 1);
+                foreach (var pair in buckets)
+                {
+                    if (samples.Count >= MaxFlowSamplesPerFlush) break;
+                    if (!buckets.TryRemove(pair.Key, out var value)) continue;
+                    bucketRemoved();
+                    samples.Add(new NetworkFlowSample(
+                        pair.Key.ProcessId,
+                        pair.Key.ProcessStartTicks,
+                        pair.Key.Protocol,
+                        pair.Key.LocalEndpoint,
+                        pair.Key.RemoteEndpoint,
+                        Interlocked.Read(ref value.SentBytes),
+                        Interlocked.Read(ref value.ReceivedBytes),
+                        capturedAt));
+                }
+
+                // PID 0 是协议心跳，主进程会忽略；SentBytes 同时携带本周期被限流的事件数，
+                // 为后续诊断保留信息但不会污染任何进程的流量统计。
+                samples.Add(new NetworkFlowSample(
+                    0, 0, string.Empty, string.Empty, string.Empty,
+                    takeDroppedEventCount(), 0, capturedAt));
+
+                using var writeTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                writeTimeout.CancelAfter(PipeWriteTimeout);
+                foreach (var sample in samples)
+                {
+                    var json = JsonSerializer.Serialize(sample);
+                    await writer.WriteLineAsync(json.AsMemory(), writeTimeout.Token).ConfigureAwait(false);
+                }
+                await writer.FlushAsync(writeTimeout.Token).ConfigureAwait(false);
+
+                if (!await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false)) break;
+            }
+            return true;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return true;
+        }
+        catch
+        {
+            // 写入超时、管道断开或资源越界时立即停止 ETW 处理，让辅助进程自行退出。
+            try { stopProcessing(); } catch { }
+            return false;
+        }
+    }
+
+    private static long GetCachedProcessStartTicks(
+        int processId,
+        ConcurrentDictionary<int, ProcessIdentityCacheEntry> cache)
+    {
+        var now = DateTimeOffset.UtcNow;
+        if (cache.TryGetValue(processId, out var cached) && cached.ExpiresAt > now)
+        {
+            return cached.StartTicks;
+        }
+
+        if (cache.Count >= MaxProcessIdentityCacheEntries && !cache.ContainsKey(processId))
+        {
+            // 极端进程风暴下宁可暂时只按 PID 归类，也不继续扩大辅助进程缓存。
+            return 0;
+        }
+
+        var startTicks = GetProcessStartTicks(processId);
+        cache[processId] = new ProcessIdentityCacheEntry(
+            startTicks,
+            now.Add(startTicks == 0 ? TimeSpan.FromSeconds(5) : ProcessIdentityCacheLifetime));
+        return startTicks;
+    }
+
+    private static void TrimProcessIdentityCache(ConcurrentDictionary<int, ProcessIdentityCacheEntry> cache)
+    {
+        var now = DateTimeOffset.UtcNow;
+        foreach (var pair in cache)
+        {
+            if (pair.Value.ExpiresAt <= now) cache.TryRemove(pair.Key, out _);
+        }
+
+        // 异常的进程创建风暴下也必须保持硬上限；PID 复用最多造成短时间归属误差，
+        // 不能允许诊断功能本身再次成为系统资源耗尽源。
+        if (cache.Count > MaxProcessIdentityCacheEntries) cache.Clear();
+    }
+
+    private static bool HelperResourcesAreWithinLimits()
+    {
+        try
+        {
+            using var process = Process.GetCurrentProcess();
+            return process.PrivateMemorySize64 <= MaxHelperPrivateMemoryBytes &&
+                   process.Threads.Count <= MaxHelperThreadCount &&
+                   process.HandleCount <= MaxHelperHandleCount;
+        }
+        catch
+        {
+            return false;
         }
     }
 
@@ -125,13 +285,17 @@ internal static class NetworkEtwTrafficHelper
     private static string Endpoint(System.Net.IPAddress address, int port) =>
         address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6 ? $"[{address}]:{port}" : $"{address}:{port}";
 
-    private readonly record struct FlowKey(int ProcessId, long ProcessStartTicks, string Protocol, string LocalEndpoint, string RemoteEndpoint);
-    private sealed class FlowBucket { public long SentBytes; public long ReceivedBytes; }
+    internal readonly record struct ProcessIdentityCacheEntry(long StartTicks, DateTimeOffset ExpiresAt);
+    internal readonly record struct FlowKey(int ProcessId, long ProcessStartTicks, string Protocol, string LocalEndpoint, string RemoteEndpoint);
+    internal sealed class FlowBucket { public long SentBytes; public long ReceivedBytes; }
 }
 
 internal sealed class NetworkEtwTrafficClient : IDisposable
 {
     private static readonly TimeSpan InactiveFlowRetention = TimeSpan.FromMinutes(5);
+    private const int MaxActiveFlowCount = 65536;
+    private const int MaxArchivedProcessCount = 4096;
+    private const int MaxProcessInfoCacheCount = 4096;
     private readonly ConcurrentDictionary<FlowKey, FlowTotal> _flows = new();
     private readonly ConcurrentDictionary<ProcessIdentity, ArchivedProcessTotal> _archivedProcesses = new();
     private readonly object _measurementSync = new();
@@ -413,7 +577,8 @@ internal sealed class NetworkEtwTrafficClient : IDisposable
         }
         catch { }
         var info = new ProcessInfo(processName, processPath);
-        _processInfoCache[identity] = info;
+        if (_processInfoCache.Count < MaxProcessInfoCacheCount || _processInfoCache.ContainsKey(identity))
+            _processInfoCache[identity] = info;
         return info;
     }
 
@@ -460,6 +625,7 @@ internal sealed class NetworkEtwTrafficClient : IDisposable
                 var received = pair.Value.ReceivedBytes;
                 var loopback = IsLoopbackEndpoint(pair.Key.LocalEndpoint) || IsLoopbackEndpoint(pair.Key.RemoteEndpoint);
                 var identity = new ProcessIdentity(pair.Key.ProcessId, pair.Key.ProcessStartTicks);
+                if (_archivedProcesses.Count >= MaxArchivedProcessCount && !_archivedProcesses.ContainsKey(identity)) continue;
                 _archivedProcesses.AddOrUpdate(identity,
                     _ => new ArchivedProcessTotal(sent, received,
                         loopback ? 0 : sent, loopback ? 0 : received,
@@ -473,7 +639,11 @@ internal sealed class NetworkEtwTrafficClient : IDisposable
     {
         while (true)
         {
-            var total = _flows.GetOrAdd(key, _ => new FlowTotal());
+            if (!_flows.TryGetValue(key, out var total))
+            {
+                if (_flows.Count >= MaxActiveFlowCount) return;
+                total = _flows.GetOrAdd(key, _ => new FlowTotal());
+            }
             lock (total.Sync)
             {
                 if (total.Archived) continue;
