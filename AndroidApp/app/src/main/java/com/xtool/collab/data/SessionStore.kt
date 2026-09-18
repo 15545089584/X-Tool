@@ -11,6 +11,14 @@ class SessionStore(context: Context) {
         get() = prefs.getString("host", "") ?: ""
         set(value) = prefs.edit().putString("host", value).apply()
 
+    var lanHost: String
+        get() = prefs.getString("lan_host", "") ?: ""
+        set(value) = prefs.edit().putString("lan_host", value).apply()
+
+    var tailscaleHost: String
+        get() = prefs.getString("tailscale_host", "") ?: ""
+        set(value) = prefs.edit().putString("tailscale_host", value).apply()
+
     var token: String
         get() = prefs.getString("token", "") ?: ""
         set(value) = prefs.edit().putString("token", value).apply()
@@ -47,6 +55,8 @@ class SessionStore(context: Context) {
     fun clearSession() {
         prefs.edit()
             .remove("host")
+            .remove("lan_host")
+            .remove("tailscale_host")
             .remove("token")
             .remove("pin")
             .remove("server_id")

@@ -39,6 +39,9 @@ public sealed class AppPreferences
     /// <summary>已配对手机在同一局域网重新出现时是否允许自动恢复连接。</summary>
     public bool CollaborationAutoReconnect { get; set; } = true;
 
+    public bool PhoneNotificationAlertsEnabled { get; set; } = true;
+    public bool PhoneNotificationPreviewEnabled { get; set; } = true;
+
     public bool StickerTopmost { get; set; } = true;
 
     /// <summary>桌面宠物相对于 288 DIP 基准尺寸的缩放百分比。</summary>

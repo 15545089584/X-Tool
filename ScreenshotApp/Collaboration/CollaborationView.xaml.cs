@@ -33,12 +33,14 @@ public partial class CollaborationView : UserControl
         _statusTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _statusTimer.Tick += (_, _) => RefreshStatus();
         Loaded += CollaborationView_Loaded;
-        Unloaded += (_, _) => _statusTimer.Stop();
+        Unloaded += (_, _) => { _statusTimer.Stop(); PhoneNotificationHub.Instance.Changed -= NotificationPairingChanged; };
     }
 
     public ObservableCollection<TransferRow> Transfers { get; } = [];
 
     public event Action? ConnectionSettingsRequested;
+
+    private void OpenPhoneNotifications_Click(object sender, RoutedEventArgs e) => PhoneNotificationsWindow.Open(Window.GetWindow(this));
 
     public void Configure(bool autoReconnectEnabled)
     {
@@ -49,6 +51,8 @@ public partial class CollaborationView : UserControl
     private void CollaborationView_Loaded(object sender, RoutedEventArgs e)
     {
         EnsureServiceStarted();
+        PhoneNotificationHub.Instance.Changed -= NotificationPairingChanged;
+        PhoneNotificationHub.Instance.Changed += NotificationPairingChanged;
         RefreshPairingVisual();
         RefreshStatus();
         _statusTimer.Start();
@@ -97,13 +101,23 @@ public partial class CollaborationView : UserControl
         QueueStatusText.Text = queued == 0 ? "发送队列为空" : $"{queued} 个文件等待手机接收";
     }
 
+    private string? _notificationPairingPayload;
+    private void NotificationPairingChanged() => Dispatcher.BeginInvoke(() =>
+    {
+        if (IsLoaded) RefreshPairingVisual();
+    });
     private void RefreshPairingVisual()
     {
         if (!_service.IsRunning) return;
         PairingPinText.Text = _service.Pin;
-        var payload = $"http://{_service.LocalIpAddress}:{_service.Port}/pair?pin={_service.Pin}";
+        var host = _service.LocalIpAddress;
+        if (string.IsNullOrWhiteSpace(host)) { PairingQrImage.Source = null; return; }
         try
         {
+            var payload = PhoneNotificationHub.Instance.CollaborationPairingPayload(
+                host, _service.Port, _service.Pin, _service.ServerId);
+            if (_notificationPairingPayload == payload && PairingQrImage.Source is not null) return;
+            _notificationPairingPayload = payload;
             var writer = new BarcodeWriterPixelData
             {
                 Format = BarcodeFormat.QR_CODE,

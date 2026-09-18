@@ -60,12 +60,14 @@ class SyncForegroundService : Service() {
         private const val ActiveTransferNameKey = "file_name"
 
         fun start(context: Context, automatic: Boolean = true) {
+            com.xtool.collab.notification.NotificationBridge(context).connectionPaused = false
             context.startForegroundService(
                 Intent(context, SyncForegroundService::class.java).putExtra(ExtraAutomatic, automatic)
             )
         }
 
         fun stop(context: Context) {
+            com.xtool.collab.notification.NotificationBridge(context).connectionPaused = true
             context.stopService(Intent(context, SyncForegroundService::class.java))
         }
     }
@@ -85,6 +87,13 @@ class SyncForegroundService : Service() {
         super.onCreate()
         TransferRuntime.initialize(applicationContext)
         session = SessionStore(applicationContext)
+        // 监听恢复不依赖文件传输或网络探测完成，避免长传输阻塞重绑。
+        scope.launch {
+            while (isActive) {
+                com.xtool.collab.notification.NotificationListenerRecovery.ensureConnected(applicationContext)
+                delay(5_000)
+            }
+        }
         createNotificationChannels()
         startForeground(NotificationId, buildConnectionNotification("正在查找已信任电脑"))
     }
@@ -158,6 +167,7 @@ class SyncForegroundService : Service() {
             TransferRuntime.updateConnection(true, "已连接 $displayName")
             updateConnectionNotification("已连接 $displayName")
             if (!wasConnected && !automaticMode) playConnectionTone()
+            if (!wasConnected) com.xtool.collab.notification.PhoneNotificationListener.refresh()
             wasConnected = true
             receiveOutgoingFiles(host, token)
             delay(1800)

@@ -480,10 +480,18 @@ internal static class NativeMethods
 
     internal static void MakeWindowMouseTransparent(IntPtr windowHandle)
     {
+        SetWindowMouseTransparent(windowHandle, true);
+    }
+
+    /// <summary>切换窗口鼠标穿透状态，同时保持工具窗不激活、不进入任务栏。</summary>
+    internal static void SetWindowMouseTransparent(IntPtr windowHandle, bool isTransparent)
+    {
         var currentStyle = IntPtr.Size == 8
             ? GetWindowLongPtr64(windowHandle, GwlExStyle).ToInt64()
             : GetWindowLong32(windowHandle, GwlExStyle);
-        var newStyle = currentStyle | WsExTransparent | WsExToolWindow | WsExNoActivate;
+        var newStyle = isTransparent
+            ? currentStyle | WsExTransparent | WsExToolWindow | WsExNoActivate
+            : (currentStyle & ~WsExTransparent) | WsExToolWindow | WsExNoActivate;
 
         if (IntPtr.Size == 8)
         {

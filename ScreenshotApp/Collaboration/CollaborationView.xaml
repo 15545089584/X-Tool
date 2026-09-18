@@ -67,6 +67,7 @@
                 <Border MinHeight="42" Padding="16,0" Background="#AEEAFFF7" BorderBrush="#83CFE4D7" BorderThickness="1" CornerRadius="12">
                     <StackPanel VerticalAlignment="Center" Orientation="Horizontal"><Ellipse x:Name="HeaderStatusDot" Width="8" Height="8" Margin="0,0,9,0" VerticalAlignment="Center" Fill="#7E94A8" /><TextBlock x:Name="HeaderStatusText" VerticalAlignment="Center" FontSize="12" Foreground="#557088" Text="正在启动" /></StackPanel>
                 </Border>
+                <Button Margin="10,0,0,0" Style="{StaticResource SecondaryButton}" Content="手机通知" Click="OpenPhoneNotifications_Click" />
                 <Button Margin="10,0,0,0" Style="{StaticResource SecondaryButton}" Content="连接设置" Click="OpenConnectionSettings_Click" />
             </StackPanel>
         </Grid>

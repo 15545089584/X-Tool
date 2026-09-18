@@ -29,6 +29,23 @@ public partial class DesktopPetWindow : Window
     private bool _petTransferFailed;
     private bool _showingCompletionState;
     private bool _initialized;
+    private PetTransferBubbleWindow? _phoneBubble;
+    private readonly System.Windows.Threading.DispatcherTimer _phoneBubbleTimer = new() { Interval = TimeSpan.FromSeconds(10) };
+    internal void ShowPhoneNotification(string title, string detail, Action onClick, string? avatar = null, ScreenshotApp.Collaboration.PhoneVerificationCode? verificationCode = null)
+    {
+        if (_closed || !IsVisible) return;
+        if (_phoneBubble is null)
+        {
+            _phoneBubble = new PetTransferBubbleWindow();
+            _phoneBubbleTimer.Tick += (_, _) => DismissPhoneNotification();
+        }
+        _phoneBubble.ShowPhoneMessage(title, detail, () => { DismissPhoneNotification(); onClick(); }, avatar, verificationCode: verificationCode);
+        _phoneBubbleTimer.Interval = TimeSpan.FromSeconds(verificationCode is null ? 10 : 20);
+        UpdateTransferBubblePosition();
+        _phoneBubbleTimer.Stop(); _phoneBubbleTimer.Start();
+    }
+    internal void DismissPhoneNotification() { _phoneBubbleTimer.Stop(); _phoneBubble?.ResetVerificationCode(); _phoneBubble?.Hide(); }
+
     private bool _closed;
 
     internal DesktopPetWindow(int initialScalePercent = 100)
@@ -121,6 +138,7 @@ public partial class DesktopPetWindow : Window
         }
 
         _closed = true;
+        _phoneBubbleTimer.Stop(); _phoneBubble?.Close(); _phoneBubble = null;
         _actionWheel?.Close();
         _actionWheel = null;
         _transferBubble?.Close();
@@ -170,6 +188,7 @@ public partial class DesktopPetWindow : Window
         }
         else
         {
+            DismissPhoneNotification();
             _player.Pause();
             _transferBubble?.Hide();
         }
@@ -597,19 +616,25 @@ public partial class DesktopPetWindow : Window
 
     private void UpdateTransferBubblePosition()
     {
-        if (_transferBubble is not { IsVisible: true } bubble || !IsVisible || !IsLoaded)
-        {
-            return;
-        }
-
+        if (!IsVisible || !IsLoaded) return;
+        if (_transferBubble is { IsVisible: true } transfer) PositionNotificationBubble(transfer, 0);
+        if (_phoneBubble is { IsVisible: true } phone)
+            PositionNotificationBubble(phone, _transferBubble is { IsVisible: true } ? _transferBubble.ActualHeight + 10 : 0);
+    }
+    private void PositionNotificationBubble(PetTransferBubbleWindow bubble, double offset)
+    {
         bubble.UpdateLayout();
         var workingArea = GetCurrentWorkingArea();
         var petWidth = ActualWidth > 0 ? ActualWidth : Width;
         var petHeight = ActualHeight > 0 ? ActualHeight : Height;
-        var bubbleWidth = bubble.ActualWidth > 0 ? bubble.ActualWidth : bubble.Width;
+        // 隐藏后的透明窗口可能短暂报告 1 像素 ActualWidth；定位时必须采用设计宽度，
+        // 否则窗口会被错误夹到屏幕右缘，即使随后恢复布局也仍不可见。
+        var bubbleWidth = Math.Max(
+            PetTransferBubbleWindow.PreferredWidth,
+            Math.Max(bubble.ActualWidth, bubble.Width));
         var bubbleHeight = bubble.ActualHeight > 0 ? bubble.ActualHeight : 126;
         var desiredLeft = Left + petWidth / 2 - bubbleWidth / 2;
-        var desiredTop = Top - bubbleHeight + 14;
+        var desiredTop = Top - bubbleHeight + 14 - offset;
 
         bubble.Left = Math.Clamp(
             desiredLeft,

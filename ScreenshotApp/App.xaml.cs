@@ -24,7 +24,76 @@ public partial class App : System.Windows.Application
     private DesktopPetWindow? _desktopPetWindow;
     private Forms.ToolStripMenuItem? _desktopPetMenuItem;
 
+    private Forms.NotifyIcon? _verificationBalloonIcon;
+
+    private System.Windows.Threading.DispatcherTimer? _verificationBalloonTimer;
+
+    private readonly Dictionary<string, ScreenshotApp.Collaboration.PhoneNotificationItem> _pendingPhoneAlerts = new();
+
+    private System.Windows.Threading.DispatcherTimer? _phoneAlertTimer;
+
     internal bool IsExitRequested { get; private set; }
+
+    private void PhoneSessionSwitch(object sender, Microsoft.Win32.SessionSwitchEventArgs e)
+    {
+        if (e.Reason == Microsoft.Win32.SessionSwitchReason.SessionLock)
+        {
+            ScreenshotApp.Collaboration.PhoneNotificationHub.Instance.Locked = true;
+            Dispatcher.BeginInvoke(() => { _pendingPhoneAlerts.Clear(); DismissPhoneAlertDisplays(); });
+        }
+        if (e.Reason == Microsoft.Win32.SessionSwitchReason.SessionUnlock) ScreenshotApp.Collaboration.PhoneNotificationHub.Instance.Locked = false;
+    }
+    private void PhoneNotificationsArrived(ScreenshotApp.Collaboration.PhoneNotificationItem[] items)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            var hub = ScreenshotApp.Collaboration.PhoneNotificationHub.Instance;
+            if (hub.Locked || !hub.AlertsEnabled) return;
+            foreach (var item in items.Take(200)) _pendingPhoneAlerts[item.Key] = item;
+            while (_pendingPhoneAlerts.Count > 200) _pendingPhoneAlerts.Remove(_pendingPhoneAlerts.Keys.First());
+            _phoneAlertTimer ??= CreatePhoneAlertTimer();
+            if (!_phoneAlertTimer.IsEnabled) _phoneAlertTimer.Start();
+        });
+    }
+    private System.Windows.Threading.DispatcherTimer CreatePhoneAlertTimer()
+    {
+        var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            var hub = ScreenshotApp.Collaboration.PhoneNotificationHub.Instance;
+            // 合并更新，丢弃等待期间已被移除或修改的通知。
+            var items = _pendingPhoneAlerts.Values.Where(i => hub.State.Items.Contains(i)).OrderByDescending(i => i.PostedAt).ToArray();
+            _pendingPhoneAlerts.Clear();
+            if (hub.Locked || hub.Paused || !hub.AlertsEnabled || items.Length == 0) return;
+            var preview = AppPreferences.Load().PhoneNotificationPreviewEnabled;
+            // 同批到达的普通消息不能挤掉验证码；识别在正文截断之前执行，发送方与数字始终取自同一条。
+            var codes = preview ? items.Select(i => (Item: i, Code: ScreenshotApp.Collaboration.PhoneVerificationCode.TryParse(i)))
+                .Where(pair => pair.Code is not null).ToArray() : [];
+            var item = codes.Length > 0 ? codes[0].Item : items[0];
+            var verificationCode = codes.Length > 0 ? codes[0].Code : null;
+            var title = items.Length == 1 ? item.App : $"手机通知 · {items.Length} 条";
+            if (title.Length > 63) title = title[..62] + "…";
+            var detail = preview ? item.Title + (string.IsNullOrWhiteSpace(item.Text) ? "" : "\n" + item.Text) : "收到新消息，点击查看";
+            if (detail.Length > 180) detail = detail[..180] + "…";
+            if (preview && verificationCode is null && ScreenshotApp.Collaboration.PhoneVerificationCode.LooksLikeVerification(item))
+            {
+                title = item.App;
+                detail = "收到验证码消息，请在手机查看";
+            }
+            Action open = () => ScreenshotApp.Collaboration.PhoneNotificationsWindow.Open(MainWindow);
+            if (verificationCode is not null)
+            {
+                DismissVerificationBalloon();
+                if (IsDesktopPetVisible)
+                    _desktopPetWindow!.ShowPhoneNotification(verificationCode.Sender, verificationCode.Code, open, item.Avatar, verificationCode);
+                else ShowVerificationBalloon(verificationCode);
+            }
+            else if (IsDesktopPetVisible) _desktopPetWindow!.ShowPhoneNotification(title, detail, open, preview ? item.Avatar : null);
+            else ShowTrayBalloon(title, detail, open);
+        };
+        return timer;
+    }
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -80,6 +149,10 @@ public partial class App : System.Windows.Application
             return;
         }
 
+        ScreenshotApp.Collaboration.PhoneNotificationHub.Instance.AlertsEnabled = AppPreferences.Load().PhoneNotificationAlertsEnabled;
+        ScreenshotApp.Collaboration.PhoneNotificationHub.Instance.NotificationsArrived += PhoneNotificationsArrived;
+        Microsoft.Win32.SystemEvents.SessionSwitch += PhoneSessionSwitch;
+
         var mainWindow = new MainWindow();
         MainWindow = mainWindow;
         CreateTrayIcon(mainWindow);
@@ -94,6 +167,8 @@ public partial class App : System.Windows.Application
 #endif
 
         mainWindow.Show();
+        if (e.Args.Contains("--phone-notifications")) ScreenshotApp.Collaboration.PhoneNotificationsWindow.Open(mainWindow);
+        _ = Task.Run(() => { try { ScreenshotApp.Collaboration.PhoneNotificationHub.Instance.ResumeIfConfigured(); } catch { /* 接收失败由通知页面提示，不创建第二个监听实例。 */ } });
         if (AppPreferences.Load().DesktopPetVisible)
         {
             Dispatcher.BeginInvoke(ShowDesktopPet, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
@@ -163,8 +238,63 @@ public partial class App : System.Windows.Application
         _trayIcon.ShowBalloonTip(2600);
     }
 
+    internal void DismissPhoneAlertDisplays()
+    {
+        _desktopPetWindow?.DismissPhoneNotification();
+        DismissVerificationBalloon();
+    }
+
+    private void DismissVerificationBalloon()
+    {
+        _verificationBalloonTimer?.Stop();
+        _verificationBalloonTimer = null;
+        _verificationBalloonIcon?.Dispose();
+        _verificationBalloonIcon = null;
+    }
+
+    private void ShowVerificationBalloon(ScreenshotApp.Collaboration.PhoneVerificationCode code)
+    {
+        DismissVerificationBalloon();
+        // 原生托盘通知不支持自定义按钮，单击通知即复制；独立实例防止旧通知误复制新的验证码。
+        var icon = new Forms.NotifyIcon
+        {
+            Icon = _trayDrawingIcon ?? SystemIcons.Application,
+            Text = "X-Tool · 验证码",
+            BalloonTipTitle = code.Sender,
+            BalloonTipText = code.Code + "\n点击复制验证码",
+            Visible = true
+        };
+        _verificationBalloonIcon = icon;
+        icon.BalloonTipClicked += (_, _) => Dispatcher.Invoke(() =>
+        {
+            var hub = ScreenshotApp.Collaboration.PhoneNotificationHub.Instance;
+            var preferences = AppPreferences.Load();
+            if (!ReferenceEquals(_verificationBalloonIcon, icon) || hub.Locked || hub.Paused ||
+                !hub.AlertsEnabled || !preferences.PhoneNotificationPreviewEnabled) return;
+            try
+            {
+                ScreenshotApp.ClipboardUi.ClipboardService.SetSensitiveText(code.Code);
+                DismissVerificationBalloon();
+            }
+            catch
+            {
+                icon.BalloonTipText = code.Code + "\n复制失败，点击重试";
+                icon.ShowBalloonTip(5000);
+            }
+        });
+        _verificationBalloonTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMinutes(2) };
+        _verificationBalloonTimer.Tick += (_, _) => DismissVerificationBalloon();
+        _verificationBalloonTimer.Start();
+        icon.ShowBalloonTip(10000);
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
+        DismissVerificationBalloon();
+        Microsoft.Win32.SystemEvents.SessionSwitch -= PhoneSessionSwitch;
+        ScreenshotApp.Collaboration.PhoneNotificationHub.Instance.NotificationsArrived -= PhoneNotificationsArrived;
+        _phoneAlertTimer?.Stop(); _pendingPhoneAlerts.Clear();
+        ScreenshotApp.Collaboration.PhoneNotificationHub.Instance.Dispose();
         if (_trayIcon is not null)
         {
             _trayIcon.Visible = false;

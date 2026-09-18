@@ -12,8 +12,9 @@ android {
         applicationId = "com.xtool.collab"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "0.2.0"
+        testInstrumentationRunner = "com.xtool.collab.notification.RecoveryInstrumentation"
+        versionCode = 11
+        versionName = "0.4.7"
     }
 
     buildTypes {
@@ -51,4 +52,5 @@ dependencies {
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("androidx.exifinterface:exifinterface:1.3.7")
     debugImplementation("androidx.compose.ui:ui-tooling")
+    testImplementation("junit:junit:4.13.2")
 }

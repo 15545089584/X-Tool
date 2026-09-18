@@ -92,6 +92,9 @@ class MainActivity : ComponentActivity() {
                 CollaborationApp(session)
             }
         }
+        if (intent.getBooleanExtra("open_notifications", false)) {
+            startActivity(Intent(this, com.xtool.collab.notification.NotificationSettingsActivity::class.java))
+        }
     }
 
     private fun requestNotificationPermission() {
@@ -131,7 +134,7 @@ private fun PairScreen(session: SessionStore, onPaired: () -> Unit) {
     var message by remember { mutableStateOf("请在电脑协作中心扫描配对码") }
     var connecting by remember { mutableStateOf(false) }
 
-    fun connect(targetHost: String = host, targetPin: String = pin) {
+    fun connect(targetHost: String = host, targetPin: String = pin, pairingQr: String? = null) {
         val normalizedHost = normalizeHost(targetHost)
         val normalizedPin = targetPin.trim()
         if (normalizedHost.isBlank() || normalizedPin.length != 6) {
@@ -155,6 +158,12 @@ private fun PairScreen(session: SessionStore, onPaired: () -> Unit) {
             session.pin = normalizedPin
             session.serverId = result.serverId
             session.serverName = result.serverName
+            // 只使用用户扫描的证书凭据，不从明文配对响应学习通知身份。
+            if (pairingQr != null) runCatching {
+                com.xtool.collab.notification.NotificationBridge(context).bind(pairingQr)
+            }.onFailure {
+                Toast.makeText(context, "文件已连接，通知需在手机通知页面补全安全配对", Toast.LENGTH_LONG).show()
+            }
             host = session.host
             pin = normalizedPin
             message = "连接成功，已保存电脑地址与配对信息"
@@ -174,7 +183,7 @@ private fun PairScreen(session: SessionStore, onPaired: () -> Unit) {
                 host = parsed.first
                 pin = parsed.second
                 message = "已读取电脑地址，正在配对"
-                connect(parsed.first, parsed.second)
+                connect(parsed.first, parsed.second, result.contents)
             }
         }
     }
@@ -270,12 +279,14 @@ private fun HomeScreen(session: SessionStore) {
                 scope.launch {
                     withContext(Dispatchers.IO) { runCatching { CollabApi(session.host).disconnect(session.token) } }
                     SyncForegroundService.stop(context)
+                    com.xtool.collab.notification.PhoneNotificationListener.refresh()
                     TransferRuntime.updateConnection(false, "已手动断开，点击连接电脑可重新连接")
                     actionMessage = "已断开当前连接，电脑地址和配对信息已保留"
                     Toast.makeText(context, "已断开，仍保留这台可信电脑", Toast.LENGTH_SHORT).show()
                 }
             }) { Text("断开", color = Color(0xFFD65362)) }
         }
+        OutlinedButton(onClick = { context.startActivity(Intent(context, com.xtool.collab.notification.NotificationSettingsActivity::class.java)) }) { Text("手机通知同步") }
         Spacer(Modifier.height(16.dp))
         Card(colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.84f)), shape = RoundedCornerShape(22.dp)) {
             Column(Modifier.padding(18.dp)) {

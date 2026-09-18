@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="X-Tool 宠物传输气泡"
-        Width="320" SizeToContent="Height"
+        Width="320" MinWidth="320" MaxWidth="320" SizeToContent="Height"
         AllowsTransparency="True" Background="Transparent"
         WindowStyle="None" ResizeMode="NoResize"
         ShowInTaskbar="False" ShowActivated="False" Topmost="True"
@@ -46,7 +46,8 @@
                 Background="#F2F4FAFF"
                 BorderBrush="{StaticResource RainbowBorderBrush}"
                 BorderThickness="2.5"
-                CornerRadius="21">
+                CornerRadius="21"
+                MouseLeftButtonUp="BubbleCard_MouseLeftButtonUp">
             <Border.Effect>
                 <DropShadowEffect Color="#52627B9A" BlurRadius="25" ShadowDepth="5" Direction="270" Opacity="0.34" />
             </Border.Effect>
@@ -56,16 +57,18 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="34" />
+                        <ColumnDefinition x:Name="StatusIconColumn" Width="34" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <Border Width="30" Height="30" CornerRadius="15" Background="#B8FFFFFF" BorderBrush="#72A9C8F1" BorderThickness="1">
+                    <Border x:Name="StatusIconBorder" Width="30" Height="30" CornerRadius="15" Background="#B8FFFFFF" BorderBrush="#72A9C8F1" BorderThickness="1">
+                        <Grid><Image x:Name="AvatarImage" Width="44" Height="44" Visibility="Collapsed" Stretch="UniformToFill"><Image.Clip><EllipseGeometry Center="22,22" RadiusX="22" RadiusY="22"/></Image.Clip></Image>
                         <TextBlock x:Name="StatusIconText" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                   FontFamily="Segoe Fluent Icons" FontSize="15" Foreground="#4D7CFE" Text="&#xE724;" />
+                                   FontFamily="Segoe Fluent Icons" FontSize="15" Foreground="#4D7CFE" Text="&#xE724;" /></Grid>
                     </Border>
                     <TextBlock x:Name="TitleText" Grid.Column="1" Margin="8,0,8,0" VerticalAlignment="Center"
                                FontSize="13" FontWeight="SemiBold" Foreground="#304A63" Text="正在传到手机" />
@@ -76,6 +79,27 @@
                            FontSize="11" Foreground="#5D7186" TextTrimming="CharacterEllipsis" Text="文件" />
                 <ProgressBar x:Name="TransferProgressBar" Grid.Row="2" Margin="1,10,1,0" Height="8"
                              Minimum="0" Maximum="100" Value="0" Style="{StaticResource RainbowProgressBarStyle}" />
+                <Button x:Name="CopyCodeButton" Grid.Row="4" Margin="1,12,1,0" Height="38"
+                        Visibility="Collapsed" Cursor="Hand" Background="#4D7CFE" Foreground="White"
+                        BorderThickness="0" Click="CopyCodeButton_Click" ToolTip="只复制验证码">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="CodeButtonBody" Background="{TemplateBinding Background}" CornerRadius="11">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="CodeButtonBody" Property="Background" Value="#3D6DE8" />
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="CodeButtonBody" Property="Background" Value="#315ACB" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                    <TextBlock x:Name="CopyCodeText" Text="复制验证码" FontSize="14" FontWeight="SemiBold"
+                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                </Button>
                 <Grid x:Name="DetailRow" Grid.Row="3" Margin="1,8,1,0">
                     <TextBlock x:Name="TransferredText" FontSize="9.5" Foreground="#7A8EA1" Text="0 B / 0 B" />
                     <TextBlock x:Name="SpeedText" HorizontalAlignment="Right" FontSize="9.5" Foreground="#7A8EA1" Text="准备中" />
