@@ -287,6 +287,7 @@ private fun HomeScreen(session: SessionStore) {
             }) { Text("断开", color = Color(0xFFD65362)) }
         }
         OutlinedButton(onClick = { context.startActivity(Intent(context, com.xtool.collab.notification.NotificationSettingsActivity::class.java)) }) { Text("手机通知同步") }
+        com.xtool.collab.screenshot.ScreenshotSyncCard()
         Spacer(Modifier.height(16.dp))
         Card(colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.84f)), shape = RoundedCornerShape(22.dp)) {
             Column(Modifier.padding(18.dp)) {

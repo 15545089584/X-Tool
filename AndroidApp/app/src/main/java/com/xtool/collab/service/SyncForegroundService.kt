@@ -75,6 +75,7 @@ class SyncForegroundService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private lateinit var session: SessionStore
     private var automaticMode = true
+    private var screenshotSync: com.xtool.collab.screenshot.ScreenshotSync? = null
     private var loopStarted = false
     private var wasConnected = false
     private val failedTransferRetryAfter = ConcurrentHashMap<String, Long>()
@@ -96,6 +97,7 @@ class SyncForegroundService : Service() {
         }
         createNotificationChannels()
         startForeground(NotificationId, buildConnectionNotification("正在查找已信任电脑"))
+        screenshotSync = com.xtool.collab.screenshot.ScreenshotSync(applicationContext, scope)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -498,6 +500,7 @@ class SyncForegroundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        screenshotSync?.close()
         scope.cancel()
         TransferRuntime.updateConnection(false, "连接服务已停止")
         super.onDestroy()

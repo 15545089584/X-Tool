@@ -13,8 +13,8 @@ android {
         minSdk = 26
         targetSdk = 34
         testInstrumentationRunner = "com.xtool.collab.notification.RecoveryInstrumentation"
-        versionCode = 11
-        versionName = "0.4.7"
+        versionCode = 12
+        versionName = "0.5.0"
     }
 
     buildTypes {

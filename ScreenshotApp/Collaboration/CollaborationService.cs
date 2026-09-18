@@ -612,6 +612,8 @@ public sealed class CollaborationService
                 : contentType.Contains("image/png", StringComparison.OrdinalIgnoreCase)
                     ? MaxClipboardBodyBytes
                     : MaxClipboardTextBodyBytes;
+            if (isFileUpload && parsedQuery.GetValueOrDefault("screenshot") == "1")
+                maximumForEndpoint = Math.Min(maximumForEndpoint, 32L * 1024 * 1024);
             if (length > maximumForEndpoint) return null;
             var total = (int)headerBytes.Length - headerEnd - 4;
             var bodyStart = headerEnd + 4;
@@ -880,12 +882,29 @@ public sealed class CollaborationService
                     await WriteJsonAsync(stream, 400, new { error = "缺少文件名或内容" }, serviceToken);
                     return false;
                 }
-                var target = MoveUploadToUniqueTarget(request.TemporaryBodyPath, IncomingDirectory, name);
                 var transferId = NormalizeTransferId(query.GetValueOrDefault("id"));
+                if (query.GetValueOrDefault("screenshot") == "1")
+                {
+                    // 仅接受有界真实图片；同一截图重试不重复保存和弹出提醒。
+                    if (!PhoneScreenshots.PhoneScreenshotPresenter.IsSupported(request.TemporaryBodyPath, name))
+                    {
+                        await WriteJsonAsync(stream, 400, new { error = "截图格式或尺寸不受支持" }, serviceToken);
+                        return false;
+                    }
+                    if (_transferOpenPaths.TryGetValue(transferId, out var existingScreenshot) && File.Exists(existingScreenshot))
+                    {
+                        await WriteJsonAsync(stream, 200, new { ok = true, name = Path.GetFileName(existingScreenshot) }, serviceToken);
+                        return false; // finally 清理本次重试的临时文件。
+                    }
+                }
+                var target = MoveUploadToUniqueTarget(request.TemporaryBodyPath, IncomingDirectory, name);
                 _transferOpenPaths[transferId] = target;
                 ReportTransfer(transferId, Path.GetFileName(target), "Receive", request.BodyLength, request.BodyLength,
                     "Completed", "已收到手机文件");
-                FileReceived?.Invoke(Path.GetFileName(target), request.BodyLength, target);
+                if (query.GetValueOrDefault("screenshot") == "1")
+                    PhoneScreenshots.PhoneScreenshotPresenter.Receive(target);
+                else
+                    FileReceived?.Invoke(Path.GetFileName(target), request.BodyLength, target);
                 await WriteJsonAsync(stream, 200, new { ok = true, name = Path.GetFileName(target) }, serviceToken);
                 return true;
             }
