@@ -17,6 +17,10 @@ public sealed class SmartHomeService
 
     private readonly SemaphoreSlim _connectionGate = new(1, 1);
     private readonly object _reconnectSync = new();
+    private readonly Func<Uri, string, ISmartHomeProvider> _providerFactory;
+    private readonly Func<string?> _readToken;
+    private readonly TimeSpan _connectTimeout;
+    private readonly TimeSpan[] _reconnectDelays;
     private ISmartHomeProvider? _provider;
     private CancellationTokenSource? _reconnectSource;
     private Task? _reconnectTask;
@@ -25,6 +29,20 @@ public sealed class SmartHomeService
     private SmartHomeConnectionSettings _settings = new();
 
     public static SmartHomeService Instance { get; } = new();
+
+    public SmartHomeService() : this(
+        (uri, token) => new HomeAssistantProvider(uri, token),
+        SmartHomeCredentialStore.ReadToken, HomeAssistantConnectionPolicy.InitializationTimeout, ReconnectDelays) { }
+
+    // 回归测试使用隔离提供程序和短时间预算，不访问真实设备或凭据。
+    internal SmartHomeService(Func<Uri, string, ISmartHomeProvider> providerFactory,
+        Func<string?> readToken, TimeSpan connectTimeout, TimeSpan[] reconnectDelays)
+    {
+        _providerFactory = providerFactory;
+        _readToken = readToken;
+        _connectTimeout = connectTimeout;
+        _reconnectDelays = reconnectDelays;
+    }
 
     public event Action<SmartHomeConnectionState, string>? ConnectionStateChanged;
 
@@ -37,7 +55,7 @@ public sealed class SmartHomeService
     public SmartHomeConnectionSettings Settings => _settings;
 
     public bool HasConfiguration => !string.IsNullOrWhiteSpace(_settings.ServerUrl) &&
-                                    !string.IsNullOrWhiteSpace(SmartHomeCredentialStore.ReadToken());
+                                    !string.IsNullOrWhiteSpace(_readToken());
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
@@ -63,7 +81,7 @@ public sealed class SmartHomeService
             return;
         }
 
-        var token = SmartHomeCredentialStore.ReadToken();
+        var token = _readToken();
         if (string.IsNullOrWhiteSpace(token))
         {
             SetConnectionState(SmartHomeConnectionState.AuthenticationFailed, "需要重新填写 Access Token");
@@ -87,14 +105,26 @@ public sealed class SmartHomeService
         bool persist = true,
         CancellationToken cancellationToken = default)
     {
-        var effectiveToken = string.IsNullOrWhiteSpace(token) ? SmartHomeCredentialStore.ReadToken() : token.Trim();
+        var effectiveToken = string.IsNullOrWhiteSpace(token) ? _readToken() : token.Trim();
         if (string.IsNullOrWhiteSpace(effectiveToken))
         {
             throw new ArgumentException("请输入 Home Assistant Access Token。", nameof(token));
         }
 
-        CancelReconnect();
-        await ConnectCoreAsync(serverUrl, effectiveToken, persist, cancellationToken).ConfigureAwait(false);
+        await CancelReconnectAsync().ConfigureAwait(false);
+        try
+        {
+            await ConnectCoreAsync(serverUrl, effectiveToken, persist, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            // 重连已保存的连接失败时恢复重试；新地址或新令牌失败不回退连接旧服务器。
+            if (!cancellationToken.IsCancellationRequested &&
+                ConnectionState == SmartHomeConnectionState.ServerUnavailable &&
+                string.Equals(serverUrl.Trim().TrimEnd('/'), _settings.ServerUrl.TrimEnd('/'), StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(effectiveToken, _readToken(), StringComparison.Ordinal)) StartReconnectLoop();
+            throw;
+        }
     }
 
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
@@ -103,13 +133,22 @@ public sealed class SmartHomeService
         {
             throw new InvalidOperationException("尚未配置 Home Assistant。");
         }
-        var token = SmartHomeCredentialStore.ReadToken();
+        var token = _readToken();
         if (string.IsNullOrWhiteSpace(token))
         {
             throw new InvalidOperationException("Home Assistant Access Token 不存在。");
         }
-        CancelReconnect();
-        await ConnectCoreAsync(_settings.ServerUrl, token, persist: false, cancellationToken).ConfigureAwait(false);
+        await CancelReconnectAsync().ConfigureAwait(false);
+        try
+        {
+            await ConnectCoreAsync(_settings.ServerUrl, token, persist: false, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            if (!cancellationToken.IsCancellationRequested &&
+                ConnectionState == SmartHomeConnectionState.ServerUnavailable) StartReconnectLoop();
+            throw;
+        }
     }
 
     public async Task ExecuteAsync(SmartHomeControlRequest request, CancellationToken cancellationToken = default)
@@ -166,14 +205,20 @@ public sealed class SmartHomeService
     public async Task ForgetAsync()
     {
         _manualDisconnect = true;
-        CancelReconnect();
-        await ReplaceProviderAsync(null).ConfigureAwait(false);
-        SmartHomeCredentialStore.DeleteToken();
-        SmartHomeSettingsStore.Delete();
-        SmartHomeCacheStore.Delete();
-        _settings = new SmartHomeConnectionSettings();
-        CurrentSnapshot = null;
-        SetConnectionState(SmartHomeConnectionState.Disconnected, "已删除 Home Assistant 连接");
+        await CancelReconnectAsync().ConfigureAwait(false);
+        await _connectionGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            _manualDisconnect = true;
+            await ReplaceProviderAsync(null).ConfigureAwait(false);
+            SmartHomeCredentialStore.DeleteToken();
+            SmartHomeSettingsStore.Delete();
+            SmartHomeCacheStore.Delete();
+            _settings = new SmartHomeConnectionSettings();
+            CurrentSnapshot = null;
+            SetConnectionState(SmartHomeConnectionState.Disconnected, "已删除 Home Assistant 连接");
+        }
+        finally { _connectionGate.Release(); }
     }
 
     private async Task ConnectCoreAsync(
@@ -183,19 +228,23 @@ public sealed class SmartHomeService
         CancellationToken cancellationToken)
     {
         var serverUri = SmartHomeSettingsStore.NormalizeServerUri(serverUrl);
+        using var attemptSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var attemptToken = attemptSource.Token;
         await _connectionGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            attemptSource.CancelAfter(_connectTimeout);
             _manualDisconnect = false;
             SetConnectionState(SmartHomeConnectionState.Connecting, "正在连接 Home Assistant…");
             await ReplaceProviderAsync(null).ConfigureAwait(false);
 
-            var provider = new HomeAssistantProvider(serverUri, token);
+            var provider = _providerFactory(serverUri, token);
             provider.SnapshotChanged += Provider_SnapshotChanged;
             provider.Disconnected += Provider_Disconnected;
             try
             {
-                await provider.ConnectAsync(cancellationToken).ConfigureAwait(false);
+                await provider.ConnectAsync(attemptToken).ConfigureAwait(false);
+                attemptToken.ThrowIfCancellationRequested();
                 _provider = provider;
             }
             catch
@@ -260,7 +309,7 @@ public sealed class SmartHomeService
             SetConnectionState(SmartHomeConnectionState.Disconnected, "连接已取消");
             throw;
         }
-        catch (TaskCanceledException exception)
+        catch (OperationCanceledException exception)
         {
             SetConnectionState(SmartHomeConnectionState.ServerUnavailable, "连接 Home Assistant 超时");
             throw new TimeoutException("连接 Home Assistant 超时。", exception);
@@ -307,6 +356,7 @@ public sealed class SmartHomeService
         lock (_reconnectSync)
         {
             if (_reconnectTask is { IsCompleted: false }) return;
+            _reconnectSource?.Dispose();
             _reconnectSource = new CancellationTokenSource();
             _reconnectTask = ReconnectLoopAsync(_reconnectSource.Token);
         }
@@ -317,11 +367,11 @@ public sealed class SmartHomeService
         var attempt = 0;
         while (!cancellationToken.IsCancellationRequested && !_manualDisconnect)
         {
-            var delay = ReconnectDelays[Math.Min(attempt, ReconnectDelays.Length - 1)];
+            var delay = _reconnectDelays[Math.Min(attempt, _reconnectDelays.Length - 1)];
             try
             {
                 await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
-                var token = SmartHomeCredentialStore.ReadToken();
+                var token = _readToken();
                 if (string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(_settings.ServerUrl)) return;
                 await ConnectCoreAsync(_settings.ServerUrl, token, persist: false, cancellationToken).ConfigureAwait(false);
                 return;
@@ -330,24 +380,40 @@ public sealed class SmartHomeService
             {
                 return;
             }
+            catch (HomeAssistantAuthenticationException)
+            {
+                // 认证失败需要用户更新令牌，不能无限重试无效凭据。
+                return;
+            }
             catch
             {
                 attempt++;
                 SetConnectionState(SmartHomeConnectionState.Reconnecting,
-                    $"连接中断，{ReconnectDelays[Math.Min(attempt, ReconnectDelays.Length - 1)].TotalSeconds:0} 秒后重试");
+                    $"连接中断，{_reconnectDelays[Math.Min(attempt, _reconnectDelays.Length - 1)].TotalSeconds:0} 秒后重试");
             }
         }
     }
 
-    private void CancelReconnect()
+    private async Task CancelReconnectAsync()
     {
+        Task? previousTask;
+        CancellationTokenSource? previousSource;
         lock (_reconnectSync)
         {
-            _reconnectSource?.Cancel();
-            _reconnectSource?.Dispose();
+            _manualDisconnect = true;
+            previousSource = _reconnectSource;
+            previousTask = _reconnectTask;
+            previousSource?.Cancel();
             _reconnectSource = null;
             _reconnectTask = null;
         }
+        // 等旧任务真正退出再启动新连接，避免旧任务覆盖新状态或累积后台任务。
+        try
+        {
+            if (previousTask is not null) await previousTask.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) { }
+        finally { previousSource?.Dispose(); }
     }
 
     private async Task ReplaceProviderAsync(ISmartHomeProvider? next)

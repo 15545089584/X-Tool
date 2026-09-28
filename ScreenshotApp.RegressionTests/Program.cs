@@ -16,13 +16,507 @@ using ScreenshotApp.StorageAnalysis;
 using ScreenshotApp.NetworkWorkbench;
 using ScreenshotApp.SystemTools;
 using ScreenshotApp.DesktopPet;
+using ScreenshotApp.SmartHome;
+using ScreenshotApp.Archives;
 using Microsoft.Data.Sqlite;
+using System.Text;
+using System.Text.Json;
+using System.IO.Compression;
 
 const int Width = 720;
 const int FrameHeight = 520;
 const int ContentHeight = 4200;
 
 var failures = new List<string>();
+
+if (args.Length >= 1 && args[0] == "--archive-workspace")
+{
+    var temporaryRoot = Path.Combine(Path.GetTempPath(), $"xtool-archive-regression-{Guid.NewGuid():N}");
+    try
+    {
+        var sourceRoot = Path.Combine(temporaryRoot, "压缩源");
+        Directory.CreateDirectory(Path.Combine(sourceRoot, "子目录", "空目录"));
+        File.WriteAllText(Path.Combine(sourceRoot, "说明.txt"), "X-Tool 压缩包回归测试\n中文文件名");
+        File.WriteAllBytes(Path.Combine(sourceRoot, "子目录", "payload.bin"),
+            Enumerable.Range(0, 16_384).Select(index => (byte)(index % 251)).ToArray());
+
+        if (PetArchiveDropPlanner.ResolveAction([sourceRoot]) != PetArchiveDropAction.Compress)
+            failures.Add("桌宠拖入文件夹时没有选择压缩动作。");
+        var expectedPetArchive = Path.Combine(temporaryRoot, "压缩源.zip");
+        if (!PetArchiveDropPlanner.CreateCompressionOutputPath([sourceRoot])
+                .Equals(expectedPetArchive, StringComparison.OrdinalIgnoreCase))
+            failures.Add("桌宠压缩没有默认输出到来源文件夹旁边。");
+        File.WriteAllText(expectedPetArchive, "占位");
+        if (!PetArchiveDropPlanner.CreateCompressionOutputPath([sourceRoot])
+                .Equals(Path.Combine(temporaryRoot, "压缩源 (1).zip"), StringComparison.OrdinalIgnoreCase))
+            failures.Add("桌宠压缩没有为同名压缩包生成安全的新名称。");
+
+        var service = new ArchiveService();
+        var formats = new[]
+        {
+            (ArchiveOutputFormat.Zip, ArchiveCompressionPreset.Balanced, ".zip"),
+            (ArchiveOutputFormat.Zip, ArchiveCompressionPreset.Store, ".store.zip"),
+            (ArchiveOutputFormat.SevenZip, ArchiveCompressionPreset.Balanced, ".7z"),
+            (ArchiveOutputFormat.TarGZip, ArchiveCompressionPreset.Fast, ".tar.gz")
+        };
+        foreach (var (format, preset, extension) in formats)
+        {
+            var archivePath = Path.Combine(temporaryRoot, $"sample{extension}");
+            var createResult = await service.CreateAsync(
+                [sourceRoot],
+                archivePath,
+                format,
+                preset,
+                includeTopLevelDirectory: true,
+                progress: null,
+                CancellationToken.None);
+            if (!File.Exists(archivePath) || createResult.ProcessedFiles != 2)
+                failures.Add($"{format}/{preset} 创建结果不完整。");
+
+            if (format == ArchiveOutputFormat.Zip && !ZipUsesUtf8EntryNames(archivePath))
+                failures.Add($"{format}/{preset} 没有为中文条目写入 ZIP UTF-8 标志。");
+
+            var inspection = await service.InspectAsync(archivePath, password: null, CancellationToken.None);
+            if (inspection.TotalEntryCount < 3 || inspection.TotalUncompressedBytes < 16_384)
+                failures.Add($"{format}/{preset} 预览没有返回完整条目或展开大小。");
+
+            var extractRoot = Path.Combine(temporaryRoot, $"extract-{format}-{preset}");
+            var extractResult = await service.ExtractAsync(
+                archivePath,
+                extractRoot,
+                password: null,
+                ArchiveConflictPolicy.Rename,
+                progress: null,
+                CancellationToken.None);
+            var extractedText = Path.Combine(extractRoot, "压缩源", "说明.txt");
+            var extractedBinary = Path.Combine(extractRoot, "压缩源", "子目录", "payload.bin");
+            if (extractResult.ProcessedFiles != 2 ||
+                !File.Exists(extractedText) ||
+                !File.Exists(extractedBinary) ||
+                File.ReadAllText(extractedText) != "X-Tool 压缩包回归测试\n中文文件名")
+            {
+                failures.Add($"{format}/{preset} 解压结果或中文文件名不正确。");
+            }
+        }
+
+        var petZipPath = Path.Combine(temporaryRoot, "sample.zip");
+        var petSevenZipPath = Path.Combine(temporaryRoot, "sample.7z");
+        var normalFilePath = Path.Combine(sourceRoot, "说明.txt");
+        if (PetArchiveDropPlanner.ResolveAction([petZipPath, petSevenZipPath]) != PetArchiveDropAction.Extract)
+            failures.Add("桌宠拖入纯压缩包时没有选择解压动作。");
+        if (PetArchiveDropPlanner.ResolveAction([petZipPath, normalFilePath]) != PetArchiveDropAction.Compress)
+            failures.Add("桌宠拖入压缩包与普通文件的混合内容时动作不明确。");
+        if (!ArchiveService.IsSupportedArchivePath("示例.tar.gz") ||
+            ArchiveService.IsSupportedArchivePath("普通文件.txt"))
+            failures.Add("桌宠压缩包扩展名识别不正确。");
+        if (!PetArchiveDropPlanner.GetExtractionDestination(petZipPath)
+                .Equals(temporaryRoot, StringComparison.OrdinalIgnoreCase))
+            failures.Add("桌宠解压没有默认使用压缩包所在位置。");
+
+        var maliciousArchive = Path.Combine(temporaryRoot, "unsafe.zip");
+        using (var output = File.Create(maliciousArchive))
+        using (var archive = new ZipArchive(output, ZipArchiveMode.Create))
+        using (var writer = new StreamWriter(archive.CreateEntry("../escape.txt").Open()))
+        {
+            writer.Write("不应写出目标目录");
+        }
+
+        var unsafeArchiveRejected = false;
+        try
+        {
+            _ = await service.InspectAsync(maliciousArchive, password: null, CancellationToken.None);
+        }
+        catch (InvalidDataException)
+        {
+            unsafeArchiveRejected = true;
+        }
+
+        if (!unsafeArchiveRejected)
+            failures.Add("路径穿越压缩包没有在预览阶段被拒绝。");
+
+        Exception? uiFailure = null;
+        var uiThread = new Thread(() =>
+        {
+            try
+            {
+                var application = new System.Windows.Application();
+                var compressWheel = new PetActionWheelWindow(
+                    new Rect(100, 100, 180, 180),
+                    new Rect(0, 0, 1920, 1080),
+                    [sourceRoot]);
+                var extractWheel = new PetActionWheelWindow(
+                    new Rect(100, 100, 180, 180),
+                    new Rect(0, 0, 1920, 1080),
+                    [petZipPath]);
+                compressWheel.Close();
+                extractWheel.Close();
+                var window = new Window
+                {
+                    Width = 1400,
+                    Height = 860,
+                    Opacity = 0,
+                    ShowInTaskbar = false,
+                    WindowStyle = WindowStyle.None,
+                    Content = new ArchiveWorkspaceView()
+                };
+                window.Loaded += (_, _) =>
+                {
+                    window.Close();
+                    application.Shutdown();
+                };
+                application.Run(window);
+            }
+            catch (Exception exception)
+            {
+                uiFailure = exception;
+            }
+        });
+        uiThread.SetApartmentState(ApartmentState.STA);
+        uiThread.Start();
+        uiThread.Join();
+        if (uiFailure is not null)
+            failures.Add($"压缩包页面 WPF 初始化失败：{uiFailure}");
+    }
+    catch (Exception exception)
+    {
+        failures.Add($"压缩包工作台回归异常：{exception}");
+    }
+    finally
+    {
+        if (Directory.Exists(temporaryRoot)) Directory.Delete(temporaryRoot, recursive: true);
+    }
+
+    foreach (var failure in failures) Console.Error.WriteLine($"FAIL: {failure}");
+    if (failures.Count == 0) Console.WriteLine("ZIP、7z、TAR.GZ 与安全路径回归通过。");
+    return failures.Count == 0 ? 0 : 1;
+}
+
+static bool ZipUsesUtf8EntryNames(string archivePath)
+{
+    var bytes = File.ReadAllBytes(archivePath);
+    var foundChineseEntry = false;
+    for (var offset = 0; offset <= bytes.Length - 46; offset++)
+    {
+        if (BitConverter.ToUInt32(bytes, offset) != 0x02014B50)
+            continue;
+
+        var flags = BitConverter.ToUInt16(bytes, offset + 8);
+        var nameLength = BitConverter.ToUInt16(bytes, offset + 28);
+        var extraLength = BitConverter.ToUInt16(bytes, offset + 30);
+        var commentLength = BitConverter.ToUInt16(bytes, offset + 32);
+        var headerLength = 46 + nameLength + extraLength + commentLength;
+        if (offset + headerLength > bytes.Length)
+            return false;
+
+        var entryName = Encoding.UTF8.GetString(bytes, offset + 46, nameLength);
+        if (entryName.Any(character => character > 127))
+        {
+            foundChineseEntry = true;
+            if ((flags & 0x0800) == 0)
+                return false;
+        }
+
+        offset += headerLength - 1;
+    }
+
+    return foundChineseEntry;
+}
+
+if (args.Length >= 1 && args[0] == "--software-models")
+{
+    var parsed = InstalledSoftwareService.ParseCommandLine("\"C:\\Program Files\\Demo App\\uninstall.exe\" /remove /source=xtool");
+    if (parsed.Count != 3 || parsed[0] != @"C:\Program Files\Demo App\uninstall.exe" || parsed[1] != "/remove")
+        failures.Add("软件卸载命令解析未保留带空格的可执行文件路径或参数。");
+
+    var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+    if (InstalledSoftwareService.IsSpecificApplicationDirectory(programFiles, out _))
+        failures.Add("软件空间扫描未阻止直接扫描 Program Files 根目录。");
+    if (InstalledSoftwareService.NormalizeIdentity("Demo App 2.0") != "demoapp20")
+        failures.Add("软件身份归一化结果不符合预期。");
+
+    var temporarySoftwareDirectory = Path.Combine(Path.GetTempPath(), $"xtool-software-regression-{Guid.NewGuid():N}");
+    try
+    {
+        Directory.CreateDirectory(temporarySoftwareDirectory);
+        File.WriteAllBytes(Path.Combine(temporarySoftwareDirectory, "payload.bin"), new byte[2048]);
+        var sampleEntry = new InstalledSoftwareEntry
+        {
+            StableId = "regression:sample",
+            Name = "XToolSoftwareRegressionSample",
+            Kind = InstalledSoftwareKind.Desktop,
+            InstallLocation = temporarySoftwareDirectory,
+            CanUninstall = false
+        };
+        var size = InstalledSoftwareService.MeasureInstallDirectory(sampleEntry, CancellationToken.None);
+        if (!size.Success || size.Bytes != 2048 || size.Files != 1)
+            failures.Add("软件安装目录占用计算结果不正确。");
+        var residuals = SoftwareResidualService.FindCandidates(sampleEntry, includeInstallDirectory: true, CancellationToken.None);
+        if (!residuals.Any(candidate => candidate.Kind == SoftwareResidualKind.Directory && candidate.Location == temporarySoftwareDirectory))
+            failures.Add("卸载后的原安装目录没有进入残留候选。");
+        if (residuals.Any(candidate => candidate.IsSelected))
+            failures.Add("残留候选不应默认选中。");
+    }
+    finally
+    {
+        if (Directory.Exists(temporarySoftwareDirectory)) Directory.Delete(temporarySoftwareDirectory, recursive: true);
+    }
+
+    using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+    try
+    {
+        var snapshot = InstalledSoftwareService.Discover(progress: null, cancellation.Token);
+        if (snapshot.Entries.Count == 0) failures.Add("软件清单没有读取到任何已登记项目。");
+        if (!snapshot.Entries.Any(entry => entry.Kind == InstalledSoftwareKind.Desktop)) failures.Add("软件清单未读取到桌面程序。");
+        if (snapshot.Entries.Any(entry => string.IsNullOrWhiteSpace(entry.Name))) failures.Add("软件清单存在空名称项目。");
+        if (snapshot.Entries.GroupBy(entry => entry.StableId, StringComparer.OrdinalIgnoreCase).Any(group => group.Count() > 1))
+            failures.Add("软件清单存在重复稳定标识。");
+        Console.WriteLine($"软件清单回归：{snapshot.Entries.Count} 项（桌面 {snapshot.Entries.Count(entry => entry.Kind == InstalledSoftwareKind.Desktop)}，Store/MSIX {snapshot.Entries.Count(entry => entry.Kind == InstalledSoftwareKind.StorePackage)}），警告 {snapshot.Warnings.Count} 项。");
+    }
+    catch (Exception exception)
+    {
+        failures.Add($"软件清单回归异常：{exception.Message}");
+    }
+
+    foreach (var failure in failures) Console.Error.WriteLine($"FAIL: {failure}");
+    if (failures.Count == 0) Console.WriteLine("软件清单与卸载安全边界回归通过。");
+    return failures.Count == 0 ? 0 : 1;
+}
+
+if (args.Length >= 1 && args[0] == "--software-ui-smoke")
+{
+    Exception? smokeFailure = null;
+    var softwareCount = 0;
+    var smokeThread = new Thread(() =>
+    {
+        var application = new System.Windows.Application();
+        var view = new SystemToolsView { EnvironmentOnly = true };
+        var window = new Window
+        {
+            Width = 1500,
+            Height = 900,
+            Opacity = 0,
+            ShowInTaskbar = false,
+            WindowStyle = WindowStyle.None,
+            Content = view
+        };
+        window.Loaded += async (_, _) =>
+        {
+            try { softwareCount = await view.ShowSoftwareForValidationAsync(); }
+            catch (Exception exception) { smokeFailure = exception; }
+            finally
+            {
+                window.Close();
+                application.Shutdown();
+            }
+        };
+        application.Run(window);
+    });
+    smokeThread.SetApartmentState(ApartmentState.STA);
+    smokeThread.Start();
+    smokeThread.Join();
+    if (smokeFailure is not null)
+    {
+        Console.Error.WriteLine($"FAIL: 软件页 WPF 初始化异常：{smokeFailure}");
+        return 1;
+    }
+    if (softwareCount == 0)
+    {
+        Console.Error.WriteLine("FAIL: 软件页 WPF 初始化后没有数据。");
+        return 1;
+    }
+    Console.WriteLine($"软件页 WPF 生命周期回归通过：{softwareCount} 项。");
+    return 0;
+}
+
+if (args.Length >= 1 && args[0] is "--smart-home-ui" or "--smart-home-setup-ui")
+{
+    var showSetupPreview = args[0] == "--smart-home-setup-ui";
+    static JsonElement PreviewJson(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        return document.RootElement.Clone();
+    }
+
+    static SmartEntity PreviewEntity(
+        string entityId,
+        string name,
+        string state,
+        string areaId,
+        Dictionary<string, JsonElement>? attributes = null) => new()
+    {
+        EntityId = entityId,
+        Name = name,
+        State = state,
+        AreaId = areaId,
+        Attributes = attributes ?? new Dictionary<string, JsonElement>()
+    };
+
+    var previewSnapshot = new SmartHomeSnapshot
+    {
+        Areas = [new SmartArea("living", "客厅"), new SmartArea("bedroom", "卧室"), new SmartArea("balcony", "阳台")],
+        Devices =
+        [
+            new SmartDevice
+            {
+                Id = "living-light", Name = "客厅吸顶灯", AreaId = "living", AreaName = "客厅", Manufacturer = "Xiaomi",
+                Entities = [PreviewEntity("light.living_room", "客厅吸顶灯", "on", "living", new Dictionary<string, JsonElement>
+                {
+                    ["brightness"] = PreviewJson("180"), ["supported_color_modes"] = PreviewJson("[\"brightness\",\"color_temp\"]")
+                })]
+            },
+            new SmartDevice
+            {
+                Id = "living-air", Name = "客厅空气净化器", AreaId = "living", AreaName = "客厅", Model = "Air Purifier 4 Pro",
+                Entities = [PreviewEntity("fan.air_purifier", "空气净化器", "on", "living", new Dictionary<string, JsonElement>
+                {
+                    ["percentage"] = PreviewJson("42")
+                }), PreviewEntity("sensor.living_pm25", "PM2.5", "12", "living", new Dictionary<string, JsonElement>
+                {
+                    ["unit_of_measurement"] = PreviewJson("\"µg/m³\"")
+                })]
+            },
+            new SmartDevice
+            {
+                Id = "bedroom-climate", Name = "卧室空调", AreaId = "bedroom", AreaName = "卧室",
+                Entities = [PreviewEntity("climate.bedroom", "卧室空调", "cool", "bedroom", new Dictionary<string, JsonElement>
+                {
+                    ["current_temperature"] = PreviewJson("25.5"), ["temperature"] = PreviewJson("24"),
+                    ["min_temp"] = PreviewJson("16"), ["max_temp"] = PreviewJson("30")
+                })]
+            },
+            new SmartDevice
+            {
+                Id = "balcony-cover", Name = "阳台窗帘", AreaId = "balcony", AreaName = "阳台",
+                Entities = [PreviewEntity("cover.balcony", "阳台窗帘", "open", "balcony", new Dictionary<string, JsonElement>
+                {
+                    ["current_position"] = PreviewJson("72")
+                })]
+            },
+            new SmartDevice
+            {
+                Id = "bedroom-sensor", Name = "卧室温湿度计", AreaId = "bedroom", AreaName = "卧室",
+                Entities = [PreviewEntity("sensor.bedroom_temperature", "温度", "23.8", "bedroom", new Dictionary<string, JsonElement>
+                {
+                    ["unit_of_measurement"] = PreviewJson("\"℃\"")
+                }), PreviewEntity("sensor.bedroom_humidity", "湿度", "48", "bedroom", new Dictionary<string, JsonElement>
+                {
+                    ["unit_of_measurement"] = PreviewJson("\"%\"")
+                })]
+            },
+            new SmartDevice
+            {
+                Id = "balcony-door", Name = "阳台门窗传感器", AreaId = "balcony", AreaName = "阳台",
+                Entities = [PreviewEntity("binary_sensor.balcony_door", "阳台门", "off", "balcony", new Dictionary<string, JsonElement>
+                {
+                    ["device_class"] = PreviewJson("\"door\"")
+                })]
+            }
+        ],
+        UpdatedAt = DateTimeOffset.Now
+    };
+
+    var previewThread = new Thread(() =>
+    {
+        var previewView = new SmartHomeView();
+        if (showSetupPreview) previewView.ShowSetupForValidation();
+        else previewView.ShowSnapshotForValidation(previewSnapshot);
+        var previewWindow = new Window
+        {
+            Title = showSetupPreview ? "X-Tool 智能家居首次连接验收" : "X-Tool 智能家居界面验收",
+            Width = 1180,
+            Height = 820,
+            MinWidth = 980,
+            MinHeight = 700,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen,
+            Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(232, 242, 250)),
+            Content = previewView
+        };
+        var previewApplication = new System.Windows.Application();
+        previewApplication.Run(previewWindow);
+    });
+    previewThread.SetApartmentState(ApartmentState.STA);
+    previewThread.Start();
+    previewThread.Join();
+    return 0;
+}
+
+if (args.Length >= 1 && args[0] == "--smart-home-models")
+{
+    static JsonElement JsonValue(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        return document.RootElement.Clone();
+    }
+
+    var light = new SmartEntity
+    {
+        EntityId = "light.living_room",
+        Name = "客厅吸顶灯",
+        State = "on",
+        Attributes = new Dictionary<string, JsonElement>
+        {
+            ["brightness"] = JsonValue("180"),
+            ["supported_color_modes"] = JsonValue("[\"brightness\",\"color_temp\"]")
+        }
+    };
+    var climate = new SmartEntity
+    {
+        EntityId = "climate.bedroom",
+        Name = "卧室空调",
+        State = "cool",
+        Attributes = new Dictionary<string, JsonElement>
+        {
+            ["current_temperature"] = JsonValue("25.5"),
+            ["temperature"] = JsonValue("24"),
+            ["min_temp"] = JsonValue("16"),
+            ["max_temp"] = JsonValue("30")
+        }
+    };
+    var cover = new SmartEntity
+    {
+        EntityId = "cover.balcony",
+        Name = "阳台窗帘",
+        State = "open",
+        Attributes = new Dictionary<string, JsonElement>
+        {
+            ["current_position"] = JsonValue("72")
+        }
+    };
+    var airflowDirection = new SmartEntity
+    {
+        EntityId = "select.bedroom_vertical_angle",
+        Name = "空调风感方向",
+        State = "向上",
+        Attributes = new Dictionary<string, JsonElement>
+        {
+            ["options"] = JsonValue("[\"定格关闭\",\"上定格（天幕风）\",\"向上\",\"中间\",\"向下\",\"地毯风\"]")
+        }
+    };
+
+    var lightDevice = new SmartDevice { Id = "light-device", Name = "客厅灯", Entities = [light] };
+    var climateDevice = new SmartDevice { Id = "climate-device", Name = "卧室空调", Entities = [climate, airflowDirection] };
+    var coverDevice = new SmartDevice { Id = "cover-device", Name = "阳台窗帘", Entities = [cover] };
+    var lightViewModel = new SmartDeviceViewModel(lightDevice);
+    var climateViewModel = new SmartDeviceViewModel(climateDevice);
+    var coverViewModel = new SmartDeviceViewModel(coverDevice);
+    Console.WriteLine(
+        $"空调风向解析 | {string.Join(" / ", climateViewModel.AirflowDirectionLevels.Select(level => $"{level.Value}->{level.Name}"))}");
+
+    var lightPassed = lightViewModel.IsOn && lightViewModel.SupportsBrightness &&
+                      Math.Abs(lightViewModel.BrightnessPercent - 70.588) < 0.01;
+    var climatePassed = climateViewModel.SupportsTargetTemperature && climateViewModel.MainState.Contains("25.5");
+    var airflowPassed = climateViewModel.AirflowDirectionLevels.Select(level => level.Name)
+        .SequenceEqual(["上", "偏上", "中间", "偏下", "下"]);
+    var coverPassed = coverViewModel.SupportsCoverPosition && Math.Abs(coverViewModel.CoverPosition - 72) < 0.01;
+    var addressPassed = SmartHomeSettingsStore.NormalizeServerUri("http://homeassistant.local:8123/").ToString() ==
+                        "http://homeassistant.local:8123/";
+    var passed = lightPassed && climatePassed && airflowPassed && coverPassed && addressPassed;
+    Console.WriteLine(
+        $"模型分项 | 灯光 {lightPassed} | 空调 {climatePassed} ({climateViewModel.SupportsTargetTemperature}, {climateViewModel.MainState}) | " +
+        $"五档风向 {airflowPassed} | 窗帘 {coverPassed} | 地址 {addressPassed}");
+    Console.WriteLine($"智能家居模型 | {(passed ? "通过" : "失败")} | 灯光、空调五档风向、窗帘能力映射与地址规范化");
+    return passed ? 0 : 8;
+}
 
 if (args.Length >= 1 && args[0] == "--sqlite-smoke")
 {
@@ -321,9 +815,11 @@ RunHorizontalBandInterferenceCase();
 RunDynamicCardStreamCase();
 RunDynamicCardNoOverlapCase();
 RunTinyScrollCase();
+RunPixelMicroScrollCase();
 RunSignatureCase();
 RunStitchCase();
 RunFixedChromeStitchCase();
+RunInitialViewportPreservationCase();
 RunPreviewGrowthCase();
 RunAnnotationRenderCase();
 RunScreenColorSamplerCase();
@@ -539,6 +1035,30 @@ void RunTinyScrollCase()
     }
 }
 
+void RunPixelMicroScrollCase()
+{
+    var offsets = new[] { 480, 481, 483 };
+    var previous = CreateViewport(code, offsets[0], true, 0);
+    for (var index = 1; index < offsets.Length; index++)
+    {
+        var current = CreateViewport(code, offsets[index], true, index);
+        var expectedDelta = offsets[index] - offsets[index - 1];
+        var match = VerticalOverlapDetector.FindWithDirection(previous, current, 1);
+        Console.WriteLine(
+            $"像素级平滑滚动 {expectedDelta}px | 检测 {match.ScrollDelta} | " +
+            $"重复 {match.IsDuplicate} | 可靠 {match.IsReliable}");
+        if (match.IsDuplicate || !match.IsReliable ||
+            Math.Abs(match.ScrollDelta - expectedDelta) > 1)
+        {
+            failures.Add(
+                $"像素级平滑滚动识别失败：期望 {expectedDelta}，实际 {match.ScrollDelta}，" +
+                $"重复={match.IsDuplicate}，可靠={match.IsReliable}。 ");
+        }
+
+        previous = current;
+    }
+}
+
 void RunSignatureCase()
 {
     var first = CreateViewport(code, 720, true, 0);
@@ -673,6 +1193,44 @@ void RunFixedChromeStitchCase()
     {
         failures.Add(
             $"缩略图没有复用最终拼接裁剪布局，平均色差={previewDifference:F4}。 ");
+    }
+}
+
+void RunInitialViewportPreservationCase()
+{
+    const int headerHeight = 64;
+    var offsets = new[] { 0, 210, 460, 735 };
+    var frames = offsets
+        .Select((offset, index) => new VerticalBitmapStitcher.PositionedFrame(
+            CreateViewportWithFixedChrome(web, offset, index),
+            offset))
+        .ToList();
+    var estimator = new FixedViewportRegionEstimator();
+    for (var index = 1; index < frames.Count; index++)
+    {
+        estimator.Observe(
+            frames[index - 1].Bitmap,
+            frames[index].Bitmap,
+            offsets[index] - offsets[index - 1]);
+    }
+
+    var stitched = VerticalBitmapStitcher.StitchPositioned(frames, estimator.Current);
+    var compareHeight = headerHeight + 96;
+    var compareWidth = stitched.PixelWidth;
+    var expectedStart = new CroppedBitmap(
+        frames[0].Bitmap,
+        new Int32Rect(0, 0, compareWidth, compareHeight));
+    expectedStart.Freeze();
+    var actualStart = new CroppedBitmap(
+        stitched,
+        new Int32Rect(0, 0, compareWidth, compareHeight));
+    actualStart.Freeze();
+    var difference = CalculateMeanColorDifference(expectedStart, actualStart);
+    Console.WriteLine($"首屏起始位置保留 | 前 {compareHeight}px 平均色差 {difference:F4}");
+    if (difference > 0.01)
+    {
+        failures.Add(
+            $"固定顶栏长截图的首屏内容被裁剪或替换，平均色差={difference:F4}。 ");
     }
 }
 

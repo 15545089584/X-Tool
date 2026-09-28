@@ -7,6 +7,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using WpfShapes = System.Windows.Shapes;
 using System.Windows.Threading;
 using ScreenshotApp.StorageAnalysis;
@@ -31,6 +32,7 @@ public partial class SystemToolsView : UserControl
     private readonly ObservableCollection<StorageVolumeEntry> _storageVolumes = new();
     private readonly ObservableCollection<PhysicalStorageEntry> _physicalStorage = new();
     private readonly ObservableCollection<SystemDiagnosticGroup> _diagnosticGroups = new();
+    private readonly ObservableCollection<InstalledSoftwareEntry> _softwareEntries = new();
     private IReadOnlyList<PortEntry> _allPorts = Array.Empty<PortEntry>();
     private IReadOnlyList<ProcessEntry> _allProcesses = Array.Empty<ProcessEntry>();
     private IReadOnlyList<ServiceEntry> _allServices = Array.Empty<ServiceEntry>();
@@ -38,6 +40,7 @@ public partial class SystemToolsView : UserControl
     private IReadOnlyList<EnvironmentVariableEntry> _allEnvironmentVariables = Array.Empty<EnvironmentVariableEntry>();
     private IReadOnlyList<DeviceDriverEntry> _allDrivers = Array.Empty<DeviceDriverEntry>();
     private IReadOnlyList<SystemDiagnosticGroup> _allDiagnosticGroups = Array.Empty<SystemDiagnosticGroup>();
+    private IReadOnlyList<InstalledSoftwareEntry> _allSoftwareEntries = Array.Empty<InstalledSoftwareEntry>();
     private IReadOnlyList<SystemDiagnosticTimelineBucket> _diagnosticTimelineBuckets = Array.Empty<SystemDiagnosticTimelineBucket>();
     private IReadOnlyList<DiskHistoryPoint> _diskHistoryPoints = Array.Empty<DiskHistoryPoint>();
     private int _diskHistoryDays = 30;
@@ -45,6 +48,8 @@ public partial class SystemToolsView : UserControl
     private SystemDiagnosticSnapshot? _diagnosticSnapshot;
     private int _selectedDiagnosticBucketIndex = -1;
     private CancellationTokenSource? _diagnosticCancellation;
+    private CancellationTokenSource? _softwareCancellation;
+    private CancellationTokenSource? _softwareSizeMeasurementCancellation;
     private bool _portsAscending = true;
     private string _portSortKey = "Port";
     private bool _portHeaderSortActive;
@@ -56,6 +61,10 @@ public partial class SystemToolsView : UserControl
     private bool _isRefreshingRelationships;
     private bool _isRefreshingDeviceInfo;
     private bool _isRefreshingStorage;
+    private bool _isRefreshingSoftware;
+    private bool _suppressSoftwareTrackingChange;
+    private bool _suppressSoftwareSelectionChange;
+    private bool _isSoftwareDetailOpen;
     private bool _isCapturingDiskHistory;
     private bool _isStorageSectionActive;
     private int _diskHistoryHoverSegment = -1;
@@ -102,18 +111,19 @@ public partial class SystemToolsView : UserControl
             ServicesPanel,
             RelationsBubblePanel,
             OverviewPanel,
-            DriversPanel,
-            StoragePanel,
-            StartupManagementView,
-            EnvironmentPanel,
-            DiagnosticsPanel);
+             DriversPanel,
+             StoragePanel,
+             SoftwarePanel,
+             EnvironmentPanel,
+             DiagnosticsPanel);
         EnvironmentListBox.ItemsSource = _environmentVariables;
         PathEntriesListBox.ItemsSource = _pathEntries;
         DriverCategoryItems.ItemsSource = _driverCategories;
         DriverPageCategoryItems.ItemsSource = _driverCategories;
         StorageVolumesItems.ItemsSource = _storageVolumes;
         PhysicalStorageItems.ItemsSource = _physicalStorage;
-        DiagnosticResultsListBox.ItemsSource = _diagnosticGroups;
+         DiagnosticResultsListBox.ItemsSource = _diagnosticGroups;
+         SoftwareListBox.ItemsSource = _softwareEntries;
         var diagnosticResultsView = CollectionViewSource.GetDefaultView(_diagnosticGroups);
         diagnosticResultsView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(SystemDiagnosticGroup.SeverityDisplay)));
         DiagnosticReliabilityChart.CellSelected += DiagnosticReliabilityChart_CellSelected;
@@ -125,7 +135,11 @@ public partial class SystemToolsView : UserControl
         _diskHistoryAutoCaptureTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(15) };
         _diskHistoryAutoCaptureTimer.Tick += DiskHistoryAutoCaptureTimer_Tick;
         EnvironmentScopeComboBox.SelectedIndex = 0;
-        AutoRefreshIntervalComboBox.SelectedIndex = 1;
+         AutoRefreshIntervalComboBox.SelectedIndex = 1;
+         _suppressSoftwareTrackingChange = true;
+         SoftwareUsageTrackingCheckBox.IsChecked = SoftwareUsageTracker.IsEnabled;
+         _suppressSoftwareTrackingChange = false;
+         SoftwareUsageTracker.EnsureStartedWhenEnabled();
         UpdatePortAutoRefreshInterval();
         RelationshipBubbleFilterTextBox.HorizontalContentAlignment = HorizontalAlignment.Left;
         RelationshipBubbleFilterTextBox.TextAlignment = TextAlignment.Left;
@@ -149,18 +163,19 @@ public partial class SystemToolsView : UserControl
         Unloaded += (_, _) =>
         {
             _portAutoRefreshTimer.Stop();
-            StartupManagementView.CancelActiveScan();
             _diskHistoryAutoCaptureTimer.Stop();
-            StorageAnalysisView.CancelActiveScan();
-            CancelActiveDiagnostics();
+             StorageAnalysisView.CancelActiveScan();
+             CancelActiveDiagnostics();
+             _softwareCancellation?.Cancel();
         };
         IsVisibleChanged += (_, _) =>
         {
-            if (!IsVisible)
-            {
-                StorageAnalysisView.CancelActiveScan();
-                CancelActiveDiagnostics();
-            }
+             if (!IsVisible)
+             {
+                 StorageAnalysisView.CancelActiveScan();
+                 CancelActiveDiagnostics();
+                 _softwareCancellation?.Cancel();
+             }
         };
     }
 
@@ -1058,10 +1073,10 @@ public partial class SystemToolsView : UserControl
         {
             CancelActiveDiagnostics();
         }
-        if (section != "Startup")
-        {
-            StartupManagementView.CancelActiveScan();
-        }
+         if (section != "Software")
+         {
+             _softwareCancellation?.Cancel();
+         }
         FrameworkElement target = section switch
         {
             "Processes" => ProcessesPanel,
@@ -1069,9 +1084,9 @@ public partial class SystemToolsView : UserControl
             "Relations" => RelationsBubblePanel,
             "Overview" => OverviewPanel,
             "Drivers" => DriversPanel,
-            "Storage" => StoragePanel,
-            "Startup" => StartupManagementView,
-            "Environment" => EnvironmentPanel,
+             "Storage" => StoragePanel,
+             "Software" => SoftwarePanel,
+             "Environment" => EnvironmentPanel,
             "Diagnostics" => DiagnosticsPanel,
             _ => PortsPanel
         };
@@ -1087,11 +1102,11 @@ public partial class SystemToolsView : UserControl
             StartDiskHistoryAutoCapture();
             _ = RefreshStorageAsync();
         }
-        else if (section == "Startup") _ = StartupManagementView.RefreshAsync();
-        else if (section == "Environment") RefreshEnvironment();
+         else if (section == "Software" && _allSoftwareEntries.Count == 0) _ = RefreshSoftwareAsync();
+         else if (section == "Environment") RefreshEnvironment();
     }
 
-    /// <summary>资源管理保留观察与关联功能；系统工具承载设备、存储、启动项与环境变量功能。</summary>
+    /// <summary>资源管理保留观察与关联功能；系统工具承载设备、存储、软件与环境变量功能。</summary>
     private void ConfigureModuleMode()
     {
         if (EnvironmentOnly)
@@ -1103,14 +1118,14 @@ public partial class SystemToolsView : UserControl
             OverviewTabButton.Visibility = Visibility.Visible;
             StorageTabButton.Visibility = Visibility.Visible;
             DriverTabButton.Visibility = Visibility.Visible;
-            StartupTabButton.Visibility = Visibility.Visible;
-            DiagnosticsTabButton.Visibility = Visibility.Visible;
+             SoftwareTabButton.Visibility = Visibility.Visible;
+             DiagnosticsTabButton.Visibility = Visibility.Visible;
             Grid.SetColumn(OverviewTabButton, 0);
             Grid.SetColumn(StorageTabButton, 2);
-            Grid.SetColumn(DriverTabButton, 4);
-            Grid.SetColumn(StartupTabButton, 6);
-            Grid.SetColumn(EnvironmentTabButton, 8);
-            Grid.SetColumn(DiagnosticsTabButton, 10);
+             Grid.SetColumn(DriverTabButton, 4);
+             Grid.SetColumn(SoftwareTabButton, 6);
+             Grid.SetColumn(EnvironmentTabButton, 8);
+             Grid.SetColumn(DiagnosticsTabButton, 10);
             AutoRefreshHostPanel.Visibility = Visibility.Collapsed;
             PortsPanel.Visibility = Visibility.Collapsed;
             ProcessesPanel.Visibility = Visibility.Collapsed;
@@ -1119,27 +1134,27 @@ public partial class SystemToolsView : UserControl
             EnvironmentPanel.Visibility = Visibility.Collapsed;
             StoragePanel.Visibility = Visibility.Collapsed;
             DriversPanel.Visibility = Visibility.Collapsed;
-            StartupManagementView.Visibility = Visibility.Collapsed;
-            DiagnosticsPanel.Visibility = Visibility.Collapsed;
+             SoftwarePanel.Visibility = Visibility.Collapsed;
+             DiagnosticsPanel.Visibility = Visibility.Collapsed;
             StorageOverviewContentPanel.Visibility = Visibility.Visible;
             StorageAnalysisView.Visibility = Visibility.Collapsed;
             OverviewPanel.Visibility = Visibility.Visible;
             _tabMotion.SetCurrent(OverviewPanel);
             SetActiveTab("Overview");
-            SetPageHeading("系统工具", "查看设备、存储、启动项、环境变量与系统诊断；所有写入操作都会在执行前明确确认。");
+             SetPageHeading("系统工具", "查看设备、存储、驱动、软件、环境变量与系统诊断；所有写入操作都会在执行前明确确认。");
             return;
         }
 
         OverviewTabButton.Visibility = Visibility.Collapsed;
         StorageTabButton.Visibility = Visibility.Collapsed;
         DriverTabButton.Visibility = Visibility.Collapsed;
-        StartupTabButton.Visibility = Visibility.Collapsed;
+         SoftwareTabButton.Visibility = Visibility.Collapsed;
         EnvironmentTabButton.Visibility = Visibility.Collapsed;
         DiagnosticsTabButton.Visibility = Visibility.Collapsed;
         OverviewPanel.Visibility = Visibility.Collapsed;
         StoragePanel.Visibility = Visibility.Collapsed;
         DriversPanel.Visibility = Visibility.Collapsed;
-        StartupManagementView.Visibility = Visibility.Collapsed;
+         SoftwarePanel.Visibility = Visibility.Collapsed;
         DiagnosticsPanel.Visibility = Visibility.Collapsed;
         HideStorageAnalysis();
         AutoRefreshHostPanel.Visibility = Visibility.Visible;
@@ -1157,7 +1172,7 @@ public partial class SystemToolsView : UserControl
 
     private void SetActiveTab(string section)
     {
-        foreach (var (button, name) in new[] { (PortsTabButton, "Ports"), (ProcessesTabButton, "Processes"), (ServicesTabButton, "Services"), (RelationsTabButton, "Relations"), (OverviewTabButton, "Overview"), (StorageTabButton, "Storage"), (DriverTabButton, "Drivers"), (StartupTabButton, "Startup"), (EnvironmentTabButton, "Environment"), (DiagnosticsTabButton, "Diagnostics") })
+         foreach (var (button, name) in new[] { (PortsTabButton, "Ports"), (ProcessesTabButton, "Processes"), (ServicesTabButton, "Services"), (RelationsTabButton, "Relations"), (OverviewTabButton, "Overview"), (StorageTabButton, "Storage"), (DriverTabButton, "Drivers"), (SoftwareTabButton, "Software"), (EnvironmentTabButton, "Environment"), (DiagnosticsTabButton, "Diagnostics") })
         {
             var active = name == section;
             button.Background = new SolidColorBrush(active ? Color.FromRgb(77, 124, 254) : Color.FromArgb(134, 255, 255, 255));
@@ -1169,11 +1184,339 @@ public partial class SystemToolsView : UserControl
     private async void RefreshPorts_Click(object sender, RoutedEventArgs e) => await RefreshPortsAsync();
     private async void RefreshProcesses_Click(object sender, RoutedEventArgs e) => await RefreshProcessesAsync();
     private async void RefreshServices_Click(object sender, RoutedEventArgs e) => await RefreshServicesAsync();
-    private async void RefreshRelationships_Click(object sender, RoutedEventArgs e) => await RefreshRelationshipsAsync();
-    private async void RefreshDeviceInfo_Click(object sender, RoutedEventArgs e) => await RefreshDeviceInfoAsync();
-    private async void RefreshStorage_Click(object sender, RoutedEventArgs e) => await RefreshStorageAsync();
+     private async void RefreshRelationships_Click(object sender, RoutedEventArgs e) => await RefreshRelationshipsAsync();
+     private async void RefreshDeviceInfo_Click(object sender, RoutedEventArgs e) => await RefreshDeviceInfoAsync();
+     private async void RefreshStorage_Click(object sender, RoutedEventArgs e) => await RefreshStorageAsync();
 
-    private async void DiagnosticScanButton_Click(object sender, RoutedEventArgs e)
+     private async void RefreshSoftware_Click(object sender, RoutedEventArgs e) => await RefreshSoftwareAsync();
+
+     private async Task RefreshSoftwareAsync()
+     {
+         if (_isRefreshingSoftware) return;
+         _isRefreshingSoftware = true;
+         _softwareCancellation?.Cancel();
+         _softwareCancellation?.Dispose();
+         var cancellation = new CancellationTokenSource();
+         _softwareCancellation = cancellation;
+         SoftwareSummaryText.Text = "正在读取已登记的软件…";
+         try
+         {
+             var progress = new Progress<SoftwareDiscoveryProgress>(value =>
+                 SoftwareSummaryText.Text = $"{value.Stage} · {value.Count:N0} 项");
+             var result = await Task.Run(() => InstalledSoftwareService.Discover(progress, cancellation.Token), cancellation.Token);
+             if (!ReferenceEquals(_softwareCancellation, cancellation)) return;
+             _allSoftwareEntries = result.Entries;
+             ApplySoftwareFilter();
+             SoftwareSummaryText.ToolTip = result.Warnings.Count == 0
+                 ? $"扫描于 {result.CapturedAt.LocalDateTime:HH:mm:ss}"
+                 : string.Join("\n", result.Warnings);
+         }
+         catch (OperationCanceledException)
+         {
+             if (ReferenceEquals(_softwareCancellation, cancellation)) SoftwareSummaryText.Text = "软件扫描已取消";
+         }
+         catch (Exception exception)
+         {
+             SoftwareSummaryText.Text = $"读取失败：{exception.Message}";
+         }
+         finally
+         {
+             if (ReferenceEquals(_softwareCancellation, cancellation)) _softwareCancellation = null;
+             cancellation.Dispose();
+             _isRefreshingSoftware = false;
+         }
+     }
+
+     /// <summary>供回归程序在真实 WPF 生命周期中验证软件页初始化，不执行任何卸载或清理。</summary>
+     internal async Task<int> ShowSoftwareForValidationAsync()
+     {
+         EnvironmentOnly = true;
+         ConfigureModuleMode();
+         _tabMotion.Show(SoftwarePanel);
+         SetActiveTab("Software");
+         await RefreshSoftwareAsync();
+         return _allSoftwareEntries.Count;
+     }
+
+     private void SoftwareFilter_Changed(object sender, RoutedEventArgs e)
+     {
+         if (IsLoaded) ApplySoftwareFilter();
+     }
+
+     private void ApplySoftwareFilter()
+     {
+         var selectedId = _isSoftwareDetailOpen
+             ? (SoftwareListBox.SelectedItem as InstalledSoftwareEntry)?.StableId
+             : null;
+         var keyword = SoftwareFilterTextBox?.Text.Trim() ?? string.Empty;
+         var kind = SoftwareKindComboBox is null ? "All" : SelectedTag(SoftwareKindComboBox);
+         var showSystem = ShowSystemSoftwareCheckBox?.IsChecked == true;
+         IEnumerable<InstalledSoftwareEntry> filtered = _allSoftwareEntries.Where(entry =>
+             (showSystem || !entry.IsSystemComponent) &&
+             (string.IsNullOrWhiteSpace(keyword) || entry.SearchText.Contains(keyword, StringComparison.CurrentCultureIgnoreCase)));
+
+         var unusedThreshold = DateTimeOffset.Now.AddDays(-90);
+         filtered = kind switch
+         {
+             "Desktop" => filtered.Where(entry => entry.Kind == InstalledSoftwareKind.Desktop),
+             "Store" => filtered.Where(entry => entry.Kind == InstalledSoftwareKind.StorePackage),
+             "Large" => filtered.Where(entry => entry.SortableSize >= 1024L * 1024 * 1024),
+             "Unused" when SoftwareUsageTracker.IsEnabled && SoftwareUsageTracker.TrackingStartedAt <= unusedThreshold =>
+                 filtered.Where(entry => entry.SortableLastUsed == DateTimeOffset.MinValue || entry.SortableLastUsed <= unusedThreshold),
+             "Unused" => Array.Empty<InstalledSoftwareEntry>(),
+             _ => filtered
+         };
+
+         var sort = SoftwareSortComboBox is null ? "Name" : SelectedTag(SoftwareSortComboBox);
+         filtered = sort switch
+         {
+             "Size" => filtered.OrderByDescending(entry => entry.SortableSize).ThenBy(entry => entry.Name, StringComparer.CurrentCultureIgnoreCase),
+             "InstallDate" => filtered.OrderByDescending(entry => entry.SortableInstallDate).ThenBy(entry => entry.Name, StringComparer.CurrentCultureIgnoreCase),
+             "LastUsed" => filtered.OrderByDescending(entry => entry.SortableLastUsed).ThenBy(entry => entry.Name, StringComparer.CurrentCultureIgnoreCase),
+             _ => filtered.OrderBy(entry => entry.Name, StringComparer.CurrentCultureIgnoreCase)
+         };
+
+         var visible = filtered.ToArray();
+         _softwareEntries.Clear();
+         foreach (var entry in visible) _softwareEntries.Add(entry);
+         var knownBytes = visible.Where(entry => entry.SortableSize > 0).Aggregate(0L, (total, entry) =>
+             total > long.MaxValue - entry.SortableSize ? long.MaxValue : total + entry.SortableSize);
+         SoftwareSummaryText.Text = $"显示 {visible.Length:N0} 项 / 共 {_allSoftwareEntries.Count:N0} 项 · 已知空间 {InstalledSoftwareEntry.FormatBytes(knownBytes)}";
+         SoftwareEmptyState.Visibility = visible.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+         var selected = selectedId is null ? null : visible.FirstOrDefault(entry => entry.StableId == selectedId);
+         _suppressSoftwareSelectionChange = true;
+         SoftwareListBox.SelectedItem = selected;
+         _suppressSoftwareSelectionChange = false;
+         if (selected is null)
+         {
+             CloseSoftwareDetail(clearSelection: false);
+         }
+         else
+         {
+             SoftwarePanel.DataContext = selected;
+         }
+     }
+
+     private void SoftwareListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+     {
+         if (_suppressSoftwareSelectionChange) return;
+         if (SoftwareListBox.SelectedItem is InstalledSoftwareEntry selected)
+         {
+             ShowSoftwareDetail(selected);
+         }
+         else
+         {
+             CloseSoftwareDetail(clearSelection: false);
+         }
+     }
+
+     private void ShowSoftwareDetail(InstalledSoftwareEntry selected)
+     {
+         SoftwarePanel.DataContext = selected;
+         _isSoftwareDetailOpen = true;
+         SoftwareDetailOverlay.Visibility = Visibility.Visible;
+         SoftwareDetailOverlay.Opacity = 0;
+         if (SoftwareDetailDialog.RenderTransform is ScaleTransform scale)
+         {
+             scale.ScaleX = 0.97;
+             scale.ScaleY = 0.97;
+             scale.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(150))
+             {
+                 EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+             });
+             scale.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(150))
+             {
+                 EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+             });
+         }
+         SoftwareDetailOverlay.BeginAnimation(OpacityProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(130)));
+         if (selected.ShouldAutoMeasureSize) _ = MeasureSoftwareSizeAsync(selected, userRequested: false);
+     }
+
+     private void CloseSoftwareDetail_Click(object sender, RoutedEventArgs e) => CloseSoftwareDetail(clearSelection: true);
+
+     private void SoftwareDetailBackdrop_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) =>
+         CloseSoftwareDetail(clearSelection: true);
+
+     private void CloseSoftwareDetail(bool clearSelection)
+     {
+         _isSoftwareDetailOpen = false;
+         SoftwareDetailOverlay.BeginAnimation(OpacityProperty, null);
+         SoftwareDetailOverlay.Visibility = Visibility.Collapsed;
+         SoftwarePanel.DataContext = null;
+         if (!clearSelection) return;
+         _suppressSoftwareSelectionChange = true;
+         SoftwareListBox.SelectedItem = null;
+         _suppressSoftwareSelectionChange = false;
+     }
+
+     private void OpenSoftwareLocation_Click(object sender, RoutedEventArgs e)
+     {
+         var selected = SoftwareListBox.SelectedItem as InstalledSoftwareEntry;
+         if (selected is null) return;
+         if (string.IsNullOrWhiteSpace(selected.InstallLocation) || !Directory.Exists(selected.InstallLocation))
+         {
+             MessageBox.Show("该软件没有登记可访问的安装位置。", "无法打开位置", MessageBoxButton.OK, MessageBoxImage.Information);
+             return;
+         }
+         try
+         {
+             Process.Start(new ProcessStartInfo("explorer.exe", $"\"{selected.InstallLocation}\"") { UseShellExecute = true });
+         }
+         catch (Exception exception)
+         {
+             MessageBox.Show($"无法打开安装位置：{exception.Message}", "打开失败", MessageBoxButton.OK, MessageBoxImage.Warning);
+         }
+     }
+
+     private async void MeasureSoftwareSize_Click(object sender, RoutedEventArgs e)
+     {
+         var selected = SoftwareListBox.SelectedItem as InstalledSoftwareEntry;
+         if (selected is null) return;
+         await MeasureSoftwareSizeAsync(selected, userRequested: true);
+     }
+
+     private async Task MeasureSoftwareSizeAsync(InstalledSoftwareEntry selected, bool userRequested)
+     {
+         _softwareSizeMeasurementCancellation?.Cancel();
+         _softwareSizeMeasurementCancellation?.Dispose();
+         var cancellation = new CancellationTokenSource();
+         _softwareSizeMeasurementCancellation = cancellation;
+         selected.SetSizeMeasurementInProgress();
+         if (userRequested) SoftwareSummaryText.Text = $"正在计算 {selected.Name} 的安装目录占用…";
+         try
+         {
+             var result = await Task.Run(() => InstalledSoftwareService.MeasureInstallDirectory(selected, cancellation.Token), cancellation.Token);
+             if (!result.Success)
+             {
+                 selected.SetSizeMeasurementUnavailable(result.Message);
+                 if (userRequested) MessageBox.Show(result.Message, "无法计算占用", MessageBoxButton.OK, MessageBoxImage.Information);
+                 return;
+             }
+             selected.SetMeasuredSize(result.Bytes);
+             SoftwareSummaryText.Text = userRequested
+                 ? $"{selected.Name} · {InstalledSoftwareEntry.FormatBytes(result.Bytes)} · {result.Files:N0} 个文件"
+                 : $"已自动读取 {selected.Name} 的安装目录占用 · {InstalledSoftwareEntry.FormatBytes(result.Bytes)}";
+             SoftwareSummaryText.ToolTip = result.Message;
+             ApplySoftwareFilter();
+         }
+         catch (OperationCanceledException)
+         {
+             selected.SetSizeMeasurementUnavailable("扫描已取消，可点击“重新计算占用”重试");
+             if (userRequested) SoftwareSummaryText.Text = "空间计算已取消";
+         }
+         finally
+         {
+             if (ReferenceEquals(_softwareSizeMeasurementCancellation, cancellation)) _softwareSizeMeasurementCancellation = null;
+             cancellation.Dispose();
+         }
+     }
+
+     private async void ScanSoftwareResiduals_Click(object sender, RoutedEventArgs e)
+     {
+         var selected = SoftwareListBox.SelectedItem as InstalledSoftwareEntry;
+         if (selected is null) return;
+         var confirmation = MessageBox.Show(
+             $"“{selected.Name}”当前仍出现在软件清单中。\n\n本次只会查找名称或发布者明确对应的用户数据和注册表候选，不会把安装目录列为残留；所有候选默认不选中。建议仅在确认软件已经卸载后处理。是否继续扫描？",
+             "扫描残留候选",
+             MessageBoxButton.YesNo,
+             MessageBoxImage.Warning,
+             MessageBoxResult.No);
+         if (confirmation != MessageBoxResult.Yes) return;
+         await ShowSoftwareResidualCandidatesAsync(selected, includeInstallDirectory: false);
+     }
+
+     private async Task ShowSoftwareResidualCandidatesAsync(InstalledSoftwareEntry entry, bool includeInstallDirectory)
+     {
+         SoftwareSummaryText.Text = $"正在扫描 {entry.Name} 的残留候选…";
+         try
+         {
+             var candidates = await Task.Run(() => SoftwareResidualService.FindCandidates(entry, includeInstallDirectory, CancellationToken.None));
+             if (candidates.Count == 0)
+             {
+                 SoftwareSummaryText.Text = "未发现名称明确对应的残留候选";
+                 MessageBox.Show("未发现名称、发布者或原卸载登记能够明确对应的残留候选。X-Tool 不会进行模糊匹配。", "没有候选", MessageBoxButton.OK, MessageBoxImage.Information);
+                 return;
+             }
+             SoftwareSummaryText.Text = $"找到 {candidates.Count:N0} 项残留候选，等待人工核对";
+             var window = new SoftwareResidualCleanupWindow(entry, candidates) { Owner = Window.GetWindow(this) };
+             window.ShowDialog();
+         }
+         catch (Exception exception)
+         {
+             SoftwareSummaryText.Text = $"残留扫描失败：{exception.Message}";
+         }
+     }
+
+     private async void UninstallSoftware_Click(object sender, RoutedEventArgs e)
+     {
+         var selected = SoftwareListBox.SelectedItem as InstalledSoftwareEntry;
+         if (selected is null || !selected.CanUninstall) return;
+         var location = string.IsNullOrWhiteSpace(selected.InstallLocation) ? "未登记" : selected.InstallLocation;
+         var confirmation = MessageBox.Show(
+             $"确定调用“{selected.Name}”提供的标准卸载程序吗？\n\n发布者：{selected.PublisherText}\n版本：{selected.VersionText}\n位置：{location}\n\nX-Tool 不会直接删除程序目录；卸载程序可能请求管理员权限。",
+             "确认卸载软件",
+             MessageBoxButton.YesNo,
+             MessageBoxImage.Warning,
+             MessageBoxResult.No);
+         if (confirmation != MessageBoxResult.Yes) return;
+
+         var launch = InstalledSoftwareService.LaunchUninstaller(selected);
+         if (!launch.Success || launch.Process is null)
+         {
+             MessageBox.Show(launch.Message, "无法启动卸载", MessageBoxButton.OK, MessageBoxImage.Warning);
+             return;
+         }
+         SoftwareSummaryText.Text = $"已启动 {selected.Name} 的卸载程序，等待其结束…";
+         try
+         {
+             await launch.Process.WaitForExitAsync();
+             await Task.Delay(800);
+             var scan = MessageBox.Show(
+                 "卸载程序已经结束。是否扫描可能残留？\n\n扫描结果只作为候选展示，默认不会选中或删除。",
+                 "卸载程序已结束",
+                 MessageBoxButton.YesNo,
+                 MessageBoxImage.Question,
+                 MessageBoxResult.No);
+             if (scan == MessageBoxResult.Yes) await ShowSoftwareResidualCandidatesAsync(selected, includeInstallDirectory: true);
+             await RefreshSoftwareAsync();
+         }
+         catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception)
+         {
+             SoftwareSummaryText.Text = $"卸载程序已启动，但无法跟踪结束状态：{exception.Message}";
+         }
+         finally
+         {
+             launch.Process.Dispose();
+         }
+     }
+
+     private void SoftwareUsageTracking_Changed(object sender, RoutedEventArgs e)
+     {
+         if (!IsLoaded || _suppressSoftwareTrackingChange) return;
+         var enable = SoftwareUsageTrackingCheckBox.IsChecked == true;
+         if (enable)
+         {
+             var confirmation = MessageBox.Show(
+                 "启用后，X-Tool 会在本机记录新启动进程的可执行文件路径、首次/最近观察时间和次数，用于估算软件多久未使用。\n\n不会读取窗口内容，也不会上传数据；无法补齐启用前的历史。是否启用？",
+                 "启用本地使用记录",
+                 MessageBoxButton.YesNo,
+                 MessageBoxImage.Information,
+                 MessageBoxResult.No);
+             if (confirmation != MessageBoxResult.Yes)
+             {
+                 _suppressSoftwareTrackingChange = true;
+                 SoftwareUsageTrackingCheckBox.IsChecked = false;
+                 _suppressSoftwareTrackingChange = false;
+                 return;
+             }
+         }
+         SoftwareUsageTracker.SetEnabled(enable);
+         InstalledSoftwareService.ApplyUsage(_allSoftwareEntries);
+         ApplySoftwareFilter();
+     }
+
+     private async void DiagnosticScanButton_Click(object sender, RoutedEventArgs e)
     {
         if (_diagnosticCancellation is not null)
         {

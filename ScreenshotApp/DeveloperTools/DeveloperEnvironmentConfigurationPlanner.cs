@@ -14,6 +14,7 @@ public static class DeveloperEnvironmentConfigurationPlanner
 
         return toolchain.Id switch
         {
+            "conda" => BuildConda(toolchain, installation),
             "java" => BuildJava(toolchain, installation),
             "python" => BuildPython(toolchain, installation),
             "node" => BuildNode(toolchain, installation),
@@ -21,6 +22,8 @@ public static class DeveloperEnvironmentConfigurationPlanner
             "mysql" => BuildMysql(toolchain, installation),
             "maven" => BuildBinTool(toolchain, installation, "mvn.cmd", "MAVEN_HOME"),
             "gradle" => BuildBinTool(toolchain, installation, "gradle.bat", "GRADLE_HOME"),
+            "jmeter" => BuildBinTool(toolchain, installation, "jmeter.bat", "JMETER_HOME"),
+            "nginx" => BuildNginx(toolchain, installation),
             "git" => BuildExecutableDirectory(toolchain, installation),
             "dotnet" => BuildExecutableDirectory(toolchain, installation),
             _ => Blocked(toolchain, installation, "当前工具链尚未提供安全的一键配置规则。")
@@ -50,6 +53,8 @@ public static class DeveloperEnvironmentConfigurationPlanner
     {
         var executable = installation.ExecutablePath;
         var directory = Path.GetDirectoryName(executable) ?? string.Empty;
+        if (Directory.Exists(Path.Combine(directory, "conda-meta")))
+            return Blocked(toolchain, installation, "这是 Conda 管理的 Python，请通过 Conda 的 condabin 入口配置环境，不把具体 Python 环境加入全局 PATH。");
         if (executable.Contains(@"\Microsoft\WindowsApps\", StringComparison.OrdinalIgnoreCase))
         {
             return Blocked(toolchain, installation, "这是 Windows 应用执行别名，不是可直接配置的 Python 安装。");
@@ -66,6 +71,19 @@ public static class DeveloperEnvironmentConfigurationPlanner
         {
             "不会设置 PYTHONHOME；推荐使用 python -m pip，避免 pip 指向其他解释器。"
         });
+    }
+
+    private static ToolchainEnvironmentPlan BuildConda(ToolchainSummary toolchain, ToolchainInstallation installation)
+    {
+        var verified = CondaInstallationInspector.Inspect(installation.InstallationPath, installation.Source, installation.IsActive);
+        if (verified is not { IsVerified: true })
+            return Blocked(toolchain, installation, "Conda 基础安装不完整，不能配置环境变量。");
+        return Ready(toolchain, installation, new[] { Path.Combine(verified.InstallationPath, "condabin") },
+            new Dictionary<string, string>(), new[]
+            {
+                "仅加入 condabin，不设置 CONDA_PREFIX、PYTHONHOME，不改变默认 Python。",
+                "不会执行 conda init 或修改 PowerShell 配置；需要 activate 时请使用发行版终端或自行初始化 Shell。"
+            });
     }
 
     private static ToolchainEnvironmentPlan BuildNode(ToolchainSummary toolchain, ToolchainInstallation installation)
@@ -115,6 +133,24 @@ public static class DeveloperEnvironmentConfigurationPlanner
             ? new[] { "Docker Desktop 通常会自动维护 PATH；若终端仍无法使用 docker，再确认此目录已加入 PATH。" }
             : new[] { "加入 PATH 的只是 docker CLI；容器引擎仍需要 Docker Desktop 或通过 DOCKER_HOST 连接远程引擎。" };
         return Ready(toolchain, installation, new[] { directory }, new Dictionary<string, string>(), warnings);
+    }
+
+    private static ToolchainEnvironmentPlan BuildNginx(ToolchainSummary toolchain, ToolchainInstallation installation)
+    {
+        var root = installation.InstallationPath;
+        var executableDirectory = Path.GetDirectoryName(installation.ExecutablePath) ?? string.Empty;
+        if (!File.Exists(Path.Combine(executableDirectory, "nginx.exe")))
+        {
+            return Blocked(toolchain, installation, "未能定位 nginx.exe 所在的命令目录。");
+        }
+
+        return Ready(toolchain, installation, new[] { executableDirectory }, new Dictionary<string, string>
+        {
+            ["NGINX_HOME"] = root
+        }, new[]
+        {
+            "加入 PATH 只提供 nginx 命令行入口；配置文件、端口和 Windows 服务仍由项目或运维流程单独管理。"
+        });
     }
 
     private static ToolchainEnvironmentPlan BuildBinTool(

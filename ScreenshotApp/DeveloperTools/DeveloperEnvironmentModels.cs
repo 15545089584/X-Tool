@@ -45,6 +45,7 @@ public sealed class ToolchainSummary
         get => _iconSource ?? $"/Assets/Toolchains/{Id}.png";
         init => _iconSource = value;
     }
+    public bool HasIconSource => !string.IsNullOrWhiteSpace(IconSource);
     public string IconGlyph { get; init; } = "\uE943";
     public string IconBackground { get; init; } = "#E6F0FF";
     public string IconForeground { get; init; } = "#2D7DFF";

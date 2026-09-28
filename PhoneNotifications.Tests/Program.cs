@@ -7,6 +7,14 @@ using System.Text.Json;
 using ScreenshotApp.Collaboration;
 
 Console.OutputEncoding = new UTF8Encoding(false);
+if (args.Contains("--screenshot-shelf"))
+{
+    Exception? error = null;
+    var thread = new Thread(() => { try { ScreenshotShelfValidation.Run(); } catch (Exception ex) { error = ex; } });
+    thread.SetApartmentState(ApartmentState.STA); thread.Start(); thread.Join();
+    if (error is not null) throw error;
+    return;
+}
 if (args.Contains("--ui"))
 {
     Exception? error = null;

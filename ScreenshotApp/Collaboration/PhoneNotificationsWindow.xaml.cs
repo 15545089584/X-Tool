@@ -38,6 +38,7 @@ public partial class PhoneNotificationsWindow : Window
         Closed += (_, _) => { _timer.Stop(); SystemEvents.SessionSwitch -= SessionSwitch; _current = null; QrImage.Source = null; };
         Refresh();
     }
+    private void Calendar_Click(object sender, RoutedEventArgs e) => ScreenshotApp.PhoneCalendar.PhoneCalendarWindow.Open();
     private void SessionSwitch(object sender, SessionSwitchEventArgs e)
     {
         if (e.Reason == SessionSwitchReason.SessionLock) _hub.Locked = true;
@@ -97,7 +98,7 @@ public partial class PhoneNotificationsWindow : Window
     private void Clear_Click(object sender, RoutedEventArgs e) { foreach (var item in _hub.State.Items) _hidden[item.Key] = item; Refresh(); }
     private void Revoke_Click(object sender, RoutedEventArgs e)
     {
-        if (!_hub.Running || MessageBox.Show(this, "撤销后手机需重新扫描协作中心配对码以恢复通知。文件传输配对不受影响。", "撤销通知绑定", MessageBoxButton.OKCancel) != MessageBoxResult.OK) return;
+        if (!_hub.Running || MessageBox.Show(this, "撤销后手机需重新扫码恢复通知及日程同步，并清空电脑日程副本。文件传输配对不受影响。", "撤销通知绑定", MessageBoxButton.OKCancel) != MessageBoxResult.OK) return;
         _hub.Revoke(); _hidden.Clear();
         if (Application.Current is App app) app.DismissPhoneAlertDisplays();
         HidePair_Click(sender, e); Refresh();

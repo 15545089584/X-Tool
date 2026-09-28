@@ -125,6 +125,42 @@
                 </Setter>
             </Style>
 
+            <!-- 空调离散档位条：用于摆风与风感方向，保持和风速条一致的胶囊式交互。 -->
+            <Style x:Key="ClimateSegmentItemStyle" TargetType="ListBoxItem">
+                <Setter Property="Margin" Value="2" />
+                <Setter Property="Padding" Value="10,0" />
+                <Setter Property="Foreground" Value="#5E7188" />
+                <Setter Property="FontSize" Value="11.5" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="VerticalContentAlignment" Value="Stretch" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ListBoxItem">
+                            <Border x:Name="SegmentSurface" Padding="{TemplateBinding Padding}" Background="Transparent" CornerRadius="18">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                  TextElement.Foreground="{TemplateBinding Foreground}" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="SegmentSurface" Property="Background" Value="#B8FFFFFF" />
+                                    <Setter Property="Foreground" Value="#36516A" />
+                                </Trigger>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter TargetName="SegmentSurface" Property="Background" Value="#4D7CFE" />
+                                    <Setter Property="Foreground" Value="White" />
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter TargetName="SegmentSurface" Property="Opacity" Value="0.42" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
             <!-- 详情页总开关：与卡片电源键一致的蓝底白色电源圆形按钮。 -->
             <Style x:Key="PowerButtonStyle" TargetType="Button">
                 <Setter Property="Width" Value="56" />
@@ -262,34 +298,59 @@
                                         </Style>
                                     </Image.Style>
                                 </Image>
-                                <!-- 风扇机头视图：圆形裁剪只保留机头，运行时机头（叶片）旋转，底座不参与。
-                                     几何来自 fan.png 实测：机头中心约 (358,330)、外笼半径约 274（720 画布）。 -->
+                                <!-- 风扇机头视图：叶片是独立转子，外环、护网和中心盖始终静止。 -->
                                 <Border Width="180" Height="180" HorizontalAlignment="Center" VerticalAlignment="Center"
                                         CornerRadius="90" ClipToBounds="True"
                                         Visibility="{Binding IsFan, Converter={StaticResource BoolToVisibility}}">
-                                    <Grid>
+                                    <Grid Width="180" Height="180">
+                                        <!-- 从原素材截取五片叶片并作为一个转子旋转，保留原图的渐变和立体质感。 -->
                                         <Image Width="236" Height="236" Stretch="Uniform" Source="{Binding DeviceArtworkUri}"
                                                RenderOptions.BitmapScalingMode="HighQuality"
-                                               HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-28,-18,0,0">
+                                               HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-27,-24.4,0,0"
+                                               IsHitTestVisible="False">
+                                            <Image.Clip>
+                                                <GeometryGroup>
+                                                    <PathGeometry Figures="M111,109.4 C99,96.4 82,69.4 86,48.4 C100,40.4 122,42.4 135,51.4 C134,73.4 127,94.4 121,107.4 C118,111.4 115,113.4 111,109.4 Z" />
+                                                    <PathGeometry Figures="M111,109.4 C99,96.4 82,69.4 86,48.4 C100,40.4 122,42.4 135,51.4 C134,73.4 127,94.4 121,107.4 C118,111.4 115,113.4 111,109.4 Z"><PathGeometry.Transform><RotateTransform Angle="72" CenterX="117" CenterY="114.4" /></PathGeometry.Transform></PathGeometry>
+                                                    <PathGeometry Figures="M111,109.4 C99,96.4 82,69.4 86,48.4 C100,40.4 122,42.4 135,51.4 C134,73.4 127,94.4 121,107.4 C118,111.4 115,113.4 111,109.4 Z"><PathGeometry.Transform><RotateTransform Angle="144" CenterX="117" CenterY="114.4" /></PathGeometry.Transform></PathGeometry>
+                                                    <PathGeometry Figures="M111,109.4 C99,96.4 82,69.4 86,48.4 C100,40.4 122,42.4 135,51.4 C134,73.4 127,94.4 121,107.4 C118,111.4 115,113.4 111,109.4 Z"><PathGeometry.Transform><RotateTransform Angle="216" CenterX="117" CenterY="114.4" /></PathGeometry.Transform></PathGeometry>
+                                                    <PathGeometry Figures="M111,109.4 C99,96.4 82,69.4 86,48.4 C100,40.4 122,42.4 135,51.4 C134,73.4 127,94.4 121,107.4 C118,111.4 115,113.4 111,109.4 Z"><PathGeometry.Transform><RotateTransform Angle="288" CenterX="117" CenterY="114.4" /></PathGeometry.Transform></PathGeometry>
+                                                </GeometryGroup>
+                                            </Image.Clip>
                                             <Image.RenderTransform>
-                                                <RotateTransform x:Name="FanHeadRotate" CenterX="118" CenterY="108" Angle="0" />
+                                                <RotateTransform x:Name="FanBladeRotate" CenterX="117" CenterY="114.4" Angle="0" />
                                             </Image.RenderTransform>
                                         </Image>
-                                        <!-- 静态外环覆盖层：从同一素材裁出外圈环带，旋转时机头叶片转动、外环保持静止。 -->
+
+                                        <!-- 原素材只保留外圈环带，延续设备图标的材质和高光。 -->
                                         <Image Width="236" Height="236" Stretch="Uniform" Source="{Binding DeviceArtworkUri}"
                                                RenderOptions.BitmapScalingMode="HighQuality"
-                                               HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-28,-18,0,0"
+                                               HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-27,-24.4,0,0"
                                                IsHitTestVisible="False">
                                             <Image.Clip>
                                                 <CombinedGeometry GeometryCombineMode="Exclude">
                                                     <CombinedGeometry.Geometry1>
-                                                        <EllipseGeometry Center="118,108" RadiusX="90" RadiusY="90" />
+                                                        <EllipseGeometry Center="117,114.4" RadiusX="90" RadiusY="90" />
                                                     </CombinedGeometry.Geometry1>
                                                     <CombinedGeometry.Geometry2>
-                                                        <EllipseGeometry Center="118,108" RadiusX="76" RadiusY="76" />
+                                                        <EllipseGeometry Center="117,114.4" RadiusX="76" RadiusY="76" />
                                                     </CombinedGeometry.Geometry2>
                                                 </CombinedGeometry>
                                             </Image.Clip>
+                                        </Image>
+
+                                        <!-- 静态护网辐条：运动层不再包含护网，因此不会跟随叶片转动。 -->
+                                        <Canvas Width="180" Height="180" IsHitTestVisible="False" Opacity="0.72">
+                                            <Path Data="M90,90 L90,15 M90,90 L127.5,25.05 M90,90 L154.95,52.5 M90,90 L165,90 M90,90 L154.95,127.5 M90,90 L127.5,154.95 M90,90 L90,165 M90,90 L52.5,154.95 M90,90 L25.05,127.5 M90,90 L15,90 M90,90 L25.05,52.5 M90,90 L52.5,25.05"
+                                                  Stroke="#C8B9C9D8" StrokeThickness="1.4" />
+                                            <Ellipse Width="146" Height="146" Canvas.Left="17" Canvas.Top="17" Stroke="#D8B9C9D8" StrokeThickness="2" />
+                                        </Canvas>
+                                        <!-- 中心盖沿用原素材，遮住叶片根部并保持静止。 -->
+                                        <Image Width="236" Height="236" Stretch="Uniform" Source="{Binding DeviceArtworkUri}"
+                                               RenderOptions.BitmapScalingMode="HighQuality"
+                                               HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-27,-24.4,0,0"
+                                               IsHitTestVisible="False">
+                                            <Image.Clip><EllipseGeometry Center="117,114.4" RadiusX="25" RadiusY="25" /></Image.Clip>
                                         </Image>
                                     </Grid>
                                 </Border>
@@ -424,57 +485,99 @@
                                 </ListBox.ItemTemplate>
                             </ListBox>
 
-                            <Grid Margin="0,18,0,0" Visibility="{Binding SupportsFanMode, Converter={StaticResource BoolToVisibility}}">
+                            <Grid Margin="0,18,0,0">
+                                <Grid.Style>
+                                    <Style TargetType="Grid">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding SupportsFanMode}" Value="True"><Setter Property="Visibility" Value="Visible" /></DataTrigger>
+                                            <DataTrigger Binding="{Binding SupportsSwingMode}" Value="True"><Setter Property="Visibility" Value="Visible" /></DataTrigger>
+                                            <DataTrigger Binding="{Binding HasAuxiliarySelects}" Value="True"><Setter Property="Visibility" Value="Visible" /></DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Grid.Style>
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="620" />
+                                    <ColumnDefinition Width="150" />
+                                    <ColumnDefinition Width="24" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="1">
-                                    <TextBlock Margin="2,0,0,7" FontSize="10.5" Foreground="#71849A" Text="空调风速" />
-                                    <Grid>
-                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="12" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                                        <Grid x:Name="FanModeBar" Height="42" ClipToBounds="True" Cursor="Hand" Background="Transparent"
-                                              MouseLeftButtonDown="FanModeBar_MouseLeftButtonDown" MouseMove="FanModeBar_MouseMove"
-                                              MouseLeftButtonUp="FanModeBar_MouseLeftButtonUp" SizeChanged="FanModeBar_SizeChanged"
-                                              Visibility="{Binding HasFanModeLevels, Converter={StaticResource BoolToVisibility}}">
-                                            <Border Background="#E4E9F0F8" BorderBrush="#AFFFFFFF" BorderThickness="1" CornerRadius="21" />
-                                            <Border x:Name="FanModeFill" Background="#4D7CFE" CornerRadius="21" HorizontalAlignment="Left" Width="0" />
-                                            <TextBlock x:Name="FanModeFillLabel" Margin="18,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center"
+
+                                <!-- 与风速条相同的填充式控件，仅将方向改为自上而下。 -->
+                                <StackPanel Grid.Column="0" HorizontalAlignment="Center"
+                                            Visibility="{Binding HasAirflowDirectionLevels, Converter={StaticResource BoolToVisibility}}">
+                                    <TextBlock Margin="0,0,0,7" HorizontalAlignment="Center" FontSize="10.5" Foreground="#71849A" Text="风感方向" />
+                                    <Grid x:Name="AirflowDirectionBar" Width="104" Height="184" ClipToBounds="True" Cursor="Hand"
+                                          Background="Transparent" IsEnabled="{Binding AirflowDirectionControl.IsAvailable}"
+                                          MouseLeftButtonDown="AirflowDirectionBar_MouseLeftButtonDown"
+                                          MouseMove="AirflowDirectionBar_MouseMove"
+                                          MouseLeftButtonUp="AirflowDirectionBar_MouseLeftButtonUp"
+                                          SizeChanged="AirflowDirectionBar_SizeChanged"
+                                          ToolTip="上、偏上、中间、偏下、下">
+                                        <Border Background="#E4E9F0F8" BorderBrush="#AFFFFFFF" BorderThickness="1" CornerRadius="26" />
+                                        <Border x:Name="AirflowDirectionFill" Height="0" VerticalAlignment="Top"
+                                                Background="#4D7CFE" CornerRadius="26" ClipToBounds="True">
+                                            <TextBlock x:Name="AirflowDirectionFillLabel" Margin="0,0,0,10"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Bottom"
                                                        FontSize="12.5" FontWeight="SemiBold" Foreground="White"
-                                                       Text="{Binding CurrentFanModeText, Mode=OneWay}" />
-                                        </Grid>
-                                        <Button Grid.Column="2" Width="96" Height="42" Content="自动" Style="{StaticResource SoftButtonStyle}"
-                                                Click="FanAutoMode_Click"
-                                                Visibility="{Binding HasFanAutoMode, Converter={StaticResource BoolToVisibility}}" />
+                                                       Text="{Binding CurrentAirflowDirectionText, Mode=OneWay}" />
+                                        </Border>
+                                        <ItemsControl Margin="10,5" IsHitTestVisible="False" ItemsSource="{Binding AirflowDirectionLevels}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate><UniformGrid Columns="1" /></ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Margin="13,0" BorderBrush="#30FFFFFF" BorderThickness="0,0,0,1" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
                                     </Grid>
                                 </StackPanel>
-                            </Grid>
 
-                            <Grid Margin="0,16,0,0" Visibility="{Binding SupportsSwingMode, Converter={StaticResource BoolToVisibility}}">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="620" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="1">
-                                    <TextBlock Margin="2,0,0,7" FontSize="10.5" Foreground="#71849A" Text="摆风方式" />
-                                    <ComboBox HorizontalAlignment="Stretch" Style="{StaticResource DetailComboBoxStyle}" ItemsSource="{Binding SwingModeOptions}" DisplayMemberPath="DisplayName" SelectedValuePath="Value"
-                                              SelectedValue="{Binding CurrentSwingMode, Mode=OneWay}" IsEnabled="{Binding CanInteract}" SelectionChanged="SwingModeComboBox_SelectionChanged" />
+                                <!-- 右侧将风速与摆风两条控制堆叠，便于同一区域连续调整。 -->
+                                <StackPanel Grid.Column="2">
+                                    <StackPanel Visibility="{Binding SupportsFanMode, Converter={StaticResource BoolToVisibility}}">
+                                        <TextBlock Margin="2,0,0,7" FontSize="10.5" Foreground="#71849A" Text="空调风速" />
+                                        <Grid>
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="12" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                            <Grid x:Name="FanModeBar" Height="42" ClipToBounds="True" Cursor="Hand" Background="Transparent"
+                                                  MouseLeftButtonDown="FanModeBar_MouseLeftButtonDown" MouseMove="FanModeBar_MouseMove"
+                                                  MouseLeftButtonUp="FanModeBar_MouseLeftButtonUp" SizeChanged="FanModeBar_SizeChanged"
+                                                  Visibility="{Binding HasFanModeLevels, Converter={StaticResource BoolToVisibility}}">
+                                                <Border Background="#E4E9F0F8" BorderBrush="#AFFFFFFF" BorderThickness="1" CornerRadius="21" />
+                                                <Border x:Name="FanModeFill" Background="#4D7CFE" CornerRadius="21" HorizontalAlignment="Left" Width="0" />
+                                                <TextBlock x:Name="FanModeFillLabel" Margin="18,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center"
+                                                           FontSize="12.5" FontWeight="SemiBold" Foreground="White"
+                                                           Text="{Binding CurrentFanModeText, Mode=OneWay}" />
+                                            </Grid>
+                                            <Button Grid.Column="2" Width="84" Height="42" Content="自动" Style="{StaticResource SoftButtonStyle}"
+                                                    Click="FanAutoMode_Click"
+                                                    Visibility="{Binding HasFanAutoMode, Converter={StaticResource BoolToVisibility}}" />
+                                        </Grid>
+                                    </StackPanel>
+
+                                    <StackPanel Margin="0,14,0,0" Visibility="{Binding SupportsSwingMode, Converter={StaticResource BoolToVisibility}}">
+                                        <TextBlock Margin="2,0,0,7" FontSize="10.5" Foreground="#71849A" Text="摆风方式" />
+                                        <Border Height="42" Padding="3" Background="#E4E9F0F8" BorderBrush="#AFFFFFFF" BorderThickness="1" CornerRadius="21">
+                                            <ListBox ItemsSource="{Binding SwingModeOptions}" SelectedValuePath="Value"
+                                                     SelectedValue="{Binding CurrentSwingMode, Mode=OneWay}" IsEnabled="{Binding CanInteract}"
+                                                     Background="Transparent" BorderThickness="0" HorizontalContentAlignment="Stretch"
+                                                     ItemContainerStyle="{StaticResource ClimateSegmentItemStyle}"
+                                                     SelectionChanged="SwingModeComboBox_SelectionChanged">
+                                                <ListBox.ItemsPanel>
+                                                    <ItemsPanelTemplate><UniformGrid Rows="1" /></ItemsPanelTemplate>
+                                                </ListBox.ItemsPanel>
+                                                <ListBox.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}"
+                                                                   Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
+                                                    </DataTemplate>
+                                                </ListBox.ItemTemplate>
+                                            </ListBox>
+                                        </Border>
+                                    </StackPanel>
                                 </StackPanel>
                             </Grid>
-
-                            <ItemsControl Margin="0,14,0,0" ItemsSource="{Binding AuxiliarySelects}" Visibility="{Binding HasAuxiliarySelects, Converter={StaticResource BoolToVisibility}}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Grid Margin="0,0,0,8"><Grid.ColumnDefinitions><ColumnDefinition Width="112" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                                            <TextBlock VerticalAlignment="Center" FontSize="11" Foreground="#71849A" Text="{Binding DisplayName}" />
-                                            <ComboBox Grid.Column="1" Style="{StaticResource DetailComboBoxStyle}" ItemsSource="{Binding Options}" SelectedValue="{Binding SelectedValue, Mode=OneWay}"
-                                                      IsEnabled="{Binding IsAvailable}" SelectionChanged="AuxiliarySelectComboBox_SelectionChanged" />
-                                        </Grid>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
                         </StackPanel>
                     </Border>
 

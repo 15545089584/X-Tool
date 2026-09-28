@@ -264,7 +264,61 @@
                                             Effect="{StaticResource SmartHomeCardShadow}" ToolTip="{Binding DeviceName}">
                                         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                                             <iconPacks:PackIconMaterial Width="22" Height="22" HorizontalAlignment="Center"
-                                                                        Foreground="#4D7CFE" Kind="{Binding Icon}" Tag="{Binding Spin}" />
+                                                                        Foreground="#4D7CFE" Kind="{Binding Icon}"
+                                                                        Loaded="RunningBadgeIcon_Loaded"
+                                                                        DataContextChanged="RunningBadgeIcon_DataContextChanged">
+                                                <iconPacks:PackIconMaterial.Style>
+                                                    <Style TargetType="iconPacks:PackIconMaterial">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsClimate}" Value="True">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </iconPacks:PackIconMaterial.Style>
+                                            </iconPacks:PackIconMaterial>
+                                            <!-- 空调使用真实壁挂机素材，三缕冷风通过错峰位移与明暗变化表现持续送风。 -->
+                                            <Grid Width="31" Height="22">
+                                                <Grid.Style>
+                                                    <Style TargetType="Grid">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsClimate}" Value="True">
+                                                                <Setter Property="Visibility" Value="Visible" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Grid.Style>
+                                                <Image Width="29" Height="19" Margin="0,-3,0,0" VerticalAlignment="Top"
+                                                       Stretch="Uniform" Source="/XTool;component/Assets/SmartHome/Devices/air-conditioner.png"
+                                                       RenderOptions.BitmapScalingMode="HighQuality" />
+                                                <Canvas Width="31" Height="22" IsHitTestVisible="False">
+                                                    <Path x:Name="ClimateAirLeft" Data="M8,14 C7.5,17 8.5,19 10,21" Stroke="#5ABDEEFF" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round">
+                                                        <Path.RenderTransform><TranslateTransform /></Path.RenderTransform>
+                                                    </Path>
+                                                    <Path x:Name="ClimateAirMiddle" Data="M15.5,14 C15,17 15.5,19 15.5,21" Stroke="#6A79DFFF" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round">
+                                                        <Path.RenderTransform><TranslateTransform /></Path.RenderTransform>
+                                                    </Path>
+                                                    <Path x:Name="ClimateAirRight" Data="M23,14 C23.5,17 22.5,19 21,21" Stroke="#5ABDEEFF" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round">
+                                                        <Path.RenderTransform><TranslateTransform /></Path.RenderTransform>
+                                                    </Path>
+                                                </Canvas>
+                                                <Grid.Triggers>
+                                                    <EventTrigger RoutedEvent="Loaded">
+                                                        <BeginStoryboard>
+                                                            <Storyboard RepeatBehavior="Forever">
+                                                                <DoubleAnimation Storyboard.TargetName="ClimateAirLeft" Storyboard.TargetProperty="Opacity" From="0.25" To="0.95" Duration="0:0:0.72" AutoReverse="True" />
+                                                                <DoubleAnimation Storyboard.TargetName="ClimateAirLeft" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" From="-1" To="1.5" Duration="0:0:0.72" AutoReverse="True" />
+                                                                <DoubleAnimation Storyboard.TargetName="ClimateAirMiddle" Storyboard.TargetProperty="Opacity" From="0.25" To="1" BeginTime="0:0:0.18" Duration="0:0:0.72" AutoReverse="True" />
+                                                                <DoubleAnimation Storyboard.TargetName="ClimateAirMiddle" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" From="-1" To="1.5" BeginTime="0:0:0.18" Duration="0:0:0.72" AutoReverse="True" />
+                                                                <DoubleAnimation Storyboard.TargetName="ClimateAirRight" Storyboard.TargetProperty="Opacity" From="0.25" To="0.95" BeginTime="0:0:0.36" Duration="0:0:0.72" AutoReverse="True" />
+                                                                <DoubleAnimation Storyboard.TargetName="ClimateAirRight" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" From="-1" To="1.5" BeginTime="0:0:0.36" Duration="0:0:0.72" AutoReverse="True" />
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </EventTrigger>
+                                                </Grid.Triggers>
+                                            </Grid>
                                             <TextBlock Margin="0,7,0,0" HorizontalAlignment="Center" FontSize="10.5" FontWeight="SemiBold"
                                                        Foreground="#4D6683" Text="{Binding Label}" />
                                         </StackPanel>

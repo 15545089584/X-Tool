@@ -20,6 +20,9 @@ public sealed class ManagedToolchainService
     private const string TunaAdoptiumRoot = "https://mirrors.tuna.tsinghua.edu.cn/Adoptium";
     private const string MysqlEolApiUrl = "https://endoflife.date/api/mysql.json";
     private const string MysqlArchivesRoot = "https://cdn.mysql.com/archives/mysql-";
+    private const string NginxDownloadPageUrl = "https://nginx.org/en/download.html";
+    private const string NginxDownloadRoot = "https://nginx.org/download/";
+    private const string JMeterBinariesUrl = "https://downloads.apache.org/jmeter/binaries/";
     private const string DockerDesktopAppcastUrl = "https://desktop.docker.com/win/main/amd64/appcast.xml";
     private const string DockerCliDirectoryUrl = "https://download.docker.com/win/static/stable/x86_64/";
     // MySQL 生命周期基线更新于 2026-08：8.4 与 9.7 为 LTS，其余 9.x 为创新版，8.0 及更早已停止维护。
@@ -44,6 +47,8 @@ public sealed class ManagedToolchainService
     private string JavaRoot => Path.Combine(ManagedRoot, "Java");
     private string PythonRoot => Path.Combine(ManagedRoot, "Python", "uv");
     private string MysqlRoot => Path.Combine(ManagedRoot, "MySQL");
+    private string NginxRoot => Path.Combine(ManagedRoot, "Nginx");
+    private string JMeterRoot => Path.Combine(ManagedRoot, "JMeter");
     private string DockerRoot => Path.Combine(ManagedRoot, "Docker");
     private string VoltaRoot
     {
@@ -167,13 +172,137 @@ public sealed class ManagedToolchainService
         return releases.OrderByDescending(item => item.IsRecommended).ThenByDescending(item => item.FeatureVersion).ToList();
     }
 
+    public async Task<IReadOnlyList<ManagedToolchainRelease>> GetNginxReleasesAsync(CancellationToken cancellationToken)
+    {
+        var manifest = await LoadManifestAsync(cancellationToken).ConfigureAwait(false);
+        using var response = await HttpClient.GetAsync(NginxDownloadPageUrl, cancellationToken).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        var content = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        var versions = Regex.Matches(content, @"nginx-(?<version>[0-9]+\.[0-9]+\.[0-9]+)\.zip")
+            .Select(match => match.Groups["version"].Value)
+            .Where(version => Version.TryParse(version, out _))
+            .Distinct(StringComparer.Ordinal)
+            .OrderByDescending(version => Version.Parse(version))
+            .Take(2)
+            .ToArray();
+
+        var releases = new List<ManagedToolchainRelease>();
+        for (var index = 0; index < versions.Length; index++)
+        {
+            var version = versions[index];
+            var fileName = $"nginx-{version}.zip";
+            var downloadUrl = $"{NginxDownloadRoot}{fileName}";
+            if (!IsTrustedNginxDownload(downloadUrl, fileName)) continue;
+
+            var installed = manifest.Installations.Any(item => item.ManagedByXTool && item.ToolchainId == "nginx" &&
+                item.ProviderId == "nginx" && item.Version == version && Directory.Exists(item.InstallationPath));
+            releases.Add(new ManagedToolchainRelease
+            {
+                ToolchainId = "nginx",
+                ProviderId = "nginx",
+                DisplayName = "Nginx",
+                Version = version,
+                Architecture = "x64",
+                DownloadUrl = downloadUrl,
+                FileName = fileName,
+                IsRecommended = true,
+                ReleaseChannelText = index == 0 ? "主线版" : "稳定版",
+                IsInstalled = installed
+            });
+        }
+
+        return releases;
+    }
+
+    public async Task<IReadOnlyList<ManagedToolchainRelease>> GetJMeterReleasesAsync(CancellationToken cancellationToken)
+    {
+        var manifest = await LoadManifestAsync(cancellationToken).ConfigureAwait(false);
+        using var response = await HttpClient.GetAsync(JMeterBinariesUrl, cancellationToken).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        var content = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        var versions = Regex.Matches(content, @"apache-jmeter-(?<version>[0-9]+\.[0-9]+(?:\.[0-9]+)?)\.zip")
+            .Select(match => match.Groups["version"].Value)
+            .Where(value => Version.TryParse(value, out _))
+            .Distinct(StringComparer.Ordinal)
+            .OrderByDescending(value => Version.Parse(value))
+            .Take(2)
+            .ToArray();
+
+        var releases = new List<ManagedToolchainRelease>();
+        foreach (var version in versions)
+        {
+            var fileName = $"apache-jmeter-{version}.zip";
+            var downloadUrl = $"{JMeterBinariesUrl}{fileName}";
+            var sha512 = await FetchApacheSha512Async(downloadUrl, cancellationToken).ConfigureAwait(false);
+            if (sha512 is null || !IsTrustedJMeterDownload(downloadUrl, fileName, sha512))
+            {
+                continue;
+            }
+
+            long size = 0;
+            try
+            {
+                using var head = await HttpClient.SendAsync(new HttpRequestMessage(HttpMethod.Head, downloadUrl), cancellationToken).ConfigureAwait(false);
+                if (head.IsSuccessStatusCode)
+                {
+                    size = head.Content.Headers.ContentLength ?? 0;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch
+            {
+                // 大小未知不影响 SHA-512 校验和安装。
+            }
+
+            releases.Add(new ManagedToolchainRelease
+            {
+                ToolchainId = "jmeter",
+                ProviderId = "jmeter",
+                DisplayName = "Apache JMeter",
+                Version = version,
+                Architecture = "Java / 跨平台",
+                DownloadUrl = downloadUrl,
+                Sha256 = sha512,
+                HashAlgorithm = "SHA512",
+                FileName = fileName,
+                DownloadSize = size,
+                IsRecommended = true,
+                ReleaseChannelText = "正式版",
+                IsInstalled = manifest.Installations.Any(item => item.ManagedByXTool &&
+                    item.ToolchainId == "jmeter" && item.ProviderId == "jmeter" &&
+                    item.Version == version && Directory.Exists(item.InstallationPath))
+            });
+        }
+
+        return releases;
+    }
+
+    private static async Task<string?> FetchApacheSha512Async(string zipUrl, CancellationToken cancellationToken)
+    {
+        using var response = await HttpClient.GetAsync(zipUrl + ".sha512", cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        var content = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        var match = Regex.Match(content, @"\b[0-9a-fA-F]{128}\b");
+        return match.Success ? match.Value.ToLowerInvariant() : null;
+    }
+
     public Task<ManagedToolchainOperationResult> InstallAsync(
         ManagedToolchainRelease release, IProgress<ManagedInstallProgress>? progress, CancellationToken cancellationToken)
         => release.ProviderId switch
         {
+            "miniconda" or "miniforge" => CondaInstallerService.LaunchInstallerAsync(release, progress, cancellationToken),
             "temurin" => InstallTemurinAsync(release, progress, cancellationToken),
             "uv" => InstallUvPythonAsync(release, progress, cancellationToken),
             "mysql" => InstallMysqlAsync(release, progress, cancellationToken),
+            "nginx" => InstallNginxAsync(release, progress, cancellationToken),
+            "jmeter" => InstallJMeterAsync(release, progress, cancellationToken),
             "docker-desktop" => InstallDockerDesktopAsync(release, progress, cancellationToken),
             "docker-cli" => InstallDockerCliAsync(release, progress, cancellationToken),
             "volta" => FetchVoltaNodeAsync(release, progress, cancellationToken),
@@ -774,6 +903,191 @@ public sealed class ManagedToolchainService
         }
     }
 
+    public async Task<ManagedToolchainOperationResult> InstallNginxAsync(
+        ManagedToolchainRelease release,
+        IProgress<ManagedInstallProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        if (release.ToolchainId != "nginx" || release.ProviderId != "nginx" ||
+            !IsTrustedNginxDownload(release.DownloadUrl, release.FileName))
+        {
+            return new(false, "安装请求不是受信任的 NGINX 官方 Windows ZIP。");
+        }
+
+        Directory.CreateDirectory(DownloadsRoot);
+        Directory.CreateDirectory(NginxRoot);
+        var operationId = Guid.NewGuid().ToString("N");
+        var archivePath = Path.Combine(DownloadsRoot, $"{operationId}.partial");
+        var stagingPath = Path.Combine(NginxRoot, $".staging-{operationId}");
+        string? installedPath = null;
+        var manifestCommitted = false;
+        try
+        {
+            progress?.Report(new("正在下载 NGINX 官方 Windows 包"));
+            await DownloadAsync(release.DownloadUrl, "NGINX 官方发行站", archivePath, progress, cancellationToken).ConfigureAwait(false);
+            progress?.Report(new("正在安全解压 NGINX"));
+            Directory.CreateDirectory(stagingPath);
+            await ExtractZipSafelyAsync(archivePath, stagingPath, cancellationToken).ConfigureAwait(false);
+            var extractedRoot = FindNginxRoot(stagingPath);
+            if (extractedRoot is null)
+            {
+                return new(false, "压缩包内未找到 nginx.exe，安装已停止。");
+            }
+
+            var safeVersion = SanitizeDirectoryName(release.Version);
+            var destination = Path.Combine(NginxRoot, $"nginx-{safeVersion}-winx64");
+            if (Directory.Exists(destination))
+            {
+                return new(false, "该 NGINX 版本的托管目录已经存在，请先重新扫描或卸载旧记录。");
+            }
+
+            Directory.Move(extractedRoot, destination);
+            installedPath = destination;
+            var nginxPath = Path.Combine(destination, "nginx.exe");
+            var validation = await _commandRunner.RunAsync(nginxPath, new[] { "-v" }, cancellationToken).ConfigureAwait(false);
+            var parsedVersion = ParseNginxVersion(validation.CombinedOutput);
+            if (validation.TimedOut || validation.ExitCode != 0 || !string.Equals(parsedVersion, release.Version, StringComparison.OrdinalIgnoreCase))
+            {
+                TryDeleteManagedDirectory(destination);
+                return new(false, "NGINX 解压完成，但 nginx -v 版本验证失败，已撤销本次安装。");
+            }
+
+            var entry = new ManagedToolchainEntry
+            {
+                ToolchainId = "nginx",
+                ProviderId = "nginx",
+                Version = release.Version,
+                Architecture = release.Architecture,
+                InstallationPath = destination,
+                ExecutablePath = nginxPath,
+                DownloadUrl = release.DownloadUrl,
+                PackageKey = release.FileName,
+                Sha256 = "由 NGINX 官方 HTTPS 下载源与 nginx -v 结构验证负责",
+                HashAlgorithm = "结构校验",
+                InstalledAtUtc = DateTime.UtcNow,
+                ManagedByXTool = true
+            };
+            await AddManifestEntryAsync(entry, cancellationToken).ConfigureAwait(false);
+            manifestCommitted = true;
+            await WriteLogAsync($"已安装 NGINX {release.Version} 到 {destination}").ConfigureAwait(false);
+            progress?.Report(new("安装与版本验证完成", release.DownloadSize, release.DownloadSize));
+            return new(true, $"Nginx {release.Version} 已安装并通过 nginx -v 验证。", entry);
+        }
+        catch (OperationCanceledException)
+        {
+            await WriteLogAsync($"NGINX {release.Version} 安装已取消").ConfigureAwait(false);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            await WriteLogAsync($"NGINX {release.Version} 安装失败：{ex}").ConfigureAwait(false);
+            return new(false, $"安装失败：{ex.Message}");
+        }
+        finally
+        {
+            TryDeleteFile(archivePath);
+            TryDeleteManagedDirectory(stagingPath);
+            if (!manifestCommitted && !string.IsNullOrWhiteSpace(installedPath)) TryDeleteManagedDirectory(installedPath);
+        }
+    }
+
+    public async Task<ManagedToolchainOperationResult> InstallJMeterAsync(
+        ManagedToolchainRelease release,
+        IProgress<ManagedInstallProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        if (release.ToolchainId != "jmeter" || release.ProviderId != "jmeter" ||
+            !IsTrustedJMeterDownload(release.DownloadUrl, release.FileName, release.Sha256))
+        {
+            return new(false, "安装请求不是受信任的 Apache JMeter 官方 ZIP。");
+        }
+
+        Directory.CreateDirectory(DownloadsRoot);
+        Directory.CreateDirectory(JMeterRoot);
+        var operationId = Guid.NewGuid().ToString("N");
+        var archivePath = Path.Combine(DownloadsRoot, $"{operationId}.partial");
+        var stagingPath = Path.Combine(JMeterRoot, $".staging-{operationId}");
+        string? installedPath = null;
+        var manifestCommitted = false;
+        try
+        {
+            progress?.Report(new("正在下载 Apache JMeter 官方二进制包"));
+            await DownloadAsync(release.DownloadUrl, "Apache 官方发行站", archivePath, progress, cancellationToken).ConfigureAwait(false);
+
+            progress?.Report(new("正在校验 Apache 官方 SHA-512"));
+            var actualHash = await ComputeSha512Async(archivePath, cancellationToken).ConfigureAwait(false);
+            if (!string.Equals(actualHash, release.Sha256, StringComparison.OrdinalIgnoreCase))
+            {
+                return new(false, "下载文件的 SHA-512 与 Apache 官方校验值不一致，安装已停止。");
+            }
+
+            progress?.Report(new("正在安全解压 Apache JMeter"));
+            Directory.CreateDirectory(stagingPath);
+            await ExtractZipSafelyAsync(archivePath, stagingPath, cancellationToken).ConfigureAwait(false);
+            var extractedRoot = FindJMeterRoot(stagingPath);
+            if (extractedRoot is null)
+            {
+                return new(false, "压缩包内未找到完整的 JMeter bin 与核心 JAR，安装已停止。");
+            }
+
+            var packageVersion = JMeterPackageInspector.TryReadVersion(extractedRoot);
+            if (!string.Equals(packageVersion, release.Version, StringComparison.OrdinalIgnoreCase))
+            {
+                return new(false, $"JMeter 核心 JAR 版本与目录版本不一致（读取到 {packageVersion ?? "未知"}），安装已停止。");
+            }
+
+            var safeVersion = SanitizeDirectoryName(release.Version);
+            var destination = Path.Combine(JMeterRoot, $"apache-jmeter-{safeVersion}");
+            if (Directory.Exists(destination))
+            {
+                return new(false, "该 JMeter 版本的托管目录已经存在，请先重新扫描或卸载旧记录。");
+            }
+
+            Directory.Move(extractedRoot, destination);
+            installedPath = destination;
+            var executablePath = Path.Combine(destination, "bin", "jmeter.bat");
+            var entry = new ManagedToolchainEntry
+            {
+                ToolchainId = "jmeter",
+                ProviderId = "jmeter",
+                Version = release.Version,
+                Architecture = release.Architecture,
+                InstallationPath = destination,
+                ExecutablePath = executablePath,
+                DownloadUrl = release.DownloadUrl,
+                PackageKey = release.FileName,
+                Sha256 = release.Sha256,
+                HashAlgorithm = "SHA512",
+                InstalledAtUtc = DateTime.UtcNow,
+                ManagedByXTool = true
+            };
+            await AddManifestEntryAsync(entry, cancellationToken).ConfigureAwait(false);
+            manifestCommitted = true;
+            await WriteLogAsync($"已安装 Apache JMeter {release.Version} 到 {destination}；SHA-512 校验通过").ConfigureAwait(false);
+            progress?.Report(new("安装与版本清单验证完成", release.DownloadSize, release.DownloadSize));
+            return new(true, $"Apache JMeter {release.Version} 已安装并通过 SHA-512 与核心版本验证。", entry);
+        }
+        catch (OperationCanceledException)
+        {
+            await WriteLogAsync($"Apache JMeter {release.Version} 安装已取消").ConfigureAwait(false);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            await WriteLogAsync($"Apache JMeter {release.Version} 安装失败：{ex}").ConfigureAwait(false);
+            return new(false, $"安装失败：{ex.Message}");
+        }
+        finally
+        {
+            TryDeleteFile(archivePath);
+            TryDeleteManagedDirectory(stagingPath);
+            if (!manifestCommitted && !string.IsNullOrWhiteSpace(installedPath))
+            {
+                TryDeleteManagedDirectory(installedPath);
+            }
+        }
+    }
+
     public async Task<ManagedToolchainOperationResult> InstallDockerDesktopAsync(
         ManagedToolchainRelease release,
         IProgress<ManagedInstallProgress>? progress,
@@ -921,6 +1235,8 @@ public sealed class ManagedToolchainService
             "java" => JavaRoot,
             "python" => PythonRoot,
             "mysql" => MysqlRoot,
+            "nginx" => NginxRoot,
+            "jmeter" => JMeterRoot,
             "docker" => DockerRoot,
             _ => string.Empty
         };
@@ -1089,6 +1405,14 @@ public sealed class ManagedToolchainService
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
+    private static async Task<string> ComputeSha512Async(string path, CancellationToken cancellationToken)
+    {
+        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1024 * 128, useAsync: true);
+        using var sha512 = SHA512.Create();
+        var hash = await sha512.ComputeHashAsync(stream, cancellationToken).ConfigureAwait(false);
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
     private static bool VerifyDockerDesktopSignature(string path)
     {
         try
@@ -1185,6 +1509,17 @@ public sealed class ManagedToolchainService
             .Prepend(stagingPath)
             .FirstOrDefault(path => File.Exists(Path.Combine(path, "docker.exe")));
 
+    private static string? FindNginxRoot(string stagingPath)
+        => Directory.EnumerateDirectories(stagingPath, "*", SearchOption.AllDirectories)
+            .Prepend(stagingPath)
+            .FirstOrDefault(path => File.Exists(Path.Combine(path, "nginx.exe")));
+
+    private static string? FindJMeterRoot(string stagingPath)
+        => Directory.EnumerateDirectories(stagingPath, "*", SearchOption.AllDirectories)
+            .Prepend(stagingPath)
+            .FirstOrDefault(path => File.Exists(Path.Combine(path, "bin", "jmeter.bat")) &&
+                                    File.Exists(Path.Combine(path, "lib", "ext", "ApacheJMeter_core.jar")));
+
     private async Task<ManagedToolchainManifest> LoadManifestAsync(CancellationToken cancellationToken)
     {
         await ManifestLock.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -1232,6 +1567,8 @@ public sealed class ManagedToolchainService
         {
             "java" => new[] { "JAVA_HOME", "JDK_HOME" },
             "mysql" => new[] { "MYSQL_HOME" },
+            "nginx" => new[] { "NGINX_HOME" },
+            "jmeter" => new[] { "JMETER_HOME" },
             _ => Array.Empty<string>()
         };
         foreach (var target in new[] { EnvironmentVariableTarget.User, EnvironmentVariableTarget.Machine })
@@ -1299,6 +1636,19 @@ public sealed class ManagedToolchainService
            Regex.IsMatch(fileName, @"^docker-[0-9]+\.[0-9]+\.[0-9]+\.zip$", RegexOptions.IgnoreCase) &&
            string.Equals(Path.GetFileName(uri.AbsolutePath), fileName, StringComparison.OrdinalIgnoreCase);
 
+    private static bool IsTrustedNginxDownload(string url, string fileName)
+        => Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps &&
+           string.Equals(uri.Host, "nginx.org", StringComparison.OrdinalIgnoreCase) &&
+           string.Equals(uri.AbsolutePath, $"/download/{fileName}", StringComparison.OrdinalIgnoreCase) &&
+           Regex.IsMatch(fileName, @"^nginx-[0-9]+\.[0-9]+\.[0-9]+\.zip$", RegexOptions.IgnoreCase);
+
+    private static bool IsTrustedJMeterDownload(string url, string fileName, string sha512)
+        => Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps &&
+           string.Equals(uri.Host, "downloads.apache.org", StringComparison.OrdinalIgnoreCase) &&
+           string.Equals(uri.AbsolutePath, $"/jmeter/binaries/{fileName}", StringComparison.Ordinal) &&
+           Regex.IsMatch(fileName, @"^apache-jmeter-[0-9]+\.[0-9]+(?:\.[0-9]+)?\.zip$", RegexOptions.IgnoreCase) &&
+           sha512.Length == 128 && sha512.All(Uri.IsHexDigit);
+
     private static bool IsTrustedUvRelease(string key, string url)
         => key.StartsWith("cpython-", StringComparison.Ordinal) &&
            key.EndsWith("-windows-x86_64-none", StringComparison.Ordinal) &&
@@ -1312,6 +1662,12 @@ public sealed class ManagedToolchainService
            Uri.TryCreate(release.DownloadUrl, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps &&
            string.Equals(uri.Host, "nodejs.org", StringComparison.OrdinalIgnoreCase) &&
            string.Equals(uri.AbsolutePath.TrimEnd('/'), $"/dist/v{release.Version}", StringComparison.Ordinal);
+
+    private static string ParseNginxVersion(string output)
+    {
+        var match = Regex.Match(output ?? string.Empty, @"nginx/(?<version>[0-9]+\.[0-9]+\.[0-9]+)", RegexOptions.IgnoreCase);
+        return match.Success ? match.Groups["version"].Value : string.Empty;
+    }
 
     private static bool IsTrustedTunaTemurinMirror(string url, string fileName)
         => Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps &&

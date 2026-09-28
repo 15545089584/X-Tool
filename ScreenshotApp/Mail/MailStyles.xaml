@@ -1,0 +1,130 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+ <SolidColorBrush x:Key="MailInk" Color="#152C48"/>
+ <LinearGradientBrush x:Key="MailGradient" StartPoint="0,0" EndPoint="1,0"><GradientStop Color="#2563EB"/><GradientStop Color="#5142E9" Offset="1"/></LinearGradientBrush>
+ <Style x:Key="MailCard" TargetType="ListBoxItem">
+  <Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="Padding" Value="18,16"/><Setter Property="Margin" Value="0,0,0,8"/><Setter Property="Cursor" Value="Hand"/>
+  <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem">
+   <Grid><Border x:Name="Card" Background="#CFFFFFFF" BorderBrush="Transparent" BorderThickness="1" CornerRadius="14" Padding="{TemplateBinding Padding}"><ContentPresenter/></Border>
+    <Border x:Name="Accent" Width="4" Background="#326AF5" CornerRadius="2" HorizontalAlignment="Left" Margin="6,14,0,14" Visibility="Collapsed"/>
+   </Grid><ControlTemplate.Triggers>
+    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Card" Property="Background" Value="#F5FAFF"/></Trigger>
+    <Trigger Property="IsSelected" Value="True"><Setter TargetName="Card" Property="Background" Value="White"/><Setter TargetName="Card" Property="BorderBrush" Value="#B7D4FF"/><Setter TargetName="Accent" Property="Visibility" Value="Visible"/><Setter TargetName="Card" Property="Effect"><Setter.Value><DropShadowEffect Color="#608DD7" BlurRadius="7" ShadowDepth="1" Opacity="0.15"/></Setter.Value></Setter></Trigger>
+    <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="Card" Property="BorderBrush" Value="#2563EB"/></Trigger>
+   </ControlTemplate.Triggers>
+  </ControlTemplate></Setter.Value></Setter>
+ </Style>
+ <Style TargetType="TextBlock"><Setter Property="Foreground" Value="#152C48"/></Style>
+ <Style TargetType="Button">
+  <Setter Property="Background" Value="#EEF3FC"/><Setter Property="Foreground" Value="#405B7E"/>
+  <Setter Property="Padding" Value="16,10"/><Setter Property="Cursor" Value="Hand"/><Setter Property="BorderThickness" Value="0"/>
+  <Setter Property="FontSize" Value="13"/><Setter Property="HorizontalContentAlignment" Value="Center"/>
+  <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+   <Border x:Name="Surface" CornerRadius="10" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+    <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}"/>
+   </Border><ControlTemplate.Triggers>
+    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Surface" Property="Opacity" Value="0.8"/></Trigger>
+    <Trigger Property="IsPressed" Value="True"><Setter TargetName="Surface" Property="Opacity" Value="0.65"/></Trigger>
+    <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45"/></Trigger>
+    <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Surface" Property="BorderBrush" Value="#2563EB"/><Setter TargetName="Surface" Property="BorderThickness" Value="1"/></Trigger>
+   </ControlTemplate.Triggers>
+  </ControlTemplate></Setter.Value></Setter>
+ </Style>
+ <Style x:Key="MailTranslationButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+  <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+  <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+   <Border x:Name="Surface" CornerRadius="8" Background="{TemplateBinding Background}" BorderBrush="Transparent" BorderThickness="1" Padding="{TemplateBinding Padding}">
+    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+   </Border>
+   <ControlTemplate.Triggers>
+    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Surface" Property="Background" Value="#E9E9FF"/></Trigger>
+    <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Surface" Property="BorderBrush" Value="#9499E8"/></Trigger>
+    <Trigger Property="IsPressed" Value="True"><Setter TargetName="Surface" Property="Background" Value="#DCDFFF"/></Trigger>
+    <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45"/></Trigger>
+   </ControlTemplate.Triggers>
+  </ControlTemplate></Setter.Value></Setter>
+ </Style>
+ <Style x:Key="MailPrimary" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+  <Setter Property="Background" Value="{StaticResource MailGradient}"/><Setter Property="Foreground" Value="White"/>
+ </Style>
+ <Style x:Key="CaptionButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+  <Setter Property="Background" Value="Transparent"/><Setter Property="Width" Value="44"/><Setter Property="Height" Value="36"/><Setter Property="Padding" Value="0"/>
+ </Style>
+ <Style TargetType="TextBox">
+  <Setter Property="FontSize" Value="14"/><Setter Property="Foreground" Value="#233C59"/><Setter Property="Padding" Value="12"/>
+  <Setter Property="Background" Value="#F8FAFE"/><Setter Property="BorderBrush" Value="#DDE5F0"/><Setter Property="BorderThickness" Value="1"/>
+  <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TextBox">
+   <Border x:Name="Box" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10">
+    <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"/>
+   </Border><ControlTemplate.Triggers><Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="Box" Property="BorderBrush" Value="#2563EB"/></Trigger></ControlTemplate.Triggers>
+  </ControlTemplate></Setter.Value></Setter>
+ </Style>
+ <Style TargetType="PasswordBox">
+  <Setter Property="Padding" Value="12"/><Setter Property="FontSize" Value="15"/><Setter Property="Background" Value="#F8FAFE"/>
+  <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="PasswordBox">
+   <Border x:Name="Box" CornerRadius="10" Background="{TemplateBinding Background}" BorderBrush="#DDE5F0" BorderThickness="1"><ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"/></Border>
+   <ControlTemplate.Triggers><Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="Box" Property="BorderBrush" Value="#2563EB"/></Trigger></ControlTemplate.Triggers>
+  </ControlTemplate></Setter.Value></Setter>
+ </Style>
+ <Style TargetType="ListBox"><Setter Property="BorderThickness" Value="0"/><Setter Property="Background" Value="Transparent"/><Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/></Style>
+ <Style TargetType="ListBoxItem">
+  <Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="Padding" Value="12"/><Setter Property="Margin" Value="0,0,0,6"/>
+  <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem">
+   <Border x:Name="ItemCard" Background="White" BorderBrush="#E5EAF3" BorderThickness="1" CornerRadius="12" Padding="{TemplateBinding Padding}">
+    <ContentPresenter/>
+   </Border><ControlTemplate.Triggers>
+    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ItemCard" Property="Background" Value="#EDF3FF"/></Trigger>
+    <Trigger Property="IsSelected" Value="True"><Setter TargetName="ItemCard" Property="Background" Value="#FFFFFF"/><Setter TargetName="ItemCard" Property="BorderBrush" Value="#2563EB"/></Trigger>
+   </ControlTemplate.Triggers>
+  </ControlTemplate></Setter.Value></Setter>
+ </Style>
+ <Style x:Key="MailToggle" TargetType="CheckBox">
+  <Setter Property="Cursor" Value="Hand"/>
+  <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="CheckBox">
+   <DockPanel><Border x:Name="Track" DockPanel.Dock="Right" Width="38" Height="22" CornerRadius="11" Background="#CED8E7" Margin="16,0,0,0">
+    <Ellipse x:Name="Knob" Width="16" Height="16" Fill="White" HorizontalAlignment="Left" Margin="3"/>
+   </Border><ContentPresenter VerticalAlignment="Center"/></DockPanel>
+   <ControlTemplate.Triggers><Trigger Property="IsChecked" Value="True"><Setter TargetName="Track" Property="Background" Value="#2563EB"/><Setter TargetName="Knob" Property="HorizontalAlignment" Value="Right"/></Trigger>
+   <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Track" Property="BorderBrush" Value="#163C82"/><Setter TargetName="Track" Property="BorderThickness" Value="1"/></Trigger></ControlTemplate.Triggers>
+  </ControlTemplate></Setter.Value></Setter>
+ </Style>
+ <Style x:Key="MailFilter" TargetType="RadioButton">
+  <Setter Property="Cursor" Value="Hand"/><Setter Property="Margin" Value="0,0,3,0"/>
+  <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="RadioButton">
+   <Border x:Name="Pill" CornerRadius="9" Padding="9,5" Background="Transparent"><TextBlock x:Name="Label" Text="{TemplateBinding Content}" FontSize="11" Foreground="#65748B"/></Border>
+   <ControlTemplate.Triggers>
+    <Trigger Property="IsChecked" Value="True"><Setter TargetName="Pill" Property="Background" Value="#2563EB"/><Setter TargetName="Label" Property="Foreground" Value="White"/></Trigger>
+    <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Pill" Property="BorderBrush" Value="#8AB1FF"/><Setter TargetName="Pill" Property="BorderThickness" Value="1"/></Trigger>
+   </ControlTemplate.Triggers>
+  </ControlTemplate></Setter.Value></Setter>
+ </Style>
+ <Style TargetType="ScrollBar">
+  <Setter Property="Width" Value="7"/><Setter Property="MinWidth" Value="0"/><Setter Property="Background" Value="Transparent"/>
+  <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ScrollBar">
+   <Track x:Name="PART_Track" IsDirectionReversed="True" Orientation="Vertical">
+    <Track.DecreaseRepeatButton><RepeatButton Command="ScrollBar.PageUpCommand" Opacity="0" Focusable="False"/></Track.DecreaseRepeatButton>
+    <Track.Thumb><Thumb><Thumb.Template><ControlTemplate TargetType="Thumb"><Border Background="#CAD5E5" CornerRadius="3" Margin="1"/></ControlTemplate></Thumb.Template></Thumb></Track.Thumb>
+    <Track.IncreaseRepeatButton><RepeatButton Command="ScrollBar.PageDownCommand" Opacity="0" Focusable="False"/></Track.IncreaseRepeatButton>
+   </Track>
+  </ControlTemplate></Setter.Value></Setter>
+ </Style>
+ <Style x:Key="MailTimePicker" TargetType="ComboBox">
+ <Setter Property="Height" Value="40"/><Setter Property="FontSize" Value="14"/>
+ <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBox">
+ <Grid>
+  <ToggleButton Focusable="False" IsChecked="{Binding IsDropDownOpen,RelativeSource={RelativeSource TemplatedParent},Mode=TwoWay}">
+   <ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><Border Background="White" BorderBrush="#DDE5F0" BorderThickness="1" CornerRadius="10"/></ControlTemplate></ToggleButton.Template>
+  </ToggleButton>
+  <ContentPresenter Margin="14,0,32,0" VerticalAlignment="Center" IsHitTestVisible="False" Content="{TemplateBinding SelectionBoxItem}"/>
+  <TextBlock Text="⌄" Foreground="#7487A2" HorizontalAlignment="Right" Margin="0,0,12,0" VerticalAlignment="Center" IsHitTestVisible="False"/>
+  <Popup x:Name="PART_Popup" Placement="Bottom" IsOpen="{TemplateBinding IsDropDownOpen}" AllowsTransparency="True" Focusable="False">
+   <Border Background="White" BorderBrush="#DDE5F0" BorderThickness="1" CornerRadius="10" MinWidth="140" MaxHeight="240"><ScrollViewer VerticalScrollBarVisibility="Auto"><ItemsPresenter/></ScrollViewer></Border>
+  </Popup>
+ </Grid>
+ <ControlTemplate.Triggers><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45"/></Trigger></ControlTemplate.Triggers>
+ </ControlTemplate></Setter.Value></Setter>
+ </Style>
+ <Style TargetType="ComboBoxItem"><Setter Property="Padding" Value="12,8"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBoxItem">
+ <Border x:Name="Row" Background="Transparent" CornerRadius="6" Padding="{TemplateBinding Padding}"><ContentPresenter/></Border>
+ <ControlTemplate.Triggers><Trigger Property="IsHighlighted" Value="True"><Setter TargetName="Row" Property="Background" Value="#EDF3FF"/></Trigger><Trigger Property="IsSelected" Value="True"><Setter TargetName="Row" Property="Background" Value="#E5EDFE"/></Trigger></ControlTemplate.Triggers>
+ </ControlTemplate></Setter.Value></Setter></Style>
+</ResourceDictionary>

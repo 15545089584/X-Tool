@@ -21,12 +21,13 @@ internal sealed class PhoneScreenshotWindow : Window
     private readonly DispatcherTimer _timer;
     private readonly TextBlock _status;
     private bool _busy;
-    private DateTime _expires = DateTime.UtcNow.AddSeconds(30);
+    private IDisposable? _petImageReminder;
+    private DateTime _expires = DateTime.UtcNow.AddSeconds(10);
 
-    internal PhoneScreenshotWindow(string path, BitmapSource thumbnail, Window pet)
+    internal PhoneScreenshotWindow(string path, BitmapSource thumbnail, ScreenshotApp.DesktopPet.DesktopPetWindow pet, bool photo = false)
     {
         _path = path; _pet = pet;
-        Title = "X-Tool 手机截图";
+        Title = photo ? "X-Tool 手机照片" : "X-Tool 手机截图";
         Width = 340; SizeToContent = SizeToContent.Height;
         WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize;
         AllowsTransparency = true; Background = Brushes.Transparent;
@@ -35,10 +36,18 @@ internal sealed class PhoneScreenshotWindow : Window
         var stack = new StackPanel();
         var heading = new DockPanel { Margin = new Thickness(0, 0, 0, 12) };
         var close = MakeButton("×", false);
-        close.Width = 32; close.Height = 30; close.Padding = new Thickness(0);
+        close.Width = 30; close.Height = 30; close.Padding = new Thickness(0);
+        close.ToolTip = "关闭";
+        System.Windows.Automation.AutomationProperties.SetName(close, "关闭截图提醒");
+        close.Content = new System.Windows.Shapes.Path {
+            Data = Geometry.Parse("M 1,1 L 11,11 M 11,1 L 1,11"),
+            Stroke = ColorBrush("#66819B"), StrokeThickness = 1.6,
+            StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round,
+            Width = 12, Height = 12, Stretch = Stretch.Uniform
+        };
         close.Click += (_, _) => Close();
         DockPanel.SetDock(close, Dock.Right); heading.Children.Add(close);
-        heading.Children.Add(new TextBlock { Text = "手机截图", FontSize = 18, FontWeight = FontWeights.SemiBold,
+        heading.Children.Add(new TextBlock { Text = photo ? "手机照片" : "手机截图", FontSize = 18, FontWeight = FontWeights.SemiBold,
             Foreground = ColorBrush("#29445F"), VerticalAlignment = VerticalAlignment.Center });
         stack.Children.Add(heading);
         var image = new Image { Source = thumbnail, MaxHeight = 220, Stretch = Stretch.Uniform, Cursor = Cursors.Hand,
@@ -69,11 +78,11 @@ internal sealed class PhoneScreenshotWindow : Window
                 if (IsVisible && !PhoneNotificationHub.Instance.Locked)
                 {
                     ClipboardService.SetImage(fullImage);
-                    _status.Text = "图片已复制，可以直接粘贴";
+                    Close();
                 }
             }
             catch (Exception e) { _status.Text = "复制失败：" + e.Message; }
-            finally { _busy = false; copy.IsEnabled = save.IsEnabled = true; _expires = DateTime.UtcNow.AddSeconds(15); }
+            finally { _busy = false; copy.IsEnabled = save.IsEnabled = true; }
         };
         save.Click += async (_, _) =>
         {
@@ -92,7 +101,7 @@ internal sealed class PhoneScreenshotWindow : Window
                 }
             }
             catch (Exception e) { _status.Text = "保存失败：" + e.Message; }
-            finally { _busy = false; copy.IsEnabled = save.IsEnabled = true; _expires = DateTime.UtcNow.AddSeconds(15); }
+            finally { _busy = false; copy.IsEnabled = save.IsEnabled = true; }
         };
         stack.Children.Add(actions);
         var card = new Border { Background = ColorBrush("#F4F9FF"), BorderBrush = ColorBrush("#C4D9F4"), BorderThickness = new Thickness(1),
@@ -108,17 +117,21 @@ internal sealed class PhoneScreenshotWindow : Window
             ScreenshotApp.Capture.NativeMethods.SetWindowDisplayAffinity(
                 new WindowInteropHelper(this).Handle, ScreenshotApp.Capture.NativeMethods.WdaExcludeFromCapture);
         };
-        Loaded += (_, _) => PositionNearPet();
+        Loaded += (_, _) => {
+            _expires = DateTime.UtcNow.AddSeconds(10); PositionNearPet();
+        };
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
         _timer.Tick += (_, _) =>
         {
             if (!_pet.IsVisible || PhoneNotificationHub.Instance.Locked) { Close(); return; }
             PositionNearPet();
-            if (IsMouseOver || _busy) _expires = DateTime.UtcNow.AddSeconds(15);
-            else if (DateTime.UtcNow >= _expires) Close();
+            // 从显示开始计时，悬停和复制不续期；保存对话框打开时等待操作结束。
+            if (!_busy && DateTime.UtcNow >= _expires) Close();
         };
-        Closed += (_, _) => _timer.Stop();
+        Closed += (_, _) => { _timer.Stop(); _petImageReminder?.Dispose(); _petImageReminder = null; };
         _timer.Start();
+        // 构造新气泡时先取得状态租约，再关闭旧气泡，连续图片不会短暂回到状态 1。
+        _petImageReminder = pet.BeginPhoneImageReminder();
     }
 
     private void PositionNearPet()
@@ -134,7 +147,10 @@ internal sealed class PhoneScreenshotWindow : Window
     private static SolidColorBrush ColorBrush(string hex) => (SolidColorBrush)new BrushConverter().ConvertFromString(hex)!;
     private static Button MakeButton(string label, bool primary)
     {
-        var button = new Button { Content = label, Height = 40, FontSize = 14, Cursor = Cursors.Hand,
+        // 直接给文字设置前景色，避免应用级 TextBlock 样式覆盖按钮继承颜色。
+        var text = new TextBlock { Text = label, Foreground = primary ? Brushes.White : ColorBrush("#355875"),
+            FontSize = 14, VerticalAlignment = VerticalAlignment.Center };
+        var button = new Button { Content = text, Height = 40, FontSize = 14, Cursor = Cursors.Hand,
             Background = ColorBrush(primary ? "#4D77FF" : "#E8F0FC"), Foreground = primary ? Brushes.White : ColorBrush("#355875"),
             BorderThickness = new Thickness(0), Padding = new Thickness(12, 5, 12, 5) };
         var border = new FrameworkElementFactory(typeof(Border));

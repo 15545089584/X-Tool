@@ -17,6 +17,9 @@ public partial class DeveloperToolsView : UserControl
     private readonly ObservableCollection<ManagedToolchainRelease> _managedHistoricalReleases = new();
     private readonly ObservableCollection<ManagedToolchainRelease> _managedMysqlReleases = new();
     private readonly ObservableCollection<ManagedToolchainRelease> _managedHistoricalMysqlReleases = new();
+    private readonly ObservableCollection<ManagedToolchainRelease> _managedNginxReleases = new();
+    private readonly ObservableCollection<ManagedToolchainRelease> _managedJMeterReleases = new();
+    private readonly ObservableCollection<ManagedToolchainRelease> _managedCondaReleases = new();
     private readonly ObservableCollection<ManagedToolchainRelease> _managedDesktopReleases = new();
     private readonly ObservableCollection<ManagedToolchainRelease> _managedDockerCliReleases = new();
     private readonly ObservableCollection<ManagedToolchainRelease> _managedPythonReleases = new();
@@ -40,6 +43,9 @@ public partial class DeveloperToolsView : UserControl
         ManagedHistoricalReleasesItemsControl.ItemsSource = _managedHistoricalReleases;
         ManagedMysqlReleasesItemsControl.ItemsSource = _managedMysqlReleases;
         ManagedHistoricalMysqlReleasesItemsControl.ItemsSource = _managedHistoricalMysqlReleases;
+        ManagedNginxReleasesItemsControl.ItemsSource = _managedNginxReleases;
+        ManagedJMeterReleasesItemsControl.ItemsSource = _managedJMeterReleases;
+        ManagedCondaReleasesItemsControl.ItemsSource = _managedCondaReleases;
         ManagedDesktopReleasesItemsControl.ItemsSource = _managedDesktopReleases;
         ManagedDockerCliReleasesItemsControl.ItemsSource = _managedDockerCliReleases;
         ManagedPythonReleasesItemsControl.ItemsSource = _managedPythonReleases;
@@ -167,7 +173,8 @@ public partial class DeveloperToolsView : UserControl
         _tabMotion.Show(target);
         if (tab == "Managed" && _managedReleases.Count == 0 && _managedHistoricalReleases.Count == 0 && _managedPythonReleases.Count == 0 &&
             _managedHistoricalPythonReleases.Count == 0 &&
-            _managedNodeReleases.Count == 0 && _managedCatalogCancellation is null)
+            _managedNodeReleases.Count == 0 && _managedNginxReleases.Count == 0 &&
+            _managedJMeterReleases.Count == 0 && _managedCondaReleases.Count == 0 && _managedCatalogCancellation is null)
         {
             _ = RefreshManagedCatalogAsync();
         }
@@ -183,9 +190,10 @@ public partial class DeveloperToolsView : UserControl
         var cancellation = new CancellationTokenSource();
         _managedCatalogCancellation = cancellation;
         RefreshManagedCatalogButton.IsEnabled = false;
-        ManagedCatalogStateText.Text = "正在读取 Adoptium API…";
+        ManagedCatalogStateText.Text = "正在读取官方版本目录…";
         try
         {
+            await RefreshCondaCatalogAsync(cancellation.Token);
             var releases = await _managedToolchainService.GetTemurinReleasesAsync(cancellation.Token);
             if (cancellation.IsCancellationRequested) return;
             _managedReleases.Clear();
@@ -207,7 +215,7 @@ public partial class DeveloperToolsView : UserControl
                 ManagedMysqlEmptyState.Visibility = mysqlReleases.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
                 ManagedHistoricalMysqlSection.Visibility = _managedHistoricalMysqlReleases.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
                 ManagedMysqlStateText.Text = mysqlReleases.Count == 0 ? "MySQL 官方目录未返回版本" : $"已读取 {mysqlReleases.Count} 个 MySQL 版本";
-                ManagedCatalogStateText.Text = $"已读取 {releases.Count + mysqlReleases.Count} 个官方版本";
+                UpdateManagedCatalogSummary();
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -216,6 +224,42 @@ public partial class DeveloperToolsView : UserControl
                 ManagedHistoricalMysqlSection.Visibility = Visibility.Collapsed;
                 ManagedMysqlEmptyState.Visibility = Visibility.Visible;
                 ManagedMysqlStateText.Text = ex.Message;
+            }
+
+            try
+            {
+                var nginxReleases = await _managedToolchainService.GetNginxReleasesAsync(cancellation.Token);
+                if (cancellation.IsCancellationRequested) return;
+                _managedNginxReleases.Clear();
+                foreach (var release in nginxReleases) _managedNginxReleases.Add(release);
+                ManagedNginxEmptyState.Visibility = nginxReleases.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+                ManagedNginxStateText.Text = nginxReleases.Count == 0 ? "NGINX 官方目录未返回版本" : $"已读取 {nginxReleases.Count} 个官方版本";
+                UpdateManagedCatalogSummary();
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _managedNginxReleases.Clear();
+                ManagedNginxEmptyState.Visibility = Visibility.Visible;
+                ManagedNginxStateText.Text = ex.Message;
+            }
+
+            try
+            {
+                var jmeterReleases = await _managedToolchainService.GetJMeterReleasesAsync(cancellation.Token);
+                if (cancellation.IsCancellationRequested) return;
+                _managedJMeterReleases.Clear();
+                foreach (var release in jmeterReleases) _managedJMeterReleases.Add(release);
+                ManagedJMeterEmptyState.Visibility = jmeterReleases.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+                ManagedJMeterStateText.Text = jmeterReleases.Count == 0
+                    ? "Apache 官方目录未返回 JMeter 版本"
+                    : $"已读取 {jmeterReleases.Count} 个正式版本";
+                UpdateManagedCatalogSummary();
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _managedJMeterReleases.Clear();
+                ManagedJMeterEmptyState.Visibility = Visibility.Visible;
+                ManagedJMeterStateText.Text = ex.Message;
             }
 
             try
@@ -256,7 +300,7 @@ public partial class DeveloperToolsView : UserControl
                 ManagedPythonEmptyState.Visibility = pythonReleases.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
                 ManagedHistoricalPythonSection.Visibility = _managedHistoricalPythonReleases.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
                 ManagedPythonStateText.Text = pythonReleases.Count == 0 ? "uv 未返回可安装版本" : $"已读取 {pythonReleases.Count} 个 CPython 版本";
-                ManagedCatalogStateText.Text = $"已读取 {releases.Count + pythonReleases.Count} 个官方版本";
+                UpdateManagedCatalogSummary();
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -279,7 +323,7 @@ public partial class DeveloperToolsView : UserControl
                 ManagedNodeStateText.Text = nodeReleases.Count == 0
                     ? "Node.js 官方目录未返回受支持版本"
                     : voltaAvailable ? $"已读取 {nodeReleases.Count} 个受支持版本" : "未安装 Volta；可先通过 WinGet 安装";
-                ManagedCatalogStateText.Text = $"已读取 {_managedReleases.Count + _managedHistoricalReleases.Count + _managedMysqlReleases.Count + _managedHistoricalMysqlReleases.Count + _managedDesktopReleases.Count + _managedDockerCliReleases.Count + _managedPythonReleases.Count + nodeReleases.Count} 个官方版本";
+                UpdateManagedCatalogSummary();
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -309,6 +353,41 @@ public partial class DeveloperToolsView : UserControl
         }
     }
 
+    private async Task RefreshCondaCatalogAsync(CancellationToken token)
+    {
+        _managedCondaReleases.Clear();
+        ManagedCondaStateText.Text = "正在读取官方发行目录…";
+        var errors = new List<string>();
+        foreach (var provider in new[] { "miniconda", "miniforge" })
+        {
+            try
+            {
+                var release = await CondaInstallerService.GetReleaseAsync(provider, token);
+                token.ThrowIfCancellationRequested();
+                _managedCondaReleases.Add(release);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                errors.Add($"{provider}：{ex.Message}");
+            }
+        }
+        ManagedCondaEmptyState.Visibility = _managedCondaReleases.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        ManagedCondaStateText.Text = errors.Count == 0 ? "两个发行版均已就绪" : $"已读取 {_managedCondaReleases.Count} 个发行版，部分来源失败";
+        ManagedCondaStateText.ToolTip = errors.Count == 0 ? null : string.Join("\n", errors);
+        UpdateManagedCatalogSummary();
+    }
+
+    private void UpdateManagedCatalogSummary()
+    {
+        var total = _managedReleases.Count + _managedHistoricalReleases.Count +
+                    _managedMysqlReleases.Count + _managedHistoricalMysqlReleases.Count +
+                    _managedNginxReleases.Count + _managedJMeterReleases.Count +
+                    _managedDesktopReleases.Count + _managedDockerCliReleases.Count +
+                    _managedPythonReleases.Count + _managedHistoricalPythonReleases.Count +
+                    _managedNodeReleases.Count + _managedCondaReleases.Count;
+        ManagedCatalogStateText.Text = total == 0 ? "未读取到可用官方版本" : $"已读取 {total} 个官方版本";
+    }
+
     private async void ManagedReleaseAction_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as Button)?.CommandParameter is not ManagedToolchainRelease release || _managedOperationCancellation is not null) return;
@@ -324,7 +403,9 @@ public partial class DeveloperToolsView : UserControl
         else
         {
             var confirmation = MessageBox.Show(
-                release.ProviderId == "uv"
+                release.ProviderId is "miniconda" or "miniforge"
+                    ? $"将下载 {release.DisplayName} {release.Version} 官方安装器（{release.Architecture} · {release.SizeText}）。\n\n通过官方 SHA-256 校验后打开安装向导，由你选择安装目录、环境选项并阅读发行版条款。完成后请重新扫描。现有 Conda 环境与卸载由发行版管理，X-Tool 不自动执行 conda init。是否继续？"
+                    : release.ProviderId == "uv"
                     ? $"将调用本机已验证的 uv 安装：\n\n{release.DisplayName} {release.Version}\n{release.Architecture}\n\n{(release.IsHistorical ? "警告：该 Python 分支已经结束官方安全维护，只建议用于无法升级的旧项目。\n\n" : string.Empty)}uv 将按其官方目录下载并校验，且只安装到 X-Tool 的当前用户托管目录，不注册系统 Python。是否继续？"
                     : release.ProviderId == "volta"
                         ? $"将调用本机已验证的 Volta 缓存：\n\n{release.DisplayName} {release.Version}\n{release.Architecture}\n\n此操作只执行 volta fetch，不会改变当前默认 Node.js，也不会修改 PATH。是否继续？"
@@ -332,6 +413,8 @@ public partial class DeveloperToolsView : UserControl
                         ? $"将下载 Docker Desktop 安装器：\n\n{release.DisplayName} {release.Version}\n{release.Architecture} · {release.SizeText}\n\n下载完成后校验官方数字签名并启动安装向导；安装需要管理员权限与 WSL2，X-Tool 不会静默安装。是否继续？"
                     : release.ProviderId == "docker-cli"
                         ? $"将从 Docker 官方下载静态 CLI 包：\n\n{release.DisplayName} {release.Version}\n{release.Architecture} · {release.SizeText}\n\n解压到 X-Tool 托管目录后仅提供 docker CLI（无守护进程），容器引擎仍需 Docker Desktop 或远程 DOCKER_HOST。是否继续？"
+                    : release.ProviderId == "jmeter"
+                        ? $"将从 Apache 官方发行目录下载：\n\n{release.DisplayName} {release.Version}\n{release.Architecture} · {release.SizeText}\n\n下载完成后校验官方 SHA-512，并核对核心 JAR 的版本清单；解压到当前用户的 X-Tool 托管目录，不修改 PATH，也不会自动切换系统 Java。是否继续？"
                     : release.ProviderId == "mysql"
                         ? $"将从 MySQL 官方 CDN 归档下载：\n\n{release.DisplayName} {release.Version}\n{release.Architecture} · {release.SizeText}\n\n{(release.IsHistorical ? "警告：该 MySQL 分支已经结束官方安全维护，只建议用于无法升级的旧项目。\n\n" : string.Empty)}下载完成后校验官方 MD5，解压到当前用户的 X-Tool 托管目录；不初始化数据目录、不注册 Windows 服务、不修改 PATH。是否继续？"
                     : $"将安装：\n\n{release.DisplayName} {release.Version}\n{release.Architecture} · {release.SizeText}\n下载源：{_managedToolchainService.TemurinDownloadSourceText}\n\n下载完成后仍会校验 Adoptium API 提供的 SHA-256，安装到当前用户的 X-Tool 托管目录。是否继续？",
@@ -359,6 +442,8 @@ public partial class DeveloperToolsView : UserControl
             ManagedCatalogStateText.Text = result.Message;
             if (result.Succeeded)
             {
+                // 向导启动不代表安装完成，保留提示，等待用户完成安装后重新扫描。
+                if (release.ProviderId is "miniconda" or "miniforge") return;
                 if (release.ProviderId != "volta" && release.ProviderId != "docker-desktop") release.IsInstalled = !release.IsInstalled;
                 await StartScanAsync();
                 await RefreshManagedCatalogAsync();

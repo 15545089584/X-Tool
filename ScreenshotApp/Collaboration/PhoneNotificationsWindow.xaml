@@ -115,6 +115,7 @@
     <TextBlock Text="同步范围在手机端选择，内容仅保存在本次运行内存中。" Foreground="#71849B" TextWrapping="Wrap" FontSize="12" LineHeight="20" Margin="0,0,0,16"/>
     <Border Background="#F7FAFE" BorderBrush="#E5EDF7" BorderThickness="1" CornerRadius="12" Padding="12">
      <StackPanel>
+      <Button Content="查看手机日程" Click="Calendar_Click" Background="#4D7CFE" Foreground="White" Padding="12,10" Margin="0,0,0,10"/>
       <Button Content="清空电脑列表" ToolTip="仅清空电脑显示，手机原通知不受影响" Click="Clear_Click" Background="White" BorderBrush="#DCE6F3" BorderThickness="1" Padding="12,10"/>
 
       <Border Height="1" Background="#E5EDF7" Margin="0,10,0,0"/>

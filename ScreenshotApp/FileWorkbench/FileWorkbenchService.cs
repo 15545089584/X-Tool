@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.IO;
 using System.Diagnostics;
+using System.ComponentModel;
 
 namespace ScreenshotApp.FileWorkbench;
 
@@ -15,12 +16,65 @@ internal static class FileWorkbenchService
         string keyword,
         string typeFilter,
         DateTime? modifiedAfter,
-        FileSortField sortField,
-        bool sortAscending,
+        IReadOnlyList<FileSortDescriptor> sortDescriptors,
+        FileSearchMode searchMode,
         IProgress<FileSearchProgress>? progress,
         CancellationToken cancellationToken)
     {
-        var displayComparer = new FileWorkbenchItemComparer(sortField, sortAscending);
+        if (searchMode == FileSearchMode.FullRecursiveScan)
+        {
+            const string manualScanReason = "用户选择完整扫描";
+            progress?.Report(FileSearchProgress.ForStatus("已跳过 Windows Search，正在完整递归扫描…", rootDirectory));
+            return SearchRecursively(
+                rootDirectory,
+                keyword,
+                typeFilter,
+                modifiedAfter,
+                sortDescriptors,
+                progress,
+                cancellationToken,
+                manualScanReason);
+        }
+
+        var indexedAttempt = WindowsSearchFileSearchBackend.TrySearch(
+            rootDirectory,
+            keyword,
+            typeFilter,
+            modifiedAfter,
+            sortDescriptors,
+            progress,
+            cancellationToken);
+        if (indexedAttempt.Result is not null)
+        {
+            return indexedAttempt.Result;
+        }
+
+        var fallbackReason = indexedAttempt.FallbackReason ?? "Windows Search 当前不可用";
+        progress?.Report(FileSearchProgress.ForStatus($"{fallbackReason}，正在切换到本地递归扫描…", rootDirectory));
+        return SearchRecursively(
+            rootDirectory,
+            keyword,
+            typeFilter,
+            modifiedAfter,
+            sortDescriptors,
+            progress,
+            cancellationToken,
+            fallbackReason);
+    }
+
+    /// <summary>在 Windows Search 降级或用户选择完整扫描时执行；不会作为常驻后台任务。</summary>
+    private static FileSearchResult SearchRecursively(
+        string rootDirectory,
+        string keyword,
+        string typeFilter,
+        DateTime? modifiedAfter,
+        IReadOnlyList<FileSortDescriptor> sortDescriptors,
+        IProgress<FileSearchProgress>? progress,
+        CancellationToken cancellationToken,
+        string scanReason)
+    {
+        var effectiveSortDescriptors = NormalizeSortDescriptors(sortDescriptors);
+        var displayComparer = new FileWorkbenchItemComparer(effectiveSortDescriptors);
         var displayResults = new SortedSet<FileWorkbenchItem>(displayComparer);
         var filesScanned = 0L;
         var matchedFiles = 0L;
@@ -63,7 +117,13 @@ internal static class FileWorkbenchService
         }
 
         ReportProgress(force: true);
-        return new FileSearchResult(SortResults(displayResults, sortField, sortAscending), filesScanned, matchedFiles);
+        return new FileSearchResult(
+            SortResults(displayResults, effectiveSortDescriptors),
+            filesScanned,
+            matchedFiles,
+            FileSearchBackend.RecursiveScan,
+            scanReason,
+            true);
 
         void KeepBestMatch(FileInfo info)
         {
@@ -74,7 +134,7 @@ internal static class FileWorkbenchService
             }
 
             var worstDisplayedItem = displayResults.Max;
-            if (worstDisplayedItem is null || CompareForDisplay(info, worstDisplayedItem, sortField, sortAscending) >= 0)
+            if (worstDisplayedItem is null || CompareForDisplay(info, worstDisplayedItem, effectiveSortDescriptors) >= 0)
             {
                 return;
             }
@@ -96,8 +156,10 @@ internal static class FileWorkbenchService
     }
 
     /// <summary>表头排序仅重排已加载的结果，不重新访问磁盘。</summary>
-    internal static IReadOnlyList<FileWorkbenchItem> SortResults(IEnumerable<FileWorkbenchItem> items, FileSortField sortField, bool sortAscending)
-        => OrderResults(items, sortField, sortAscending).ToArray();
+    internal static IReadOnlyList<FileWorkbenchItem> SortResults(
+        IEnumerable<FileWorkbenchItem> items,
+        IReadOnlyList<FileSortDescriptor> sortDescriptors)
+        => OrderResults(items, sortDescriptors).ToArray();
 
     internal static IReadOnlyList<FileOperationPlan> CreatePlans(
         IEnumerable<FileWorkbenchItem> items,
@@ -126,12 +188,17 @@ internal static class FileWorkbenchService
                     $"{Path.GetFileNameWithoutExtension(item.FullPath)}{NormalizeExtension(newExtension)}"),
                 FileBatchOperation.Classify => Path.Combine(destinationDirectory, GetCategory(item.Extension), item.FileName),
                 FileBatchOperation.Move => Path.Combine(destinationDirectory, item.FileName),
+                FileBatchOperation.PermanentDelete => string.Empty,
                 _ => item.FullPath
             };
 
-            destination = GetAvailableDestination(destination, destinations);
-            destinations.Add(destination);
-            plans.Add(new FileOperationPlan(item.FullPath, destination));
+            if (operation != FileBatchOperation.PermanentDelete)
+            {
+                destination = GetAvailableDestination(destination, destinations);
+                destinations.Add(destination);
+            }
+
+            plans.Add(new FileOperationPlan(item.FullPath, destination, operation, item.Size));
         }
 
         return plans;
@@ -140,11 +207,25 @@ internal static class FileWorkbenchService
     internal static FileBatchExecutionResult Execute(IReadOnlyList<FileOperationPlan> plans)
     {
         var failures = new List<string>();
+        var completedPaths = new List<string>();
         var completed = 0;
         foreach (var plan in plans)
         {
             try
             {
+                if (plan.Operation == FileBatchOperation.PermanentDelete)
+                {
+                    if (!File.Exists(plan.SourcePath))
+                    {
+                        throw new FileNotFoundException("文件已经不存在。", plan.SourcePath);
+                    }
+
+                    File.Delete(plan.SourcePath);
+                    completed++;
+                    completedPaths.Add(plan.SourcePath);
+                    continue;
+                }
+
                 if (string.Equals(plan.SourcePath, plan.DestinationPath, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
@@ -153,14 +234,15 @@ internal static class FileWorkbenchService
                 Directory.CreateDirectory(Path.GetDirectoryName(plan.DestinationPath) ?? throw new IOException("目标目录无效。"));
                 File.Move(plan.SourcePath, plan.DestinationPath);
                 completed++;
+                completedPaths.Add(plan.SourcePath);
             }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or OperationCanceledException)
             {
                 failures.Add($"{Path.GetFileName(plan.SourcePath)}：{exception.Message}");
             }
         }
 
-        return new FileBatchExecutionResult(completed, failures);
+        return new FileBatchExecutionResult(completed, completedPaths, failures);
     }
 
     private static bool Matches(FileInfo info, string keyword, string typeFilter, DateTime? modifiedAfter)
@@ -179,39 +261,53 @@ internal static class FileWorkbenchService
         return modifiedAfter is null || info.LastWriteTime >= modifiedAfter.Value;
     }
 
-    private static IOrderedEnumerable<FileWorkbenchItem> OrderResults(IEnumerable<FileWorkbenchItem> items, FileSortField field, bool ascending)
+    private static IOrderedEnumerable<FileWorkbenchItem> OrderResults(
+        IEnumerable<FileWorkbenchItem> items,
+        IReadOnlyList<FileSortDescriptor> sortDescriptors)
     {
-        return items.OrderBy(item => item, new FileWorkbenchItemComparer(field, ascending));
+        return items.OrderBy(item => item, new FileWorkbenchItemComparer(sortDescriptors));
     }
 
-    private static int CompareForDisplay(FileInfo left, FileWorkbenchItem right, FileSortField field, bool ascending)
+    private static int CompareForDisplay(
+        FileInfo left,
+        FileWorkbenchItem right,
+        IReadOnlyList<FileSortDescriptor> sortDescriptors)
     {
-        var comparison = field switch
+        foreach (var descriptor in sortDescriptors)
         {
-            FileSortField.Name => StringComparer.OrdinalIgnoreCase.Compare(left.Name, right.FileName),
-            FileSortField.Extension => StringComparer.OrdinalIgnoreCase.Compare(left.Extension, right.Extension),
-            FileSortField.Size => left.Length.CompareTo(right.Size),
-            FileSortField.Modified => left.LastWriteTime.CompareTo(right.ModifiedAt),
-            _ => 0
-        };
+            var comparison = descriptor.Field switch
+            {
+                FileSortField.Name => StringComparer.OrdinalIgnoreCase.Compare(left.Name, right.FileName),
+                FileSortField.Extension => StringComparer.OrdinalIgnoreCase.Compare(left.Extension, right.Extension),
+                FileSortField.Size => left.Length.CompareTo(right.Size),
+                FileSortField.Modified => left.LastWriteTime.CompareTo(right.ModifiedAt),
+                _ => 0
+            };
 
-        if (comparison == 0)
-        {
-            comparison = StringComparer.OrdinalIgnoreCase.Compare(left.FullName, right.FullPath);
+            if (comparison != 0)
+            {
+                return descriptor.Ascending ? comparison : -comparison;
+            }
         }
 
-        return ascending ? comparison : -comparison;
+        return StringComparer.OrdinalIgnoreCase.Compare(left.FullName, right.FullPath);
     }
+
+    private static IReadOnlyList<FileSortDescriptor> NormalizeSortDescriptors(IReadOnlyList<FileSortDescriptor> sortDescriptors)
+        => sortDescriptors.Count == 0 ? DefaultSortDescriptors : sortDescriptors;
+
+    private static readonly FileSortDescriptor[] DefaultSortDescriptors =
+    {
+        new(FileSortField.Name, true)
+    };
 
     private sealed class FileWorkbenchItemComparer : IComparer<FileWorkbenchItem>
     {
-        private readonly FileSortField _field;
-        private readonly bool _ascending;
+        private readonly IReadOnlyList<FileSortDescriptor> _sortDescriptors;
 
-        public FileWorkbenchItemComparer(FileSortField field, bool ascending)
+        public FileWorkbenchItemComparer(IReadOnlyList<FileSortDescriptor> sortDescriptors)
         {
-            _field = field;
-            _ascending = ascending;
+            _sortDescriptors = NormalizeSortDescriptors(sortDescriptors);
         }
 
         public int Compare(FileWorkbenchItem? left, FileWorkbenchItem? right)
@@ -231,21 +327,24 @@ internal static class FileWorkbenchService
                 return 1;
             }
 
-            var comparison = _field switch
+            foreach (var descriptor in _sortDescriptors)
             {
-                FileSortField.Name => StringComparer.OrdinalIgnoreCase.Compare(left.FileName, right.FileName),
-                FileSortField.Extension => StringComparer.OrdinalIgnoreCase.Compare(left.Extension, right.Extension),
-                FileSortField.Size => left.Size.CompareTo(right.Size),
-                FileSortField.Modified => left.ModifiedAt.CompareTo(right.ModifiedAt),
-                _ => 0
-            };
+                var comparison = descriptor.Field switch
+                {
+                    FileSortField.Name => StringComparer.OrdinalIgnoreCase.Compare(left.FileName, right.FileName),
+                    FileSortField.Extension => StringComparer.OrdinalIgnoreCase.Compare(left.Extension, right.Extension),
+                    FileSortField.Size => left.Size.CompareTo(right.Size),
+                    FileSortField.Modified => left.ModifiedAt.CompareTo(right.ModifiedAt),
+                    _ => 0
+                };
 
-            if (comparison == 0)
-            {
-                comparison = StringComparer.OrdinalIgnoreCase.Compare(left.FullPath, right.FullPath);
+                if (comparison != 0)
+                {
+                    return descriptor.Ascending ? comparison : -comparison;
+                }
             }
 
-            return _ascending ? comparison : -comparison;
+            return StringComparer.OrdinalIgnoreCase.Compare(left.FullPath, right.FullPath);
         }
     }
 
@@ -292,7 +391,8 @@ internal enum FileBatchOperation
     Rename,
     ChangeExtension,
     Classify,
-    Move
+    Move,
+    PermanentDelete
 }
 
 internal enum FileSortField
@@ -303,20 +403,78 @@ internal enum FileSortField
     Modified
 }
 
+/// <summary>用户选中的一项排序规则；列表顺序就是多列排序的优先级。</summary>
+internal readonly record struct FileSortDescriptor(FileSortField Field, bool Ascending);
+
 /// <summary>文件搜索的阶段性进度；目录总量未知，因此展示已扫描数量与当前路径。</summary>
-internal sealed record FileSearchProgress(long FilesScanned, long MatchedFiles, string CurrentPath)
+internal sealed record FileSearchProgress(long FilesScanned, long MatchedFiles, string CurrentPath, string? StatusText = null)
 {
-    public string SummaryText => $"已扫描 {FilesScanned:N0} 个文件 · 匹配 {MatchedFiles:N0} 个";
+    public string SummaryText => StatusText ?? $"已扫描 {FilesScanned:N0} 个文件 · 匹配 {MatchedFiles:N0} 个";
+
+    internal static FileSearchProgress ForStatus(string statusText, string currentPath) => new(0, 0, currentPath, statusText);
 }
 
-/// <summary>文件搜索结果只保留可流畅显示的部分，仍返回完整匹配计数供用户缩小筛选范围。</summary>
-internal sealed record FileSearchResult(IReadOnlyList<FileWorkbenchItem> Items, long FilesScanned, long MatchedFiles)
+/// <summary>文件搜索结果只保留可流畅显示的部分；Windows Search 的超过上限结果只报告下界。</summary>
+internal sealed record FileSearchResult(
+    IReadOnlyList<FileWorkbenchItem> Items,
+    long FilesScanned,
+    long MatchedFiles,
+    FileSearchBackend Backend,
+    string? FallbackReason,
+    bool IsMatchCountExact)
 {
-    public bool IsTruncated => MatchedFiles > Items.Count;
+    public bool IsTruncated => !IsMatchCountExact || MatchedFiles > Items.Count;
 }
 
-public sealed record FileWorkbenchItem(string FullPath, string FileName, string Extension, long Size, DateTime ModifiedAt)
+internal enum FileSearchBackend
 {
+    WindowsSearch,
+    RecursiveScan
+}
+
+/// <summary>智能搜索优先读取系统索引；完整扫描明确绕过索引，以换取当前目录的可读取文件覆盖。</summary>
+internal enum FileSearchMode
+{
+    Smart,
+    FullRecursiveScan
+}
+
+public sealed class FileWorkbenchItem : INotifyPropertyChanged
+{
+    private bool _isSelectedForDeletion;
+
+    public FileWorkbenchItem(string fullPath, string fileName, string extension, long size, DateTime modifiedAt)
+    {
+        FullPath = fullPath;
+        FileName = fileName;
+        Extension = extension;
+        Size = size;
+        ModifiedAt = modifiedAt;
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    public string FullPath { get; }
+    public string FileName { get; }
+    public string Extension { get; }
+    public long Size { get; }
+    public DateTime ModifiedAt { get; }
+
+    public bool IsSelectedForDeletion
+    {
+        get => _isSelectedForDeletion;
+        set
+        {
+            if (_isSelectedForDeletion == value)
+            {
+                return;
+            }
+
+            _isSelectedForDeletion = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsSelectedForDeletion)));
+        }
+    }
+
     public string ExtensionText => Extension.TrimStart('.').ToUpperInvariant();
 
     public string SizeText => Size >= 1024L * 1024 * 1024
@@ -330,10 +488,27 @@ public sealed record FileWorkbenchItem(string FullPath, string FileName, string 
     internal static FileWorkbenchItem Create(FileInfo info) => new(info.FullName, info.Name, info.Extension, info.Length, info.LastWriteTime);
 }
 
-public sealed record FileOperationPlan(string SourcePath, string DestinationPath)
+internal sealed record FileOperationPlan(
+    string SourcePath,
+    string DestinationPath,
+    FileBatchOperation Operation,
+    long Size)
 {
     public string SourceName => Path.GetFileName(SourcePath);
-    public string DestinationText => Path.Combine(Path.GetFileName(Path.GetDirectoryName(DestinationPath) ?? string.Empty), Path.GetFileName(DestinationPath));
+    public string DestinationText => Operation switch
+    {
+        FileBatchOperation.PermanentDelete => $"永久删除 · {FormatSize(Size)} · {SourcePath}",
+        _ => Path.Combine(Path.GetFileName(Path.GetDirectoryName(DestinationPath) ?? string.Empty), Path.GetFileName(DestinationPath))
+    };
+
+    private static string FormatSize(long size) => size >= 1024L * 1024 * 1024
+        ? $"{size / 1024d / 1024d / 1024d:F2} GB"
+        : size >= 1024L * 1024
+            ? $"{size / 1024d / 1024d:F2} MB"
+            : $"{size / 1024d:F1} KB";
 }
 
-internal sealed record FileBatchExecutionResult(int CompletedCount, IReadOnlyList<string> Failures);
+internal sealed record FileBatchExecutionResult(
+    int CompletedCount,
+    IReadOnlyList<string> CompletedPaths,
+    IReadOnlyList<string> Failures);

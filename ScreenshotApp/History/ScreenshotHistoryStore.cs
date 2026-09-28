@@ -11,6 +11,11 @@ namespace ScreenshotApp.History;
 /// </summary>
 public sealed class ScreenshotHistoryStore
 {
+    private static readonly HashSet<string> SupportedImageExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tif", ".tiff", ".webp", ".heic", ".heif"
+    };
+
     private readonly AppPreferences _preferences;
 
     public ScreenshotHistoryStore(AppPreferences preferences)
@@ -91,10 +96,14 @@ public sealed class ScreenshotHistoryStore
         HistoryEntryKind expectedKind,
         ISet<string> loadedFiles,
         bool detectLongCapture = false,
-        int? newestOnly = null)
+        int? newestOnly = null,
+        bool includeCommonFormats = false)
     {
         Directory.CreateDirectory(directory);
-        var files = Directory.EnumerateFiles(directory, "*.png", SearchOption.TopDirectoryOnly);
+        var files = includeCommonFormats
+            ? Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly)
+                .Where(file => SupportedImageExtensions.Contains(Path.GetExtension(file)))
+            : Directory.EnumerateFiles(directory, "*.png", SearchOption.TopDirectoryOnly);
         if (newestOnly.HasValue)
         {
             // 仅图片模式只取最近文件，避免为历史全量解码缩略图。
@@ -207,7 +216,13 @@ public sealed class ScreenshotHistoryStore
         ISet<string> loadedFiles,
         bool imagesOnly = false)
     {
-        LoadImageEntries(items, directory, HistoryEntryKind.ExternalClipboard, loadedFiles, newestOnly: imagesOnly ? 80 : null);
+        LoadImageEntries(
+            items,
+            directory,
+            HistoryEntryKind.ExternalClipboard,
+            loadedFiles,
+            newestOnly: imagesOnly ? 80 : null,
+            includeCommonFormats: true);
         if (!imagesOnly)
         {
             LoadTextEntries(items, directory, HistoryEntryKind.ExternalClipboard, "外部复制", loadedFiles);
@@ -317,6 +332,25 @@ public sealed class ScreenshotHistoryStore
             encoder.Save(stream);
             return filePath;
         });
+    }
+
+    /// <summary>保存手机接收的原始图片作为剪贴板历史，避免再次完整转码 PNG 造成明显延迟。</summary>
+    public async Task<string> SaveReceivedClipboardImageAsync(string sourcePath)
+    {
+        var extension = Path.GetExtension(sourcePath).ToLowerInvariant();
+        if (!SupportedImageExtensions.Contains(extension))
+        {
+            throw new NotSupportedException($"不支持的图片格式：{extension}");
+        }
+
+        Directory.CreateDirectory(_preferences.ClipboardDirectory);
+        var filePath = Path.Combine(
+            _preferences.ClipboardDirectory,
+            $"外部复制_图片_{DateTime.Now:yyyy-MM-dd_HH-mm-ss-fff}{extension}");
+        await using var input = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        await using var output = new FileStream(filePath, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
+        await input.CopyToAsync(output);
+        return filePath;
     }
 
 }

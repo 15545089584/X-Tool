@@ -42,13 +42,23 @@ public sealed class AppPreferences
     public bool PhoneNotificationAlertsEnabled { get; set; } = true;
     public bool PhoneNotificationPreviewEnabled { get; set; } = true;
 
+    /// <summary>截图保存成功后自动复制到本次运行的宠物文件暂存区；默认关闭。</summary>
+    public bool ScreenshotAutoAddToPetShelf { get; set; }
+
     public bool StickerTopmost { get; set; } = true;
 
     /// <summary>桌面宠物相对于 288 DIP 基准尺寸的缩放百分比。</summary>
     public int DesktopPetScalePercent { get; set; } = 100;
 
     /// <summary>是否显示桌面宠物；关闭后下次启动仍保持隐藏。</summary>
-    public bool DesktopPetVisible { get; set; } = true;
+    private bool _desktopPetVisible = true;
+    private bool _desktopPetVisibilityChanged;
+    private static readonly object SaveGate = new();
+    public bool DesktopPetVisible
+    {
+        get => _desktopPetVisible;
+        set { _desktopPetVisible = value; _desktopPetVisibilityChanged = true; }
+    }
 
     /// <summary>宠物可见时是否由头顶彩虹气泡接管文件传输系统通知。</summary>
     public bool DesktopPetTakesOverTransferNotifications { get; set; } = true;
@@ -82,6 +92,8 @@ public sealed class AppPreferences
 
             var preferences = JsonSerializer.Deserialize<AppPreferences>(File.ReadAllText(PreferencesFilePath))
                               ?? new AppPreferences();
+            // 反序列化只是读取，不代表用户修改了宠物开关。
+            preferences._desktopPetVisibilityChanged = false;
             preferences.DesktopPetScalePercent = Math.Clamp(preferences.DesktopPetScalePercent, 60, 160);
             return preferences;
         }
@@ -94,11 +106,18 @@ public sealed class AppPreferences
 
     public void Save()
     {
-        Directory.CreateDirectory(PreferencesDirectory);
-        var temporaryPath = $"{PreferencesFilePath}.tmp";
-        File.WriteAllText(
-            temporaryPath,
-            JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true }));
-        File.Move(temporaryPath, PreferencesFilePath, overwrite: true);
+        lock (SaveGate)
+        {
+            // 长期开启的页面可能持有旧设置；保存其他选项不能覆盖最新宠物开关。
+            if (!_desktopPetVisibilityChanged && File.Exists(PreferencesFilePath))
+                _desktopPetVisible = Load().DesktopPetVisible;
+            Directory.CreateDirectory(PreferencesDirectory);
+            var temporaryPath = $"{PreferencesFilePath}.tmp";
+            File.WriteAllText(
+                temporaryPath,
+                JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true }));
+            File.Move(temporaryPath, PreferencesFilePath, overwrite: true);
+            _desktopPetVisibilityChanged = false;
+        }
     }
 }

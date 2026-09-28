@@ -12,6 +12,7 @@ public sealed class ScrollCaptureService
 {
     private const int MaximumContentFrames = 160;
     private const int MaximumAnchors = 72;
+    private static readonly TimeSpan InitialViewportSettleDelay = TimeSpan.FromMilliseconds(80);
     private static readonly TimeSpan ManualSampleDelay = TimeSpan.FromMilliseconds(45);
 
     private readonly ICaptureBackend _captureBackend;
@@ -71,10 +72,10 @@ public sealed class ScrollCaptureService
                 throw new InvalidOperationException("无法激活框选区域下方的滚动窗口。");
             }
 
-            frameWindow.Show();
-            toolbarWindow.Show();
-            await Task.Delay(140, cancellationToken);
-
+            // 先把用户框选时看到的初始视口保存下来，再显示边框和工具条。
+            // 如果先显示“可以滚动”的界面再延迟抓取，用户第一次滚轮输入可能
+            // 早于首帧，最终长图就会从第二段内容开始，看起来像裁掉了顶部。
+            await Task.Delay(InitialViewportSettleDelay, cancellationToken);
             var first = await CaptureRegionAsync(screenRegion, cancellationToken);
 #if DEBUG
             SaveDebugBitmap(first, Path.Combine(debugSessionDirectory, "000_first.png"));
@@ -83,6 +84,8 @@ public sealed class ScrollCaptureService
             anchors.Add(lastAnchor);
             contentFrames.Add(new VerticalBitmapStitcher.PositionedFrame(first, 0));
             previewWindow.UpdatePreview(contentFrames, first.PixelHeight);
+            frameWindow.Show();
+            toolbarWindow.Show();
             previewWindow.Show();
 
             var minimumCoveredOffset = 0;
@@ -280,12 +283,44 @@ public sealed class ScrollCaptureService
             lastAnchor.Bitmap,
             current,
             inputDirection);
+
+        // 滚动条拖拽、触控板惯性和触摸滚动不会始终产生可识别的滚轮方向。
+        // 首帧是本次长截图的原点；在尚无其他锚点时，方向未知的负位移不能
+        // 直接把后续帧放到原点上方，否则最终排序会让真正的首屏被挤到中间。
+        if (anchors.Count == 1 &&
+            inputDirection == 0 &&
+            directMatch.IsReliable &&
+            !directMatch.IsDuplicate &&
+            directMatch.ScrollDelta < 0)
+        {
+            var downwardMatch = VerticalOverlapDetector.Find(lastAnchor.Bitmap, current);
+            directMatch = downwardMatch.IsReliable
+                ? downwardMatch
+                : directMatch with { IsReliable = false };
+        }
+
         if (directMatch.IsDuplicate || directMatch.IsReliable)
         {
-            return new LocatedFrame(
-                lastAnchor.ContentOffset + directMatch.ScrollDelta,
-                directMatch,
-                false);
+            var directOffset = lastAnchor.ContentOffset + directMatch.ScrollDelta;
+            if (directMatch.IsReliable &&
+                !directMatch.IsDuplicate &&
+                IsSuspiciousMatch(directMatch, current.PixelHeight) &&
+                !IsCorroboratedByPreviousAnchor(
+                    lastAnchor,
+                    anchors,
+                    current,
+                    directOffset))
+            {
+                // 重复列表、轮播图和广告刷新可能形成一个分数很低但坐标错误的
+                // 假接缝。只对弱证据候选再与前一个不同坐标的锚点交叉验证，
+                // 避免正常采样都付出双倍图像分析成本。
+                return new LocatedFrame(
+                    lastAnchor.ContentOffset,
+                    directMatch with { IsReliable = false },
+                    false);
+            }
+
+            return new LocatedFrame(directOffset, directMatch, false);
         }
 
         // 完整的位移搜索成本较高，逐个扫描几十个历史锚点会让采样停顿数秒，
@@ -333,6 +368,65 @@ public sealed class ScrollCaptureService
         }
 
         return new LocatedFrame(lastAnchor.ContentOffset, directMatch, false);
+    }
+
+    private static bool IsSuspiciousMatch(
+        VerticalOverlapDetector.Match match,
+        int frameHeight)
+    {
+        return Math.Abs(match.ScrollDelta) > frameHeight * 0.58 ||
+               match.Score > 20.0 ||
+               match.MatchedEdgeRatio < 0.72 ||
+               match.StableCellCount < 8;
+    }
+
+    private static bool IsCorroboratedByPreviousAnchor(
+        Anchor lastAnchor,
+        IReadOnlyList<Anchor> anchors,
+        BitmapSource current,
+        int proposedOffset)
+    {
+        Anchor? previousDistinctAnchor = null;
+        for (var index = anchors.Count - 1; index >= 0; index--)
+        {
+            var candidate = anchors[index];
+            if (!ReferenceEquals(candidate, lastAnchor) &&
+                candidate.ContentOffset != lastAnchor.ContentOffset)
+            {
+                previousDistinctAnchor = candidate;
+                break;
+            }
+        }
+
+        // 第二个有效片段尚无独立锚点可作交叉验证，仍按相邻帧证据处理。
+        if (previousDistinctAnchor is null)
+        {
+            return true;
+        }
+
+        var expectedDelta = proposedOffset - previousDistinctAnchor.ContentOffset;
+        var maximumComparableDelta = Math.Min(
+            current.PixelHeight - 48,
+            (int)Math.Round(current.PixelHeight * 0.90));
+        if (expectedDelta == 0 || Math.Abs(expectedDelta) > maximumComparableDelta)
+        {
+            // 两帧理论上已经没有足够重叠，无法用这一个锚点否定相邻帧结果。
+            return true;
+        }
+
+        var corroboratingMatch = VerticalOverlapDetector.FindWithDirection(
+            previousDistinctAnchor.Bitmap,
+            current,
+            Math.Sign(expectedDelta));
+        if (!corroboratingMatch.IsReliable)
+        {
+            return true;
+        }
+
+        var corroboratedOffset =
+            previousDistinctAnchor.ContentOffset + corroboratingMatch.ScrollDelta;
+        var offsetTolerance = Math.Max(3, current.PixelHeight / 250);
+        return Math.Abs(corroboratedOffset - proposedOffset) <= offsetTolerance;
     }
 
     private static Anchor CreateAnchor(BitmapSource bitmap, int contentOffset)

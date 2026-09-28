@@ -46,6 +46,10 @@ public sealed class ManagedToolchainRelease : INotifyPropertyChanged
         "temurin" => "Eclipse Adoptium 官方发行版",
         "uv" => "uv 官方托管 Python",
         "mysql" => "MySQL 官方 CDN 归档",
+        "nginx" => "NGINX 官方 Windows 发行版",
+        "jmeter" => "Apache 官方二进制发行版",
+        "miniconda" => "Anaconda 官方安装器 · SHA-256",
+        "miniforge" => "conda-forge 官方安装器 · SHA-256",
         "docker-desktop" => "Docker Desktop 官方更新源",
         "docker-cli" => "Docker 官方 Windows 静态包",
         _ => ProviderId
@@ -54,7 +58,7 @@ public sealed class ManagedToolchainRelease : INotifyPropertyChanged
         IsReadOnlyInstalled ? (ProviderId == "volta" ? "已缓存" : "已安装") :
         IsInstalled ? "卸载" :
         ProviderId == "volta" ? "缓存版本" :
-        ProviderId == "docker-desktop" ? "下载安装器" : "安装";
+        ProviderId is "docker-desktop" or "miniconda" or "miniforge" ? "下载安装器" : "安装";
     public bool CanExecuteAction => IsProviderAvailable && !IsReadOnlyInstalled;
 
     public bool IsInstalled

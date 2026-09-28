@@ -7,15 +7,29 @@ namespace ScreenshotApp.Translation;
 
 internal static class TranslationEngineProvider
 {
-    private static readonly Lazy<ITranslationEngine> DefaultEngine = new(
+    private static readonly Lazy<OnnxTranslationEngine> DefaultEngine = new(
         () => new OnnxTranslationEngine(TranslationModelPaths.CreateDefault(), "英译中", "opus-mt-en-zh-onnx-int8"),
         LazyThreadSafetyMode.ExecutionAndPublication);
-    private static readonly Lazy<ITranslationEngine> ChineseToEnglishEngine = new(
+    private static readonly Lazy<OnnxTranslationEngine> ChineseToEnglishEngine = new(
         () => new OnnxTranslationEngine(TranslationModelPaths.CreateChineseToEnglish(), "中译英", "opus-mt-zh-en-onnx-int8"),
         LazyThreadSafetyMode.ExecutionAndPublication);
 
     internal static ITranslationEngine Default => DefaultEngine.Value;
     internal static ITranslationEngine ChineseToEnglish => ChineseToEnglishEngine.Value;
+
+    /// <summary>应用退出时释放已经创建的离线翻译会话，不触发尚未使用模型的加载。</summary>
+    internal static void Dispose()
+    {
+        if (DefaultEngine.IsValueCreated)
+        {
+            DefaultEngine.Value.Dispose();
+        }
+
+        if (ChineseToEnglishEngine.IsValueCreated)
+        {
+            ChineseToEnglishEngine.Value.Dispose();
+        }
+    }
 }
 
 /// <summary>
@@ -55,19 +69,32 @@ internal sealed record TranslationModelPaths(
     }
 }
 
-internal sealed class OnnxTranslationEngine : ITranslationEngine
+internal sealed class OnnxTranslationEngine : ITranslationEngine, IDisposable
 {
+    // 中英两个模型共享限流，避免截图翻译与邮件翻译同时抢占 CPU。
+    private static readonly SemaphoreSlim InferenceSlot = new(1, 1);
+    // 截图翻译通常间隔较长，空闲后释放模型以降低后台内存占用。
+    private static readonly TimeSpan SessionIdleTimeout = TimeSpan.FromMinutes(5);
     private readonly TranslationModelPaths _paths;
     private readonly string _languageDescription;
     private readonly string _modelVersion;
-    private readonly Lazy<ModelSessions> _sessions;
+    private readonly object _sessionSync = new();
+    private readonly System.Threading.Timer _sessionIdleTimer;
+    private ModelSessions? _sessions;
+    private int _activeSessionLeases;
+    private long _sessionReleaseDeadlineUtcTicks;
+    private bool _disposed;
 
     internal OnnxTranslationEngine(TranslationModelPaths paths, string languageDescription, string modelVersion)
     {
         _paths = paths;
         _languageDescription = languageDescription;
         _modelVersion = modelVersion;
-        _sessions = new Lazy<ModelSessions>(CreateSessions, LazyThreadSafetyMode.ExecutionAndPublication);
+        _sessionIdleTimer = new System.Threading.Timer(
+            ReleaseSessionsWhenIdle,
+            null,
+            System.Threading.Timeout.InfiniteTimeSpan,
+            System.Threading.Timeout.InfiniteTimeSpan);
     }
 
     public bool IsReady => RequiredFiles.All(File.Exists);
@@ -76,17 +103,23 @@ internal sealed class OnnxTranslationEngine : ITranslationEngine
         ? $"离线{_languageDescription}模型已就绪。"
         : $"离线{_languageDescription}模型尚未安装。该功能不会上传文字；模型安装完成后即可断网使用。";
 
-    public Task<TranslationResult> TranslateAsync(
+    public async Task<TranslationResult> TranslateAsync(
         TranslationRequest request,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        ThrowIfDisposed();
         if (!IsReady)
         {
             throw new InvalidOperationException(UnavailableReason);
         }
 
-        return Task.Run(() => TranslateCore(request, cancellationToken), cancellationToken);
+        await InferenceSlot.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await Task.Run(() => TranslateCore(request, cancellationToken), cancellationToken).ConfigureAwait(false);
+        }
+        finally { InferenceSlot.Release(); }
     }
 
     private IEnumerable<string> RequiredFiles => new[]
@@ -101,11 +134,16 @@ internal sealed class OnnxTranslationEngine : ITranslationEngine
 
     private ModelSessions CreateSessions()
     {
-        var options = new SessionOptions
+        using var options = new SessionOptions
         {
             ExecutionMode = ExecutionMode.ORT_SEQUENTIAL,
+            IntraOpNumThreads = Math.Clamp(Environment.ProcessorCount / 4, 1, 2),
+            InterOpNumThreads = 1,
             GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_EXTENDED
         };
+        // 禁止空转等待，给鼠标、桌宠和 WPF 渲染线程留出调度时间。
+        options.AddSessionConfigEntry("session.intra_op.allow_spinning", "0");
+        options.AddSessionConfigEntry("session.inter_op.allow_spinning", "0");
         return new ModelSessions(
             new InferenceSession(_paths.EncoderPath, options),
             new InferenceSession(_paths.DecoderPath, options),
@@ -121,7 +159,8 @@ internal sealed class OnnxTranslationEngine : ITranslationEngine
         }
 
         var stopwatch = Stopwatch.StartNew();
-        var sessions = _sessions.Value;
+        using var sessionLease = AcquireSessionLease();
+        var sessions = sessionLease.Sessions;
         var units = SplitIntoUnits(sourceText, sessions.Tokenizer).ToArray();
         if (units.Length == 0)
         {
@@ -144,6 +183,141 @@ internal sealed class OnnxTranslationEngine : ITranslationEngine
             string.Join(Environment.NewLine, translatedUnits),
             stopwatch.Elapsed,
             _modelVersion);
+    }
+
+    /// <summary>取得翻译会话使用权，并停止已有的空闲释放计时。</summary>
+    private ModelSessionLease AcquireSessionLease()
+    {
+        lock (_sessionSync)
+        {
+            if (_disposed)
+            {
+                throw new ObjectDisposedException(nameof(OnnxTranslationEngine));
+            }
+
+            _sessionReleaseDeadlineUtcTicks = 0;
+            _sessionIdleTimer.Change(
+                System.Threading.Timeout.InfiniteTimeSpan,
+                System.Threading.Timeout.InfiniteTimeSpan);
+            _sessions ??= CreateSessions();
+            _activeSessionLeases++;
+            return new ModelSessionLease(this, _sessions);
+        }
+    }
+
+    /// <summary>归还翻译会话；无活跃任务时开始空闲释放倒计时。</summary>
+    private void ReleaseSessionLease()
+    {
+        ModelSessions? sessionsToDispose = null;
+        lock (_sessionSync)
+        {
+            if (_activeSessionLeases == 0)
+            {
+                return;
+            }
+
+            _activeSessionLeases--;
+            if (_activeSessionLeases > 0)
+            {
+                return;
+            }
+
+            if (_disposed)
+            {
+                sessionsToDispose = _sessions;
+                _sessions = null;
+                _sessionReleaseDeadlineUtcTicks = 0;
+            }
+            else if (_sessions is not null)
+            {
+                _sessionReleaseDeadlineUtcTicks = DateTime.UtcNow.Add(SessionIdleTimeout).Ticks;
+                _sessionIdleTimer.Change(SessionIdleTimeout, System.Threading.Timeout.InfiniteTimeSpan);
+            }
+        }
+
+        sessionsToDispose?.Dispose();
+    }
+
+    /// <summary>空闲到期后仅在没有翻译任务时释放模型会话。</summary>
+    private void ReleaseSessionsWhenIdle(object? state)
+    {
+        ModelSessions? sessionsToDispose = null;
+        TimeSpan? retryDelay = null;
+        lock (_sessionSync)
+        {
+            if (_disposed || _activeSessionLeases > 0 || _sessions is null)
+            {
+                return;
+            }
+
+            var deadline = _sessionReleaseDeadlineUtcTicks;
+            if (deadline <= 0)
+            {
+                return;
+            }
+
+            var remainingTicks = deadline - DateTime.UtcNow.Ticks;
+            if (remainingTicks > 0)
+            {
+                retryDelay = TimeSpan.FromTicks(remainingTicks);
+            }
+            else
+            {
+                sessionsToDispose = _sessions;
+                _sessions = null;
+                _sessionReleaseDeadlineUtcTicks = 0;
+            }
+        }
+
+        if (retryDelay is TimeSpan delay)
+        {
+            try
+            {
+                _sessionIdleTimer.Change(delay, System.Threading.Timeout.InfiniteTimeSpan);
+            }
+            catch (ObjectDisposedException)
+            {
+                // 应用退出时计时器可能与释放流程重叠。
+            }
+
+            return;
+        }
+
+        sessionsToDispose?.Dispose();
+    }
+
+    public void Dispose()
+    {
+        ModelSessions? sessionsToDispose = null;
+        lock (_sessionSync)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            _sessionReleaseDeadlineUtcTicks = 0;
+            if (_activeSessionLeases == 0)
+            {
+                sessionsToDispose = _sessions;
+                _sessions = null;
+            }
+        }
+
+        _sessionIdleTimer.Dispose();
+        sessionsToDispose?.Dispose();
+    }
+
+    private void ThrowIfDisposed()
+    {
+        lock (_sessionSync)
+        {
+            if (_disposed)
+            {
+                throw new ObjectDisposedException(nameof(OnnxTranslationEngine));
+            }
+        }
     }
 
     /// <summary>
@@ -309,5 +483,33 @@ internal sealed class OnnxTranslationEngine : ITranslationEngine
     private sealed record ModelSessions(
         InferenceSession Encoder,
         InferenceSession Decoder,
-        SentencePieceMarianTokenizer Tokenizer);
+        SentencePieceMarianTokenizer Tokenizer) : IDisposable
+    {
+        public void Dispose()
+        {
+            Encoder.Dispose();
+            Decoder.Dispose();
+            Tokenizer.Dispose();
+        }
+    }
+
+    /// <summary>确保正在进行的翻译完成前不会释放其依赖的 ONNX 会话。</summary>
+    private sealed class ModelSessionLease : IDisposable
+    {
+        private OnnxTranslationEngine? _owner;
+
+        internal ModelSessionLease(OnnxTranslationEngine owner, ModelSessions sessions)
+        {
+            _owner = owner;
+            Sessions = sessions;
+        }
+
+        internal ModelSessions Sessions { get; }
+
+        public void Dispose()
+        {
+            var owner = Interlocked.Exchange(ref _owner, null);
+            owner?.ReleaseSessionLease();
+        }
+    }
 }

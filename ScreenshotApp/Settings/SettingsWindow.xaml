@@ -266,6 +266,16 @@
                                 <ScrollViewer x:Name="ScreenshotSettingsPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                                     <StackPanel Margin="0,2,8,0">
                                         <Border Style="{StaticResource SettingCardStyle}"><Grid Height="76" Margin="20,0"><StackPanel VerticalAlignment="Center"><TextBlock FontSize="15" Foreground="#304A63" Text="截图后自动复制" /><TextBlock Margin="0,5,0,0" FontSize="11" Foreground="#74899E" Text="完成截图后写入系统剪贴板；当前截图流程固定启用" /></StackPanel><CheckBox HorizontalAlignment="Right" VerticalAlignment="Center" IsChecked="True" IsEnabled="False" Style="{StaticResource SettingToggleStyle}" /></Grid></Border>
+                                        <Border Style="{StaticResource SettingCardStyle}">
+                                            <Grid MinHeight="94" Margin="20,12">
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="58"/></Grid.ColumnDefinitions>
+                                                <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                                                    <TextBlock FontSize="15" Foreground="#304A63" Text="截图后自动加入宠物文件暂存区" TextWrapping="Wrap"/>
+                                                    <TextBlock Margin="0,6,0,0" FontSize="11" Foreground="#74899E" Text="普通截图、全屏截图和长截图保存后自动暂存，并由宠物提醒；宠物隐藏时使用系统提醒。暂存副本仅本次运行保留。" TextWrapping="Wrap"/>
+                                                </StackPanel>
+                                                <CheckBox x:Name="ScreenshotAutoAddToPetShelfCheckBox" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource SettingToggleStyle}" Click="ScreenshotAutoAddToPetShelfCheckBox_Click"/>
+                                            </Grid>
+                                        </Border>
                                         <Border Style="{StaticResource SettingCardStyle}"><Grid Height="70" Margin="20,0"><StackPanel VerticalAlignment="Center"><TextBlock FontSize="15" Foreground="#304A63" Text="保存截图历史" /><TextBlock Margin="0,5,0,0" FontSize="11" Foreground="#74899E" Text="保存截图与长截图，供历史记录和剪贴板工作台使用" /></StackPanel><CheckBox HorizontalAlignment="Right" VerticalAlignment="Center" IsChecked="True" IsEnabled="False" Style="{StaticResource SettingToggleStyle}" /></Grid></Border>
                                         <Border Style="{StaticResource SettingCardStyle}">
                                             <Grid Height="76" Margin="20,0">

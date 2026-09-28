@@ -14,6 +14,11 @@ public partial class SmartHomeView : UserControl
 {
     private readonly SmartHomeService _service = SmartHomeService.Instance;
     private readonly Dictionary<string, SmartDeviceViewModel> _deviceById = new(StringComparer.Ordinal);
+    private readonly object _snapshotDispatchGate = new();
+    private SmartHomeSnapshot? _pendingSnapshot;
+    private bool _pendingSnapshotFromCache;
+    private bool _snapshotDispatchScheduled;
+    private bool _isSynchronizingSnapshot;
     private bool _initialized;
     private string _selectedAreaId = "__online";
 
@@ -22,8 +27,6 @@ public partial class SmartHomeView : UserControl
         InitializeComponent();
         DataContext = this;
         RunningBadgesList.ItemsSource = _runningBadges;
-        ((System.Collections.Specialized.INotifyCollectionChanged)_runningBadges).CollectionChanged += (_, _) =>
-            Dispatcher.BeginInvoke(new Action(ApplyFanSpinAnimations), System.Windows.Threading.DispatcherPriority.Loaded);
         AreaFilters.Add(new SmartAreaFilterItem("__online", "在线", 0, PackIconMaterialKind.WifiCheck));
         _service.ConnectionStateChanged += Service_ConnectionStateChanged;
         _service.SnapshotChanged += Service_SnapshotChanged;
@@ -31,7 +34,13 @@ public partial class SmartHomeView : UserControl
     }
 
     /// <summary>首页头部“运行中设备”卡片（仅风扇/灯泡/空调三类运行时显示，样式对齐米家：上图标下状态文字）。</summary>
-    public sealed record RunningDeviceBadge(PackIconMaterialKind Icon, string Label, string DeviceName, bool Spin);
+    public sealed record RunningDeviceBadge(
+        string DeviceId,
+        PackIconMaterialKind Icon,
+        string Label,
+        string DeviceName,
+        bool Spin,
+        bool IsClimate);
 
     private readonly System.Collections.ObjectModel.ObservableCollection<RunningDeviceBadge> _runningBadges = [];
 
@@ -152,11 +161,34 @@ public partial class SmartHomeView : UserControl
 
     private void Service_SnapshotChanged(SmartHomeSnapshot snapshot, bool fromCache)
     {
-        Dispatcher.BeginInvoke(new Action(() =>
+        lock (_snapshotDispatchGate)
         {
-            ShowDashboard();
-            ApplySnapshot(snapshot, fromCache);
-        }));
+            // Home Assistant 可能在短时间内连续推送多个实体状态，只保留等待渲染期间的最新快照。
+            _pendingSnapshot = snapshot;
+            _pendingSnapshotFromCache = fromCache;
+            if (_snapshotDispatchScheduled) return;
+            _snapshotDispatchScheduled = true;
+        }
+
+        Dispatcher.BeginInvoke(new Action(ApplyPendingSnapshot),
+            System.Windows.Threading.DispatcherPriority.DataBind);
+    }
+
+    private void ApplyPendingSnapshot()
+    {
+        SmartHomeSnapshot? snapshot;
+        bool fromCache;
+        lock (_snapshotDispatchGate)
+        {
+            snapshot = _pendingSnapshot;
+            fromCache = _pendingSnapshotFromCache;
+            _pendingSnapshot = null;
+            _snapshotDispatchScheduled = false;
+        }
+
+        if (snapshot is null) return;
+        ShowDashboard();
+        ApplySnapshot(snapshot, fromCache);
     }
 
     private void ApplySnapshot(SmartHomeSnapshot snapshot, bool fromCache)
@@ -174,9 +206,11 @@ public partial class SmartHomeView : UserControl
         }
 
         var selected = _selectedAreaId;
-        AreaFilters.Clear();
-        AreaFilters.Add(new SmartAreaFilterItem("__online", "在线", snapshot.Devices.Count(device => device.IsAvailable), PackIconMaterialKind.WifiCheck));
-        AreaFilters.Add(new SmartAreaFilterItem("__all", "全屋", snapshot.Devices.Count, PackIconMaterialKind.HomeOutline));
+        var desiredAreaFilters = new List<SmartAreaFilterItem>
+        {
+            new("__online", "在线", snapshot.Devices.Count(device => device.IsAvailable), PackIconMaterialKind.WifiCheck),
+            new("__all", "全屋", snapshot.Devices.Count, PackIconMaterialKind.HomeOutline)
+        };
         foreach (var area in snapshot.Areas)
         {
             var count = area.Id == "__unassigned"
@@ -184,11 +218,22 @@ public partial class SmartHomeView : UserControl
                 : snapshot.Devices.Count(device => device.AreaId == area.Id);
             if (count == 0) continue;
             var displayName = area.Id == "__unassigned" ? "其他" : area.Name;
-            AreaFilters.Add(new SmartAreaFilterItem(area.Id, displayName, count, ResolveRoomIconKind(displayName)));
+            desiredAreaFilters.Add(new SmartAreaFilterItem(area.Id, displayName, count, ResolveRoomIconKind(displayName)));
         }
-        var selectedIndex = Math.Max(0, AreaFilters.ToList().FindIndex(item => item.Id == selected));
-        AreaFilterList.SelectedIndex = selectedIndex;
-        _selectedAreaId = AreaFilters[selectedIndex].Id;
+
+        _isSynchronizingSnapshot = true;
+        try
+        {
+            SynchronizeCollection(AreaFilters, desiredAreaFilters, item => item.Id);
+            var selectedIndex = Math.Max(0, AreaFilters.ToList().FindIndex(item => item.Id == selected));
+            if (AreaFilterList.SelectedIndex != selectedIndex) AreaFilterList.SelectedIndex = selectedIndex;
+            _selectedAreaId = AreaFilters[selectedIndex].Id;
+        }
+        finally
+        {
+            _isSynchronizingSnapshot = false;
+        }
+
         UpdateWeather(snapshot);
         UpdateRunningBadges(snapshot);
         ApplyFilter();
@@ -235,7 +280,7 @@ public partial class SmartHomeView : UserControl
 
     private void UpdateRunningBadges(SmartHomeSnapshot snapshot)
     {
-        _runningBadges.Clear();
+        var desiredBadges = new List<RunningDeviceBadge>();
         foreach (var device in snapshot.Devices.Select(item => _deviceById.GetValueOrDefault(item.Id)))
         {
             if (device is not { IsWorking: true }) continue;
@@ -249,54 +294,50 @@ public partial class SmartHomeView : UserControl
                 "light" => "灯已开启",
                 _ => "空调运行中"
             };
-            _runningBadges.Add(new RunningDeviceBadge(
+            desiredBadges.Add(new RunningDeviceBadge(
+                device.Id,
                 domain == "fan" ? PackIconMaterialKind.Fan :
                 domain == "light" ? PackIconMaterialKind.LightbulbOn :
                 PackIconMaterialKind.AirConditioner,
                 label,
                 device.Name,
-                domain == "fan"));
+                domain == "fan",
+                domain == "climate"));
         }
 
+        SynchronizeCollection(_runningBadges, desiredBadges, item => item.DeviceId);
         RunningBadgesHost.Visibility = _runningBadges.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    /// <summary>徽标生成后由代码后置挂接旋转动画：数据模板内的变换会被自动冻结，无法用 XAML 动画驱动。</summary>
-    private void ApplyFanSpinAnimations()
+    /// <summary>图标进入可视树时直接挂接动画，避免依赖 ItemsControl 容器生成时机而偶发漏转。</summary>
+    private void RunningBadgeIcon_Loaded(object sender, RoutedEventArgs e)
     {
-        for (var index = 0; index < RunningBadgesList.Items.Count; index++)
-        {
-            if (RunningBadgesList.ItemContainerGenerator.ContainerFromIndex(index) is not ContentPresenter presenter) continue;
-            foreach (var icon in FindVisualChildren<PackIconMaterial>(presenter))
-            {
-                if (icon.Tag is not true) continue;
-                var transform = new RotateTransform();
-                icon.RenderTransformOrigin = new Point(0.5, 0.5);
-                icon.RenderTransform = transform;
-                transform.BeginAnimation(RotateTransform.AngleProperty,
-                    new System.Windows.Media.Animation.DoubleAnimation(0, 360, TimeSpan.FromSeconds(1.6))
-                    {
-                        RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever
-                    });
-            }
-        }
+        if (sender is PackIconMaterial icon) UpdateRunningBadgeAnimation(icon);
     }
 
-    private static IEnumerable<T> FindVisualChildren<T>(DependencyObject root) where T : DependencyObject
+    private void RunningBadgeIcon_DataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
-        var queue = new Queue<DependencyObject>();
-        queue.Enqueue(root);
-        while (queue.Count > 0)
+        if (sender is PackIconMaterial icon && icon.IsLoaded) UpdateRunningBadgeAnimation(icon);
+    }
+
+    private static void UpdateRunningBadgeAnimation(PackIconMaterial icon)
+    {
+        if (icon.RenderTransform is RotateTransform previous)
         {
-            var current = queue.Dequeue();
-            var count = VisualTreeHelper.GetChildrenCount(current);
-            for (var index = 0; index < count; index++)
-            {
-                var child = VisualTreeHelper.GetChild(current, index);
-                if (child is T typed) yield return typed;
-                queue.Enqueue(child);
-            }
+            previous.BeginAnimation(RotateTransform.AngleProperty, null);
         }
+
+        icon.RenderTransform = Transform.Identity;
+        if (icon.DataContext is not RunningDeviceBadge { Spin: true }) return;
+
+        var transform = new RotateTransform();
+        icon.RenderTransformOrigin = new Point(0.5, 0.5);
+        icon.RenderTransform = transform;
+        transform.BeginAnimation(RotateTransform.AngleProperty,
+            new System.Windows.Media.Animation.DoubleAnimation(0, 360, TimeSpan.FromSeconds(1.6))
+            {
+                RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever
+            });
     }
 
     private void ApplyFilter()
@@ -315,8 +356,7 @@ public partial class SmartHomeView : UserControl
             .ThenBy(device => device.Name, StringComparer.CurrentCulture)
             .ToArray();
 
-        VisibleDevices.Clear();
-        foreach (var device in filtered) VisibleDevices.Add(device);
+        SynchronizeCollection(VisibleDevices, filtered, device => device.Id);
         EmptyState.Visibility = VisibleDevices.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         EmptyStateTitle.Text = _selectedAreaId switch
         {
@@ -329,6 +369,7 @@ public partial class SmartHomeView : UserControl
 
     private void AreaFilterList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (_isSynchronizingSnapshot) return;
         if (AreaFilterList.SelectedItem is SmartAreaFilterItem item)
         {
             _selectedAreaId = item.Id;
@@ -516,11 +557,58 @@ public partial class SmartHomeView : UserControl
 
     private void ShowDashboard()
     {
+        var isFirstDisplay = DashboardPanel.Visibility != Visibility.Visible;
         SetupPanel.Visibility = Visibility.Collapsed;
         DashboardPanel.Visibility = Visibility.Visible;
-        DashboardPanel.Opacity = 0;
+        if (!isFirstDisplay) return;
+
+        // 只在首次进入仪表盘时淡入；状态同步不得重播整页动画。
+        DashboardPanel.Opacity = 1;
         DashboardPanel.BeginAnimation(OpacityProperty,
-            new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(220)));
+            new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(220))
+            {
+                FillBehavior = System.Windows.Media.Animation.FillBehavior.Stop
+            });
+    }
+
+    /// <summary>按稳定键增量同步集合，避免刷新状态时销毁并重建全部可视控件。</summary>
+    private static void SynchronizeCollection<T, TKey>(
+        ObservableCollection<T> target,
+        IReadOnlyList<T> desired,
+        Func<T, TKey> keySelector)
+        where TKey : notnull
+    {
+        var comparer = EqualityComparer<TKey>.Default;
+        for (var index = 0; index < desired.Count; index++)
+        {
+            var desiredItem = desired[index];
+            var desiredKey = keySelector(desiredItem);
+            if (index < target.Count && comparer.Equals(keySelector(target[index]), desiredKey))
+            {
+                if (!EqualityComparer<T>.Default.Equals(target[index], desiredItem)) target[index] = desiredItem;
+                continue;
+            }
+
+            var existingIndex = -1;
+            for (var candidate = index + 1; candidate < target.Count; candidate++)
+            {
+                if (!comparer.Equals(keySelector(target[candidate]), desiredKey)) continue;
+                existingIndex = candidate;
+                break;
+            }
+
+            if (existingIndex >= 0)
+            {
+                target.Move(existingIndex, index);
+                if (!EqualityComparer<T>.Default.Equals(target[index], desiredItem)) target[index] = desiredItem;
+            }
+            else
+            {
+                target.Insert(index, desiredItem);
+            }
+        }
+
+        while (target.Count > desired.Count) target.RemoveAt(target.Count - 1);
     }
 
     private static string FriendlyError(Exception exception)

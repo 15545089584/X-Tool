@@ -18,18 +18,20 @@ public partial class App : System.Windows.Application
     private const string ActivationEventName = @"Local\JieYing.Desktop.Activate.v1";
     private Forms.NotifyIcon? _trayIcon;
     private Action? _trayBalloonAction;
+    private Forms.NotifyIcon? _verificationBalloonIcon;
+    private System.Windows.Threading.DispatcherTimer? _verificationBalloonTimer;
     private Icon? _trayDrawingIcon;
     private bool _trayHintShown;
     private SingleInstanceCoordinator? _singleInstanceCoordinator;
     private DesktopPetWindow? _desktopPetWindow;
+    private PetSessionShelfService? _petShelfService;
+    private PetAlarmService? _petAlarmService;
+    private (string Title, string Detail)? _pendingScreenshotShelfNotice;
+    private readonly SemaphoreSlim _alarmReminderGate = new(1, 1);
     private Forms.ToolStripMenuItem? _desktopPetMenuItem;
-
-    private Forms.NotifyIcon? _verificationBalloonIcon;
-
-    private System.Windows.Threading.DispatcherTimer? _verificationBalloonTimer;
-
+    private int _desktopPetCaptureHideDepth;
+    private bool _restoreDesktopPetAfterCapture;
     private readonly Dictionary<string, ScreenshotApp.Collaboration.PhoneNotificationItem> _pendingPhoneAlerts = new();
-
     private System.Windows.Threading.DispatcherTimer? _phoneAlertTimer;
 
     internal bool IsExitRequested { get; private set; }
@@ -39,7 +41,7 @@ public partial class App : System.Windows.Application
         if (e.Reason == Microsoft.Win32.SessionSwitchReason.SessionLock)
         {
             ScreenshotApp.Collaboration.PhoneNotificationHub.Instance.Locked = true;
-            Dispatcher.BeginInvoke(() => { _pendingPhoneAlerts.Clear(); DismissPhoneAlertDisplays(); });
+            Dispatcher.BeginInvoke(() => { _pendingPhoneAlerts.Clear(); DismissPhoneAlertDisplays(); ClearMailAlerts(); });
         }
         if (e.Reason == Microsoft.Win32.SessionSwitchReason.SessionUnlock) ScreenshotApp.Collaboration.PhoneNotificationHub.Instance.Locked = false;
     }
@@ -93,6 +95,28 @@ public partial class App : System.Windows.Application
             else ShowTrayBalloon(title, detail, open);
         };
         return timer;
+    }
+
+    private void CalendarReminderDue(PhoneCalendar.CalendarEntry[] entries)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (IsExitRequested || ScreenshotApp.Collaboration.PhoneNotificationHub.Instance.Locked ||
+                PhoneCalendar.PhoneCalendarService.Instance.Read().Paused || entries.Length == 0) return;
+            var currentCalendar = PhoneCalendar.PhoneCalendarService.Instance.Read().Snapshot;
+            entries = entries.Where(item => currentCalendar?.Enabled == true &&
+                currentCalendar.Events.Any(e => e.Id == item.Id && e.Title == item.Title &&
+                    e.Reminders.Any(r => item.Reminders.Contains(r)))).ToArray();
+            if (entries.Length == 0) return;
+            var first = entries[0];
+            var title = entries.Length > 1 ? $"日程提醒 · {entries.Length} 项" : "日程提醒";
+            var detail = first.Title + "\n" + first.When +
+                (string.IsNullOrWhiteSpace(first.Location) ? "" : "\n" + first.Location);
+            if (detail.Length > 220) detail = detail[..219] + "…";
+            Action open = PhoneCalendar.PhoneCalendarWindow.Open;
+            if (IsDesktopPetVisible) _desktopPetWindow!.ShowPhoneNotification(title, detail, open);
+            else ShowTrayBalloon(title, detail, open);
+        });
     }
 
     protected override void OnStartup(StartupEventArgs e)
@@ -149,13 +173,19 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        ScreenshotApp.Collaboration.PhoneNotificationHub.Instance.AlertsEnabled = AppPreferences.Load().PhoneNotificationAlertsEnabled;
-        ScreenshotApp.Collaboration.PhoneNotificationHub.Instance.NotificationsArrived += PhoneNotificationsArrived;
-        Microsoft.Win32.SystemEvents.SessionSwitch += PhoneSessionSwitch;
-
         var mainWindow = new MainWindow();
         MainWindow = mainWindow;
         CreateTrayIcon(mainWindow);
+        ScreenshotApp.Collaboration.PhoneNotificationHub.Instance.AlertsEnabled = AppPreferences.Load().PhoneNotificationAlertsEnabled;
+        ScreenshotApp.Collaboration.PhoneNotificationHub.Instance.NotificationsArrived += PhoneNotificationsArrived;
+        StartMail();
+        PhoneCalendar.PhoneCalendarService.Instance.Start();
+        ScreenshotApp.Collaboration.PhoneNotificationHub.Instance.CalendarExchange = PhoneCalendar.PhoneCalendarService.Instance.Exchange;
+        ScreenshotApp.Collaboration.PhoneNotificationHub.Instance.PairingRevoked += PhoneCalendar.PhoneCalendarService.Instance.Clear;
+        PhoneCalendar.PhoneCalendarService.Instance.Due += CalendarReminderDue;
+        Microsoft.Win32.SystemEvents.SessionSwitch += PhoneSessionSwitch;
+        _petAlarmService = new PetAlarmService();
+        _petAlarmService.ReminderTriggered += PetAlarmService_ReminderTriggered;
 
 #if SCROLL_CAPTURE_TEST
         mainWindow.Loaded += async (_, _) =>
@@ -167,6 +197,7 @@ public partial class App : System.Windows.Application
 #endif
 
         mainWindow.Show();
+        if (e.Args.Contains("--mail-center")) Mail.MailWindow.Open();
         if (e.Args.Contains("--phone-notifications")) ScreenshotApp.Collaboration.PhoneNotificationsWindow.Open(mainWindow);
         _ = Task.Run(() => { try { ScreenshotApp.Collaboration.PhoneNotificationHub.Instance.ResumeIfConfigured(); } catch { /* 接收失败由通知页面提示，不创建第二个监听实例。 */ } });
         if (AppPreferences.Load().DesktopPetVisible)
@@ -216,6 +247,14 @@ public partial class App : System.Windows.Application
         {
             _desktopPetWindow.Close();
             _desktopPetWindow = null;
+        }
+        _petShelfService?.Dispose();
+        _petShelfService = null;
+        if (_petAlarmService is not null)
+        {
+            _petAlarmService.ReminderTriggered -= PetAlarmService_ReminderTriggered;
+            _petAlarmService.Dispose();
+            _petAlarmService = null;
         }
         if (MainWindow is MainWindow mainWindow)
         {
@@ -294,6 +333,12 @@ public partial class App : System.Windows.Application
         Microsoft.Win32.SystemEvents.SessionSwitch -= PhoneSessionSwitch;
         ScreenshotApp.Collaboration.PhoneNotificationHub.Instance.NotificationsArrived -= PhoneNotificationsArrived;
         _phoneAlertTimer?.Stop(); _pendingPhoneAlerts.Clear();
+        ScreenshotApp.Collaboration.PhoneNotificationHub.Instance.CalendarSnapshotReceived = null;
+        ScreenshotApp.Collaboration.PhoneNotificationHub.Instance.CalendarExchange = null;
+        ScreenshotApp.Collaboration.PhoneNotificationHub.Instance.PairingRevoked -= PhoneCalendar.PhoneCalendarService.Instance.Clear;
+        PhoneCalendar.PhoneCalendarService.Instance.Due -= CalendarReminderDue;
+        StopMail();
+        PhoneCalendar.PhoneCalendarService.Instance.Dispose();
         ScreenshotApp.Collaboration.PhoneNotificationHub.Instance.Dispose();
         if (_trayIcon is not null)
         {
@@ -308,6 +353,14 @@ public partial class App : System.Windows.Application
         _singleInstanceCoordinator = null;
         _desktopPetWindow = null;
         _desktopPetMenuItem = null;
+        _petShelfService?.Dispose();
+        _petShelfService = null;
+        if (_petAlarmService is not null)
+        {
+            _petAlarmService.ReminderTriggered -= PetAlarmService_ReminderTriggered;
+            _petAlarmService.Dispose();
+            _petAlarmService = null;
+        }
         TranslationEngineProvider.Dispose();
         base.OnExit(e);
     }
@@ -330,6 +383,7 @@ public partial class App : System.Windows.Application
         };
         _desktopPetMenuItem.Click += (_, _) => Dispatcher.Invoke(ToggleDesktopPet);
         menu.Items.Add(_desktopPetMenuItem);
+        menu.Items.Add("邮箱中心", null, (_, _) => Dispatcher.Invoke(Mail.MailWindow.Open));
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("截图", null, (_, _) => Dispatcher.Invoke(mainWindow.BeginRegionCapture));
         menu.Items.Add(new Forms.ToolStripSeparator());
@@ -351,6 +405,40 @@ public partial class App : System.Windows.Application
         };
     }
 
+    /// <summary>复用宠物暂存服务；复制失败不影响已经保存的截图和剪贴板。</summary>
+    internal async Task StoreScreenshotInPetShelfAsync(string savedPath)
+    {
+        if (IsExitRequested) return;
+        try
+        {
+            _petShelfService ??= new PetSessionShelfService();
+            var result = await _petShelfService.AddFilesAsync([savedPath]);
+            if (IsExitRequested) return;
+            if (result.AddedCount > 0)
+                _pendingScreenshotShelfNotice = ("截图已存入文件暂存区", $"暂存区现有 {_petShelfService.Items.Count} 个文件 · 仅本次运行保留");
+            else if (result.DuplicateCount == 0)
+                _pendingScreenshotShelfNotice = ("截图未能自动暂存", result.LimitMessage ?? "截图原文件已保存，可稍后手动加入暂存区");
+        }
+        catch (OperationCanceledException) { return; }
+        catch (Exception)
+        {
+            if (IsExitRequested) return;
+            _pendingScreenshotShelfNotice = ("截图未能自动暂存", "截图原文件已保存，可稍后手动加入暂存区");
+        }
+        FlushScreenshotShelfNotice();
+    }
+
+    private void FlushScreenshotShelfNotice()
+    {
+        // 保存可能先于截图隐藏租约结束；不能把提醒显示在截图中，也不能强行开启隐藏的宠物。
+        if (IsExitRequested || _desktopPetCaptureHideDepth > 0 || _pendingScreenshotShelfNotice is not { } notice) return;
+        _pendingScreenshotShelfNotice = null;
+        if (_desktopPetWindow?.IsVisible == true)
+            _ = _desktopPetWindow.ShowScreenshotShelfNoticeAsync(notice.Title, notice.Detail);
+        else
+            ShowTrayBalloon(notice.Title, notice.Detail);
+    }
+
     private void ToggleDesktopPet()
     {
         SetDesktopPetVisible(!IsDesktopPetVisible);
@@ -362,13 +450,18 @@ public partial class App : System.Windows.Application
         {
             try
             {
-                _desktopPetWindow = new DesktopPetWindow(AppPreferences.Load().DesktopPetScalePercent);
+                _petShelfService ??= new PetSessionShelfService();
+                _petAlarmService ??= new PetAlarmService();
+                _petAlarmService.ReminderTriggered -= PetAlarmService_ReminderTriggered;
+                _petAlarmService.ReminderTriggered += PetAlarmService_ReminderTriggered;
+                _desktopPetWindow = new DesktopPetWindow(
+                    _petShelfService,
+                    _petAlarmService,
+                    AppPreferences.Load().DesktopPetScalePercent);
                 _desktopPetWindow.PetVisibilityChanged += (_, _) =>
                 {
-                    if (!IsExitRequested)
-                    {
-                        PersistDesktopPetVisibility();
-                    }
+                    // 可见性是运行状态；退出、截图和加载失败的隐藏不能修改用户开关。
+                    UpdateDesktopPetMenuItem();
                 };
             }
             catch (Exception exception)
@@ -380,7 +473,55 @@ public partial class App : System.Windows.Application
         }
 
         _desktopPetWindow.Show();
+        _desktopPetWindow.EnsureTopmostWithoutActivation();
         UpdateDesktopPetMenuItem();
+    }
+
+    private async void PetAlarmService_ReminderTriggered(PetAlarmTrigger trigger)
+    {
+        var service = _petAlarmService;
+        if (service is null)
+        {
+            return;
+        }
+
+        await _alarmReminderGate.WaitAsync();
+        try
+        {
+            var screenBounds = _desktopPetWindow?.GetCurrentScreenBounds() ?? new Rect(
+                0,
+                0,
+                SystemParameters.PrimaryScreenWidth,
+                SystemParameters.PrimaryScreenHeight);
+            var workingArea = _desktopPetWindow?.GetCurrentWorkingAreaForValidation() ?? SystemParameters.WorkArea;
+            Task messageTask;
+            if (_desktopPetWindow?.IsVisible == true)
+            {
+                messageTask = _desktopPetWindow.ShowAlarmReminderAsync(trigger);
+            }
+            else
+            {
+                var notification = new PetAlarmSystemNotificationWindow(trigger, workingArea);
+                messageTask = trigger.IsDue
+                    ? notification.ShowUntilClickedAsync()
+                    : notification.ShowForAsync(TimeSpan.FromSeconds(5));
+            }
+
+            var glow = new PetAlarmEdgeGlowWindow(screenBounds);
+            var glowTask = trigger.IsDue
+                ? glow.ShowUntilAsync(messageTask)
+                : glow.ShowForAsync(TimeSpan.FromSeconds(5));
+            await Task.WhenAll(glowTask, messageTask);
+            service.CompleteReminder(trigger);
+        }
+        catch (Exception exception)
+        {
+            System.Diagnostics.Debug.WriteLine($"桌宠闹钟提醒显示失败：{exception.GetBaseException().Message}");
+        }
+        finally
+        {
+            _alarmReminderGate.Release();
+        }
     }
 
     private void UpdateDesktopPetMenuItem()
@@ -400,8 +541,81 @@ public partial class App : System.Windows.Application
 
     internal bool IsDesktopPetVisible => _desktopPetWindow?.IsVisible == true;
 
+    /// <summary>
+    /// 主窗口切换页面或重新激活后恢复桌宠的预期可见性与顶层层级。
+    /// 截图临时隐藏期间不会提前显示，用户主动关闭后也不会重新开启。
+    /// </summary>
+    internal void EnsureDesktopPetVisibleAndTopmost()
+    {
+        if (IsExitRequested || _desktopPetCaptureHideDepth > 0 || !AppPreferences.Load().DesktopPetVisible)
+        {
+            return;
+        }
+
+        ShowDesktopPet();
+    }
+
     internal bool ShouldUseDesktopPetTransferBubbles =>
         IsDesktopPetVisible && AppPreferences.Load().DesktopPetTakesOverTransferNotifications;
+
+    /// <summary>
+    /// 截图会话期间临时隐藏桌面宠物。释放后只恢复截图前本来可见的宠物，
+    /// 不写入用户的长期显示偏好；嵌套调用也只会在最外层结束时恢复。
+    /// </summary>
+    internal IDisposable SuspendDesktopPetForCapture()
+    {
+        Dispatcher.VerifyAccess();
+        if (_desktopPetCaptureHideDepth++ == 0)
+        {
+            _restoreDesktopPetAfterCapture = IsDesktopPetVisible;
+            if (_restoreDesktopPetAfterCapture)
+            {
+                _desktopPetWindow?.Hide();
+            }
+        }
+
+        return new DesktopPetCaptureSuspension(this);
+    }
+
+    private void ResumeDesktopPetAfterCapture()
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.Invoke(ResumeDesktopPetAfterCapture);
+            return;
+        }
+
+        if (_desktopPetCaptureHideDepth <= 0 || --_desktopPetCaptureHideDepth > 0)
+        {
+            return;
+        }
+
+        var shouldRestore = _restoreDesktopPetAfterCapture;
+        _restoreDesktopPetAfterCapture = false;
+        if (!shouldRestore || IsExitRequested)
+        {
+            FlushScreenshotShelfNotice();
+            return;
+        }
+
+        ShowDesktopPet();
+        FlushScreenshotShelfNotice();
+    }
+
+    private sealed class DesktopPetCaptureSuspension : IDisposable
+    {
+        private App? _owner;
+
+        internal DesktopPetCaptureSuspension(App owner)
+        {
+            _owner = owner;
+        }
+
+        public void Dispose()
+        {
+            Interlocked.Exchange(ref _owner, null)?.ResumeDesktopPetAfterCapture();
+        }
+    }
 
     internal bool SetDesktopPetVisible(bool visible)
     {

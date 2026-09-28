@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../ScreenshotApp/DeveloperTools/CondaInstallationInspector.cs" Link="CondaInstallationInspector.cs" />
+    <Compile Include="../ScreenshotApp/DeveloperTools/CondaInstallerService.cs" Link="CondaInstallerService.cs" />
+    <Compile Include="../ScreenshotApp/DeveloperTools/DeveloperEnvironmentModels.cs" Link="DeveloperEnvironmentModels.cs" />
+    <Compile Include="../ScreenshotApp/DeveloperTools/DeveloperEnvironmentConfigurationPlanner.cs" Link="DeveloperEnvironmentConfigurationPlanner.cs" />
+    <Compile Include="../ScreenshotApp/DeveloperTools/ManagedToolchainModels.cs" Link="ManagedToolchainModels.cs" />
+  </ItemGroup>
+</Project>

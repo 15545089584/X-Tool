@@ -10,8 +10,11 @@ internal sealed class VoiceInputService : IDisposable
     private const int SampleRate = 16_000;
     // 长段口述由用户再次按右 Alt 完成；时长上限仅用于避免忘记结束时持续录音。
     private const int MaximumRecordingSeconds = 90;
+    // 识别模型较大，保留短时间可避免连续语音输入反复冷启动。
+    private static readonly TimeSpan RecognizerIdleTimeout = TimeSpan.FromMinutes(10);
     private readonly object _syncRoot = new();
     private readonly SemaphoreSlim _recognitionGate = new(1, 1);
+    private readonly System.Threading.Timer _recognizerIdleTimer;
     private readonly List<float> _samples = new();
     private WaveInEvent? _waveIn;
     private OfflineRecognizer? _recognizer;
@@ -21,6 +24,17 @@ internal sealed class VoiceInputService : IDisposable
     private string? _recordingError;
     private CancellationTokenSource? _partialRecognitionCancellation;
     private Task? _partialRecognitionTask;
+    private long _recognizerReleaseDeadlineUtcTicks;
+    private int _disposed;
+
+    internal VoiceInputService()
+    {
+        _recognizerIdleTimer = new System.Threading.Timer(
+            ReleaseRecognizerWhenIdle,
+            null,
+            System.Threading.Timeout.InfiniteTimeSpan,
+            System.Threading.Timeout.InfiniteTimeSpan);
+    }
 
     internal event EventHandler? AutoStopRequested;
     internal event Action<double>? SoundLevelChanged;
@@ -53,11 +67,14 @@ internal sealed class VoiceInputService : IDisposable
 
     internal void Start()
     {
+        ThrowIfDisposed();
         if (IsRecording)
         {
             return;
         }
 
+        // 已开始一次新的语音输入时，不在录音期间回收上一轮留下的模型。
+        CancelRecognizerIdleRelease();
         if (!IsModelAvailable)
         {
             throw new FileNotFoundException("未找到本地语音识别模型，请修复或重新安装 X-Tool。");
@@ -143,10 +160,34 @@ internal sealed class VoiceInputService : IDisposable
 
     public void Dispose()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
+        _recognizerIdleTimer.Dispose();
         Cancel();
-        _recognizer?.Dispose();
-        _recognizer = null;
-        _recognitionGate.Dispose();
+        OfflineRecognizer? recognizer = null;
+        try
+        {
+            _recognitionGate.Wait();
+            try
+            {
+                recognizer = _recognizer;
+                _recognizer = null;
+                Interlocked.Exchange(ref _recognizerReleaseDeadlineUtcTicks, 0);
+            }
+            finally
+            {
+                _recognitionGate.Release();
+            }
+        }
+        catch (ObjectDisposedException)
+        {
+            // 应用退出时并发取消识别任务，不需要继续处理。
+        }
+
+        recognizer?.Dispose();
     }
 
     private void WaveIn_DataAvailable(object? sender, WaveInEventArgs e)
@@ -231,6 +272,10 @@ internal sealed class VoiceInputService : IDisposable
         {
             // 停止录音时正常取消后台分段识别。
         }
+        catch (ObjectDisposedException)
+        {
+            // 应用退出时识别服务已释放。
+        }
     }
 
     private async Task StopPartialRecognitionAsync()
@@ -250,14 +295,18 @@ internal sealed class VoiceInputService : IDisposable
 
     private async Task<string> RecognizeAsync(float[] samples, CancellationToken cancellationToken)
     {
+        ThrowIfDisposed();
         await _recognitionGate.WaitAsync(cancellationToken);
         try
         {
+            ThrowIfDisposed();
+            CancelRecognizerIdleRelease();
             return await Task.Run(() => Recognize(samples, cancellationToken), cancellationToken);
         }
         finally
         {
             _recognitionGate.Release();
+            ScheduleRecognizerIdleRelease();
         }
     }
 
@@ -274,6 +323,7 @@ internal sealed class VoiceInputService : IDisposable
 
     private OfflineRecognizer GetRecognizer()
     {
+        ThrowIfDisposed();
         if (_recognizer is not null)
         {
             return _recognizer;
@@ -290,6 +340,109 @@ internal sealed class VoiceInputService : IDisposable
         config.ModelConfig.Debug = 0;
         _recognizer = new OfflineRecognizer(config);
         return _recognizer;
+    }
+
+    /// <summary>取消已排队的空闲释放，避免识别进行中被计时器回收。</summary>
+    private void CancelRecognizerIdleRelease()
+    {
+        Interlocked.Exchange(ref _recognizerReleaseDeadlineUtcTicks, 0);
+        try
+        {
+            _recognizerIdleTimer.Change(
+                System.Threading.Timeout.InfiniteTimeSpan,
+                System.Threading.Timeout.InfiniteTimeSpan);
+        }
+        catch (ObjectDisposedException)
+        {
+            // 应用正在退出。
+        }
+    }
+
+    /// <summary>识别完成后延迟释放模型，兼顾连续输入速度与空闲内存占用。</summary>
+    private void ScheduleRecognizerIdleRelease()
+    {
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            return;
+        }
+
+        var deadline = DateTime.UtcNow.Add(RecognizerIdleTimeout).Ticks;
+        Interlocked.Exchange(ref _recognizerReleaseDeadlineUtcTicks, deadline);
+        try
+        {
+            _recognizerIdleTimer.Change(
+                RecognizerIdleTimeout,
+                System.Threading.Timeout.InfiniteTimeSpan);
+        }
+        catch (ObjectDisposedException)
+        {
+            // 应用正在退出。
+        }
+    }
+
+    /// <summary>计时到期后在识别锁内摘除模型，避免与正在运行的识别共享同一实例。</summary>
+    private void ReleaseRecognizerWhenIdle(object? state)
+    {
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            return;
+        }
+
+        OfflineRecognizer? recognizer = null;
+        TimeSpan? retryDelay = null;
+        try
+        {
+            _recognitionGate.Wait();
+            try
+            {
+                if (Volatile.Read(ref _disposed) != 0)
+                {
+                    return;
+                }
+
+                var deadline = Interlocked.Read(ref _recognizerReleaseDeadlineUtcTicks);
+                if (deadline <= 0)
+                {
+                    return;
+                }
+
+                var remainingTicks = deadline - DateTime.UtcNow.Ticks;
+                if (remainingTicks > 0)
+                {
+                    retryDelay = TimeSpan.FromTicks(remainingTicks);
+                }
+                else
+                {
+                    recognizer = _recognizer;
+                    _recognizer = null;
+                    Interlocked.Exchange(ref _recognizerReleaseDeadlineUtcTicks, 0);
+                }
+            }
+            finally
+            {
+                _recognitionGate.Release();
+            }
+
+            if (retryDelay is TimeSpan delay)
+            {
+                _recognizerIdleTimer.Change(delay, System.Threading.Timeout.InfiniteTimeSpan);
+                return;
+            }
+
+            recognizer?.Dispose();
+        }
+        catch (ObjectDisposedException)
+        {
+            // 应用退出时计时器可能与释放流程重叠。
+        }
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            throw new ObjectDisposedException(nameof(VoiceInputService));
+        }
     }
 
     private static string NormalizeResult(string text)

@@ -8,7 +8,7 @@ using System.Windows.Media.Imaging;
 namespace ScreenshotApp.SystemTools;
 
 /// <summary>按可执行文件路径读取并冻结 Windows Shell 图标，供后台扫描结果安全交给 UI 线程。</summary>
-internal static class StartupIconProvider
+internal static class SystemProgramIconProvider
 {
     private const uint ShgfiIcon = 0x000000100;
     private const uint ShgfiLargeIcon = 0x000000000;

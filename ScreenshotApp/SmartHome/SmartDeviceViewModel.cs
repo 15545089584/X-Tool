@@ -9,6 +9,9 @@ public sealed record SmartModeOption(string Value, string DisplayName, string Ic
 
 public sealed record SmartFanLevelOption(int Level, string Label, double Percent, bool IsCurrent);
 
+/// <summary>空调纵向风感方向条档位；Value 保留 HA 原始值，Name 使用米家五档文案。</summary>
+public sealed record SmartAirflowDirectionLevel(string Value, string Name, double Percent, bool IsCurrent);
+
 public sealed record SmartFeatureOption(
     string EntityId,
     string DisplayName,
@@ -303,6 +306,40 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
             var mode = FanModeOptions.FirstOrDefault(option =>
                 string.Equals(option.Value, CurrentFanMode, StringComparison.Ordinal));
             return mode?.DisplayName ?? CurrentFanMode;
+        }
+    }
+
+    public SmartSelectControl? AirflowDirectionControl => AuxiliarySelects.FirstOrDefault();
+
+    /// <summary>
+    /// 米家定向风仅展示上、偏上、中间、偏下、下五档。“定格关闭”是设备
+    /// 内部关闭位置，不作为可选风向；控制时仍向 HA 发送对应的原始 option。
+    /// </summary>
+    public IReadOnlyList<SmartAirflowDirectionLevel> AirflowDirectionLevels
+    {
+        get
+        {
+            var control = AirflowDirectionControl;
+            if (control is null) return Array.Empty<SmartAirflowDirectionLevel>();
+            var options = control.Options
+                .Where(option => !IsClosedAirflowDirection(option))
+                .ToArray();
+            return options.Select((option, index) => new SmartAirflowDirectionLevel(
+                option,
+                TranslateAirflowDirection(option),
+                Math.Round((index + 1) * 100d / options.Length, 2),
+                string.Equals(option, control.SelectedValue, StringComparison.Ordinal))).ToArray();
+        }
+    }
+
+    public bool HasAirflowDirectionLevels => AirflowDirectionLevels.Count > 0;
+
+    public string CurrentAirflowDirectionText
+    {
+        get
+        {
+            var current = AirflowDirectionLevels.FirstOrDefault(level => level.IsCurrent);
+            return current?.Name ?? string.Empty;
         }
     }
 
@@ -893,6 +930,28 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
         _ => value
     };
 
+    private static bool IsClosedAirflowDirection(string value)
+    {
+        var normalized = value.Trim().ToLowerInvariant().Replace("_", string.Empty).Replace(" ", string.Empty);
+        return normalized.Contains("定格关闭", StringComparison.Ordinal) ||
+               normalized is "fixedclose" or "fixedclosed";
+    }
+
+    private static string TranslateAirflowDirection(string value)
+    {
+        var normalized = value.Trim().ToLowerInvariant();
+        if (normalized.Contains("天幕", StringComparison.Ordinal) ||
+            normalized.Contains("上定格", StringComparison.Ordinal) ||
+            normalized is "top" or "uppermost") return "上";
+        if (normalized.Contains("偏上", StringComparison.Ordinal)) return "偏上";
+        if (normalized.Contains("向上", StringComparison.Ordinal) || normalized is "upper" or "up") return "偏上";
+        if (normalized.Contains("中间", StringComparison.Ordinal) || normalized is "middle" or "center") return "中间";
+        if (normalized.Contains("偏下", StringComparison.Ordinal)) return "偏下";
+        if (normalized.Contains("向下", StringComparison.Ordinal) || normalized is "lower" or "down") return "偏下";
+        if (normalized.Contains("地毯", StringComparison.Ordinal) || normalized is "bottom" or "lowermost") return "下";
+        return value;
+    }
+
     private static string TranslateBinarySensor(SmartEntity entity)
     {
         var on = string.Equals(entity.State, "on", StringComparison.OrdinalIgnoreCase);
@@ -938,7 +997,8 @@ public sealed class SmartDeviceViewModel : INotifyPropertyChanged
                      nameof(TemperatureUnit), nameof(TargetTemperature), nameof(TargetTemperatureText),
                      nameof(MinimumTemperature), nameof(MaximumTemperature), nameof(TemperatureStep),
                      nameof(CurrentTemperatureText), nameof(FeatureControls), nameof(AuxiliarySelects),
-                     nameof(HasFeatureControls), nameof(HasAuxiliarySelects),
+                     nameof(HasFeatureControls), nameof(HasAuxiliarySelects), nameof(AirflowDirectionControl),
+                     nameof(AirflowDirectionLevels), nameof(HasAirflowDirectionLevels), nameof(CurrentAirflowDirectionText),
                      nameof(HvacModeOptions), nameof(FanModeOptions), nameof(SwingModeOptions),
                      nameof(PresetModeOptions), nameof(CurrentHvacMode), nameof(CurrentFanMode),
                      nameof(FanLevels), nameof(CurrentFanLevel),

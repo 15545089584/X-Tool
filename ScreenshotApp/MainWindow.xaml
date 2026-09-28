@@ -13,6 +13,7 @@
         xmlns:developerTools="clr-namespace:ScreenshotApp.DeveloperTools"
         xmlns:informationVault="clr-namespace:ScreenshotApp.InformationVault"
         xmlns:smartHome="clr-namespace:ScreenshotApp.SmartHome"
+        xmlns:archives="clr-namespace:ScreenshotApp.Archives"
         mc:Ignorable="d"
         Title="X-Tool"
         Icon="Assets/XTool.png"
@@ -520,6 +521,8 @@
                                                      Tag="ConverterWorkbench" Content="转换器" Checked="WorkspaceSectionTab_Checked" />
                                         <RadioButton x:Name="FileSectionTab" GroupName="EfficiencySection" Style="{StaticResource WorkspaceSectionTabStyle}"
                                                      Tag="FileWorkbench" Content="文件" Checked="WorkspaceSectionTab_Checked" />
+                                        <RadioButton x:Name="ArchiveSectionTab" GroupName="EfficiencySection" Style="{StaticResource WorkspaceSectionTabStyle}"
+                                                     Tag="ArchiveWorkbench" Content="压缩包" Checked="WorkspaceSectionTab_Checked" />
                                     </StackPanel>
                                     <StackPanel x:Name="SystemSectionTabs" Orientation="Horizontal" Visibility="Collapsed">
                                         <RadioButton x:Name="NetworkSectionTab" GroupName="SystemSection" Style="{StaticResource WorkspaceSectionTabStyle}"
@@ -527,102 +530,131 @@
                                         <RadioButton x:Name="ResourceSectionTab" GroupName="SystemSection" Style="{StaticResource WorkspaceSectionTabStyle}"
                                                      Tag="ResourceManagement" Content="资源" Checked="WorkspaceSectionTab_Checked" />
                                         <RadioButton x:Name="SystemToolsSectionTab" GroupName="SystemSection" Style="{StaticResource WorkspaceSectionTabStyle}"
-                                                     Tag="SystemTools" Content="系统" Checked="WorkspaceSectionTab_Checked" />
+                                                     Tag="SystemTools" Content="维护" Checked="WorkspaceSectionTab_Checked" />
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
 
                             <!-- X-Tool 工具箱首页 -->
-                            <Grid x:Name="HomeView" Grid.Row="1" Margin="44,34,44,34">
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="174" />
-                                    <RowDefinition Height="20" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="12" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="*" />
-                                </Grid.RowDefinitions>
+                            <ScrollViewer x:Name="HomeView" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                <Grid Margin="44,34,44,34">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="174" />
+                                        <RowDefinition Height="20" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="12" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
 
-                                <Border Padding="26,20" Background="#82FFFFFF" BorderBrush="#A6FFFFFF" BorderThickness="1" CornerRadius="18">
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#52779D" Text="X-Tool · 本地桌面效率平台" />
-                                        <TextBlock Margin="0,8,0,0" FontSize="28" FontWeight="SemiBold" Text="一个入口，管理你的桌面工作流" />
-                                        <TextBlock Margin="0,7,0,0" FontSize="13" Foreground="{StaticResource SecondaryTextBrush}"
-                                                   Text="从屏幕内容、格式转换和文件整理，到网络、进程、设备与系统诊断，都在本机按需完成。" />
-                                        <StackPanel Margin="0,14,0,0" Orientation="Horizontal">
-                                            <Border Padding="10,5" Background="#DCEBFF" CornerRadius="9"><TextBlock FontSize="11" Foreground="#326DAF" Text="8 项核心能力" /></Border>
-                                            <Border Margin="8,0,0,0" Padding="10,5" Background="#DDF6EA" CornerRadius="9"><TextBlock FontSize="11" Foreground="#367A59" Text="本地优先" /></Border>
-                                            <Border Margin="8,0,0,0" Padding="10,5" Background="#F3E8FF" CornerRadius="9"><TextBlock FontSize="11" Foreground="#76549A" Text="按需申请权限" /></Border>
+                                    <Border Padding="26,20" Background="#82FFFFFF" BorderBrush="#A6FFFFFF" BorderThickness="1" CornerRadius="18">
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#52779D" Text="X-Tool · 本地桌面效率平台" />
+                                            <TextBlock Margin="0,8,0,0" FontSize="28" FontWeight="SemiBold" Text="一个入口，管理你的桌面工作流" />
+                                            <TextBlock Margin="0,7,0,0" FontSize="13" Foreground="{StaticResource SecondaryTextBrush}"
+                                                       Text="从屏幕捕获、格式转换和文件整理，到系统诊断、家庭设备与手机协作，都在一个入口按需完成。" />
+                                            <StackPanel Margin="0,14,0,0" Orientation="Horizontal">
+                                                <Border Padding="10,5" Background="#DCEBFF" CornerRadius="9"><TextBlock FontSize="11" Foreground="#326DAF" Text="12 项核心能力" /></Border>
+                                                <Border Margin="8,0,0,0" Padding="10,5" Background="#DDF6EA" CornerRadius="9"><TextBlock FontSize="11" Foreground="#367A59" Text="本地优先" /></Border>
+                                                <Border Margin="8,0,0,0" Padding="10,5" Background="#F3E8FF" CornerRadius="9"><TextBlock FontSize="11" Foreground="#76549A" Text="按需申请权限" /></Border>
+                                            </StackPanel>
                                         </StackPanel>
-                                    </StackPanel>
-                                </Border>
+                                    </Border>
 
-                                <Grid Grid.Row="2">
-                                    <TextBlock FontSize="16" FontWeight="SemiBold" Text="探索全部能力" />
-                                    <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}" Text="点击卡片进入对应工作台" />
+                                    <Grid Grid.Row="2">
+                                        <TextBlock FontSize="16" FontWeight="SemiBold" Text="探索全部能力" />
+                                        <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}" Text="点击卡片进入对应工作台或设置" />
+                                    </Grid>
+
+                                    <primitives:UniformGrid Grid.Row="4" Rows="3" Columns="4">
+                                        <Button Height="152" Margin="0,0,8,8" Style="{StaticResource InteractiveActionCardStyle}" Tag="History" Click="HomeNavigate_Click">
+                                            <StackPanel>
+                                                <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#E8F4FF" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#3D8ED0" Text="&#xE7F4;" /></Border>
+                                                <TextBlock Margin="0,10,0,0" FontSize="16" FontWeight="SemiBold" Text="屏幕与剪贴板" />
+                                                <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="截图、长截图、OCR、翻译、录屏、贴图与历史" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Height="152" Margin="8,0,8,8" Style="{StaticResource InteractiveActionCardStyle}" Click="NavigateToConverterWorkbench_Click">
+                                            <StackPanel>
+                                                <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#FFF2D9" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#E6A326" Text="&#xE8A7;" /></Border>
+                                                <TextBlock Margin="0,10,0,0" FontSize="16" FontWeight="SemiBold" Text="转换器工作台" />
+                                                <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="图片、音频、视频、PDF、编码与二维码" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Height="152" Margin="8,0,8,8" Style="{StaticResource InteractiveActionCardStyle}" Tag="FileWorkbench" Click="HomeNavigate_Click">
+                                            <StackPanel>
+                                                <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#EAF6E9" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#42A26A" Text="&#xE8B7;" /></Border>
+                                                <TextBlock Margin="0,10,0,0" FontSize="16" FontWeight="SemiBold" Text="文件工作台" />
+                                                <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="Windows Search、完整扫描、重复文件与批处理" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Height="152" Margin="8,0,0,8" Style="{StaticResource InteractiveActionCardStyle}" Tag="DesktopPetSettings" Click="HomeNavigate_Click">
+                                            <StackPanel>
+                                                <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#F4E9FF" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#8B5AC7" Text="&#xE74C;" /></Border>
+                                                <TextBlock Margin="0,10,0,0" FontSize="16" FontWeight="SemiBold" Text="桌面宠物" />
+                                                <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="主动轮盘、文件暂存区、静默闹钟与手机投递" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Height="152" Margin="0,8,8,8" Style="{StaticResource InteractiveActionCardStyle}" Tag="NetworkWorkbench" Click="HomeNavigate_Click">
+                                            <StackPanel>
+                                                <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#E5F5FF" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#338BC4" Text="&#xE774;" /></Border>
+                                                <TextBlock Margin="0,10,0,0" FontSize="16" FontWeight="SemiBold" Text="网络工作台" />
+                                                <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="状态监测、连接诊断、Wi-Fi、代理 DNS 与网络方案" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Height="152" Margin="8,8,8,8" Style="{StaticResource InteractiveActionCardStyle}" Tag="ResourceManagement" Click="HomeNavigate_Click">
+                                            <StackPanel>
+                                                <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#EAF0F7" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#657B94" Text="&#xE9D2;" /></Border>
+                                                <TextBlock Margin="0,10,0,0" FontSize="16" FontWeight="SemiBold" Text="资源管理" />
+                                                <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="端口、进程、服务与运行关系一站查看" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Height="152" Margin="8,8,8,8" Style="{StaticResource InteractiveActionCardStyle}" Tag="SystemTools" Click="HomeNavigate_Click">
+                                            <StackPanel>
+                                                <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#F0EAFF" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#7659B3" Text="&#xE950;" /></Border>
+                                                <TextBlock Margin="0,10,0,0" FontSize="16" FontWeight="SemiBold" Text="系统工具" />
+                                                <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="设备、驱动、存储、软件、环境变量与系统诊断" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Height="152" Margin="8,8,0,8" Style="{StaticResource InteractiveActionCardStyle}" Tag="DeveloperTools" Click="HomeNavigate_Click">
+                                            <StackPanel>
+                                                <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#E4F2FF" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#4384C8" Text="&#xE943;" /></Border>
+                                                <TextBlock Margin="0,10,0,0" FontSize="16" FontWeight="SemiBold" Text="开发者工具" />
+                                                <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="工具链扫描、版本识别、托管安装与环境诊断" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Height="152" Margin="0,8,8,0" Style="{StaticResource InteractiveActionCardStyle}" Tag="InformationVault" Click="HomeNavigate_Click">
+                                            <StackPanel>
+                                                <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#FDE9EF" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#B95C77" Text="&#xE72E;" /></Border>
+                                                <TextBlock Margin="0,10,0,0" FontSize="16" FontWeight="SemiBold" Text="信息库" />
+                                                <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="本地加密保存账号、密码、密钥与恢复码" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Height="152" Margin="8,8,8,0" Style="{StaticResource InteractiveActionCardStyle}" Tag="SmartHome" Click="HomeNavigate_Click">
+                                            <StackPanel>
+                                                <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#E7F1FF" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#4D7CFE" Text="&#xE80F;" /></Border>
+                                                <TextBlock Margin="0,10,0,0" FontSize="16" FontWeight="SemiBold" Text="智能家居" />
+                                                <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="Home Assistant 设备控制、天气、状态与数据趋势" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Height="152" Margin="8,8,8,0" Style="{StaticResource InteractiveActionCardStyle}" Tag="Collaboration" Click="HomeNavigate_Click">
+                                            <StackPanel>
+                                                <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#E7F8F5" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#329C8A" Text="&#xE753;" /></Border>
+                                                <TextBlock Margin="0,10,0,0" FontSize="16" FontWeight="SemiBold" Text="协作中心" />
+                                                <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="可信配对、自动重连、双向文件传输与进度通知" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Height="152" Margin="8,8,0,0" Style="{StaticResource InteractiveActionCardStyle}" Tag="Shortcuts" Click="HomeNavigate_Click">
+                                            <StackPanel>
+                                                <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#F4E8FF" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#9A58C7" Text="&#xE765;" /></Border>
+                                                <TextBlock Margin="0,10,0,0" FontSize="16" FontWeight="SemiBold" Text="快捷键" />
+                                                <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="统一管理截图、剪贴板与本地语音输入热键" />
+                                            </StackPanel>
+                                        </Button>
+                                    </primitives:UniformGrid>
                                 </Grid>
+                            </ScrollViewer>
 
-                                <primitives:UniformGrid Grid.Row="4" Rows="2" Columns="4">
-                                    <Button Height="148" Margin="0,0,8,8" Style="{StaticResource InteractiveActionCardStyle}" Click="NavigateToConverterWorkbench_Click">
-                                        <StackPanel>
-                                            <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#FFF2D9" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#E6A326" Text="&#xE8A7;" /></Border>
-                                            <TextBlock Margin="0,11,0,0" FontSize="16" FontWeight="SemiBold" Text="转换器工作台" />
-                                            <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="图片、音频、视频、PDF 与编码转换" />
-                                        </StackPanel>
-                                    </Button>
-                                    <Button Height="148" Margin="8,0,8,8" Style="{StaticResource InteractiveActionCardStyle}" Tag="FileWorkbench" Click="HomeNavigate_Click">
-                                        <StackPanel>
-                                            <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#EAF6E9" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#42A26A" Text="&#xE8B7;" /></Border>
-                                            <TextBlock Margin="0,11,0,0" FontSize="16" FontWeight="SemiBold" Text="文件工作台" />
-                                            <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="Windows Search、完整扫描、重复文件与批处理" />
-                                        </StackPanel>
-                                    </Button>
-                                    <Button Height="148" Margin="8,0,8,8" Style="{StaticResource InteractiveActionCardStyle}" Tag="NetworkWorkbench" Click="HomeNavigate_Click">
-                                        <StackPanel>
-                                            <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#E5F5FF" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#338BC4" Text="&#xE774;" /></Border>
-                                            <TextBlock Margin="0,11,0,0" FontSize="16" FontWeight="SemiBold" Text="网络工作台" />
-                                            <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="状态监测、连接诊断、Wi-Fi、代理 DNS 与网络方案" />
-                                        </StackPanel>
-                                    </Button>
-                                    <Button Height="148" Margin="8,0,0,8" Style="{StaticResource InteractiveActionCardStyle}" Tag="ResourceManagement" Click="HomeNavigate_Click">
-                                        <StackPanel>
-                                            <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#EAF0F7" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#657B94" Text="&#xE9D2;" /></Border>
-                                            <TextBlock Margin="0,11,0,0" FontSize="16" FontWeight="SemiBold" Text="资源管理" />
-                                            <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="端口、进程、服务与运行关系一站查看" />
-                                        </StackPanel>
-                                    </Button>
-                                    <Button Height="148" Margin="0,8,8,0" Style="{StaticResource InteractiveActionCardStyle}" Tag="SystemTools" Click="HomeNavigate_Click">
-                                        <StackPanel>
-                                            <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#F0EAFF" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#7659B3" Text="&#xE950;" /></Border>
-                                            <TextBlock Margin="0,11,0,0" FontSize="16" FontWeight="SemiBold" Text="系统工具" />
-                                            <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="设备、驱动、存储树状图、启动项、环境变量与系统诊断" />
-                                        </StackPanel>
-                                    </Button>
-                                    <Button Height="148" Margin="8,8,8,0" Style="{StaticResource InteractiveActionCardStyle}" Tag="Shortcuts" Click="HomeNavigate_Click">
-                                        <StackPanel>
-                                            <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#F4E8FF" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#9A58C7" Text="&#xE765;" /></Border>
-                                            <TextBlock Margin="0,11,0,0" FontSize="16" FontWeight="SemiBold" Text="快捷键" />
-                                            <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="统一管理区域截图、全屏截图、剪贴板与本地语音输入热键" />
-                                        </StackPanel>
-                                    </Button>
-                                    <Button Height="148" Margin="8,8,8,0" Style="{StaticResource InteractiveActionCardStyle}" Tag="DeveloperTools" Click="HomeNavigate_Click">
-                                        <StackPanel>
-                                            <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#E4F2FF" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#4384C8" Text="&#xE943;" /></Border>
-                                            <TextBlock Margin="0,11,0,0" FontSize="16" FontWeight="SemiBold" Text="开发者工具" />
-                                            <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="工具链扫描、实际版本识别与开发环境诊断" />
-                                        </StackPanel>
-                                    </Button>
-                                    <Button Height="148" Margin="8,8,0,0" Style="{StaticResource InteractiveActionCardStyle}" Tag="InformationVault" Click="HomeNavigate_Click">
-                                        <StackPanel>
-                                            <Border Width="36" Height="36" HorizontalAlignment="Left" Background="#FDE9EF" CornerRadius="10"><TextBlock Style="{StaticResource IconTextStyle}" FontSize="18" Foreground="#B95C77" Text="&#xE72E;" /></Border>
-                                            <TextBlock Margin="0,11,0,0" FontSize="16" FontWeight="SemiBold" Text="信息库" />
-                                            <TextBlock Margin="0,4,0,0" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Text="本地加密保存账号、密码、密钥与恢复码" />
-                                        </StackPanel>
-                                    </Button>
-                                </primitives:UniformGrid>
-                            </Grid>
-
-                            <!-- 效率工具在共享分组栏中切换转换器与文件模块；转换器内部继续使用独立工具轨道。 -->
+                            <!-- 效率工具在共享分组栏中切换转换器、文件与压缩包模块；转换器内部继续使用独立工具轨道。 -->
                             <Grid x:Name="ConverterWorkbenchView" Grid.Row="1" Visibility="Collapsed" Margin="44,18,52,38">
                                 <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="14" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                                 <StackPanel>
@@ -756,6 +788,10 @@
                                     <converters:QrCodeConverterView x:Name="QrCodeConverterViewHost" Grid.Column="2" />
                                 </Grid>
                             </Grid>
+
+                            <!-- 压缩包工作台：纯本地创建、预览与安全解压，不调用外部命令行。 -->
+                            <archives:ArchiveWorkspaceView x:Name="ArchiveWorkspaceView" Grid.Row="1"
+                                                           Visibility="Collapsed" Margin="44,18,52,38" />
 
                             <!-- 统一剪贴板页：截图相关内容与外部复制内容集中回看。 -->
                             <Grid x:Name="HistoryView" Grid.Row="1" Visibility="Collapsed" Margin="58,32,48,38">

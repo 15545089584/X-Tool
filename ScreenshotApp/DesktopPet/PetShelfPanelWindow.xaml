@@ -1,0 +1,391 @@
+<Window x:Class="ScreenshotApp.DesktopPet.PetShelfPanelWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="X-Tool 文件暂存区"
+        Width="420" Height="490"
+        UseLayoutRounding="True" SnapsToDevicePixels="True"
+        AllowsTransparency="True" Background="Transparent"
+        WindowStyle="None" ResizeMode="NoResize"
+        ShowInTaskbar="False" Topmost="True"
+        WindowStartupLocation="Manual"
+        Deactivated="Window_Deactivated">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+        <Style x:Key="ShelfSelectionCheckBoxStyle" TargetType="CheckBox">
+            <Setter Property="Width" Value="18" />
+            <Setter Property="Height" Value="18" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Grid Width="18" Height="18">
+                            <Border x:Name="SelectionBox"
+                                    Background="#F9FBFE"
+                                    BorderBrush="#B8CADB"
+                                    BorderThickness="1.2"
+                                    CornerRadius="5" />
+                            <TextBlock x:Name="SelectionGlyph"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       FontFamily="Segoe Fluent Icons"
+                                       FontSize="10"
+                                       FontWeight="SemiBold"
+                                       Foreground="White"
+                                       Text="&#xE73E;"
+                                       Visibility="Collapsed" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="SelectionBox" Property="BorderBrush" Value="#6F9BFF" />
+                                <Setter TargetName="SelectionBox" Property="Background" Value="#F2F6FF" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="SelectionBox" Property="Background" Value="#4D7CFE" />
+                                <Setter TargetName="SelectionBox" Property="BorderBrush" Value="#4D7CFE" />
+                                <Setter TargetName="SelectionGlyph" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsChecked" Value="True" />
+                                    <Condition Property="IsMouseOver" Value="True" />
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="SelectionBox" Property="Background" Value="#3F6FEA" />
+                                <Setter TargetName="SelectionBox" Property="BorderBrush" Value="#3F6FEA" />
+                            </MultiTrigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="ShelfItemOpenButtonStyle" TargetType="Button">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="Transparent">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="Opacity" Value="0.72" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="ShelfCardStyle" TargetType="Border">
+            <Setter Property="Margin" Value="0,0,0,8" />
+            <Setter Property="Padding" Value="11" />
+            <Setter Property="Background" Value="White" />
+            <Setter Property="BorderBrush" Value="#E4EAF3" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="14" />
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="BorderBrush" Value="#6F9BFF" />
+                    <Setter Property="Background" Value="#F7F9FF" />
+                </Trigger>
+                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                    <Setter Property="Background" Value="#EDF3FF" />
+                    <Setter Property="BorderBrush" Value="#7B9FFA" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="ShelfScrollThumbStyle" TargetType="Thumb">
+            <Setter Property="MinHeight" Value="28" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Border x:Name="ThumbBody" Margin="1" Background="#BBCBDF" CornerRadius="3" />
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ThumbBody" Property="Background" Value="#6F91D8" />
+                            </Trigger>
+                            <Trigger Property="IsDragging" Value="True">
+                                <Setter TargetName="ThumbBody" Property="Background" Value="#4D7CFE" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="ShelfScrollBarStyle" TargetType="ScrollBar">
+            <Setter Property="Width" Value="8" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MaxWidth" Value="8" />
+            <Setter Property="Margin" Value="5,2,1,2" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Grid>
+                            <Border Margin="1" Background="#EDF1F7" CornerRadius="3" />
+                            <Track x:Name="PART_Track" IsDirectionReversed="True" Focusable="False">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="{x:Static ScrollBar.PageUpCommand}"
+                                                  Focusable="False" Opacity="0" />
+                                </Track.DecreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb Style="{StaticResource ShelfScrollThumbStyle}" />
+                                </Track.Thumb>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="{x:Static ScrollBar.PageDownCommand}"
+                                                  Focusable="False" Opacity="0" />
+                                </Track.IncreaseRepeatButton>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="ToolbarButtonStyle" TargetType="Button">
+            <Style.Resources>
+                <SolidColorBrush x:Key="ShelfButtonHover" Color="#EDF3FF" />
+                <SolidColorBrush x:Key="ShelfButtonPressed" Color="#DBE7FC" />
+            </Style.Resources>
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Padding" Value="11,0" />
+            <Setter Property="Margin" Value="6,0,0,0" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Foreground" Value="#3D5871" />
+            <Setter Property="Background" Value="#F6F9FE" />
+            <Setter Property="BorderBrush" Value="#C6D9EE" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBorder"
+                                Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="10">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource ShelfButtonHover}" />
+                                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#80A6F8" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource ShelfButtonPressed}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="PrimaryToolbarButtonStyle" TargetType="Button" BasedOn="{StaticResource ToolbarButtonStyle}">
+            <Style.Resources>
+                <SolidColorBrush x:Key="ShelfButtonHover" Color="#3E6BE8" />
+                <SolidColorBrush x:Key="ShelfButtonPressed" Color="#315ACB" />
+            </Style.Resources>
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Background" Value="#4D7CFE" />
+            <Setter Property="BorderBrush" Value="#4D7CFE" />
+        </Style>
+        <Style x:Key="ShelfScrollViewerStyle" TargetType="ScrollViewer">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollViewer">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <ScrollContentPresenter x:Name="PART_ScrollContentPresenter"
+                                Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}"
+                                CanContentScroll="{TemplateBinding CanContentScroll}" />
+                            <ScrollBar x:Name="PART_VerticalScrollBar" Grid.Column="1" Orientation="Vertical"
+                                Style="{StaticResource ShelfScrollBarStyle}" Maximum="{TemplateBinding ScrollableHeight}"
+                                ViewportSize="{TemplateBinding ViewportHeight}"
+                                Value="{Binding VerticalOffset, RelativeSource={RelativeSource TemplatedParent}, Mode=OneWay}"
+                                Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Border x:Name="PanelRoot"
+            Margin="12"
+            Padding="18,18,18,14"
+            BorderBrush="#D4DFED"
+            BorderThickness="1"
+            CornerRadius="22">
+        <Border.Background>
+            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                <GradientStop Offset="0" Color="#FFFFFF" />
+                <GradientStop Offset="0.58" Color="#F7F9FD" />
+                <GradientStop Offset="1" Color="#F0F5FC" />
+            </LinearGradientBrush>
+        </Border.Background>
+        <Border.Effect>
+            <DropShadowEffect Color="#5065809C" BlurRadius="30" ShadowDepth="7" Direction="270" Opacity="0.32" />
+        </Border.Effect>
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal">
+                    <Border Width="38" Height="38" Margin="0,0,10,0" VerticalAlignment="Center"
+                            Background="#E6EEFF" BorderBrush="#B7CBF7" BorderThickness="1" CornerRadius="11">
+                        <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="#597ED8" Text="&#xE8B7;" />
+                    </Border>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="文件暂存区" FontSize="18" FontWeight="SemiBold" Foreground="#29465F" />
+                        <TextBlock x:Name="SummaryText" Margin="0,3,0,0" FontSize="10.5" Foreground="#7890A7" />
+                    </StackPanel>
+                </StackPanel>
+                <Button Grid.Column="1" Width="30" Height="30" Padding="0" Margin="6,0,0,0"
+                        Style="{StaticResource ToolbarButtonStyle}" ToolTip="关闭暂存区" Click="CloseButton_Click">
+                    <TextBlock FontFamily="Segoe Fluent Icons" FontSize="11" Text="&#xE711;" />
+                </Button>
+            </Grid>
+
+            <StackPanel Grid.Row="1" Margin="0,17,0,12">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="CopyButton" Margin="0" Style="{StaticResource PrimaryToolbarButtonStyle}" Click="CopyButton_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Margin="0,0,6,0" FontFamily="Segoe Fluent Icons" Text="&#xE8C8;"
+                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                            <TextBlock x:Name="CopyButtonText" Text="复制全部"
+                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="SelectAllButton" Grid.Column="1" Style="{StaticResource ToolbarButtonStyle}" Click="SelectAllButton_Click">
+                        <TextBlock x:Name="SelectAllButtonText" Text="全选" Foreground="#46617C" />
+                    </Button>
+                    <Button x:Name="ClearButton" Grid.Column="2" HorizontalAlignment="Right" Style="{StaticResource ToolbarButtonStyle}" Click="ClearButton_Click">
+                        <TextBlock x:Name="ClearButtonText" Text="清空" Foreground="#657C92" />
+                    </Button>
+                </Grid>
+                <TextBlock x:Name="SelectionText" Margin="1,12,0,0" FontSize="11" Foreground="#637D9A"
+                           Text="勾选文件后，长按即可拖出" />
+            </StackPanel>
+
+            <Grid Grid.Row="2">
+                <Border x:Name="EmptyState" Padding="22" Background="#88FFFFFF" CornerRadius="14">
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock HorizontalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="28"
+                                   Foreground="#7695BD" Text="&#xE8B7;" />
+                        <TextBlock Margin="0,10,0,0" HorizontalAlignment="Center" TextAlignment="Center"
+                                   FontSize="12" Foreground="#607A94" Text="暂存区还是空的" />
+                        <TextBlock Margin="0,5,0,0" HorizontalAlignment="Center" TextAlignment="Center"
+                                   FontSize="10" Foreground="#8A9BAD" Text="把文件拖到宠物，并选择“存入暂存区”" />
+                    </StackPanel>
+                </Border>
+
+                <ScrollViewer x:Name="ItemsScroller" Style="{StaticResource ShelfScrollViewerStyle}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <ScrollViewer.Resources>
+                        <Style TargetType="ScrollBar" BasedOn="{StaticResource ShelfScrollBarStyle}" />
+                    </ScrollViewer.Resources>
+                    <ItemsControl x:Name="ShelfItemsControl">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Style="{StaticResource ShelfCardStyle}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="30" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <CheckBox Style="{StaticResource ShelfSelectionCheckBoxStyle}"
+                                                  IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                  ToolTip="勾选后长按文件，可与其他已选项一起拖出"
+                                                  Checked="SelectionCheckBox_Changed" Unchecked="SelectionCheckBox_Changed" />
+                                        <Button Grid.Column="1" Style="{StaticResource ShelfItemOpenButtonStyle}" Tag="{Binding Item}"
+                                                ToolTip="{Binding Item.DisplayName}" Click="OpenItemButton_Click"
+                                                PreviewMouseLeftButtonDown="Item_PreviewMouseLeftButtonDown"
+                                                PreviewMouseLeftButtonUp="Item_PreviewMouseLeftButtonUp"
+                                                LostMouseCapture="Item_LostMouseCapture">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="52" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <Border Width="48" Height="48" ClipToBounds="True" CornerRadius="10" Background="#F1F5FA"
+                                                        BorderBrush="#CBD9E7" BorderThickness="1">
+                                                    <Grid>
+                                                        <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                   FontFamily="Segoe Fluent Icons" FontSize="18"
+                                                                   Foreground="#6D8AA6" Text="&#xE8A5;">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="Visibility" Value="Visible" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding HasThumbnail}" Value="True">
+                                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
+                                                        <Image Source="{Binding Item.Thumbnail}" Stretch="UniformToFill"
+                                                               Visibility="{Binding HasThumbnail, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                                    </Grid>
+                                                </Border>
+                                                <StackPanel Grid.Column="1" Margin="8,0,0,0"
+                                                            HorizontalAlignment="Stretch" VerticalAlignment="Center">
+                                                    <TextBlock HorizontalAlignment="Stretch"
+                                                               FontSize="12" FontWeight="SemiBold"
+                                                               Foreground="#38536B" Text="{Binding Item.DisplayName}"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Margin="0,3,0,0" HorizontalAlignment="Left"
+                                                               FontSize="10.5" Foreground="#8497A9"
+                                                               Text="{Binding Detail}" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </Button>
+                                        <Button Grid.Column="2" Width="31" Height="31" Padding="0" Margin="6,0,0,0"
+                                                VerticalAlignment="Center" Style="{StaticResource ToolbarButtonStyle}"
+                                                Visibility="{Binding Item.IsImage, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                                Tag="{Binding Item}" ToolTip="复制图片内容" Click="CopyImageButton_Click">
+                                            <TextBlock FontFamily="Segoe Fluent Icons" FontSize="12" Text="&#xE8C8;" />
+                                        </Button>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
+
+            <Border Grid.Row="3" Margin="0,5,0,0" Padding="2,11,2,0" BorderBrush="#E0E7F1" BorderThickness="0,1,0,0">
+                <TextBlock x:Name="StatusText" MinHeight="15" FontSize="10.5" Foreground="#6B829A"
+                           Text="拖出默认复制 · 暂存文件保留" TextTrimming="CharacterEllipsis" />
+            </Border>
+        </Grid>
+    </Border>
+</Window>

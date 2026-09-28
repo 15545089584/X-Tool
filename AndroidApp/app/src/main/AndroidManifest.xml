@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 仅在用户开启日程同步后申请只读权限，不修改手机日历。 -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
     <!-- 用户主动开启截图同步后，读取系统保存的新截图。 -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
@@ -44,6 +47,8 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+        <activity android:name=".calendar.CalendarSettingsActivity" android:exported="false" />
+        <activity android:name=".CollaborationSettingsActivity" android:exported="false" />
         <activity android:name=".notification.NotificationSettingsActivity" android:exported="false" />
         <service android:name=".notification.PhoneNotificationListener" android:label="X-Tool 手机通知同步"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" android:exported="true">

@@ -179,6 +179,7 @@ public partial class MainWindow : Window
 
         SourceInitialized += MainWindow_SourceInitialized;
         Loaded += MainWindow_Loaded;
+        Activated += (_, _) => ScheduleDesktopPetVisibilityRefresh();
         StateChanged += (_, _) => UpdateMaximizeButton();
         Closing += MainWindow_Closing;
         Closed += MainWindow_Closed;
@@ -554,7 +555,8 @@ public partial class MainWindow : Window
         {
             "History" => SettingsNav,
             "ConverterWorkbench" or "ImageConverter" or "AudioConverter" or "VideoConverter" or
-                "PdfConverter" or "EncodingConverter" or "QrCodeConverter" or "FileWorkbench" => EfficiencyToolsNav,
+                "PdfConverter" or "EncodingConverter" or "QrCodeConverter" or "FileWorkbench" or
+                "ArchiveWorkbench" => EfficiencyToolsNav,
             "NetworkWorkbench" or "ResourceManagement" or "SystemTools" => SystemCenterNav,
             "DeveloperTools" => DeveloperToolsNav,
             "InformationVault" => InformationVaultNav,
@@ -646,6 +648,15 @@ public partial class MainWindow : Window
         {
             _ = RefreshHistoryAsync();
         }
+
+        ScheduleDesktopPetVisibilityRefresh();
+    }
+
+    private void ScheduleDesktopPetVisibilityRefresh()
+    {
+        Dispatcher.BeginInvoke(
+            () => (Application.Current as App)?.EnsureDesktopPetVisibleAndTopmost(),
+            DispatcherPriority.ApplicationIdle);
     }
 
     private void RememberWorkspaceSectionPage(string page)
@@ -681,8 +692,9 @@ public partial class MainWindow : Window
         {
             if (showEfficiency)
             {
-                ConverterSectionTab.IsChecked = page != "FileWorkbench";
+                ConverterSectionTab.IsChecked = page is not "FileWorkbench" and not "ArchiveWorkbench";
                 FileSectionTab.IsChecked = page == "FileWorkbench";
+                ArchiveSectionTab.IsChecked = page == "ArchiveWorkbench";
             }
             else
             {
@@ -699,7 +711,7 @@ public partial class MainWindow : Window
 
     private static bool IsEfficiencyPage(string page) => page is
         "ConverterWorkbench" or "ImageConverter" or "AudioConverter" or "VideoConverter" or
-        "PdfConverter" or "EncodingConverter" or "QrCodeConverter" or "FileWorkbench";
+        "PdfConverter" or "EncodingConverter" or "QrCodeConverter" or "FileWorkbench" or "ArchiveWorkbench";
 
     private static bool IsSystemCenterPage(string page) => page is
         "NetworkWorkbench" or "ResourceManagement" or "SystemTools";
@@ -715,6 +727,7 @@ public partial class MainWindow : Window
         "EncodingConverter" => EncodingConverterView,
         "QrCodeConverter" => QrCodeConverterView,
         "FileWorkbench" => FileWorkbenchView,
+        "ArchiveWorkbench" => ArchiveWorkspaceView,
         "NetworkWorkbench" => NetworkWorkbenchView,
         "ResourceManagement" => ResourceManagementView,
         "SystemTools" => SystemToolsView,
@@ -737,6 +750,7 @@ public partial class MainWindow : Window
         EncodingConverterView,
         QrCodeConverterView,
         FileWorkbenchView,
+        ArchiveWorkspaceView,
         NetworkWorkbenchView,
         ResourceManagementView,
         SystemToolsView,
@@ -759,6 +773,7 @@ public partial class MainWindow : Window
         "EncodingConverter" => 25,
         "QrCodeConverter" => 26,
         "FileWorkbench" => 30,
+        "ArchiveWorkbench" => 31,
         "NetworkWorkbench" => 40,
         "ResourceManagement" => 50,
         "SystemTools" => 60,
@@ -889,6 +904,7 @@ public partial class MainWindow : Window
     {
         Dispatcher.BeginInvoke(() =>
         {
+            _ = CopyReceivedImageToClipboardAsync(filePath);
             if (Application.Current is not App app) return;
             if (app.ShouldUseDesktopPetTransferBubbles) return;
             app.ShowTrayBalloon("手机文件已接收", $"{name}（{FormatCollaborationSize(size)}）已保存，点击打开文件", () =>
@@ -910,6 +926,70 @@ public partial class MainWindow : Window
                 }
             });
         });
+    }
+
+    /// <summary>手机传来单张图片后复制到系统剪贴板；解码或剪贴板占用失败不影响已完成传输。</summary>
+    private async Task CopyReceivedImageToClipboardAsync(string filePath)
+    {
+        var extension = Path.GetExtension(filePath).ToLowerInvariant();
+        if (extension is not (".png" or ".jpg" or ".jpeg" or ".bmp" or ".gif" or ".tif" or ".tiff" or
+            ".webp" or ".heic" or ".heif"))
+        {
+            return;
+        }
+
+        try
+        {
+            // 历史副本直接保留手机原始图片；与解码并行执行，避免等待 PNG 重编码。
+            var historyItemTask = CreateReceivedClipboardItemAsync(filePath);
+            var image = await Task.Run<BitmapSource?>(() =>
+            {
+                using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                var decoder = BitmapDecoder.Create(
+                    stream,
+                    BitmapCreateOptions.PreservePixelFormat,
+                    BitmapCacheOption.OnLoad);
+                var frame = decoder.Frames.FirstOrDefault();
+                if (frame is null)
+                {
+                    return null;
+                }
+
+                BitmapSource result = frame;
+                if (!result.CanFreeze)
+                {
+                    result = new WriteableBitmap(result);
+                }
+                result.Freeze();
+                return result;
+            });
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher is null)
+            {
+                return;
+            }
+
+            if (image is not null)
+            {
+                // 文件接收事件来自协作服务后台线程；即使调用方当前位于 UI 线程，
+                // 后台解码结束后也显式回到 WPF STA Dispatcher，避免剪贴板写入静默失败。
+                await dispatcher.InvokeAsync(() => ClipboardService.SetImage(image, recordToHistory: false));
+            }
+
+            var historyItem = await historyItemTask;
+            await dispatcher.InvokeAsync(() => InsertClipboardItem(historyItem));
+        }
+        catch (Exception exception)
+        {
+            Debug.WriteLine($"接收图片写入剪贴板失败：{exception.GetBaseException().Message}");
+        }
+    }
+
+    /// <summary>在后台保存接收图片并构造缩略图，避免剪贴板历史更新阻塞主界面。</summary>
+    private async Task<ScreenshotHistoryItem> CreateReceivedClipboardItemAsync(string filePath)
+    {
+        var savedPath = await _historyStore.SaveReceivedClipboardImageAsync(filePath);
+        return await Task.Run(() => _historyStore.CreateClipboardItem(savedPath, isText: false));
     }
 
     private void CollaborationService_DeviceStateChanged()
@@ -1050,10 +1130,13 @@ public partial class MainWindow : Window
         var wasVisible = IsVisible;
         var previousState = WindowState;
         var restoreWindowAfterCapture = true;
+        IDisposable? desktopPetCaptureSuspension = null;
 
         try
         {
             var sourceWindow = NativeMethods.GetForegroundWindow();
+            desktopPetCaptureSuspension =
+                (Application.Current as App)?.SuspendDesktopPetForCapture();
             NativeMethods.DismissForegroundTransientUi(sourceWindow);
             Hide();
             await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
@@ -1133,6 +1216,7 @@ public partial class MainWindow : Window
             }
 
             _captureInProgress = false;
+            desktopPetCaptureSuspension?.Dispose();
         }
     }
 
@@ -1148,10 +1232,13 @@ public partial class MainWindow : Window
         var wasVisible = IsVisible;
         var previousState = WindowState;
         var clipboardSaved = false;
+        IDisposable? desktopPetCaptureSuspension = null;
 
         try
         {
             var sourceWindow = NativeMethods.GetForegroundWindow();
+            desktopPetCaptureSuspension =
+                (Application.Current as App)?.SuspendDesktopPetForCapture();
             NativeMethods.DismissForegroundTransientUi(sourceWindow);
             Hide();
             await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
@@ -1192,6 +1279,7 @@ public partial class MainWindow : Window
             }
 
             _captureInProgress = false;
+            desktopPetCaptureSuspension?.Dispose();
         }
     }
 
@@ -1206,10 +1294,13 @@ public partial class MainWindow : Window
         var wasVisible = IsVisible;
         var previousState = WindowState;
         var restoreWindowAfterCapture = true;
+        IDisposable? desktopPetCaptureSuspension = null;
 
         try
         {
             var sourceWindow = NativeMethods.GetForegroundWindow();
+            desktopPetCaptureSuspension =
+                (Application.Current as App)?.SuspendDesktopPetForCapture();
             NativeMethods.DismissForegroundTransientUi(sourceWindow);
             Hide();
             await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
@@ -1251,6 +1342,7 @@ public partial class MainWindow : Window
             }
 
             _captureInProgress = false;
+            desktopPetCaptureSuspension?.Dispose();
         }
     }
 
@@ -1522,15 +1614,20 @@ public partial class MainWindow : Window
         try
         {
             var item = _historyStore.CreateClipboardItem(savedPath, isText);
-            _allHistoryItems = new[] { item }.Concat(_allHistoryItems).Take(200).ToArray();
-            // 历史页正在展示时同步更新列表，剪贴板历史与浮窗都能立即看到新内容。
-            ApplyHistoryFilter();
+            InsertClipboardItem(item);
         }
         catch (Exception exception)
         {
             LogClipboardCapture($"缓存插入异常：{exception.GetBaseException().Message}");
             // 条目构造失败时由随后的全量刷新兜底。
         }
+    }
+
+    private void InsertClipboardItem(ScreenshotHistoryItem item)
+    {
+        _allHistoryItems = new[] { item }.Concat(_allHistoryItems).Take(200).ToArray();
+        // 历史页正在展示时同步更新列表，剪贴板历史与浮窗都能立即看到新内容。
+        ApplyHistoryFilter();
     }
 
 #if SCROLL_CAPTURE_TEST
@@ -1561,6 +1658,11 @@ public partial class MainWindow : Window
         try
         {
             var savedPath = await _historyStore.SaveAsync(bitmap, isLongCapture);
+            // 三种截图共用保存出口；取消截图、OCR 和录像不会进入自动暂存。
+            if (_preferences.ScreenshotAutoAddToPetShelf && Application.Current is App app)
+            {
+                _ = app.StoreScreenshotInPetShelfAsync(savedPath);
+            }
             // 新文件已经落盘即可结束保存阶段；历史扫描在后台刷新，
             // 不再把遍历目录和解码缩略图时间叠加到复制完成路径。
             _ = RefreshHistoryAsync();
@@ -1882,7 +1984,7 @@ public partial class MainWindow : Window
         _clipboardPasteTarget = NativeMethods.GetForegroundWindow();
         var choices = _allHistoryItems
             .Where(item => item.Kind != HistoryEntryKind.ScreenRecording &&
-                           (item.IsTextRecord || Path.GetExtension(item.FilePath).Equals(".png", StringComparison.OrdinalIgnoreCase)))
+                           (item.IsTextRecord || IsClipboardImagePath(item.FilePath)))
             .ToArray();
         if (choices.Length == 0)
         {
@@ -1908,6 +2010,21 @@ public partial class MainWindow : Window
             }
         };
         picker.Show();
+    }
+
+    private static bool IsClipboardImagePath(string filePath)
+    {
+        var extension = Path.GetExtension(filePath);
+        return extension.Equals(".png", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".jpg", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".bmp", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".gif", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".tif", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".tiff", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".webp", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".heic", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".heif", StringComparison.OrdinalIgnoreCase);
     }
 
     private void ClipboardPicker_FullHistoryRequested(object? sender, EventArgs e)
@@ -2668,6 +2785,18 @@ public partial class MainWindow : Window
             case "InformationVault":
                 SelectMainNavigation(InformationVaultNav);
                 break;
+            case "SmartHome":
+                SelectMainNavigation(SmartHomeNav);
+                break;
+            case "Collaboration":
+                SelectMainNavigation(CollaborationNav);
+                break;
+            case "History":
+                SelectMainNavigation(SettingsNav);
+                break;
+            case "DesktopPetSettings":
+                OpenSettingsWindow("DesktopPet");
+                return;
             case "Shortcuts":
                 OpenShortcutSettings();
                 return;

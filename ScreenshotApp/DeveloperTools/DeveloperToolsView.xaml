@@ -263,7 +263,19 @@
                                         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                                         <Grid>
                                             <Border Width="38" Height="38" HorizontalAlignment="Left" Background="{Binding IconBackground}" CornerRadius="10">
-                                                <Image Width="27" Height="27" Source="{Binding IconSource}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
+                                                <Grid>
+                                                    <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe UI, Microsoft YaHei UI"
+                                                               FontSize="13" FontWeight="SemiBold" Foreground="{Binding IconForeground}" Text="{Binding IconGlyph}">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock"><Setter Property="Visibility" Value="Visible" /><Style.Triggers><DataTrigger Binding="{Binding HasIconSource}" Value="True"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger></Style.Triggers></Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                    <Image Width="27" Height="27" Source="{Binding IconSource}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality">
+                                                        <Image.Style>
+                                                            <Style TargetType="Image"><Setter Property="Visibility" Value="Collapsed" /><Style.Triggers><DataTrigger Binding="{Binding HasIconSource}" Value="True"><Setter Property="Visibility" Value="Visible" /></DataTrigger></Style.Triggers></Style>
+                                                        </Image.Style>
+                                                    </Image>
+                                                </Grid>
                                             </Border>
                                             <Button HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource DeveloperStatusButtonStyle}"
                                                     Background="{Binding StatusBackground}" Foreground="{Binding StatusForeground}" Content="{Binding StatusText}"
@@ -294,7 +306,19 @@
                                     <Grid>
                                         <StackPanel Orientation="Horizontal">
                                             <Border Width="40" Height="40" Background="{Binding IconBackground}" CornerRadius="11">
-                                                <Image Width="29" Height="29" Source="{Binding IconSource}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
+                                                <Grid>
+                                                    <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe UI, Microsoft YaHei UI"
+                                                               FontSize="13" FontWeight="SemiBold" Foreground="{Binding IconForeground}" Text="{Binding IconGlyph}">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock"><Setter Property="Visibility" Value="Visible" /><Style.Triggers><DataTrigger Binding="{Binding HasIconSource}" Value="True"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger></Style.Triggers></Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                    <Image Width="29" Height="29" Source="{Binding IconSource}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality">
+                                                        <Image.Style>
+                                                            <Style TargetType="Image"><Setter Property="Visibility" Value="Collapsed" /><Style.Triggers><DataTrigger Binding="{Binding HasIconSource}" Value="True"><Setter Property="Visibility" Value="Visible" /></DataTrigger></Style.Triggers></Style>
+                                                        </Image.Style>
+                                                    </Image>
+                                                </Grid>
                                             </Border>
                                             <StackPanel Margin="13,0,0,0" VerticalAlignment="Center"><TextBlock FontSize="16" FontWeight="SemiBold" Text="{Binding DisplayName}" /><TextBlock Margin="0,3,0,0" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}" Text="{Binding Description}" /></StackPanel>
                                         </StackPanel>
@@ -528,6 +552,159 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </StackPanel>
+
+                    <Grid Margin="0,14,0,10">
+                        <TextBlock FontSize="16" FontWeight="SemiBold" Text="Nginx 托管下载" />
+                        <TextBlock x:Name="ManagedNginxStateText" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" Foreground="#66809A" Text="等待读取官方目录" />
+                    </Grid>
+                    <TextBlock Margin="0,0,0,12" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}" TextWrapping="Wrap"
+                               Text="版本与下载地址来自 NGINX 官方 Windows 发行站；压缩包解压到 X-Tool 托管目录并验证 nginx -v。托管安装不会注册 Windows 服务，也不会自动修改 PATH。" />
+                    <Border x:Name="ManagedNginxEmptyState" Padding="20" Background="#72FFFFFF" BorderBrush="#92FFFFFF" BorderThickness="1" CornerRadius="14">
+                        <TextBlock HorizontalAlignment="Center" FontSize="12" Foreground="#74879A" Text="点击“刷新版本”读取 NGINX 官方目录" />
+                    </Border>
+                    <TextBlock Margin="0,2,0,10" FontSize="13" FontWeight="SemiBold" Foreground="#526E87" Text="推荐版本" />
+                    <ItemsControl x:Name="ManagedNginxReleasesItemsControl">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Margin="0,0,0,10" Padding="16,14" Background="#78FFFFFF" BorderBrush="#99D5E3EF" BorderThickness="1" CornerRadius="13">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="52" /><ColumnDefinition Width="*" /><ColumnDefinition Width="116" /></Grid.ColumnDefinitions>
+                                        <Border Width="42" Height="42" Background="#E4F5E9" CornerRadius="11">
+                                            <TextBlock FontFamily="Consolas" FontSize="16" FontWeight="SemiBold" Foreground="#168A4A" Text="NG" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                        <StackPanel Grid.Column="1" Margin="12,0,20,0" VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock FontSize="15" FontWeight="SemiBold" Text="{Binding DisplayName}" />
+                                                <Border Margin="10,0,0,0" Padding="8,3" Background="#DDF6EA" CornerRadius="7">
+                                                    <TextBlock FontSize="10" Foreground="#367A59" Text="{Binding Version}" />
+                                                </Border>
+                                                <Border Margin="7,0,0,0" Padding="8,3" Background="{Binding SupportBackground}" CornerRadius="7">
+                                                    <TextBlock FontSize="10" Foreground="{Binding SupportForeground}" Text="{Binding SupportText}" />
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Margin="0,5,0,0" FontSize="11" Foreground="#687D91">
+                                                <Run Text="{Binding SourceText, Mode=OneWay}" /><Run Text="  ·  " /><Run Text="{Binding Architecture, Mode=OneWay}" /><Run Text="  ·  " /><Run Text="{Binding SizeText, Mode=OneWay}" />
+                                            </TextBlock>
+                                            <TextBlock Margin="0,5,0,0" FontSize="10" Foreground="#74899D" Text="{Binding ProgressText}" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <Button Grid.Column="2" Width="104" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                Content="{Binding ActionText}" CommandParameter="{Binding}" Click="ManagedReleaseAction_Click">
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource DeveloperSmallButtonStyle}">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsBusy}" Value="True"><Setter Property="IsEnabled" Value="False" /></DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsInstalled}" Value="True"><Setter Property="Foreground" Value="#B14F4F" /><Setter Property="Background" Value="#FFF0F0" /></DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <Grid Margin="0,14,0,10">
+                        <TextBlock FontSize="16" FontWeight="SemiBold" Text="Apache JMeter 托管下载" />
+                        <TextBlock x:Name="ManagedJMeterStateText" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" Foreground="#66809A" Text="等待读取 Apache 官方目录" />
+                    </Grid>
+                    <TextBlock Margin="0,0,0,12" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}" TextWrapping="Wrap"
+                               Text="版本、ZIP 与 SHA-512 均来自 Apache 官方发行目录；校验通过后安全解压到 X-Tool 托管目录，并核对核心 JAR 的版本清单。JMeter 需要 Java 8 或更高版本，托管安装不会自动切换系统 Java，也不会修改 PATH。" />
+                    <Border x:Name="ManagedJMeterEmptyState" Padding="20" Background="#72FFFFFF" BorderBrush="#92FFFFFF" BorderThickness="1" CornerRadius="14">
+                        <TextBlock HorizontalAlignment="Center" FontSize="12" Foreground="#74879A" Text="点击“刷新版本”读取 Apache JMeter 官方目录" />
+                    </Border>
+                    <TextBlock Margin="0,2,0,10" FontSize="13" FontWeight="SemiBold" Foreground="#526E87" Text="正式版本" />
+                    <ItemsControl x:Name="ManagedJMeterReleasesItemsControl">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Margin="0,0,0,10" Padding="16,14" Background="#78FFFFFF" BorderBrush="#99D5E3EF" BorderThickness="1" CornerRadius="13">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="52" /><ColumnDefinition Width="*" /><ColumnDefinition Width="116" /></Grid.ColumnDefinitions>
+                                        <Border Width="42" Height="42" Background="#FDE9E2" CornerRadius="11">
+                                            <Image Width="28" Height="28" Stretch="Uniform" Source="/XTool;component/Assets/Toolchains/jmeter.png" />
+                                        </Border>
+                                        <StackPanel Grid.Column="1" Margin="12,0,20,0" VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock FontSize="15" FontWeight="SemiBold" Text="{Binding DisplayName}" />
+                                                <Border Margin="10,0,0,0" Padding="8,3" Background="#FDE9E2" CornerRadius="7">
+                                                    <TextBlock FontSize="10" Foreground="#A84D31" Text="{Binding Version}" />
+                                                </Border>
+                                                <Border Margin="7,0,0,0" Padding="8,3" Background="{Binding SupportBackground}" CornerRadius="7">
+                                                    <TextBlock FontSize="10" Foreground="{Binding SupportForeground}" Text="{Binding SupportText}" />
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Margin="0,5,0,0" FontSize="11" Foreground="#687D91">
+                                                <Run Text="{Binding SourceText, Mode=OneWay}" /><Run Text="  ·  " /><Run Text="{Binding Architecture, Mode=OneWay}" /><Run Text="  ·  " /><Run Text="{Binding SizeText, Mode=OneWay}" />
+                                            </TextBlock>
+                                            <TextBlock Margin="0,5,0,0" FontSize="10" Foreground="#74899D" Text="{Binding ProgressText}" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <Button Grid.Column="2" Width="104" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                Content="{Binding ActionText}" CommandParameter="{Binding}" Click="ManagedReleaseAction_Click">
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource DeveloperSmallButtonStyle}">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsBusy}" Value="True"><Setter Property="IsEnabled" Value="False" /></DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsInstalled}" Value="True"><Setter Property="Foreground" Value="#B14F4F" /><Setter Property="Background" Value="#FFF0F0" /></DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <Grid Margin="0,14,0,10">
+                        <TextBlock FontSize="16" FontWeight="SemiBold" Text="Conda 发行版安装" />
+                        <TextBlock x:Name="ManagedCondaStateText" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="11" Foreground="#66809A" Text="等待读取官方发行目录" />
+                    </Grid>
+                    <TextBlock Margin="0,0,0,12" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}" TextWrapping="Wrap"
+                               Text="提供 Miniconda 与 Miniforge 官方 Windows 安装器，校验 SHA-256 后打开安装向导。完成后点击重新扫描，即可在总览和 SDK 与工具链查看；现有环境与卸载由发行版管理。" />
+                    <Border x:Name="ManagedCondaEmptyState" Padding="20" Background="#72FFFFFF" BorderBrush="#92FFFFFF" BorderThickness="1" CornerRadius="14">
+                        <TextBlock HorizontalAlignment="Center" FontSize="12" Foreground="#74879A" Text="点击“刷新版本”读取 Miniconda 与 Miniforge" />
+                    </Border>
+                    <TextBlock Margin="0,2,0,10" FontSize="13" FontWeight="SemiBold" Foreground="#526E87" Text="正式版本" />
+                    <ItemsControl x:Name="ManagedCondaReleasesItemsControl">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Margin="0,0,0,10" Padding="16,14" Background="#78FFFFFF" BorderBrush="#99D5E3EF" BorderThickness="1" CornerRadius="13">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="52" /><ColumnDefinition Width="*" /><ColumnDefinition Width="116" /></Grid.ColumnDefinitions>
+                                        <Border Width="42" Height="42" Background="#E2F5E8" CornerRadius="11">
+                                            <Image Width="28" Height="28" Stretch="Uniform" Source="/XTool;component/Assets/Toolchains/conda.png" />
+                                        </Border>
+                                        <StackPanel Grid.Column="1" Margin="12,0,20,0" VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock FontSize="15" FontWeight="SemiBold" Text="{Binding DisplayName}" />
+                                                <Border Margin="10,0,0,0" Padding="8,3" Background="#E2F5E8" CornerRadius="7">
+                                                    <TextBlock FontSize="10" Foreground="#268447" Text="{Binding Version}" />
+                                                </Border>
+                                                <Border Margin="7,0,0,0" Padding="8,3" Background="{Binding SupportBackground}" CornerRadius="7">
+                                                    <TextBlock FontSize="10" Foreground="{Binding SupportForeground}" Text="{Binding SupportText}" />
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Margin="0,5,0,0" FontSize="11" Foreground="#687D91">
+                                                <Run Text="{Binding SourceText, Mode=OneWay}" /><Run Text="  ·  " /><Run Text="{Binding Architecture, Mode=OneWay}" /><Run Text="  ·  " /><Run Text="{Binding SizeText, Mode=OneWay}" />
+                                            </TextBlock>
+                                            <TextBlock Margin="0,5,0,0" FontSize="10" Foreground="#74899D" Text="{Binding ProgressText}" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <Button Grid.Column="2" Width="104" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                Content="{Binding ActionText}" CommandParameter="{Binding}" Click="ManagedReleaseAction_Click">
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource DeveloperSmallButtonStyle}">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsBusy}" Value="True"><Setter Property="IsEnabled" Value="False" /></DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsInstalled}" Value="True"><Setter Property="Foreground" Value="#B14F4F" /><Setter Property="Background" Value="#FFF0F0" /></DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
 
                     <Grid Margin="0,14,0,10">
                         <TextBlock FontSize="16" FontWeight="SemiBold" Text="uv 托管 Python" />

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <Compile Include="../ScreenshotApp/SmartHome/HomeAssistantConnectionPolicy.cs" Link="HomeAssistantConnectionPolicy.cs" />
+    <Compile Include="../ScreenshotApp/SmartHome/HomeAssistantWebSocketClient.cs" Link="HomeAssistantWebSocketClient.cs" />
+    <Compile Include="../ScreenshotApp/SmartHome/HomeAssistantProvider.cs" Link="HomeAssistantProvider.cs" />
+    <Compile Include="../ScreenshotApp/SmartHome/ISmartHomeProvider.cs" Link="ISmartHomeProvider.cs" />
+    <Compile Include="../ScreenshotApp/SmartHome/SmartHomeModels.cs" Link="SmartHomeModels.cs" />
+    <Compile Include="../ScreenshotApp/SmartHome/SmartHomeService.cs" Link="SmartHomeService.cs" />
+    <Compile Include="../ScreenshotApp/SmartHome/SmartHomeSettingsStore.cs" Link="SmartHomeSettingsStore.cs" />
+    <Compile Include="../ScreenshotApp/SmartHome/SmartHomeCredentialStore.cs" Link="SmartHomeCredentialStore.cs" />
+    <Compile Include="../ScreenshotApp/SmartHome/SmartHomeCacheStore.cs" Link="SmartHomeCacheStore.cs" />
+  </ItemGroup>
+</Project>

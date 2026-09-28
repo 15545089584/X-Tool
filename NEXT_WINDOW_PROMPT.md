@@ -1,0 +1,1 @@
+继续开发 X-Tool。实际仓库是 D:\Claude Code\X-Tool，请先阅读 MAIL_HANDOFF.md 和 HANDOFF.md 顶部，检查 git status，再按我接下来提出的需求工作。当前稳定运行版是 ScreenshotApp\bin\mail-enterprise-diagnostics\Release\XTool.exe。腾讯企业邮箱已连接成功，此前失败是我把邮箱地址输入错了，不要继续当作认证故障处理。QQ、Gmail、腾讯企业邮箱都支持添加及创建后编辑备注，保留当前渐变三栏界面、简洁账户卡片、状态光点、平滑滚动和布局记忆。工作区有大量其他任务未提交改动，请保留，不清理、不暂存、不提交、不推送；文件使用 UTF-8 并保留原编码。先简要说明已理解的现状，然后等待我的具体下一项需求，不要自行启动交接中的全部待办。

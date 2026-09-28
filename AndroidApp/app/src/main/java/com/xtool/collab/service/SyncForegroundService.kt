@@ -75,9 +75,11 @@ class SyncForegroundService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private lateinit var session: SessionStore
     private var automaticMode = true
+    private var calendarSync: com.xtool.collab.calendar.CalendarSync? = null
     private var screenshotSync: com.xtool.collab.screenshot.ScreenshotSync? = null
     private var loopStarted = false
     private var wasConnected = false
+    private var lastLanDiscoveryAt = 0L
     private val failedTransferRetryAfter = ConcurrentHashMap<String, Long>()
     private val interruptedDownloadNames = ConcurrentHashMap.newKeySet<String>()
     private val activeTransferPreferences by lazy {
@@ -98,6 +100,7 @@ class SyncForegroundService : Service() {
         createNotificationChannels()
         startForeground(NotificationId, buildConnectionNotification("正在查找已信任电脑"))
         screenshotSync = com.xtool.collab.screenshot.ScreenshotSync(applicationContext, scope)
+        calendarSync = com.xtool.collab.calendar.CalendarSync(applicationContext, scope)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -130,36 +133,51 @@ class SyncForegroundService : Service() {
             }
 
             var host = session.host
-            var connected = host.isNotBlank() && runCatching {
-                withContext(Dispatchers.IO) { CollabApi(host).status(token, automatic = automaticMode) != null }
-            }.getOrDefault(false)
+            var connected = false
+            var attemptedLanDiscovery = false
 
-            if (!connected && automaticMode && session.autoConnectEnabled) {
-                TransferRuntime.updateConnection(false, "正在局域网内查找电脑")
-                updateConnectionNotification("正在局域网内查找已信任电脑")
-                val servers = runCatching {
-                    withContext(Dispatchers.IO) { CollabApi.discover() }
-                }.getOrDefault(emptyList())
-                val candidates = servers
-                    .filter { it.autoReconnectAllowed }
-                    .sortedByDescending { it.serverId == session.serverId }
-                for (candidate in candidates) {
-                    val accepted = runCatching {
-                        withContext(Dispatchers.IO) { CollabApi(candidate.host).status(token, automatic = true) != null }
-                    }.getOrDefault(false)
-                    if (!accepted) continue
-                    host = candidate.host
-                    session.host = candidate.host
-                    session.serverId = candidate.serverId
-                    session.serverName = candidate.serverName
+            // 热点提供方也有本地接口；不能仅凭 TRANSPORT_WIFI 判断能否发现电脑。
+            val localNetworkAvailable = CollabApi.hasLocalDiscoveryNetwork()
+            if (localNetworkAvailable && (!wasConnected ||
+                    (session.host == session.tailscaleHost && SystemClock.elapsedRealtime() - lastLanDiscoveryAt >= 15_000))) {
+                attemptedLanDiscovery = true
+                lastLanDiscoveryAt = SystemClock.elapsedRealtime()
+                discoverTrustedLanHost(token)?.let { discoveredHost ->
+                    host = discoveredHost
+                    connected = true
+                }
+            }
+
+            if (!connected) {
+                val savedHosts = listOf(session.lanHost, session.host, session.tailscaleHost)
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                for (candidateHost in savedHosts) {
+                    val status = runCatching {
+                        withContext(Dispatchers.IO) {
+                            CollabApi(candidateHost).status(token, automatic = automaticMode)
+                        }
+                    }.getOrNull() ?: continue
+                    if (session.serverId.isNotBlank() && status.optString("serverId") != session.serverId) continue
+                    host = candidateHost
+                    session.host = candidateHost
+                    status.optString("tailscaleHost").takeIf { it.isNotBlank() }?.let { session.tailscaleHost = it }
                     connected = true
                     break
                 }
             }
 
+            // 手动点击连接也必须允许重新发现；自动连接开关只限制无人操作时的后台恢复。
+            if (!connected && localNetworkAvailable && !attemptedLanDiscovery) {
+                discoverTrustedLanHost(token)?.let { discoveredHost ->
+                    host = discoveredHost
+                    connected = true
+                }
+            }
+
             if (!connected) {
                 wasConnected = false
-                TransferRuntime.updateConnection(false, "等待电脑出现在同一局域网")
+                TransferRuntime.updateConnection(false, "等待电脑通过局域网或 Tailscale 上线")
                 updateConnectionNotification("等待已信任电脑上线")
                 delay(4500)
                 continue
@@ -174,6 +192,34 @@ class SyncForegroundService : Service() {
             receiveOutgoingFiles(host, token)
             delay(1800)
         }
+    }
+
+    /** 在 Wi-Fi 或热点本地接口上查找同一台已信任电脑，并只用既有令牌恢复会话。 */
+    private suspend fun discoverTrustedLanHost(token: String): String? {
+        TransferRuntime.updateConnection(false, "正在局域网内查找电脑")
+        updateConnectionNotification("正在局域网内查找已信任电脑")
+        val servers = runCatching {
+            withContext(Dispatchers.IO) { CollabApi.discover() }
+        }.getOrDefault(emptyList())
+        val candidates = servers
+            .filter { !automaticMode || it.autoReconnectAllowed }
+            .filter { session.serverId.isBlank() || it.serverId == session.serverId }
+            .sortedByDescending { it.serverId == session.serverId }
+        for (candidate in candidates) {
+            val status = runCatching {
+                withContext(Dispatchers.IO) {
+                    CollabApi(candidate.host).status(token, automatic = automaticMode)
+                }
+            }.getOrNull() ?: continue
+            if (status.optString("serverId") != candidate.serverId) continue
+            session.host = candidate.host
+            session.lanHost = candidate.host
+            session.tailscaleHost = candidate.tailscaleHost
+            session.serverId = candidate.serverId
+            session.serverName = candidate.serverName
+            return candidate.host
+        }
+        return null
     }
 
     private suspend fun receiveOutgoingFiles(host: String, token: String) {
@@ -500,6 +546,7 @@ class SyncForegroundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        calendarSync?.close()
         screenshotSync?.close()
         scope.cancel()
         TransferRuntime.updateConnection(false, "连接服务已停止")

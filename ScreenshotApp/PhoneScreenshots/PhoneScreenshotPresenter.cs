@@ -34,20 +34,51 @@ internal static class PhoneScreenshotPresenter
         catch { return false; }
     }
 
-    internal static BitmapImage LoadImage(string path, bool thumbnail)
+    internal static BitmapSource LoadImage(string path, bool thumbnail)
     {
         using var stream = File.OpenRead(path);
+        var orientation = 1;
+        var portrait = false;
+        try
+        {
+            var decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
+            portrait = decoder.Frames[0].PixelHeight > decoder.Frames[0].PixelWidth;
+            if (decoder.Frames[0].Metadata is BitmapMetadata metadata && metadata.ContainsQuery("/app1/ifd/{ushort=274}"))
+                orientation = Convert.ToInt32(metadata.GetQuery("/app1/ifd/{ushort=274}"));
+        }
+        catch { /* 无方向元数据时按原像素方向显示。 */ }
+        stream.Position = 0;
         var image = new BitmapImage();
         image.BeginInit();
         image.CacheOption = BitmapCacheOption.OnLoad;
-        if (thumbnail) image.DecodePixelWidth = 600;
+        if (thumbnail)
+        {
+            // 气泡只需有界缩略图；长截图不再按固定宽度解码出很高的位图。
+            if (portrait) image.DecodePixelHeight = 600;
+            else image.DecodePixelWidth = 600;
+        }
         image.StreamSource = stream;
         image.EndInit();
         image.Freeze();
-        return image;
+        // 相机 JPEG 常用 EXIF 记录旋转方向，预览与复制都应用同一变换。
+        var matrix = orientation switch
+        {
+            2 => new System.Windows.Media.Matrix(-1, 0, 0, 1, 0, 0),
+            3 => new System.Windows.Media.Matrix(-1, 0, 0, -1, 0, 0),
+            4 => new System.Windows.Media.Matrix(1, 0, 0, -1, 0, 0),
+            5 => new System.Windows.Media.Matrix(0, 1, 1, 0, 0, 0),
+            6 => new System.Windows.Media.Matrix(0, 1, -1, 0, 0, 0),
+            7 => new System.Windows.Media.Matrix(0, -1, -1, 0, 0, 0),
+            8 => new System.Windows.Media.Matrix(0, -1, 1, 0, 0, 0),
+            _ => System.Windows.Media.Matrix.Identity
+        };
+        if (matrix.IsIdentity) return image;
+        var transformed = new TransformedBitmap(image, new System.Windows.Media.MatrixTransform(matrix));
+        transformed.Freeze();
+        return transformed;
     }
 
-    internal static void Receive(string path)
+    internal static void Receive(string path, bool photo = false)
     {
         var application = Application.Current;
         if (application is null || application.Dispatcher.HasShutdownStarted) return;
@@ -70,17 +101,18 @@ internal static class PhoneScreenshotPresenter
                         };
                         application.Exit += (_, _) => Clear();
                     }
-                    _bubble?.Close();
+                    var previousBubble = _bubble;
                     _bubble = null;
                     var pet = application.Windows.OfType<DesktopPetWindow>().FirstOrDefault(w => w.IsVisible);
                     if (pet is not null)
                     {
-                        var bubble = new PhoneScreenshotWindow(path, thumbnail, pet);
+                        var bubble = new PhoneScreenshotWindow(path, thumbnail, pet, photo);
                         _bubble = bubble;
                         bubble.Closed += (_, _) => { if (_bubble == bubble) _bubble = null; };
                         bubble.Show();
                     }
-                    else ShowNotice(path);
+                    else ShowNotice(path, photo);
+                    previousBubble?.Close();
                 });
             }
             catch { /* 图片已保存在接收目录，预览失败不能阻断传输响应。 */ }
@@ -93,11 +125,11 @@ internal static class PhoneScreenshotPresenter
         Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
     }
 
-    private static void ShowNotice(string path)
+    private static void ShowNotice(string path, bool photo)
     {
         // 每个通知绑定自己的文件，避免点击旧通知却打开最新图片。
         while (Notices.Count >= 8) DisposeNotice(Notices[0].Icon);
-        var icon = new Forms.NotifyIcon { Icon = System.Drawing.SystemIcons.Information, Visible = true, Text = "X-Tool 手机截图" };
+        var icon = new Forms.NotifyIcon { Icon = System.Drawing.SystemIcons.Information, Visible = true, Text = photo ? "X-Tool 手机照片" : "X-Tool 手机截图" };
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(2) };
         Notices.Add((icon, timer));
         icon.BalloonTipClicked += (_, _) =>
@@ -111,7 +143,7 @@ internal static class PhoneScreenshotPresenter
         };
         timer.Tick += (_, _) => DisposeNotice(icon);
         timer.Start();
-        icon.ShowBalloonTip(10000, "收到手机截图", "点击使用默认图片程序打开", Forms.ToolTipIcon.Info);
+        icon.ShowBalloonTip(10000, photo ? "收到手机照片" : "收到手机截图", "点击使用默认图片程序打开", Forms.ToolTipIcon.Info);
     }
 
     private static void DisposeNotice(Forms.NotifyIcon icon)

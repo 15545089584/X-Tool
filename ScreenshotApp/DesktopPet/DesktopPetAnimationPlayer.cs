@@ -53,12 +53,13 @@ internal sealed class DesktopPetAnimationPlayer : IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         var state = _catalog.GetState(stateId);
+        // 即使回到当前状态，也须取消尚未完成的其他状态加载。
+        _switchCancellation?.Cancel();
         if (_current?.State.Id.Equals(state.Id, StringComparison.OrdinalIgnoreCase) == true)
         {
             return;
         }
 
-        _switchCancellation?.Cancel();
         _switchCancellation?.Dispose();
         _switchCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var token = _switchCancellation.Token;

@@ -4,7 +4,9 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using Microsoft.Win32;
+using ScreenshotApp.Archives;
 using ScreenshotApp.Collaboration;
+using ScreenshotApp.Capture;
 using Forms = System.Windows.Forms;
 
 namespace ScreenshotApp.DesktopPet;
@@ -15,20 +17,23 @@ public partial class DesktopPetWindow : Window
     private readonly DesktopPetAnimationCatalog _catalog;
     private readonly DesktopPetAnimationPlayer _player;
     private readonly CollaborationService _collaborationService = CollaborationService.Instance;
+    private readonly PetSessionShelfService _shelfService;
+    private readonly PetAlarmService _alarmService;
+    private readonly bool _ownsShelfService;
+    private readonly bool _ownsAlarmService;
     private readonly HashSet<string> _petTransferIds = new(StringComparer.Ordinal);
     private readonly Dictionary<string, CollaborationTransferProgress> _activeTransferProgress = new(StringComparer.Ordinal);
     private readonly Dictionary<string, TransferSpeedSample> _transferSpeedSamples = new(StringComparer.Ordinal);
     private CancellationTokenSource? _resizeDecodeCancellation;
     private CancellationTokenSource? _completionResetCancellation;
+    private CancellationTokenSource? _shelfBubbleResetCancellation;
+    private CancellationTokenSource? _alarmBubbleResetCancellation;
+    private CancellationTokenSource? _archiveOperationCancellation;
     private PetActionWheelWindow? _actionWheel;
+    private PetCommandWheelWindow? _commandWheel;
+    private PetShelfPanelWindow? _shelfPanel;
+    private PetAlarmPanelWindow? _alarmPanel;
     private PetTransferBubbleWindow? _transferBubble;
-    private CollaborationTransferProgress? _lastCompletedProgress;
-    private CollaborationTransferProgress? _lastFailedProgress;
-    private int _scalePercent;
-    private int _activeQueueOperations;
-    private bool _petTransferFailed;
-    private bool _showingCompletionState;
-    private bool _initialized;
     private PetTransferBubbleWindow? _phoneBubble;
     private readonly System.Windows.Threading.DispatcherTimer _phoneBubbleTimer = new() { Interval = TimeSpan.FromSeconds(10) };
     internal void ShowPhoneNotification(string title, string detail, Action onClick, string? avatar = null, ScreenshotApp.Collaboration.PhoneVerificationCode? verificationCode = null)
@@ -44,13 +49,87 @@ public partial class DesktopPetWindow : Window
         UpdateTransferBubblePosition();
         _phoneBubbleTimer.Stop(); _phoneBubbleTimer.Start();
     }
+    internal void ShowMailNotification(string title, string detail, Action open, Action? markRead, string? logo = null)
+    {
+        if (_closed || !IsVisible) return;
+        if (_phoneBubble is null)
+        {
+            _phoneBubble = new PetTransferBubbleWindow();
+            _phoneBubbleTimer.Tick += (_, _) => DismissPhoneNotification();
+        }
+        _phoneBubble.ShowMailMessage(title, detail,
+            () => { DismissPhoneNotification(); open(); },
+            markRead is null ? null : () => { DismissPhoneNotification(); markRead(); }, logo);
+        _phoneBubbleTimer.Interval = TimeSpan.FromSeconds(10);
+        UpdateTransferBubblePosition();
+        _phoneBubbleTimer.Stop(); _phoneBubbleTimer.Start();
+    }
     internal void DismissPhoneNotification() { _phoneBubbleTimer.Stop(); _phoneBubble?.ResetVerificationCode(); _phoneBubble?.Hide(); }
 
+    private CollaborationTransferProgress? _lastCompletedProgress;
+    private CollaborationTransferProgress? _lastFailedProgress;
+    private int _scalePercent;
+    private int _activeQueueOperations;
+    private bool _petTransferFailed;
+    private bool _showingCompletionState;
+    private bool _activeDueAlarm;
+    private bool _archiveOperationActive;
+    private bool _shelfTransitionInProgress;
+    private bool _initialized;
     private bool _closed;
+    private int _phoneImageReminderCount;
+
+    internal IDisposable BeginPhoneImageReminder()
+    {
+        Dispatcher.VerifyAccess();
+        _phoneImageReminderCount++;
+        if (!_closed) _ = SwitchStateSafelyAsync("state-05");
+        return new PhoneImageReminderLease(this);
+    }
+
+    private sealed class PhoneImageReminderLease(DesktopPetWindow owner) : IDisposable
+    {
+        private DesktopPetWindow? _owner = owner;
+        public void Dispose()
+        {
+            var pet = Interlocked.Exchange(ref _owner, null);
+            if (pet is null) return;
+            pet._phoneImageReminderCount = Math.Max(0, pet._phoneImageReminderCount - 1);
+            if (!pet._closed && pet._phoneImageReminderCount == 0)
+                _ = pet.SwitchStateSafelyAsync("state-01");
+        }
+    }
 
     internal DesktopPetWindow(int initialScalePercent = 100)
+        : this(
+            new PetSessionShelfService(cleanupStaleSessions: false),
+            new PetAlarmService(),
+            initialScalePercent,
+            ownsShelfService: true,
+            ownsAlarmService: true)
+    {
+    }
+
+    internal DesktopPetWindow(
+        PetSessionShelfService shelfService,
+        PetAlarmService alarmService,
+        int initialScalePercent = 100)
+        : this(shelfService, alarmService, initialScalePercent, ownsShelfService: false, ownsAlarmService: false)
+    {
+    }
+
+    private DesktopPetWindow(
+        PetSessionShelfService shelfService,
+        PetAlarmService alarmService,
+        int initialScalePercent,
+        bool ownsShelfService,
+        bool ownsAlarmService)
     {
         InitializeComponent();
+        _shelfService = shelfService;
+        _alarmService = alarmService;
+        _ownsShelfService = ownsShelfService;
+        _ownsAlarmService = ownsAlarmService;
         _catalog = DesktopPetAnimationCatalog.LoadDefault();
         _scalePercent = Math.Clamp(initialScalePercent, 60, 160);
         var initialSize = CalculateDisplaySize(_scalePercent);
@@ -65,6 +144,8 @@ public partial class DesktopPetWindow : Window
         BuildAnimationStateMenu();
         _player.StateChanged += Player_StateChanged;
         _collaborationService.TransferProgressChanged += CollaborationService_TransferProgressChanged;
+        _shelfService.ItemsChanged += ShelfService_ItemsChanged;
+        _alarmService.ItemsChanged += AlarmService_ItemsChanged;
         Loaded += DesktopPetWindow_Loaded;
         IsVisibleChanged += DesktopPetWindow_IsVisibleChanged;
         LocationChanged += (_, _) => UpdateTransferBubblePosition();
@@ -89,6 +170,22 @@ public partial class DesktopPetWindow : Window
 
     internal Rect GetCurrentWorkingAreaForValidation() => GetCurrentWorkingArea();
 
+    internal Rect GetCurrentScreenBounds()
+    {
+        var handle = new WindowInteropHelper(this).Handle;
+        var bounds = Forms.Screen.FromHandle(handle).Bounds;
+        var source = PresentationSource.FromVisual(this);
+        if (source?.CompositionTarget is null)
+        {
+            return new Rect(bounds.Left, bounds.Top, bounds.Width, bounds.Height);
+        }
+
+        var transform = source.CompositionTarget.TransformFromDevice;
+        return new Rect(
+            transform.Transform(new Point(bounds.Left, bounds.Top)),
+            transform.Transform(new Point(bounds.Right, bounds.Bottom)));
+    }
+
     internal async Task SetScalePercentForValidationAsync(
         int scalePercent,
         CancellationToken cancellationToken)
@@ -101,6 +198,7 @@ public partial class DesktopPetWindow : Window
 
     internal void SetScalePercent(int scalePercent)
     {
+        CloseCommandExperience();
         if (!ApplyScalePercent(scalePercent))
         {
             return;
@@ -129,6 +227,19 @@ public partial class DesktopPetWindow : Window
         UpdateTransferBubblePosition();
     }
 
+    /// <summary>主窗口切换页面或重新激活后，重申桌宠的非激活置顶层级。</summary>
+    internal void EnsureTopmostWithoutActivation()
+    {
+        if (_closed || !IsVisible)
+        {
+            return;
+        }
+
+        var handle = new WindowInteropHelper(this).Handle;
+        NativeMethods.KeepWindowTopmostWithoutActivating(handle);
+        _transferBubble?.RefreshTopmost();
+    }
+
     protected override void OnClosed(EventArgs e)
     {
         if (_closed)
@@ -138,19 +249,36 @@ public partial class DesktopPetWindow : Window
         }
 
         _closed = true;
-        _phoneBubbleTimer.Stop(); _phoneBubble?.Close(); _phoneBubble = null;
         _actionWheel?.Close();
         _actionWheel = null;
+        CloseCommandExperience();
         _transferBubble?.Close();
         _transferBubble = null;
+        _phoneBubbleTimer.Stop(); _phoneBubble?.Close(); _phoneBubble = null;
         _resizeDecodeCancellation?.Cancel();
         _resizeDecodeCancellation?.Dispose();
         _resizeDecodeCancellation = null;
+        _archiveOperationCancellation?.Cancel();
+        _archiveOperationCancellation?.Dispose();
+        _archiveOperationCancellation = null;
+        _archiveOperationActive = false;
         CancelCompletionReset();
+        CancelShelfBubbleReset();
+        CancelAlarmBubbleReset();
         SystemEvents.DisplaySettingsChanged -= SystemEvents_DisplaySettingsChanged;
         _player.StateChanged -= Player_StateChanged;
         _collaborationService.TransferProgressChanged -= CollaborationService_TransferProgressChanged;
+        _shelfService.ItemsChanged -= ShelfService_ItemsChanged;
+        _alarmService.ItemsChanged -= AlarmService_ItemsChanged;
         _player.Dispose();
+        if (_ownsShelfService)
+        {
+            _shelfService.Dispose();
+        }
+        if (_ownsAlarmService)
+        {
+            _alarmService.Dispose();
+        }
         base.OnClosed(e);
     }
 
@@ -163,6 +291,10 @@ public partial class DesktopPetWindow : Window
             try
             {
                 await _player.SwitchStateAsync(_catalog.States[0].Id);
+            }
+            catch (OperationCanceledException)
+            {
+                // 启动过程中收到图片等新状态请求时，让最新状态继续加载，不隐藏宠物。
             }
             catch (Exception exception)
             {
@@ -190,13 +322,17 @@ public partial class DesktopPetWindow : Window
         {
             DismissPhoneNotification();
             _player.Pause();
-            _transferBubble?.Hide();
+            if (!_activeDueAlarm)
+            {
+                _transferBubble?.Hide();
+            }
+            CloseCommandExperience();
         }
 
         PetVisibilityChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    private async void PetSurface_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    private void PetSurface_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (e.ChangedButton != MouseButton.Left)
         {
@@ -217,26 +353,22 @@ public partial class DesktopPetWindow : Window
         var moved = Math.Abs(Left - startLeft) > 3 || Math.Abs(Top - startTop) > 3;
         if (moved)
         {
+            CloseCommandExperience();
             SnapToNearestEdge();
             return;
         }
 
-        if (HasAnyActiveTransfer || _showingCompletionState || _actionWheel is not null)
+        if (_actionWheel is not null)
         {
             return;
         }
 
-        var currentIndex = _catalog.States
-            .Select((state, index) => (state, index))
-            .FirstOrDefault(item => item.state.Id.Equals(_player.CurrentStateId, StringComparison.OrdinalIgnoreCase))
-            .index;
-        var nextState = _catalog.States[(currentIndex + 1) % _catalog.States.Count].Id;
-        await SwitchStateSafelyAsync(nextState);
+        ToggleCommandExperience();
     }
 
     private async void AnimationStateMenuItem_Click(object sender, RoutedEventArgs e)
     {
-        if (HasAnyActiveTransfer || _showingCompletionState || _actionWheel is not null)
+        if (HasAnyActiveTransfer || _showingCompletionState || _actionWheel is not null || _commandWheel is not null)
         {
             return;
         }
@@ -249,11 +381,16 @@ public partial class DesktopPetWindow : Window
 
     private void SnapToEdgeMenuItem_Click(object sender, RoutedEventArgs e) => SnapToNearestEdge();
 
-    private void HidePetMenuItem_Click(object sender, RoutedEventArgs e) => Hide();
+    private void HidePetMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        // 右键菜单属于用户主动关闭，需要保存；普通 Hide 仅改变运行状态。
+        if (Application.Current is App app) app.SetDesktopPetVisible(false);
+        else Hide();
+    }
 
     private void PetSurface_DragEnter(object sender, DragEventArgs e)
     {
-        if (!TryGetDraggedFiles(e.Data, out var files))
+        if (HasAnyActiveTransfer || !TryGetDraggedFiles(e.Data, out var files))
         {
             e.Effects = DragDropEffects.None;
             e.Handled = true;
@@ -262,6 +399,7 @@ public partial class DesktopPetWindow : Window
 
         e.Effects = DragDropEffects.Copy;
         e.Handled = true;
+        CloseCommandExperience();
         if (_actionWheel is not null)
         {
             return;
@@ -274,8 +412,10 @@ public partial class DesktopPetWindow : Window
             Top,
             ActualWidth > 0 ? ActualWidth : Width,
             ActualHeight > 0 ? ActualHeight : Height);
-        var wheel = new PetActionWheelWindow(petBounds, GetCurrentWorkingArea());
+        var wheel = new PetActionWheelWindow(petBounds, GetCurrentWorkingArea(), files);
         wheel.FilesDropped += ActionWheel_FilesDropped;
+        wheel.FilesStored += ActionWheel_FilesStored;
+        wheel.ArchiveRequested += ActionWheel_ArchiveRequested;
         wheel.Cancelled += ActionWheel_Cancelled;
         _actionWheel = wheel;
         wheel.Show();
@@ -284,7 +424,7 @@ public partial class DesktopPetWindow : Window
 
     private void PetSurface_DragOver(object sender, DragEventArgs e)
     {
-        e.Effects = TryGetDraggedFiles(e.Data, out _)
+        e.Effects = !HasAnyActiveTransfer && TryGetDraggedFiles(e.Data, out _)
             ? DragDropEffects.Copy
             : DragDropEffects.None;
         e.Handled = true;
@@ -313,10 +453,643 @@ public partial class DesktopPetWindow : Window
         _ = QueuePetFilesAsync(files);
     }
 
+    private void ActionWheel_FilesStored(IReadOnlyList<string> files)
+    {
+        _actionWheel = null;
+        _ = StorePetFilesAsync(files);
+    }
+
+    private void ActionWheel_ArchiveRequested(
+        IReadOnlyList<string> paths,
+        PetArchiveDropAction action)
+    {
+        _actionWheel = null;
+        _ = RunPetArchiveOperationAsync(paths, action);
+    }
+
     private void ActionWheel_Cancelled()
     {
         _actionWheel = null;
         _ = RestoreStateAfterWheelAsync();
+    }
+
+    private async Task StorePetFilesAsync(IReadOnlyList<string> files)
+    {
+        if (files.Count == 0)
+        {
+            await RestoreStateAfterWheelAsync();
+            return;
+        }
+
+        PetShelfAddResult result;
+        try
+        {
+            result = await _shelfService.AddFilesAsync(files);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception exception)
+        {
+            System.Diagnostics.Debug.WriteLine($"桌宠文件暂存失败：{exception.GetBaseException().Message}");
+            await RestoreStateAfterWheelAsync();
+            return;
+        }
+
+        await RestoreStateAfterWheelAsync();
+        if (result.AddedCount > 0)
+        {
+            _ = ShowShelfCompletionBubbleAsync(result);
+        }
+        else if (!string.IsNullOrWhiteSpace(result.LimitMessage))
+        {
+            _ = ShowShelfMessageBubbleAsync("暂存区空间不足", result.LimitMessage, "单击查看并清理");
+        }
+        else if (result.DuplicateCount > 0)
+        {
+            _ = ShowShelfMessageBubbleAsync("文件已在暂存区", "没有重复存入相同文件", "单击查看");
+        }
+        else
+        {
+            _ = ShowShelfMessageBubbleAsync("文件暂存失败", "文件可能已移动或正在被占用", "单击查看");
+        }
+    }
+
+    private void ToggleCommandExperience()
+    {
+        if (_commandWheel is not null || _shelfPanel is not null || _alarmPanel is not null)
+        {
+            CloseCommandExperience();
+            return;
+        }
+
+        OpenCommandExperience(showShelf: false);
+    }
+
+    private void OpenCommandExperience(bool showShelf)
+    {
+        if (!IsVisible || !IsLoaded)
+        {
+            return;
+        }
+
+        if (_commandWheel is null)
+        {
+            var wheel = new PetCommandWheelWindow(
+                GetPetBounds(),
+                GetCurrentWorkingArea(),
+                _shelfService.Items.Count,
+                _alarmService.Items.Count);
+            wheel.ShelfRequested += ShowShelfPanel;
+            wheel.AlarmRequested += ShowAlarmPanel;
+            wheel.CalendarRequested += () => { CloseCommandExperience(); ScreenshotApp.PhoneCalendar.PhoneCalendarWindow.Open(); };
+            wheel.MailRequested += () => { CloseCommandExperience(); ScreenshotApp.Mail.MailWindow.Open(); };
+            wheel.DismissRequested += CloseCommandExperience;
+            wheel.Closed += (_, _) =>
+            {
+                if (ReferenceEquals(_commandWheel, wheel))
+                {
+                    _commandWheel = null;
+                    _shelfPanel?.Close();
+                    _shelfPanel = null;
+                    _alarmPanel?.Close();
+                    _alarmPanel = null;
+                }
+            };
+            _commandWheel = wheel;
+            wheel.Show();
+        }
+
+        if (showShelf)
+        {
+            Dispatcher.BeginInvoke(ShowShelfPanel);
+        }
+    }
+
+    private async void ShowShelfPanel()
+    {
+        var wheel = _commandWheel;
+        if (wheel is null || _shelfTransitionInProgress)
+        {
+            return;
+        }
+
+        if (_shelfPanel is not null)
+        {
+            _shelfPanel.Activate();
+            return;
+        }
+
+        _shelfTransitionInProgress = true;
+        wheel.KeepOpenForCompanion = true;
+        try
+        {
+            var panel = new PetShelfPanelWindow(_shelfService, () => false);
+            var panelBounds = wheel.CalculatePanelBounds(panel.Width, panel.Height);
+            var transitionAnchor = wheel.CalculateTransitionAnchor(panelBounds);
+            await wheel.PlaySelectionTransitionAsync(PetCommandWheelWindow.ShelfCommandIndex, panelBounds);
+            if (!ReferenceEquals(_commandWheel, wheel))
+            {
+                panel.Close();
+                return;
+            }
+
+            panel.DismissRequested += CloseCommandExperience;
+            panel.Closed += (_, _) =>
+            {
+                if (ReferenceEquals(_shelfPanel, panel))
+                {
+                    _shelfPanel = null;
+                }
+            };
+            panel.UpdatePlacement(panelBounds);
+            panel.PrepareEntrance(transitionAnchor, panelBounds);
+            _shelfPanel = panel;
+            panel.Show();
+            panel.Activate();
+            _commandWheel = null;
+            wheel.Close();
+        }
+        catch (Exception exception)
+        {
+            System.Diagnostics.Debug.WriteLine($"桌宠暂存区转场失败：{exception.GetBaseException().Message}");
+            CloseCommandExperience();
+        }
+        finally
+        {
+            _shelfTransitionInProgress = false;
+        }
+    }
+
+    private async void ShowAlarmPanel()
+    {
+        var wheel = _commandWheel;
+        if (wheel is null || _shelfTransitionInProgress)
+        {
+            return;
+        }
+
+        if (_alarmPanel is not null)
+        {
+            _alarmPanel.Activate();
+            return;
+        }
+
+        _shelfTransitionInProgress = true;
+        wheel.KeepOpenForCompanion = true;
+        try
+        {
+            var panel = new PetAlarmPanelWindow(_alarmService, () => false);
+            var panelBounds = wheel.CalculatePanelBounds(panel.Width, panel.Height);
+            var transitionAnchor = wheel.CalculateTransitionAnchor(panelBounds);
+            await wheel.PlaySelectionTransitionAsync(PetCommandWheelWindow.AlarmCommandIndex, panelBounds);
+            if (!ReferenceEquals(_commandWheel, wheel))
+            {
+                panel.Close();
+                return;
+            }
+
+            panel.DismissRequested += CloseCommandExperience;
+            panel.Closed += (_, _) =>
+            {
+                if (ReferenceEquals(_alarmPanel, panel))
+                {
+                    _alarmPanel = null;
+                }
+            };
+            panel.UpdatePlacement(panelBounds);
+            panel.PrepareEntrance(transitionAnchor, panelBounds);
+            _alarmPanel = panel;
+            panel.Show();
+            panel.Activate();
+            _commandWheel = null;
+            wheel.Close();
+        }
+        catch (Exception exception)
+        {
+            System.Diagnostics.Debug.WriteLine($"桌宠闹钟转场失败：{exception.GetBaseException().Message}");
+            CloseCommandExperience();
+        }
+        finally
+        {
+            _shelfTransitionInProgress = false;
+        }
+    }
+
+    private void CloseCommandExperience()
+    {
+        var panel = _shelfPanel;
+        var alarmPanel = _alarmPanel;
+        var wheel = _commandWheel;
+        _shelfPanel = null;
+        _alarmPanel = null;
+        _commandWheel = null;
+        _shelfTransitionInProgress = false;
+        if (wheel is not null)
+        {
+            wheel.KeepOpenForCompanion = false;
+        }
+        panel?.Close();
+        alarmPanel?.Close();
+        wheel?.Close();
+    }
+
+    private void AlarmService_ItemsChanged()
+    {
+        if (Dispatcher.CheckAccess())
+        {
+            _commandWheel?.UpdateAlarmCount(_alarmService.Items.Count);
+        }
+        else
+        {
+            Dispatcher.BeginInvoke(() => _commandWheel?.UpdateAlarmCount(_alarmService.Items.Count));
+        }
+    }
+
+    private void ShelfService_ItemsChanged()
+    {
+        if (Dispatcher.CheckAccess())
+        {
+            _commandWheel?.UpdateShelfCount(_shelfService.Items.Count);
+        }
+        else
+        {
+            Dispatcher.BeginInvoke(() => _commandWheel?.UpdateShelfCount(_shelfService.Items.Count));
+        }
+    }
+
+    internal async Task ShowScreenshotShelfNoticeAsync(string title, string detail)
+    {
+        // 正在传输或显示到点闹钟时先等待，避免自动暂存提醒抢占已有气泡。
+        while (!_closed && IsVisible && (HasAnyActiveTransfer || _showingCompletionState || _activeDueAlarm))
+            await Task.Delay(500);
+        if (_closed || !IsVisible) return;
+        await ShowShelfMessageBubbleAsync(title, detail, "单击查看暂存区");
+    }
+
+    private Task ShowShelfCompletionBubbleAsync(PetShelfAddResult result)
+    {
+        var detailParts = new List<string>();
+        if (result.DuplicateCount > 0)
+        {
+            detailParts.Add($"跳过 {result.DuplicateCount} 个重复文件");
+        }
+        if (result.FailedCount > 0)
+        {
+            detailParts.Add($"{result.FailedCount} 个失败");
+        }
+        if (!string.IsNullOrWhiteSpace(result.LimitMessage))
+        {
+            detailParts.Add(result.LimitMessage);
+        }
+
+        var fileSummary = detailParts.Count == 0
+            ? "文件已安全保留到本次运行的暂存区"
+            : string.Join(" · ", detailParts);
+        return ShowShelfMessageBubbleAsync(
+            $"暂存区现有 {_shelfService.Items.Count} 个文件",
+            fileSummary,
+            "单击查看暂存区");
+    }
+
+    private async Task ShowShelfMessageBubbleAsync(string title, string detail, string actionText)
+    {
+        if (!IsVisible || HasAnyActiveTransfer || _showingCompletionState)
+        {
+            return;
+        }
+
+        CancelShelfBubbleReset();
+        var resetCancellation = new CancellationTokenSource();
+        _shelfBubbleResetCancellation = resetCancellation;
+        try
+        {
+            EnsureTransferBubble().ShowShelfMessage(title, detail, actionText, () => OpenCommandExperience(showShelf: true));
+            UpdateTransferBubblePosition();
+            await Task.Delay(TimeSpan.FromSeconds(4), resetCancellation.Token);
+            if (!HasAnyActiveTransfer && !_showingCompletionState)
+            {
+                _transferBubble?.Hide();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 手机传输开始后立即交还气泡显示权。
+        }
+        finally
+        {
+            if (ReferenceEquals(_shelfBubbleResetCancellation, resetCancellation))
+            {
+                _shelfBubbleResetCancellation = null;
+            }
+            resetCancellation.Dispose();
+        }
+    }
+
+    private void CancelShelfBubbleReset()
+    {
+        var cancellation = _shelfBubbleResetCancellation;
+        _shelfBubbleResetCancellation = null;
+        cancellation?.Cancel();
+    }
+
+    internal async Task ShowAlarmReminderAsync(PetAlarmTrigger trigger)
+    {
+        if (!IsVisible)
+        {
+            return;
+        }
+
+        CancelAlarmBubbleReset();
+        CancelShelfBubbleReset();
+        var previousState = _player.CurrentStateId;
+        var resetCancellation = new CancellationTokenSource();
+        _alarmBubbleResetCancellation = resetCancellation;
+        _activeDueAlarm = trigger.IsDue;
+        using var topmostPulse = new AlarmTopmostPulse(RefreshAlarmTopmost, TimeSpan.FromMilliseconds(350));
+        topmostPulse.Start();
+        try
+        {
+            await SwitchStateSafelyAsync("state-03");
+            if (trigger.IsDue)
+            {
+                var dismissed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                EnsureTransferBubble().ShowAlarmMessage(trigger, () => dismissed.TrySetResult(true));
+                UpdateTransferBubblePosition();
+                RefreshAlarmTopmost();
+                await dismissed.Task.WaitAsync(resetCancellation.Token);
+            }
+            else
+            {
+                EnsureTransferBubble().ShowAlarmMessage(trigger);
+                UpdateTransferBubblePosition();
+                RefreshAlarmTopmost();
+                await Task.Delay(TimeSpan.FromSeconds(5), resetCancellation.Token);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 新提醒或传输开始后，由新的状态接管。
+        }
+        finally
+        {
+            if (ReferenceEquals(_alarmBubbleResetCancellation, resetCancellation))
+            {
+                _alarmBubbleResetCancellation = null;
+                _activeDueAlarm = false;
+                if (HasAnyActiveTransfer)
+                {
+                    RestoreActiveTransferBubble();
+                    await SwitchStateSafelyAsync("state-06");
+                }
+                else if (_showingCompletionState)
+                {
+                    await SwitchStateSafelyAsync("state-05");
+                }
+                else
+                {
+                    _transferBubble?.Hide();
+                    await SwitchStateSafelyAsync(string.IsNullOrWhiteSpace(previousState) ? "state-01" : previousState);
+                }
+            }
+            resetCancellation.Dispose();
+        }
+    }
+
+    private void RefreshAlarmTopmost()
+    {
+        if (!IsVisible) return;
+        var handle = new WindowInteropHelper(this).Handle;
+        NativeMethods.KeepWindowTopmostWithoutActivating(handle);
+        _transferBubble?.RefreshTopmost();
+    }
+
+    private void CancelAlarmBubbleReset()
+    {
+        var cancellation = _alarmBubbleResetCancellation;
+        _alarmBubbleResetCancellation = null;
+        cancellation?.Cancel();
+    }
+
+    private async Task RunPetArchiveOperationAsync(
+        IReadOnlyList<string> paths,
+        PetArchiveDropAction action)
+    {
+        if (paths.Count == 0 || _archiveOperationActive)
+        {
+            await RestoreStateAfterWheelAsync();
+            return;
+        }
+
+        CancelCompletionReset();
+        CancelShelfBubbleReset();
+        _archiveOperationCancellation?.Cancel();
+        _archiveOperationCancellation?.Dispose();
+        var operationCancellation = new CancellationTokenSource();
+        _archiveOperationCancellation = operationCancellation;
+        _archiveOperationActive = true;
+        var sourceSummary = paths.Count == 1
+            ? Path.GetFileName(paths[0].TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
+            : $"{paths.Count} 个项目";
+
+        try
+        {
+            await SwitchStateSafelyAsync("state-06");
+            if (IsVisible)
+            {
+                EnsureTransferBubble().ShowArchiveProgress(action, sourceSummary);
+                UpdateTransferBubblePosition();
+            }
+
+            var archiveService = new ArchiveService();
+            string completionPath;
+            string completionName;
+            long processedBytes;
+            if (action == PetArchiveDropAction.Compress)
+            {
+                var outputPath = PetArchiveDropPlanner.CreateCompressionOutputPath(paths);
+                var progress = CreatePetArchiveProgress(action, sourceSummary);
+                var compressionResult = await archiveService.CreateAsync(
+                    paths,
+                    outputPath,
+                    ArchiveOutputFormat.Zip,
+                    ArchiveCompressionPreset.Balanced,
+                    includeTopLevelDirectory: true,
+                    progress,
+                    operationCancellation.Token);
+                completionPath = compressionResult.OutputPath;
+                completionName = Path.GetFileName(compressionResult.OutputPath);
+                processedBytes = compressionResult.ProcessedBytes;
+            }
+            else
+            {
+                long totalProcessedBytes = 0;
+                string? firstDestination = null;
+                foreach (var (archivePath, index) in paths.Select((path, index) => (path, index)))
+                {
+                    operationCancellation.Token.ThrowIfCancellationRequested();
+                    var archiveName = Path.GetFileName(archivePath);
+                    var itemSummary = paths.Count == 1
+                        ? archiveName
+                        : $"{index + 1}/{paths.Count} · {archiveName}";
+                    if (IsVisible)
+                    {
+                        EnsureTransferBubble().ShowArchiveProgress(action, itemSummary);
+                        UpdateTransferBubblePosition();
+                    }
+
+                    var destination = PetArchiveDropPlanner.GetExtractionDestination(archivePath);
+                    firstDestination ??= destination;
+                    var itemResult = await archiveService.ExtractAsync(
+                        archivePath,
+                        destination,
+                        password: null,
+                        ArchiveConflictPolicy.Rename,
+                        CreatePetArchiveProgress(action, itemSummary),
+                        operationCancellation.Token);
+                    totalProcessedBytes += itemResult.ProcessedBytes;
+                }
+
+                completionPath = firstDestination
+                                 ?? PetArchiveDropPlanner.GetExtractionDestination(paths[0]);
+                completionName = paths.Count == 1
+                    ? $"{Path.GetFileName(paths[0])} · 已解压"
+                    : $"{paths.Count} 个压缩包已解压";
+                processedBytes = totalProcessedBytes;
+            }
+
+            _archiveOperationActive = false;
+            await ShowArchiveCompletionStateAsync(
+                action,
+                completionName,
+                completionPath,
+                processedBytes);
+        }
+        catch (OperationCanceledException)
+        {
+            _archiveOperationActive = false;
+            _transferBubble?.Hide();
+            if (!_closed)
+            {
+                await RestoreStateAfterWheelAsync();
+            }
+        }
+        catch (Exception exception)
+        {
+            _archiveOperationActive = false;
+            System.Diagnostics.Debug.WriteLine($"桌宠压缩任务失败：{exception}");
+            await ShowArchiveFailureBubbleAsync(
+                action,
+                sourceSummary,
+                exception.GetBaseException().Message);
+        }
+        finally
+        {
+            _archiveOperationActive = false;
+            if (ReferenceEquals(_archiveOperationCancellation, operationCancellation))
+            {
+                _archiveOperationCancellation = null;
+            }
+            operationCancellation.Dispose();
+        }
+    }
+
+    private IProgress<ArchiveProgressInfo> CreatePetArchiveProgress(
+        PetArchiveDropAction action,
+        string sourceSummary)
+    {
+        return new Progress<ArchiveProgressInfo>(progress =>
+        {
+            if (_closed || !_archiveOperationActive || !IsVisible)
+            {
+                return;
+            }
+
+            EnsureTransferBubble().ShowArchiveProgress(action, sourceSummary, progress);
+            UpdateTransferBubblePosition();
+            if (!string.Equals(_player.CurrentStateId, "state-06", StringComparison.OrdinalIgnoreCase))
+            {
+                _ = SwitchStateSafelyAsync("state-06");
+            }
+        });
+    }
+
+    private async Task ShowArchiveCompletionStateAsync(
+        PetArchiveDropAction action,
+        string resultName,
+        string resultPath,
+        long processedBytes)
+    {
+        CancelCompletionReset();
+        var resetCancellation = new CancellationTokenSource();
+        _completionResetCancellation = resetCancellation;
+        _showingCompletionState = true;
+        try
+        {
+            await SwitchStateSafelyAsync("state-05");
+            if (IsVisible)
+            {
+                EnsureTransferBubble().ShowArchiveCompletion(
+                    action,
+                    resultName,
+                    resultPath,
+                    processedBytes);
+                UpdateTransferBubblePosition();
+            }
+            await Task.Delay(TimeSpan.FromSeconds(5), resetCancellation.Token);
+            _transferBubble?.Hide();
+            if (!HasAnyActiveTransfer && _actionWheel is null)
+            {
+                await SwitchStateSafelyAsync("state-01");
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 新任务开始后，由新的进度状态接管。
+        }
+        finally
+        {
+            if (ReferenceEquals(_completionResetCancellation, resetCancellation))
+            {
+                _completionResetCancellation = null;
+                _showingCompletionState = false;
+            }
+            resetCancellation.Dispose();
+        }
+    }
+
+    private async Task ShowArchiveFailureBubbleAsync(
+        PetArchiveDropAction action,
+        string sourceName,
+        string message)
+    {
+        CancelCompletionReset();
+        var resetCancellation = new CancellationTokenSource();
+        _completionResetCancellation = resetCancellation;
+        try
+        {
+            await SwitchStateSafelyAsync("state-01");
+            if (IsVisible)
+            {
+                EnsureTransferBubble().ShowArchiveFailure(action, sourceName, message);
+                UpdateTransferBubblePosition();
+            }
+            await Task.Delay(TimeSpan.FromSeconds(5), resetCancellation.Token);
+            _transferBubble?.Hide();
+        }
+        catch (OperationCanceledException)
+        {
+            // 新任务开始后立即交还气泡显示权。
+        }
+        finally
+        {
+            if (ReferenceEquals(_completionResetCancellation, resetCancellation))
+            {
+                _completionResetCancellation = null;
+            }
+            resetCancellation.Dispose();
+        }
     }
 
     private async Task QueuePetFilesAsync(IReadOnlyList<string> files)
@@ -375,6 +1148,11 @@ public partial class DesktopPetWindow : Window
         var isTerminal = progress.State is "Completed" or "Failed";
         if (!isTerminal)
         {
+            if (!_activeDueAlarm)
+            {
+                CancelAlarmBubbleReset();
+            }
+            CancelShelfBubbleReset();
             CancelCompletionReset();
             _activeTransferProgress[progress.TransferId] = progress;
             var speed = UpdateTransferSpeed(progress);
@@ -559,7 +1337,10 @@ public partial class DesktopPetWindow : Window
     }
 
     private bool HasAnyActiveTransfer =>
-        _activeQueueOperations > 0 || _petTransferIds.Count > 0 || _activeTransferProgress.Count > 0;
+        _archiveOperationActive ||
+        _activeQueueOperations > 0 ||
+        _petTransferIds.Count > 0 ||
+        _activeTransferProgress.Count > 0;
 
     private PetTransferBubbleWindow EnsureTransferBubble()
     {
@@ -660,7 +1441,7 @@ public partial class DesktopPetWindow : Window
         }
 
         var existingFiles = paths
-            .Where(File.Exists)
+            .Where(path => File.Exists(path) || Directory.Exists(path))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         files = existingFiles;
@@ -671,7 +1452,9 @@ public partial class DesktopPetWindow : Window
     {
         try
         {
-            await _player.SwitchStateAsync(stateId);
+            // 图片气泡存在时保持状态 5，避免其他完成计时器抢先复位。
+            if (_closed) return;
+            await _player.SwitchStateAsync(_phoneImageReminderCount > 0 ? "state-05" : stateId);
         }
         catch (OperationCanceledException)
         {
@@ -690,7 +1473,7 @@ public partial class DesktopPetWindow : Window
             menuItem.IsChecked = menuItem.Tag is string stateId &&
                                  stateId.Equals(e.State.Id, StringComparison.OrdinalIgnoreCase);
         }
-        ToolTip = $"{e.State.DisplayName} · 可拖入文件传到手机 · 左键单击切换，拖动后自动贴边，右键查看更多";
+        ToolTip = $"{e.State.DisplayName} · 左键单击打开功能轮盘 · 拖入文件可传输、暂存、压缩或解压 · 右键查看更多";
     }
 
     private void BuildAnimationStateMenu()
@@ -788,6 +1571,13 @@ public partial class DesktopPetWindow : Window
     {
         _actionWheel?.Close();
         _actionWheel = null;
+        CloseCommandExperience();
         Dispatcher.BeginInvoke(SnapToNearestEdge);
     }
+
+    private Rect GetPetBounds() => new(
+        Left,
+        Top,
+        ActualWidth > 0 ? ActualWidth : Width,
+        ActualHeight > 0 ? ActualHeight : Height);
 }

@@ -29,6 +29,10 @@ public sealed class PhoneNotificationHub : IDisposable
     public bool Paused { get; set; }
     public bool AlertsEnabled { get; set; }
     public event Action<PhoneNotificationItem[]>? NotificationsArrived;
+    // 日程复用同一证书与配对鉴权，处理器独立，通知暂停不改变日程开关。
+    public Func<byte[], bool>? CalendarSnapshotReceived { get; set; }
+    public Func<byte[], byte[]?>? CalendarExchange { get; set; }
+    public event Action? PairingRevoked;
     public bool Running => _listener is not null;
     public bool Locked { get; set; }
     public string LastError { get; private set; } = "";
@@ -109,7 +113,7 @@ public sealed class PhoneNotificationHub : IDisposable
     }
     public void Revoke()
     {
-        lock (_gate) { _secret = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)); SaveIdentity(); State.Reset(); }
+        lock (_gate) { _secret = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)); SaveIdentity(); State.Reset(); PairingRevoked?.Invoke(); }
         Changed?.Invoke();
     }
     private async Task AcceptAsync(TcpListener listener, CancellationToken token)
@@ -145,7 +149,8 @@ public sealed class PhoneNotificationHub : IDisposable
                     if (header.Count >= 4 && header[^4] == 13 && header[^3] == 10 && header[^2] == 13 && header[^1] == 10) break;
                 }
                 var lines = Encoding.ASCII.GetString(header.ToArray()).Split("\r\n");
-                if (header.Count >= 8192 || lines[0] != "POST /api/v2/notifications/snapshot HTTP/1.1") { await Reply(tls, 400, budget.Token); return; }
+                var calendarRoute = lines[0] == "POST /api/v2/calendar/snapshot HTTP/1.1";
+                if (header.Count >= 8192 || (!calendarRoute && lines[0] != "POST /api/v2/notifications/snapshot HTTP/1.1")) { await Reply(tls, 400, budget.Token); return; }
                 var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var line in lines.Skip(1).Where(l => l.Length > 0))
                 {
@@ -157,6 +162,22 @@ public sealed class PhoneNotificationHub : IDisposable
                 if (!CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(supplied), Encoding.ASCII.GetBytes("Bearer " + secret))) { await Reply(tls, 401, budget.Token); return; }
                 if (headers.ContainsKey("Transfer-Encoding") || !int.TryParse(headers.GetValueOrDefault("Content-Length"), out var length) || length < 2 || length > 512 * 1024) { await Reply(tls, 413, budget.Token); return; }
                 var body = new byte[length]; await tls.ReadExactlyAsync(body, budget.Token);
+                if (calendarRoute)
+                {
+                    bool accepted;
+                    byte[]? response = null;
+                    lock (_gate)
+                    {
+                        if (secret != _secret) throw new UnauthorizedAccessException();
+                        if (CalendarExchange is not null) { response = CalendarExchange(body); accepted = response is not null; }
+                        else accepted = CalendarSnapshotReceived?.Invoke(body) == true;
+                    }
+                    if (accepted && response is not null) {
+                        var prefix = Encoding.ASCII.GetBytes($"HTTP/1.1 200 Result\r\nContent-Length: {response.Length}\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n");
+                        await tls.WriteAsync(prefix, budget.Token); await tls.WriteAsync(response, budget.Token);
+                    } else await Reply(tls, accepted ? 200 : 400, budget.Token);
+                    return;
+                }
                 var snapshot = JsonSerializer.Deserialize<PhoneNotificationSnapshot>(body, _json) ?? throw new InvalidDataException();
                 bool changed;
                 PhoneNotificationItem[] fresh = [];

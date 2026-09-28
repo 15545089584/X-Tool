@@ -78,6 +78,7 @@ public sealed class CollaborationService
     private readonly SemaphoreSlim _uploadGate = new(1, 1);
     private readonly object _pairAttemptSync = new();
     private readonly object _outgoingQueueSync = new();
+    private readonly RemoteFileAccessService _remoteFiles = RemoteFileAccessService.Instance;
     private sealed record PairAttemptInfo(int Failures, DateTime BlockedUntil, DateTime LastAttempt);
     private sealed class ParallelDownloadProgress(long totalBytes)
     {
@@ -101,7 +102,7 @@ public sealed class CollaborationService
         "X-Tool", "Collaboration", "outgoing-queue.json");
     private static readonly string[] VirtualAdapterKeywords =
     {
-        "virtual", "vmware", "virtualbox", "hyper-v", "vethernet", "wsl", "radmin", "inode",
+        "virtual", "vmware", "virtualbox", "hyper-v", "vethernet", "wsl", "radmin", "inode", "tailscale",
         "tap", "tun", "loopback", "tunnel", "vpn", "bluetooth", "docker"
     };
 
@@ -123,6 +124,10 @@ public sealed class CollaborationService
     public string Pin => _pin ?? string.Empty;
 
     public string? LocalIpAddress { get; private set; }
+
+    public string? TailscaleIpAddress { get; private set; }
+
+    public RemoteFileAccessService RemoteFiles => _remoteFiles;
 
     public string ServerId => _serverId;
 
@@ -174,6 +179,7 @@ public sealed class CollaborationService
         Directory.CreateDirectory(OutgoingDirectory);
         _pin = CreatePairingPin();
         LocalIpAddress = ResolveLanIpAddress();
+        TailscaleIpAddress = ResolveTailscaleIpAddress();
         _pageHtml = LoadEmbeddedPage();
         CleanupStaleUploads();
         LoadTrustedDevices();
@@ -410,12 +416,14 @@ public sealed class CollaborationService
                 var result = await _discoveryListener.ReceiveAsync(cancellationToken);
                 var request = Encoding.UTF8.GetString(result.Buffer);
                 if (!string.Equals(request.Trim(), DiscoveryRequest, StringComparison.Ordinal)) continue;
-                LocalIpAddress = ResolveLanIpAddress();
+                LocalIpAddress = ResolveLanIpAddress(result.RemoteEndPoint.Address);
+                TailscaleIpAddress = ResolveTailscaleIpAddress();
                 var payload = JsonSerializer.SerializeToUtf8Bytes(new
                 {
                     service = "xtool-collaboration-v1",
                     serverId = _serverId,
                     host = $"{LocalIpAddress}:{Port}",
+                    tailscaleHost = string.IsNullOrWhiteSpace(TailscaleIpAddress) ? string.Empty : $"{TailscaleIpAddress}:{Port}",
                     serverName = Environment.MachineName,
                     autoReconnectAllowed = AutoReconnectAllowed
                 });
@@ -638,6 +646,8 @@ public sealed class CollaborationService
                     return null;
                 }
                 var temporaryPath = Path.Combine(IncomingDirectory, $".xtool-upload-{Guid.NewGuid():N}.tmp");
+                // 自动截图有专用图片提醒，不再同时触发普通文件传输气泡。
+                var isScreenshotUpload = parsedQuery.GetValueOrDefault("screenshot") == "1";
                 var transferName = SanitizeFileName(parsedQuery.GetValueOrDefault("name"));
                 var transferId = NormalizeTransferId(parsedQuery.GetValueOrDefault("id"));
                 try
@@ -649,7 +659,7 @@ public sealed class CollaborationService
                     var progressClock = Stopwatch.StartNew();
                     long lastProgressReportAt = 0;
                     long received = copied;
-                    ReportTransfer(transferId, transferName, "Receive", received, length, "Transferring", "正在接收手机文件");
+                    if (!isScreenshotUpload) ReportTransfer(transferId, transferName, "Receive", received, length, "Transferring", "正在接收手机文件");
                     var bodyDeadline = CreateBodyDeadline(length, isFileUpload: true);
                     while (received < length)
                     {
@@ -664,7 +674,7 @@ public sealed class CollaborationService
                         received += chunk;
                         if (ShouldReportTransferProgress(progressClock, ref lastProgressReportAt, received, length))
                         {
-                            ReportTransfer(transferId, transferName, "Receive", received, length, "Transferring", "正在接收手机文件");
+                            if (!isScreenshotUpload) ReportTransfer(transferId, transferName, "Receive", received, length, "Transferring", "正在接收手机文件");
                         }
                     }
                     await output.FlushAsync();
@@ -672,7 +682,7 @@ public sealed class CollaborationService
                 }
                 catch
                 {
-                    ReportTransfer(transferId, transferName, "Receive", 0, length, "Failed", "手机文件接收中断");
+                    if (!isScreenshotUpload) ReportTransfer(transferId, transferName, "Receive", 0, length, "Failed", "手机文件接收中断");
                     try { File.Delete(temporaryPath); } catch { }
                     _uploadGate.Release();
                     return null;
@@ -736,6 +746,7 @@ public sealed class CollaborationService
                     ok = true,
                     token,
                     host = $"{LocalIpAddress}:{Port}",
+                    tailscaleHost = string.IsNullOrWhiteSpace(TailscaleIpAddress) ? string.Empty : $"{TailscaleIpAddress}:{Port}",
                     serverId = _serverId,
                     serverName = Environment.MachineName
                 }, serviceToken);
@@ -749,9 +760,23 @@ public sealed class CollaborationService
                 return false;
             }
 
-            if (!IsValidSession(query.GetValueOrDefault("t"), remoteEndpoint))
+            var bearerToken = GetBearerToken(request.Headers);
+            var isRemoteFileRequest = path.StartsWith("/api/v2/remote-files/", StringComparison.Ordinal);
+            var sessionToken = isRemoteFileRequest ? bearerToken : bearerToken ?? query.GetValueOrDefault("t");
+            if (isRemoteFileRequest && string.IsNullOrWhiteSpace(bearerToken))
+            {
+                await WriteJsonAsync(stream, 401, new { error = "远程文件接口必须使用 Authorization 请求头" }, serviceToken);
+                return false;
+            }
+            if (!IsValidSession(sessionToken, remoteEndpoint))
             {
                 await WriteJsonAsync(stream, 401, new { error = "未授权或会话已过期" }, serviceToken);
+                return false;
+            }
+
+            if (isRemoteFileRequest && !_remoteFiles.Enabled)
+            {
+                await WriteJsonAsync(stream, 403, new { error = "电脑端未开启远程文件访问" }, serviceToken);
                 return false;
             }
 
@@ -814,7 +839,10 @@ public sealed class CollaborationService
                         latestAt = latest?.CreatedAt.ToString("O"),
                         serverId = _serverId,
                         serverName = Environment.MachineName,
-                        autoReconnectAllowed = AutoReconnectAllowed
+                        autoReconnectAllowed = AutoReconnectAllowed,
+                        tailscaleHost = string.IsNullOrWhiteSpace(TailscaleIpAddress) ? string.Empty : $"{TailscaleIpAddress}:{Port}",
+                        remoteFilesEnabled = _remoteFiles.Enabled,
+                        remoteFileRootCount = _remoteFiles.Roots.Count
                     };
                 }
                 await WriteJsonAsync(stream, 200, statusPayload, serviceToken);
@@ -899,10 +927,11 @@ public sealed class CollaborationService
                 }
                 var target = MoveUploadToUniqueTarget(request.TemporaryBodyPath, IncomingDirectory, name);
                 _transferOpenPaths[transferId] = target;
-                ReportTransfer(transferId, Path.GetFileName(target), "Receive", request.BodyLength, request.BodyLength,
-                    "Completed", "已收到手机文件");
+                if (query.GetValueOrDefault("screenshot") != "1")
+                    ReportTransfer(transferId, Path.GetFileName(target), "Receive", request.BodyLength, request.BodyLength,
+                        "Completed", "已收到手机文件");
                 if (query.GetValueOrDefault("screenshot") == "1")
-                    PhoneScreenshots.PhoneScreenshotPresenter.Receive(target);
+                    PhoneScreenshots.PhoneScreenshotPresenter.Receive(target, query.GetValueOrDefault("photo") == "1");
                 else
                     FileReceived?.Invoke(Path.GetFileName(target), request.BodyLength, target);
                 await WriteJsonAsync(stream, 200, new { ok = true, name = Path.GetFileName(target) }, serviceToken);
@@ -930,6 +959,104 @@ public sealed class CollaborationService
                         .ToArray()
                     : Array.Empty<object>();
                 await WriteJsonAsync(stream, 200, new { ok = true, files }, serviceToken);
+                return false;
+            }
+
+            if (path == "/api/v2/remote-files/roots" && request.Method == "GET")
+            {
+                var roots = _remoteFiles.GetRootDescriptors()
+                    .Select(root => new { id = root.Id, name = root.Name, token = root.Token })
+                    .ToArray();
+                await WriteJsonAsync(stream, 200, new { ok = true, roots }, serviceToken);
+                return false;
+            }
+
+            if (path == "/api/v2/remote-files/list" && request.Method == "GET")
+            {
+                var directoryToken = query.GetValueOrDefault("directory") ?? string.Empty;
+                var offset = int.TryParse(query.GetValueOrDefault("offset"), NumberStyles.Integer,
+                    CultureInfo.InvariantCulture, out var parsedOffset) ? parsedOffset : 0;
+                var pageSize = int.TryParse(query.GetValueOrDefault("limit"), NumberStyles.Integer,
+                    CultureInfo.InvariantCulture, out var parsedLimit) ? parsedLimit : 100;
+                if (!_remoteFiles.TryListDirectory(directoryToken, offset, pageSize, out var page, out var error) || page is null)
+                {
+                    await WriteJsonAsync(stream, 400, new { error }, serviceToken);
+                    return false;
+                }
+                var entries = page.Entries.Select(entry => new
+                {
+                    name = entry.Name,
+                    isDirectory = entry.IsDirectory,
+                    size = entry.Size,
+                    modifiedAt = entry.ModifiedAt.ToString("O"),
+                    token = entry.Token,
+                    extension = entry.Extension
+                }).ToArray();
+                await WriteJsonAsync(stream, 200, new
+                {
+                    ok = true,
+                    currentName = page.CurrentName,
+                    parentToken = page.ParentToken ?? string.Empty,
+                    nextOffset = page.NextOffset,
+                    entries
+                }, serviceToken);
+                return false;
+            }
+
+            if (path == "/api/v2/remote-files/download" && request.Method == "GET")
+            {
+                var fileToken = query.GetValueOrDefault("file") ?? string.Empty;
+                if (!_remoteFiles.TryOpenDownload(fileToken, out var download, out var error) || download is null)
+                {
+                    await WriteJsonAsync(stream, 404, new { error }, serviceToken);
+                    return false;
+                }
+
+                await using (download)
+                {
+                    var transferId = NormalizeTransferId(query.GetValueOrDefault("id"));
+                    var isParallelSegment = query.GetValueOrDefault("parallel") == "1";
+                    if (!TryParseByteRange(
+                            request.Headers.GetValueOrDefault("Range"),
+                            download.Length,
+                            out var rangeStart,
+                            out var rangeEndInclusive))
+                    {
+                        await WriteJsonAsync(stream, 416, new { error = "断点位置超出文件范围" }, serviceToken);
+                        return false;
+                    }
+                    if (isParallelSegment && string.IsNullOrWhiteSpace(request.Headers.GetValueOrDefault("Range")))
+                    {
+                        await WriteJsonAsync(stream, 400, new { error = "并行下载必须指定字节范围" }, serviceToken);
+                        return false;
+                    }
+                    try
+                    {
+                        var aggregateCompleted = await WriteRemoteFileAsync(
+                            stream,
+                            download,
+                            transferId,
+                            rangeStart,
+                            rangeEndInclusive,
+                            isParallelSegment,
+                            serviceToken);
+                        if (!isParallelSegment ||
+                            aggregateCompleted && _parallelDownloadProgress.TryRemove(transferId, out _))
+                        {
+                            ReportTransfer(transferId, download.Name, "Send", download.Length, download.Length,
+                                "Completed", "手机已下载远程文件");
+                        }
+                    }
+                    catch
+                    {
+                        if (!isParallelSegment || _parallelDownloadProgress.TryRemove(transferId, out _))
+                        {
+                            ReportTransfer(transferId, download.Name, "Send", 0, download.Length,
+                                "Failed", "远程文件下载中断");
+                        }
+                        throw;
+                    }
+                }
                 return false;
             }
 
@@ -1174,6 +1301,49 @@ public sealed class CollaborationService
             }
         }
         return result;
+    }
+
+    private static string? GetBearerToken(IReadOnlyDictionary<string, string> headers)
+    {
+        var authorization = headers.GetValueOrDefault("Authorization") ?? string.Empty;
+        const string prefix = "Bearer ";
+        return authorization.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+            ? authorization[prefix.Length..].Trim()
+            : null;
+    }
+
+    private static bool TryParseByteRange(
+        string? rangeHeader,
+        long fileLength,
+        out long start,
+        out long endInclusive)
+    {
+        start = 0;
+        endInclusive = fileLength - 1;
+        if (fileLength <= 0) return false;
+        if (string.IsNullOrWhiteSpace(rangeHeader)) return true;
+        const string prefix = "bytes=";
+        if (!rangeHeader.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return false;
+        var value = rangeHeader[prefix.Length..];
+        var separator = value.IndexOf('-');
+        if (separator < 1 || !long.TryParse(value[..separator], NumberStyles.Integer,
+                CultureInfo.InvariantCulture, out start) || start < 0 || start >= fileLength)
+        {
+            return false;
+        }
+        var endText = value[(separator + 1)..].Trim();
+        if (endText.Length == 0)
+        {
+            endInclusive = fileLength - 1;
+            return true;
+        }
+        if (!long.TryParse(endText, NumberStyles.Integer, CultureInfo.InvariantCulture, out endInclusive) ||
+            endInclusive < start)
+        {
+            return false;
+        }
+        endInclusive = Math.Min(endInclusive, fileLength - 1);
+        return true;
     }
 
     private static string SanitizeFileName(string? name)
@@ -1458,8 +1628,9 @@ public sealed class CollaborationService
         }
     }
 
-    private static string? ResolveLanIpAddress()
+    private static string? ResolveLanIpAddress(IPAddress? peerAddress = null)
     {
+        string? fallback = null;
         try
         {
             foreach (var adapter in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces())
@@ -1485,7 +1656,10 @@ public sealed class CollaborationService
                         var ip = unicast.Address.ToString();
                         if (!ip.StartsWith("169.254", StringComparison.Ordinal))
                         {
-                            return ip;
+                            fallback ??= ip;
+                            // 热点、多网卡环境优先回复与手机同网段的地址，而非枚举到的第一块网卡。
+                            if (peerAddress is null || CollaborationLanAddress.IsSameSubnet(
+                                    unicast.Address, peerAddress, unicast.PrefixLength)) return ip;
                         }
                     }
                 }
@@ -1495,7 +1669,32 @@ public sealed class CollaborationService
         {
             // 找不到时由调用方降级显示。
         }
-        return "127.0.0.1";
+        return fallback ?? "127.0.0.1";
+    }
+
+    private static string? ResolveTailscaleIpAddress()
+    {
+        try
+        {
+            foreach (var adapter in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (adapter.OperationalStatus != System.Net.NetworkInformation.OperationalStatus.Up) continue;
+                foreach (var unicast in adapter.GetIPProperties().UnicastAddresses)
+                {
+                    if (unicast.Address.AddressFamily != AddressFamily.InterNetwork) continue;
+                    var bytes = unicast.Address.GetAddressBytes();
+                    if (bytes.Length == 4 && bytes[0] == 100 && bytes[1] is >= 64 and <= 127)
+                    {
+                        return unicast.Address.ToString();
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // 未安装、未登录或网卡尚未就绪时不影响局域网协作。
+        }
+        return null;
     }
 
     private static string? LoadEmbeddedPage()
@@ -1541,7 +1740,9 @@ public sealed class CollaborationService
             200 => "OK",
             400 => "Bad Request",
             401 => "Unauthorized",
+            403 => "Forbidden",
             404 => "Not Found",
+            416 => "Range Not Satisfiable",
             500 => "Internal Server Error",
             _ => "OK"
         };
@@ -1585,6 +1786,71 @@ public sealed class CollaborationService
         await stream.FlushAsync(timeoutSource.Token);
     }
 
+    private void ReportRemoteDownloadProgress(string transferId, string fileName, long transferred, long total) =>
+        ReportTransfer(transferId, fileName, "Send", transferred, total, "Transferring", "手机正在下载远程文件");
+
+    private async Task<bool> WriteRemoteFileAsync(
+        NetworkStream stream,
+        RemoteFileDownload download,
+        string transferId,
+        long rangeStart,
+        long rangeEndInclusive,
+        bool parallelSegment,
+        CancellationToken cancellationToken)
+    {
+        var file = download.Stream;
+        file.Position = rangeStart;
+        var segmentLength = rangeEndInclusive - rangeStart + 1;
+        var isPartialResponse = rangeStart > 0 || rangeEndInclusive < download.Length - 1;
+        var statusLine = isPartialResponse ? "206 Partial Content" : "200 OK";
+        var rangeHeader = isPartialResponse
+            ? $"Content-Range: bytes {rangeStart}-{rangeEndInclusive}/{download.Length}\r\n"
+            : string.Empty;
+        var safeName = Uri.EscapeDataString(download.Name);
+        var head = $"HTTP/1.1 {statusLine}\r\nContent-Type: application/octet-stream\r\nContent-Length: {segmentLength}\r\n{rangeHeader}Accept-Ranges: bytes\r\nContent-Disposition: attachment; filename*=UTF-8''{safeName}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n";
+        using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutSource.CancelAfter(TimeSpan.FromMinutes(60));
+        await stream.WriteAsync(Encoding.ASCII.GetBytes(head), timeoutSource.Token);
+        var buffer = new byte[TransferBufferBytes];
+        var progressClock = Stopwatch.StartNew();
+        long lastProgressReportAt = 0;
+        long segmentSent = 0;
+        var aggregate = parallelSegment
+            ? ReportParallelDownloadProgress(transferId, download.Name, rangeStart, segmentSent, download.Length)
+            : rangeStart;
+        if (!parallelSegment)
+        {
+            ReportRemoteDownloadProgress(transferId, download.Name, aggregate, download.Length);
+        }
+        while (segmentSent < segmentLength)
+        {
+            var read = await file.ReadAsync(buffer.AsMemory(0, (int)Math.Min(buffer.Length, segmentLength - segmentSent)),
+                timeoutSource.Token);
+            if (read == 0) throw new EndOfStreamException("远程文件在传输完成前结束。");
+            await stream.WriteAsync(buffer.AsMemory(0, read), timeoutSource.Token);
+            segmentSent += read;
+            if (parallelSegment)
+            {
+                aggregate = ReportParallelDownloadProgress(
+                    transferId,
+                    download.Name,
+                    rangeStart,
+                    segmentSent,
+                    download.Length);
+            }
+            else
+            {
+                aggregate = rangeStart + segmentSent;
+                if (ShouldReportTransferProgress(progressClock, ref lastProgressReportAt, aggregate, download.Length))
+                {
+                    ReportRemoteDownloadProgress(transferId, download.Name, aggregate, download.Length);
+                }
+            }
+        }
+        await stream.FlushAsync(timeoutSource.Token);
+        return aggregate >= download.Length;
+    }
+
     private async Task WriteFileRangeAsync(
         NetworkStream stream,
         string filePath,
@@ -1618,7 +1884,7 @@ public sealed class CollaborationService
         await stream.FlushAsync(timeoutSource.Token);
     }
 
-    private void ReportParallelDownloadProgress(
+    private long ReportParallelDownloadProgress(
         string transferId,
         string fileName,
         long segmentOffset,
@@ -1635,12 +1901,13 @@ public sealed class CollaborationService
             if (aggregate < state.TotalBytes &&
                 now - state.LastReportAtMilliseconds < TransferProgressIntervalMilliseconds)
             {
-                return;
+                return aggregate;
             }
             state.LastReportAtMilliseconds = now;
         }
 
         ReportTransfer(transferId, fileName, "Send", aggregate, total, "Transferring", "正在并行发送到手机");
+        return aggregate;
     }
 
     private static bool ShouldReportTransferProgress(

@@ -1,0 +1,98 @@
+<Window x:Class="ScreenshotApp.Collaboration.RemoteFileAccessWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="远程文件访问" Width="720" Height="540"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent">
+    <Border Margin="18" Padding="0" Background="#F2F8FC" BorderBrush="#B9D7E8F3" BorderThickness="1" CornerRadius="24">
+        <Border.Effect><DropShadowEffect BlurRadius="30" ShadowDepth="8" Opacity="0.20" Color="#355471" /></Border.Effect>
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="74" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="72" />
+            </Grid.RowDefinitions>
+
+            <Grid Margin="26,0,20,0" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock FontSize="21" FontWeight="SemiBold" Foreground="#20384F" Text="远程文件访问" />
+                    <TextBlock Margin="0,4,0,0" FontSize="11" Foreground="#71879B" Text="只向已信任手机展示下面明确授权的文件夹，不开放其他磁盘位置。" />
+                </StackPanel>
+                <Button Width="38" Height="38" HorizontalAlignment="Right" VerticalAlignment="Center" Background="#DFFFFFFF"
+                        BorderBrush="#A8D3E5F2" BorderThickness="1" Cursor="Hand" Click="Close_Click" Content="×" FontSize="20" Foreground="#60778D" />
+            </Grid>
+
+            <Grid Grid.Row="1" Margin="26,4,26,0">
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="16" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                <Border Padding="18,14" Background="#C9FFFFFF" BorderBrush="#A8D5E7F3" BorderThickness="1" CornerRadius="16">
+                    <Grid>
+                        <StackPanel>
+                            <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="#29445F" Text="允许手机浏览并下载" />
+                            <TextBlock x:Name="AccessHintText" Margin="0,4,0,0" FontSize="10" Foreground="#71879B" Text="关闭后手机端立即无法列出或下载授权文件。" />
+                        </StackPanel>
+                        <CheckBox x:Name="EnabledCheckBox" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  FontSize="12" Foreground="#405E78" Content="已开启" Click="EnabledCheckBox_Click" />
+                    </Grid>
+                </Border>
+
+                <Border Grid.Row="2" Padding="18" Background="#BFFFFFFF" BorderBrush="#A8D5E7F3" BorderThickness="1" CornerRadius="18">
+                    <Grid>
+                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                        <Grid>
+                            <StackPanel>
+                                <TextBlock FontSize="15" FontWeight="SemiBold" Foreground="#29445F" Text="授权文件夹" />
+                                <TextBlock Margin="0,4,0,0" FontSize="10" Foreground="#71879B" Text="目录联接、符号链接和系统重解析点不会展示给手机。" />
+                            </StackPanel>
+                            <Button MinWidth="116" Height="38" HorizontalAlignment="Right" Background="#4D7CFE" Foreground="White"
+                                    BorderThickness="0" Cursor="Hand" Click="AddRoot_Click" Content="添加文件夹" />
+                        </Grid>
+                        <Grid Grid.Row="2">
+                            <ListBox x:Name="RootList" ItemsSource="{Binding Roots}" Background="Transparent" BorderThickness="0"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <ListBox.ItemContainerStyle>
+                                    <Style TargetType="ListBoxItem">
+                                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                        <Setter Property="Padding" Value="0" />
+                                        <Setter Property="Margin" Value="0,0,0,8" />
+                                        <Setter Property="Background" Value="Transparent" />
+                                        <Setter Property="BorderThickness" Value="0" />
+                                        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                                    </Style>
+                                </ListBox.ItemContainerStyle>
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Padding="13,10" Background="#DDF8FBFF" BorderBrush="#A0D3E5F2" BorderThickness="1" CornerRadius="13">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="40" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                                <Border Width="34" Height="34" Background="#E5EEFAFF" CornerRadius="10">
+                                                    <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="17" Foreground="#4D7CFE" Text="&#xE8B7;" />
+                                                </Border>
+                                                <StackPanel Grid.Column="1" Margin="8,0,14,0" VerticalAlignment="Center">
+                                                    <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#35536E" Text="{Binding Name}" />
+                                                    <TextBlock Margin="0,3,0,0" FontSize="9" Foreground="#7890A6" Text="{Binding Path}" TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                                <Button Grid.Column="2" MinWidth="72" Height="32" Padding="12,0" Background="#FFF0F2" Foreground="#C34F60"
+                                                        BorderBrush="#F2C9D0" BorderThickness="1" Cursor="Hand" Content="移除" Tag="{Binding Id}" Click="RemoveRoot_Click" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                            <StackPanel x:Name="EmptyState" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock HorizontalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="32" Foreground="#8AA2B6" Text="&#xE838;" />
+                                <TextBlock Margin="0,9,0,0" FontSize="12" Foreground="#71879B" Text="尚未授权任何文件夹" />
+                                <TextBlock Margin="0,4,0,0" FontSize="10" Foreground="#8AA0B4" Text="手机端不会看到电脑中的任何文件" />
+                            </StackPanel>
+                        </Grid>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <Grid Grid.Row="2" Margin="26,0">
+                <TextBlock VerticalAlignment="Center" FontSize="10" Foreground="#71879B" Text="只读模式 · 不支持远程删除、移动、重命名或写入" />
+                <Button Width="98" Height="38" HorizontalAlignment="Right" VerticalAlignment="Center" Background="#DFFFFFFF"
+                        BorderBrush="#A8D3E5F2" BorderThickness="1" Cursor="Hand" Click="Close_Click" Content="完成" Foreground="#405E78" />
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

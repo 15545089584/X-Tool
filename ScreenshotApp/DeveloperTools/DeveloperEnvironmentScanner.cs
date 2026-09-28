@@ -12,15 +12,18 @@ public sealed class DeveloperEnvironmentScanner
 {
     private static readonly ToolDefinition[] Definitions =
     {
-        new("java", "Java", "JDK、JAVA_HOME 与命令解析", "\uE943", "#FFF0D9", "#D88B24", new[] { "java.exe" }, new[] { "-XshowSettings:properties", "-version" }),
-        new("python", "Python", "解释器、启动别名与 pip 一致性", "\uE73C", "#E6F0FF", "#347ED8", new[] { "python.exe", "python3.exe" }, new[] { "--version" }),
-        new("node", "Node.js", "Node、npm 与版本管理器入口", "\uE74C", "#E5F6E9", "#3C9760", new[] { "node.exe" }, new[] { "--version" }),
-        new("dotnet", ".NET SDK", "并行安装的 SDK 与默认 dotnet", "\uE756", "#F0EAFF", "#7759B5", new[] { "dotnet.exe" }, new[] { "--list-sdks" }),
-        new("git", "Git", "版本、命令路径与基础配置入口", "\uE8F1", "#FFEAE5", "#C45D42", new[] { "git.exe" }, new[] { "--version" }),
-        new("docker", "Docker", "客户端、守护进程与 Docker Desktop 状态", "\uE9A3", "#E5F1FF", "#2F6FB3", new[] { "docker.exe" }, new[] { "--version" }),
-        new("mysql", "MySQL", "客户端、服务端与 MYSQL_HOME 一致性", "\uE8A7", "#E8F1FF", "#3E74C7", new[] { "mysql.exe", "mysqld.exe" }, new[] { "--version" }),
-        new("maven", "Maven", "Maven 主目录与命令入口", "\uE8F7", "#E6F4FF", "#3B7DAA", new[] { "mvn.cmd", "mvn.bat" }, Array.Empty<string>()),
-        new("gradle", "Gradle", "Gradle 主目录与命令入口", "\uE9D9", "#E2F5F3", "#318C83", new[] { "gradle.bat", "gradle.cmd" }, Array.Empty<string>())
+        new("java", "Java", "JDK、JAVA_HOME 与命令解析", "/Assets/Toolchains/java.png", "\uE943", "#FFF0D9", "#D88B24", new[] { "java.exe" }, new[] { "-XshowSettings:properties", "-version" }),
+        new("python", "Python", "解释器、启动别名与 pip 一致性", "/Assets/Toolchains/python.png", "\uE73C", "#E6F0FF", "#347ED8", new[] { "python.exe", "python3.exe" }, new[] { "--version" }),
+        new("node", "Node.js", "Node、npm 与版本管理器入口", "/Assets/Toolchains/node.png", "\uE74C", "#E5F6E9", "#3C9760", new[] { "node.exe" }, new[] { "--version" }),
+        new("dotnet", ".NET SDK", "并行安装的 SDK 与默认 dotnet", "/Assets/Toolchains/dotnet.png", "\uE756", "#F0EAFF", "#7759B5", new[] { "dotnet.exe" }, new[] { "--list-sdks" }),
+        new("git", "Git", "版本、命令路径与基础配置入口", "/Assets/Toolchains/git.png", "\uE8F1", "#FFEAE5", "#C45D42", new[] { "git.exe" }, new[] { "--version" }),
+        new("docker", "Docker", "客户端、守护进程与 Docker Desktop 状态", "/Assets/Toolchains/docker.png", "\uE9A3", "#E5F1FF", "#2F6FB3", new[] { "docker.exe" }, new[] { "--version" }),
+        new("mysql", "MySQL", "客户端、服务端与 MYSQL_HOME 一致性", "/Assets/Toolchains/mysql.png", "\uE8A7", "#E8F1FF", "#3E74C7", new[] { "mysql.exe", "mysqld.exe" }, new[] { "--version" }),
+        new("maven", "Maven", "Maven 主目录与命令入口", "/Assets/Toolchains/maven.png", "\uE8F7", "#E6F4FF", "#3B7DAA", new[] { "mvn.cmd", "mvn.bat" }, Array.Empty<string>()),
+        new("gradle", "Gradle", "Gradle 主目录与命令入口", "/Assets/Toolchains/gradle.png", "\uE9D9", "#E2F5F3", "#318C83", new[] { "gradle.bat", "gradle.cmd" }, Array.Empty<string>()),
+        new("jmeter", "JMeter", "压测工具、Java 依赖与命令入口", "/Assets/Toolchains/jmeter.png", "JM", "#FDE9E2", "#C85B38", new[] { "jmeter.bat" }, Array.Empty<string>()),
+        new("nginx", "Nginx", "反向代理、静态文件与本地服务入口", "/Assets/Toolchains/nginx.png", "\uE943", "#E4F5E9", "#168A4A", new[] { "nginx.exe" }, new[] { "-v" }),
+        new("conda", "Conda", "Miniconda、Anaconda 与 Miniforge 环境管理", "/Assets/Toolchains/conda.png", "C", "#E2F5E8", "#268447", new[] { "conda.exe", "conda.bat" }, Array.Empty<string>())
     };
 
     private readonly SafeDeveloperCommandRunner _commandRunner = new();
@@ -69,6 +72,7 @@ public sealed class DeveloperEnvironmentScanner
                 Id = definition.Id,
                 DisplayName = definition.DisplayName,
                 Description = definition.Description,
+                IconSource = definition.IconSource,
                 IconGlyph = definition.IconGlyph,
                 IconBackground = definition.IconBackground,
                 IconForeground = definition.IconForeground
@@ -99,6 +103,8 @@ public sealed class DeveloperEnvironmentScanner
         IReadOnlyList<string> processPathEntries,
         CancellationToken cancellationToken)
     {
+        if (definition.Id == "conda")
+            return await Task.Run(() => CondaInstallationInspector.Discover(processPathEntries, cancellationToken), cancellationToken).ConfigureAwait(false);
         var candidates = new Dictionary<string, ToolCandidate>(StringComparer.OrdinalIgnoreCase);
         AddPathCandidates(definition, processPathEntries, candidates);
         AddEnvironmentCandidates(definition.Id, candidates);
@@ -343,6 +349,8 @@ public sealed class DeveloperEnvironmentScanner
             "mysql" => new[] { "MYSQL_HOME" },
             "maven" => new[] { "MAVEN_HOME", "M2_HOME" },
             "gradle" => new[] { "GRADLE_HOME" },
+            "jmeter" => new[] { "JMETER_HOME" },
+            "nginx" => new[] { "NGINX_HOME" },
             _ => Array.Empty<string>()
         };
 
@@ -542,12 +550,24 @@ public sealed class DeveloperEnvironmentScanner
                 Path.Combine(programFilesX86, "MySQL"),
                 Path.Combine(localAppData, "X-Tool", "Dev", "MySQL")
             },
+            "nginx" => new[]
+            {
+                Path.Combine(programFiles, "nginx"),
+                Path.Combine(programFilesX86, "nginx"),
+                Path.Combine(localAppData, "X-Tool", "Dev", "Nginx")
+            },
+            "jmeter" => new[]
+            {
+                Path.Combine(programFiles, "Apache", "JMeter"),
+                Path.Combine(programFilesX86, "Apache", "JMeter"),
+                Path.Combine(localAppData, "X-Tool", "Dev", "JMeter")
+            },
             _ => Array.Empty<string>()
         };
 
         foreach (var root in roots.Where(path => !string.IsNullOrWhiteSpace(path)))
         {
-            foreach (var candidateRoot in EnumerateCandidateRoots(root, toolchainId is "java" or "python" or "node" or "mysql" ? 2 : 0))
+            foreach (var candidateRoot in EnumerateCandidateRoots(root, toolchainId is "java" or "python" or "node" or "mysql" or "jmeter" ? 2 : 0))
             {
                 foreach (var executable in CandidateExecutablesForRoot(toolchainId, candidateRoot))
                 {
@@ -570,6 +590,8 @@ public sealed class DeveloperEnvironmentScanner
             "mysql" => new[] { "mysql" },
             "maven" => new[] { "maven", "apache-maven" },
             "gradle" => new[] { "gradle" },
+            "jmeter" => new[] { "jmeter", "apache-jmeter" },
+            "nginx" => new[] { "nginx" },
             _ => Array.Empty<string>()
         };
 
@@ -663,6 +685,8 @@ public sealed class DeveloperEnvironmentScanner
             "mysql" => new[] { Path.Combine(root, "bin", "mysql.exe"), Path.Combine(root, "bin", "mysqld.exe") },
             "maven" => new[] { Path.Combine(root, "bin", "mvn.cmd"), Path.Combine(root, "bin", "mvn.bat") },
             "gradle" => new[] { Path.Combine(root, "bin", "gradle.bat"), Path.Combine(root, "bin", "gradle.cmd") },
+            "jmeter" => new[] { Path.Combine(root, "bin", "jmeter.bat"), Path.Combine(root, "jmeter.bat") },
+            "nginx" => new[] { Path.Combine(root, "nginx.exe"), Path.Combine(root, "bin", "nginx.exe") },
             _ => Array.Empty<string>()
         };
     }
@@ -740,7 +764,72 @@ public sealed class DeveloperEnvironmentScanner
         AddPythonPipIssue(snapshot, processPathEntries, issues);
         AddNodeDirectoryVersionIssue(snapshot, issues);
         AddMysqlIssues(snapshot, issues);
+        AddJMeterIssues(snapshot, issues);
+        issues.AddRange(CondaInstallationInspector.Diagnose(snapshot.Toolchains.FirstOrDefault(t => t.Id == "conda"), processPathEntries));
         return issues;
+    }
+
+    private static void AddJMeterIssues(DeveloperEnvironmentSnapshot snapshot, ICollection<DeveloperDiagnosticIssue> issues)
+    {
+        var jmeter = snapshot.Toolchains.FirstOrDefault(item => item.Id == "jmeter");
+        if (jmeter is null || jmeter.InstallationCount == 0)
+        {
+            return;
+        }
+
+        var java = snapshot.Toolchains.FirstOrDefault(item => item.Id == "java")?
+            .Installations.FirstOrDefault(item => item.IsActive && item.IsVerified);
+        if (java is null)
+        {
+            issues.Add(new DeveloperDiagnosticIssue
+            {
+                Severity = DeveloperIssueSeverity.Warning,
+                Title = "JMeter 缺少可验证的 Java 运行环境",
+                Description = "JMeter 需要 Java 8 或更高版本；建议先配置受支持的 JDK，再启动图形界面或命令行压测。",
+                Evidence = string.Join(Environment.NewLine, jmeter.Installations.Select(item => item.ExecutablePath))
+            });
+        }
+        else if (TryParseJavaFeatureVersion(java.Version, out var featureVersion) && featureVersion < 8)
+        {
+            issues.Add(new DeveloperDiagnosticIssue
+            {
+                Severity = DeveloperIssueSeverity.Error,
+                Title = "当前 Java 版本不能运行 JMeter",
+                Description = "当前 JMeter 发行版至少需要 Java 8；请切换到受支持的 JDK。",
+                Evidence = $"Java {java.Version}：{java.ExecutablePath}"
+            });
+        }
+
+        var jmeterHome = Environment.GetEnvironmentVariable("JMETER_HOME");
+        var active = jmeter.Installations.FirstOrDefault(item => item.IsActive);
+        if (!string.IsNullOrWhiteSpace(jmeterHome) && active is not null &&
+            !string.Equals(NormalizePath(Environment.ExpandEnvironmentVariables(jmeterHome)), NormalizePath(active.InstallationPath), StringComparison.OrdinalIgnoreCase))
+        {
+            issues.Add(new DeveloperDiagnosticIssue
+            {
+                Severity = DeveloperIssueSeverity.Warning,
+                Title = "JMETER_HOME 与当前 jmeter.bat 不一致",
+                Description = "环境变量和 PATH 指向不同的 JMeter 安装，插件、配置文件和命令行行为可能不一致。",
+                Evidence = $"JMETER_HOME：{jmeterHome}{Environment.NewLine}当前命令：{active.ExecutablePath}"
+            });
+        }
+    }
+
+    private static bool TryParseJavaFeatureVersion(string version, out int featureVersion)
+    {
+        featureVersion = 0;
+        var parts = version.Trim().TrimStart('v').Split('.', '-', '_');
+        if (parts.Length == 0)
+        {
+            return false;
+        }
+
+        if (parts[0] == "1" && parts.Length > 1)
+        {
+            return int.TryParse(parts[1], out featureVersion);
+        }
+
+        return int.TryParse(parts[0], out featureVersion);
     }
 
     private static void AddPathIssues(string? rawPath, string scopeName, ICollection<DeveloperDiagnosticIssue> issues)
@@ -1073,7 +1162,7 @@ public sealed class DeveloperEnvironmentScanner
     {
         var directory = Path.GetDirectoryName(executablePath) ?? string.Empty;
         var directoryName = Path.GetFileName(directory);
-        if (toolchainId is "java" or "maven" or "gradle" or "mysql" && string.Equals(directoryName, "bin", StringComparison.OrdinalIgnoreCase))
+        if (toolchainId is "java" or "maven" or "gradle" or "mysql" or "nginx" or "jmeter" && string.Equals(directoryName, "bin", StringComparison.OrdinalIgnoreCase))
         {
             return Directory.GetParent(directory)?.FullName ?? directory;
         }
@@ -1118,6 +1207,11 @@ public sealed class DeveloperEnvironmentScanner
                 var version = ReadJarVersion(installationRoot, "gradle-core-*.jar", "gradle-core-");
                 return version?.StartsWith("api-", StringComparison.OrdinalIgnoreCase) == true ? version[4..] : version;
             }
+
+            if (toolchainId == "jmeter")
+            {
+                return JMeterPackageInspector.TryReadVersion(installationRoot);
+            }
         }
         catch
         {
@@ -1161,6 +1255,7 @@ public sealed class DeveloperEnvironmentScanner
             "docker" => "Docker version\\s+(?<version>[0-9][^,\\s]*)",
             // 兼容 5.x 的 “Distrib 5.7.19” 与 8.x/9.x 的 “Ver 8.4.6 for” 两种输出。
             "mysql" => "(?:Distrib|Ver)\\s+(?<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+            "nginx" => "nginx/(?<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
             _ => "(?<version>[0-9]+(?:\\.[0-9A-Za-z-]+)+)"
         };
         var match = Regex.Match(output, pattern, RegexOptions.IgnoreCase);
@@ -1321,6 +1416,7 @@ public sealed class DeveloperEnvironmentScanner
         string Id,
         string DisplayName,
         string Description,
+        string IconSource,
         string IconGlyph,
         string IconBackground,
         string IconForeground,

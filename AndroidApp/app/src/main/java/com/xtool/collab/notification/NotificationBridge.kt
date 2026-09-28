@@ -43,7 +43,11 @@ class NotificationBridge(private val context: Context) {
     }
     fun forget() { prefs.edit().clear().apply(); PhoneNotificationListener.refresh() }
 
-    fun send(payload: String): Boolean {
+    fun send(payload: String): Boolean = sendTo(payload, false)
+    fun sendCalendar(payload: String, receive: (JSONObject) -> Unit = {}): Boolean = sendTo(payload, true, receive)
+
+    private fun sendTo(payload: String, calendar: Boolean, receive: (JSONObject) -> Unit = {}): Boolean {
+        val status = if (calendar) calendarStatus else Companion.status
         val session = SessionStore(context)
         if (!paired || session.token.isBlank() || session.serverId != prefs.getString("serverId", "")) {
             status.value = "请先绑定当前电脑的通知通道"; return false
@@ -74,11 +78,26 @@ class NotificationBridge(private val context: Context) {
         try {
             for (host in hosts) {
                 try {
-                    val request = Request.Builder().url("https://$host:18122/api/v2/notifications/snapshot")
+                    val request = Request.Builder().url("https://$host:18122/api/v2/" + (if (calendar) "calendar" else "notifications") + "/snapshot")
                         .header("Authorization", "Bearer " + prefs.getString("secret", ""))
                         .post(payload.toRequestBody("application/json; charset=utf-8".toMediaType())).build()
                     client.newCall(request).execute().use { response ->
-                        if (response.code == 200) { status.value = "已加密同步 · " + java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date()); return true }
+                        if (response.code == 200) {
+                            if (calendar) {
+                                val output = java.io.ByteArrayOutputStream()
+                                response.body?.byteStream()?.use { input ->
+                                    val buffer = ByteArray(4096)
+                                    while (output.size() <= 65536) {
+                                        val count = input.read(buffer, 0, minOf(buffer.size, 65537 - output.size()))
+                                        if (count < 0) break
+                                        output.write(buffer, 0, count)
+                                    }
+                                }
+                                val bytes = output.toByteArray()
+                                check(bytes.size <= 65536)
+                                receive(if (bytes.isEmpty()) JSONObject() else JSONObject(String(bytes, Charsets.UTF_8)))
+                            }
+                            status.value = "已加密同步 · " + java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date()); return true }
                         if (response.code == 401) { status.value = "通知绑定已撤销，请重新扫码"; return false }
                         if (response.code == 409) { status.value = "电脑已暂停接收"; return false }
                     }
@@ -87,5 +106,5 @@ class NotificationBridge(private val context: Context) {
             status.value = "通知通道未连接，正在等待网络恢复"; return false
         } finally { client.connectionPool.evictAll(); client.dispatcher.executorService.shutdown() }
     }
-    companion object { val status = MutableStateFlow("尚未连接通知通道") }
+    companion object { val status = MutableStateFlow("尚未连接通知通道"); val calendarStatus = MutableStateFlow("尚未同步日程") }
 }

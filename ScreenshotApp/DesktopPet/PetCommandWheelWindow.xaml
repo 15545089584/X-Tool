@@ -1,0 +1,17 @@
+<Window x:Class="ScreenshotApp.DesktopPet.PetCommandWheelWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="X-Tool 宠物功能轮盘"
+        Width="420" Height="420"
+        AllowsTransparency="True" Background="Transparent"
+        WindowStyle="None" ResizeMode="NoResize"
+        ShowInTaskbar="False" Topmost="True"
+        WindowStartupLocation="Manual"
+        MouseMove="Window_MouseMove"
+        MouseLeftButtonUp="Window_MouseLeftButtonUp"
+        KeyDown="Window_KeyDown"
+        Deactivated="Window_Deactivated">
+    <Grid x:Name="WheelRoot" Background="#01000000" SnapsToDevicePixels="True">
+        <Canvas x:Name="WheelCanvas" />
+    </Grid>
+</Window>

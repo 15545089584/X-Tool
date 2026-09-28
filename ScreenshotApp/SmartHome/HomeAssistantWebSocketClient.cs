@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.IO;
 using System.Net.WebSockets;
+using System.Net.Http;
 using System.Text.Json;
 
 namespace ScreenshotApp.SmartHome;
@@ -10,10 +11,11 @@ internal sealed class HomeAssistantWebSocketClient : IAsyncDisposable
     private readonly ClientWebSocket _socket = new();
     private readonly SemaphoreSlim _sendGate = new(1, 1);
     private readonly ConcurrentDictionary<int, TaskCompletionSource<JsonElement>> _pendingCommands = new();
-    private CancellationTokenSource? _lifetimeSource;
+    private readonly CancellationTokenSource _lifetimeSource = new();
     private Task? _receiveLoop;
     private int _nextCommandId;
     private bool _intentionalClose;
+    private int _disposed;
 
     public event Action<JsonElement>? EventReceived;
 
@@ -21,6 +23,8 @@ internal sealed class HomeAssistantWebSocketClient : IAsyncDisposable
 
     public async Task ConnectAsync(Uri serverUri, string token, CancellationToken cancellationToken)
     {
+        _socket.Options.Proxy = HomeAssistantConnectionPolicy.BypassProxy(serverUri)
+            ? null : HttpClient.DefaultProxy;
         var webSocketUri = new UriBuilder(serverUri)
         {
             Scheme = serverUri.Scheme == Uri.UriSchemeHttps ? "wss" : "ws",
@@ -28,8 +32,8 @@ internal sealed class HomeAssistantWebSocketClient : IAsyncDisposable
             Query = string.Empty
         }.Uri;
 
-        using var connectSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        connectSource.CancelAfter(TimeSpan.FromSeconds(15));
+        using var connectSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetimeSource.Token);
+        connectSource.CancelAfter(HomeAssistantConnectionPolicy.RequestTimeout);
         await _socket.ConnectAsync(webSocketUri, connectSource.Token).ConfigureAwait(false);
 
         var authRequired = await ReceiveMessageAsync(connectSource.Token).ConfigureAwait(false);
@@ -60,14 +64,14 @@ internal sealed class HomeAssistantWebSocketClient : IAsyncDisposable
             }
         }
 
-        _lifetimeSource = new CancellationTokenSource();
         _receiveLoop = ReceiveLoopAsync(_lifetimeSource.Token);
     }
 
     public async Task<JsonElement> SendCommandAsync(
         string type,
         IReadOnlyDictionary<string, object?>? arguments,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TimeSpan? timeout = null)
     {
         if (_socket.State != WebSocketState.Open)
         {
@@ -93,8 +97,11 @@ internal sealed class HomeAssistantWebSocketClient : IAsyncDisposable
                 foreach (var argument in arguments) payload[argument.Key] = argument.Value;
             }
 
-            await SendPayloadAsync(payload, cancellationToken).ConfigureAwait(false);
-            return await completion.Task.WaitAsync(TimeSpan.FromSeconds(20), cancellationToken).ConfigureAwait(false);
+            // 发送锁、发送和应答共用预算，避免发送阶段无限等待。
+            using var commandSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetimeSource.Token);
+            commandSource.CancelAfter(timeout ?? TimeSpan.FromSeconds(20));
+            await SendPayloadAsync(payload, commandSource.Token).ConfigureAwait(false);
+            return await completion.Task.WaitAsync(commandSource.Token).ConfigureAwait(false);
         }
         finally
         {
@@ -197,30 +204,21 @@ internal sealed class HomeAssistantWebSocketClient : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
         _intentionalClose = true;
-        _lifetimeSource?.Cancel();
-        if (_socket.State is WebSocketState.Open or WebSocketState.CloseReceived)
-        {
-            try
-            {
-                await _socket.CloseOutputAsync(
-                    WebSocketCloseStatus.NormalClosure,
-                    "X-Tool 智能家居断开连接",
-                    CancellationToken.None).ConfigureAwait(false);
-            }
-            catch
-            {
-                // 连接已经中断时无需再次报告关闭错误。
-            }
-        }
+        _lifetimeSource.Cancel();
+        // 故障重连不等待对端关闭握手；中止在途 I/O 后再等待接收循环退出。
+        _socket.Abort();
 
         if (_receiveLoop is not null)
         {
             try { await _receiveLoop.ConfigureAwait(false); } catch { }
         }
-        _lifetimeSource?.Dispose();
-        _sendGate.Dispose();
+        // 等待已取消的发送者释放锁，防止其 finally 与 Dispose 竞争。
+        await _sendGate.WaitAsync().ConfigureAwait(false);
+        _sendGate.Release();
         _socket.Dispose();
+        // 不释放 CTS/信号量：并发命令可能仍在 finally 中访问它们，由 GC 回收托管对象。
     }
 
     private static string CombinePath(string basePath, string relativePath) =>

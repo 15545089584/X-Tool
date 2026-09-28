@@ -1,0 +1,208 @@
+<Window x:Class="ScreenshotApp.PhoneCalendar.PhoneCalendarEditor"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+ xmlns:icons="http://metro.mahapps.com/winfx/xaml/iconpacks"
+ Title="新建日程 · X-Tool" Width="720" Height="850" MinWidth="600" MinHeight="540"
+ WindowStyle="None" WindowStartupLocation="CenterOwner" Background="#F7FAFE" FontFamily="Microsoft YaHei UI" Foreground="#26364C">
+ <shell:WindowChrome.WindowChrome><shell:WindowChrome CaptionHeight="44" ResizeBorderThickness="6" GlassFrameThickness="0" UseAeroCaptionButtons="False"/></shell:WindowChrome.WindowChrome>
+ <Window.Resources>
+  <Style TargetType="TextBlock"><Setter Property="Foreground" Value="#526780"/><Setter Property="TextWrapping" Value="Wrap"/></Style>
+  <Style x:Key="Label" TargetType="TextBlock"><Setter Property="Margin" Value="0,0,0,8"/><Setter Property="Foreground" Value="#526780"/><Setter Property="FontSize" Value="12"/></Style>
+  <Style x:Key="Card" TargetType="Border"><Setter Property="CornerRadius" Value="14"/><Setter Property="Background" Value="White"/><Setter Property="BorderBrush" Value="#E6EDF6"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Padding" Value="16"/><Setter Property="Margin" Value="0,0,0,12"/></Style>
+  <Style TargetType="Button">
+   <Setter Property="Padding" Value="17,10"/><Setter Property="Background" Value="#EDF3FB"/><Setter Property="Foreground" Value="#526780"/><Setter Property="Cursor" Value="Hand"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+    <Border x:Name="Frame" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10" Padding="{TemplateBinding Padding}">
+     <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}"/>
+    </Border><ControlTemplate.Triggers>
+     <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Frame" Property="Opacity" Value="0.82"/></Trigger>
+     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Frame" Property="BorderBrush" Value="#287CF3"/><Setter TargetName="Frame" Property="BorderThickness" Value="1"/></Trigger>
+     <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45"/></Trigger>
+    </ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style TargetType="TextBox">
+   <Setter Property="FontSize" Value="13"/><Setter Property="Padding" Value="12,10"/><Setter Property="Background" Value="White"/><Setter Property="Foreground" Value="#26364C"/>
+   <Setter Property="BorderBrush" Value="#E0E8F3"/><Setter Property="BorderThickness" Value="1"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TextBox">
+    <Border x:Name="Frame" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="9">
+     <Grid><ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"/>
+      <TextBlock x:Name="Placeholder" Text="{TemplateBinding Tag}" Foreground="#9BAABE" Margin="{TemplateBinding Padding}" IsHitTestVisible="False" Visibility="Collapsed"/>
+     </Grid>
+    </Border><ControlTemplate.Triggers>
+     <Trigger Property="Text" Value=""><Setter TargetName="Placeholder" Property="Visibility" Value="Visible"/></Trigger>
+     <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="Frame" Property="BorderBrush" Value="#287CF3"/></Trigger>
+     <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.55"/></Trigger>
+    </ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style TargetType="ComboBoxItem">
+   <Setter Property="Padding" Value="12,9"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBoxItem">
+    <Border x:Name="Row" Background="Transparent" CornerRadius="7" Padding="{TemplateBinding Padding}"><ContentPresenter/></Border>
+    <ControlTemplate.Triggers><Trigger Property="IsHighlighted" Value="True"><Setter TargetName="Row" Property="Background" Value="#EDF4FF"/></Trigger>
+     <Trigger Property="IsSelected" Value="True"><Setter TargetName="Row" Property="Background" Value="#E3EFFF"/></Trigger></ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style TargetType="ComboBox">
+   <Setter Property="FontSize" Value="13"/><Setter Property="Foreground" Value="#26364C"/><Setter Property="MinHeight" Value="42"/>
+   <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/><Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBox">
+    <Grid>
+     <ToggleButton Focusable="False" IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" ClickMode="Press">
+      <ToggleButton.Template><ControlTemplate TargetType="ToggleButton">
+       <Border x:Name="Frame" Background="White" BorderBrush="#E0E8F3" BorderThickness="1" CornerRadius="9">
+        <icons:PackIconMaterial Kind="ChevronDown" Width="18" Height="18" Foreground="#7C91AA" HorizontalAlignment="Right" Margin="0,0,12,0"/>
+       </Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Frame" Property="BorderBrush" Value="#82B2F7"/></Trigger></ControlTemplate.Triggers>
+      </ControlTemplate></ToggleButton.Template>
+     </ToggleButton>
+     <ContentPresenter Content="{TemplateBinding SelectionBoxItem}" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}" ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}" Margin="12,8,38,8" VerticalAlignment="Center" IsHitTestVisible="False"/>
+     <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
+      <Border Background="White" BorderBrush="#DCE6F2" BorderThickness="1" CornerRadius="10" Padding="5" MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" MaxHeight="280" Margin="0,4,0,0">
+       <ScrollViewer CanContentScroll="True"><ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/></ScrollViewer>
+      </Border>
+     </Popup>
+    </Grid><ControlTemplate.Triggers><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.55"/></Trigger></ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style TargetType="DatePicker">
+   <Setter Property="Foreground" Value="#26364C"/><Setter Property="FontSize" Value="13"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="DatePicker">
+    <Grid>
+     <Border x:Name="Frame" Background="White" BorderBrush="#E0E8F3" BorderThickness="1" CornerRadius="9">
+      <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="40"/></Grid.ColumnDefinitions>
+       <DatePickerTextBox x:Name="PART_TextBox" Background="Transparent" BorderThickness="0" Padding="10,9" VerticalContentAlignment="Center" Focusable="True">
+        <DatePickerTextBox.Template><ControlTemplate TargetType="DatePickerTextBox"><ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"/></ControlTemplate></DatePickerTextBox.Template>
+       </DatePickerTextBox>
+       <Button x:Name="PART_Button" Grid.Column="1" Background="Transparent" Padding="8" Focusable="False" ToolTip="选择日期">
+        <icons:PackIconMaterial Kind="CalendarMonthOutline" Width="18" Height="18" Foreground="#287CF3"/>
+       </Button>
+      </Grid>
+     </Border>
+     <Popup x:Name="PART_Popup" Placement="Bottom" PlacementTarget="{Binding ElementName=PART_TextBox}" StaysOpen="False" AllowsTransparency="True"/>
+    </Grid><ControlTemplate.Triggers><Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="Frame" Property="BorderBrush" Value="#287CF3"/></Trigger>
+    <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.55"/></Trigger></ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style x:Key="Switch" TargetType="CheckBox">
+   <Setter Property="Cursor" Value="Hand"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="CheckBox">
+    <Border x:Name="Track" Width="36" Height="22" CornerRadius="11" Background="#DCE6F3">
+     <Ellipse x:Name="Knob" Width="16" Height="16" Fill="White" HorizontalAlignment="Left" Margin="3"/>
+    </Border><ControlTemplate.Triggers>
+     <Trigger Property="IsChecked" Value="True"><Setter TargetName="Track" Property="Background" Value="#287CF3"/><Setter TargetName="Knob" Property="HorizontalAlignment" Value="Right"/></Trigger>
+     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Track" Property="BorderBrush" Value="#526780"/><Setter TargetName="Track" Property="BorderThickness" Value="1"/></Trigger>
+     <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45"/></Trigger>
+    </ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style x:Key="ReminderChip" TargetType="CheckBox">
+   <Setter Property="Cursor" Value="Hand"/><Setter Property="FontSize" Value="12"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="CheckBox">
+    <Border x:Name="Chip" Padding="9,9" CornerRadius="8" Background="White" BorderBrush="#E0E8F3" BorderThickness="1">
+     <StackPanel Orientation="Horizontal"><Border x:Name="Check" Width="14" Height="14" CornerRadius="4" BorderBrush="#CFDBEA" BorderThickness="1" Margin="0,0,6,0" VerticalAlignment="Center">
+      <icons:PackIconMaterial x:Name="Mark" Kind="Check" Width="11" Height="11" Foreground="White" Visibility="Collapsed"/>
+     </Border><ContentPresenter VerticalAlignment="Center"/></StackPanel>
+    </Border><ControlTemplate.Triggers>
+     <Trigger Property="IsChecked" Value="True"><Setter TargetName="Chip" Property="Background" Value="#EDF4FF"/><Setter TargetName="Chip" Property="BorderBrush" Value="#75A8F2"/><Setter TargetName="Check" Property="Background" Value="#287CF3"/><Setter TargetName="Check" Property="BorderBrush" Value="#287CF3"/><Setter TargetName="Mark" Property="Visibility" Value="Visible"/></Trigger>
+     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Chip" Property="BorderBrush" Value="#287CF3"/></Trigger>
+     <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.55"/></Trigger>
+    </ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style TargetType="ScrollBar">
+   <Setter Property="Width" Value="7"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ScrollBar">
+    <Track x:Name="PART_Track" IsDirectionReversed="True"><Track.Thumb><Thumb><Thumb.Template><ControlTemplate TargetType="Thumb"><Border Background="#BFCDDE" CornerRadius="3"/></ControlTemplate></Thumb.Template></Thumb></Track.Thumb></Track>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+ </Window.Resources>
+ <Border Background="#FAFCFF" BorderBrush="#DCE6F2" BorderThickness="1" CornerRadius="16">
+  <Grid>
+   <Grid.RowDefinitions><RowDefinition Height="44"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+   <Border Background="#F0F5FC" CornerRadius="16,16,0,0">
+    <DockPanel Margin="18,5,10,5">
+     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" shell:WindowChrome.IsHitTestVisibleInChrome="True">
+      <Button Click="Minimize_Click" Padding="9" Background="Transparent" ToolTip="最小化"><icons:PackIconMaterial Kind="WindowMinimize" Width="16" Height="16"/></Button>
+      <Button Click="Maximize_Click" Padding="9" Background="Transparent" ToolTip="最大化 / 还原"><icons:PackIconMaterial Kind="WindowMaximize" Width="15" Height="15"/></Button>
+      <Button Click="Cancel_Click" Padding="9" Background="Transparent" ToolTip="关闭"><icons:PackIconMaterial Kind="Close" Width="17" Height="17"/></Button>
+     </StackPanel>
+     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+      <icons:PackIconMaterial Kind="CalendarMonthOutline" Width="19" Height="19" Foreground="#287CF3" Margin="0,0,9,0"/>
+      <TextBlock x:Name="Caption" Text="新建日程 · X-Tool" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center"/>
+     </StackPanel>
+    </DockPanel>
+   </Border>
+   <Grid Grid.Row="1" Margin="24,20,24,17">
+    <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+    <StackPanel><TextBlock x:Name="Heading" Text="新建日程" FontSize="25" FontWeight="Bold" Foreground="#26364C"/>
+     <TextBlock Text="保存到手机所选日历 · 等待手机确认后完成" FontSize="12" Margin="0,6,0,0"/>
+    </StackPanel>
+    <Border Grid.Column="1" Background="#EDF4FF" CornerRadius="13" Padding="10,6" VerticalAlignment="Top" Margin="8,4,0,0">
+     <StackPanel Orientation="Horizontal"><Ellipse x:Name="StatusDot" Width="7" Height="7" Fill="#94A3B8" Margin="0,0,6,0"/>
+      <TextBlock x:Name="ConnectionStatus" Text="等待手机连接" FontSize="11"/></StackPanel>
+    </Border>
+   </Grid>
+   <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="24,0,15,0" PanningMode="VerticalOnly">
+    <StackPanel x:Name="Fields" Margin="0,0,9,0">
+     <Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="类型 / 日历" Style="{StaticResource Label}"/>
+      <ComboBox x:Name="CalendarBox" SelectedValuePath="Id"><ComboBox.ItemTemplate><DataTemplate>
+       <StackPanel Orientation="Horizontal"><Ellipse Fill="{Binding Color}" Width="9" Height="9" Margin="0,0,9,0"/><TextBlock Text="{Binding Name}" Foreground="#26364C"/></StackPanel>
+      </DataTemplate></ComboBox.ItemTemplate></ComboBox>
+     </StackPanel></Border>
+     <Border Style="{StaticResource Card}"><StackPanel>
+      <TextBlock Text="标题" Style="{StaticResource Label}"/><TextBox x:Name="TitleBox" MaxLength="300" Tag="添加日程主题、会议或待办…"/>
+      <DockPanel Margin="0,14,0,0"><CheckBox x:Name="AllDayBox" DockPanel.Dock="Right" Style="{StaticResource Switch}" Checked="AllDayChanged" Unchecked="AllDayChanged" AutomationProperties.Name="全天日程"/>
+       <TextBlock Text="全天日程" VerticalAlignment="Center" FontSize="13"/>
+      </DockPanel>
+     </StackPanel></Border>
+     <Border Style="{StaticResource Card}"><StackPanel>
+      <Grid x:Name="TimeFields"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="16"/><ColumnDefinition/></Grid.ColumnDefinitions>
+       <StackPanel><TextBlock Text="开始日期与时间" Style="{StaticResource Label}"/><DatePicker x:Name="StartDate" SelectedDateFormat="Short"/>
+        <TextBox x:Name="StartTime" Margin="0,8,0,0" MaxLength="5" Tag="HH:mm" ToolTip="24 小时制，例如 09:30"/>
+       </StackPanel>
+       <StackPanel Grid.Column="2"><TextBlock Text="结束日期与时间" Style="{StaticResource Label}"/><DatePicker x:Name="EndDate" SelectedDateFormat="Short"/>
+        <TextBox x:Name="EndTime" Margin="0,8,0,0" MaxLength="5" Tag="HH:mm" ToolTip="24 小时制，例如 10:30"/>
+       </StackPanel>
+      </Grid>
+      <Border Background="#F1F6FD" CornerRadius="7" Padding="10,8" Margin="0,10,0,0">
+       <DockPanel><icons:PackIconMaterial Kind="ClockOutline" Width="14" Height="14" Foreground="#7C91AA" Margin="0,1,7,0" VerticalAlignment="Top"/>
+        <TextBlock x:Name="TimeHint" FontSize="11" Foreground="#7A8DA7"/></DockPanel>
+      </Border>
+     </StackPanel></Border>
+     <Border Style="{StaticResource Card}"><StackPanel>
+      <TextBlock Text="重复" Style="{StaticResource Label}"/><ComboBox x:Name="RepeatBox" SelectedIndex="0">
+       <ComboBoxItem Content="一次性日程" Tag=""/><ComboBoxItem Content="每天" Tag="FREQ=DAILY"/><ComboBoxItem Content="每周" Tag="FREQ=WEEKLY"/>
+       <ComboBoxItem Content="每月（公历）" Tag="FREQ=MONTHLY"/><ComboBoxItem Content="每年（公历）" Tag="FREQ=YEARLY"/>
+      </ComboBox>
+      <TextBlock x:Name="RecurringHint" Visibility="Collapsed" Text="修改将应用到整组重复日程，保留原有时间和重复规则。日期或农历规则请在手机上修改。" FontSize="11" Margin="0,9,0,0"/>
+     </StackPanel></Border>
+     <Border Style="{StaticResource Card}"><StackPanel>
+      <TextBlock Text="通知提醒" Style="{StaticResource Label}" FontWeight="SemiBold"/>
+      <WrapPanel x:Name="ReminderChoices"/>
+      <TextBlock Text="自定义提醒时间" Style="{StaticResource Label}" Margin="0,4,0,8"/>
+      <TextBox x:Name="OtherReminders" Tag="例如：10, 45, -15" ToolTip="提前分钟数；全天日程填 -540 表示当天 09:00"/>
+      <TextBlock Text="填写提前分钟数，以逗号分隔；负数表示开始后。" FontSize="11" Foreground="#899AB0" Margin="0,7,0,0"/>
+     </StackPanel></Border>
+     <Border Style="{StaticResource Card}"><StackPanel>
+      <TextBlock Text="地点" Style="{StaticResource Label}"/><TextBox x:Name="LocationBox" MaxLength="300" Tag="添加会议室、地址或线上链接…"/>
+      <TextBlock Text="备注" Style="{StaticResource Label}" Margin="0,14,0,8"/>
+      <TextBox x:Name="DescriptionBox" MaxLength="2000" Tag="补充日程说明…" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="76" VerticalScrollBarVisibility="Auto"/>
+     </StackPanel></Border>
+    </StackPanel>
+   </ScrollViewer>
+   <Border Grid.Row="3" Background="#F0F5FC" BorderBrush="#E3EBF6" BorderThickness="0,1,0,0" CornerRadius="0,0,16,16" Padding="24,13">
+    <StackPanel><TextBlock x:Name="Feedback" Foreground="#B65D50" FontSize="12" Margin="0,0,0,8"/>
+     <DockPanel LastChildFill="True">
+      <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+       <Button Click="Cancel_Click" Margin="0,0,8,0"><TextBlock x:Name="BackText" Text="取消"/></Button>
+       <Button x:Name="SaveButton" Click="Save_Click" Background="#287CF3" Foreground="White"><TextBlock x:Name="SaveText" Text="保存到手机" Foreground="White" FontWeight="SemiBold"/></Button>
+      </StackPanel>
+      <StackPanel VerticalAlignment="Center" Margin="0,0,10,0">
+       <TextBlock Text="手机确认后完成保存" FontSize="11"/>
+       <TextBlock x:Name="FooterStatus" Text="等待同步状态" FontSize="10" Foreground="#899AB0" Margin="0,3,0,0"/>
+      </StackPanel>
+     </DockPanel>
+    </StackPanel>
+   </Border>
+  </Grid>
+ </Border>
+</Window>

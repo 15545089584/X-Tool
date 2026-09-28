@@ -4,6 +4,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
+import okhttp3.ResponseBody
 import org.json.JSONObject
 import java.io.BufferedInputStream
 import java.io.ByteArrayOutputStream
@@ -38,6 +39,7 @@ class CollabApi(private val host: String) {
                 PairResult(
                     token = token,
                     host = json.optString("host", host),
+                    tailscaleHost = json.optString("tailscaleHost"),
                     serverId = json.optString("serverId"),
                     serverName = json.optString("serverName")
                 )
@@ -50,9 +52,10 @@ class CollabApi(private val host: String) {
     }
 
     fun status(token: String, automatic: Boolean = false): JSONObject? {
-        val suffix = if (automatic) "&auto=1" else ""
-        val request = Request.Builder().url("${baseUrl()}/api/status?t=${encode(token)}$suffix").build()
-        client.newCall(request).execute().use { response ->
+        val suffix = if (automatic) "?auto=1" else ""
+        val request = Request.Builder().url("${baseUrl()}/api/status$suffix")
+            .header("Authorization", "Bearer $token").build()
+        StatusClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) return null
             return JSONObject(response.body?.string() ?: return null)
         }
@@ -83,6 +86,143 @@ class CollabApi(private val host: String) {
                 RemoteFile(item.optString("id"), item.optString("name"), item.optLong("size"), item.optString("at"))
             }
         }
+    }
+
+    fun listRemoteRoots(token: String): List<RemoteFileRoot> {
+        val request = authorizedRequest("${baseUrl()}/api/v2/remote-files/roots", token)
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw RemoteFileApiException(readError(response.body, response.code))
+            val array = JSONObject(response.body?.string() ?: error("电脑端响应为空"))
+                .optJSONArray("roots") ?: return emptyList()
+            return (0 until array.length()).mapNotNull { index ->
+                val item = array.optJSONObject(index) ?: return@mapNotNull null
+                val entryToken = item.optString("token")
+                if (entryToken.isBlank()) return@mapNotNull null
+                RemoteFileRoot(item.optString("id"), item.optString("name", "授权目录"), entryToken)
+            }
+        }
+    }
+
+    fun listRemoteEntries(token: String, directoryToken: String, offset: Int = 0, limit: Int = 100): RemoteFilePage {
+        val url = "${baseUrl()}/api/v2/remote-files/list?directory=${encode(directoryToken)}&offset=$offset&limit=$limit"
+        val request = authorizedRequest(url, token)
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw RemoteFileApiException(readError(response.body, response.code))
+            val json = JSONObject(response.body?.string() ?: error("电脑端响应为空"))
+            val array = json.optJSONArray("entries")
+            val entries = if (array == null) emptyList() else (0 until array.length()).mapNotNull { index ->
+                val item = array.optJSONObject(index) ?: return@mapNotNull null
+                val entryToken = item.optString("token")
+                if (entryToken.isBlank()) return@mapNotNull null
+                RemoteFileEntry(
+                    name = item.optString("name", "未命名"),
+                    isDirectory = item.optBoolean("isDirectory"),
+                    size = item.optLong("size"),
+                    modifiedAt = item.optString("modifiedAt"),
+                    token = entryToken,
+                    extension = item.optString("extension")
+                )
+            }
+            return RemoteFilePage(
+                currentName = json.optString("currentName", "授权目录"),
+                parentToken = json.optString("parentToken"),
+                nextOffset = json.optInt("nextOffset", -1),
+                entries = entries
+            )
+        }
+    }
+
+    fun downloadRemoteFile(
+        token: String,
+        transferId: String,
+        file: RemoteFileEntry,
+        openOutput: () -> java.io.OutputStream,
+        onProgress: (Long, Long) -> Unit
+    ): Boolean {
+        val url = "${baseUrl()}/api/v2/remote-files/download?file=${encode(file.token)}&id=${encode(transferId)}"
+        val request = authorizedRequest(url, token)
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw RemoteFileApiException(readError(response.body, response.code))
+            val body = response.body ?: throw RemoteFileApiException("电脑端未返回文件内容")
+            val total = body.contentLength().takeIf { it >= 0 } ?: file.size
+            body.byteStream().use { input ->
+                openOutput().use { output ->
+                    val buffer = ByteArray(TRANSFER_BATCH_BYTES)
+                    var downloaded = 0L
+                    var lastProgressAt = 0L
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        if (read == 0) continue
+                        output.write(buffer, 0, read)
+                        downloaded += read
+                        val now = System.nanoTime()
+                        if (downloaded >= total || now - lastProgressAt >= PROGRESS_INTERVAL_NANOS) {
+                            lastProgressAt = now
+                            onProgress(downloaded, total)
+                        }
+                    }
+                    output.flush()
+                    return total <= 0 || downloaded == total
+                }
+            }
+        }
+    }
+
+    fun downloadRemoteFileSegment(
+        token: String,
+        transferId: String,
+        file: RemoteFileEntry,
+        offset: Long,
+        length: Long,
+        openOutput: () -> java.io.OutputStream,
+        onProgress: (Long, Long) -> Unit
+    ): Boolean {
+        require(offset >= 0 && length > 0 && offset + length <= file.size) { "远程文件分段范围无效" }
+        val url = "${baseUrl()}/api/v2/remote-files/download?file=${encode(file.token)}&id=${encode(transferId)}&parallel=1"
+        val endInclusive = offset + length - 1
+        val request = authorizedRequest(url, token).newBuilder()
+            .header("Range", "bytes=$offset-$endInclusive")
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (response.code != 206) throw RemoteFileApiException(readError(response.body, response.code))
+            val body = response.body ?: throw RemoteFileApiException("电脑端未返回文件分段")
+            val responseLength = body.contentLength().takeIf { it >= 0 } ?: length
+            if (responseLength != length) throw RemoteFileApiException("电脑端返回的文件分段长度不一致")
+            body.byteStream().use { input ->
+                openOutput().use { output ->
+                    val buffer = ByteArray(TRANSFER_BATCH_BYTES)
+                    var downloaded = 0L
+                    var lastProgressAt = 0L
+                    while (downloaded < length) {
+                        val expected = minOf(buffer.size.toLong(), length - downloaded).toInt()
+                        val read = input.read(buffer, 0, expected)
+                        if (read < 0) break
+                        if (read == 0) continue
+                        output.write(buffer, 0, read)
+                        downloaded += read
+                        val now = System.nanoTime()
+                        if (downloaded >= length || now - lastProgressAt >= PROGRESS_INTERVAL_NANOS) {
+                            lastProgressAt = now
+                            onProgress(downloaded, length)
+                        }
+                    }
+                    output.flush()
+                    return downloaded == length
+                }
+            }
+        }
+    }
+
+    private fun authorizedRequest(url: String, token: String): Request = Request.Builder()
+        .url(url)
+        .header("Authorization", "Bearer $token")
+        .build()
+
+    private fun readError(body: ResponseBody?, status: Int): String = try {
+        JSONObject(body?.string().orEmpty()).optString("error").ifBlank { "电脑端返回错误（$status）" }
+    } catch (_: Exception) {
+        "电脑端返回错误（$status）"
     }
 
     fun uploadFileStreaming(
@@ -261,38 +401,61 @@ class CollabApi(private val host: String) {
             .readTimeout(35, TimeUnit.MINUTES)
             .writeTimeout(35, TimeUnit.MINUTES)
             .build()
+        // 状态探测不能继承大文件传输的 35 分钟读取超时，否则旧热点地址会卡住重连。
+        private val StatusClient = SharedClient.newBuilder()
+            .connectTimeout(2, TimeUnit.SECONDS)
+            .readTimeout(4, TimeUnit.SECONDS)
+            .callTimeout(5, TimeUnit.SECONDS)
+            .build()
+
+        fun hasLocalDiscoveryNetwork(): Boolean = LanDiscovery.bindings().isNotEmpty()
 
         /** 通过局域网广播查找电脑，不携带任何配对令牌。 */
         fun discover(timeoutMs: Int = 1800): List<DiscoveredServer> {
             val found = linkedMapOf<String, DiscoveredServer>()
-            DatagramSocket().use { socket ->
-                socket.broadcast = true
-                socket.soTimeout = 350
+            val sockets = mutableListOf<Pair<DatagramSocket, LanDiscovery.Binding>>()
+            try {
                 val requestBytes = DiscoveryRequest.toByteArray(Charsets.UTF_8)
-                val request = DatagramPacket(requestBytes, requestBytes.size, InetAddress.getByName("255.255.255.255"), DiscoveryPort)
-                socket.send(request)
-                val deadline = System.currentTimeMillis() + timeoutMs
-                val responseBuffer = ByteArray(2048)
-                while (System.currentTimeMillis() < deadline) {
+                for (binding in LanDiscovery.bindings()) {
+                    var socket: DatagramSocket? = null
                     try {
-                        val response = DatagramPacket(responseBuffer, responseBuffer.size)
-                        socket.receive(response)
-                        val json = JSONObject(String(response.data, response.offset, response.length, Charsets.UTF_8))
-                        if (json.optString("service") != "xtool-collaboration-v1") continue
-                        val discoveredHost = json.optString("host")
-                        val serverId = json.optString("serverId")
-                        if (discoveredHost.isBlank() || serverId.isBlank()) continue
-                        found[serverId] = DiscoveredServer(
-                            host = discoveredHost,
-                            serverId = serverId,
-                            serverName = json.optString("serverName", "X-Tool 电脑"),
-                            autoReconnectAllowed = json.optBoolean("autoReconnectAllowed", true)
-                        )
-                    } catch (_: java.net.SocketTimeoutException) {
-                        // 在总等待时间内继续接收其它网卡或电脑的响应。
+                        socket = DatagramSocket(InetSocketAddress(binding.address, 0))
+                        socket.broadcast = true
+                        socket.soTimeout = 80
+                        socket.send(DatagramPacket(requestBytes, requestBytes.size, binding.broadcast, DiscoveryPort))
+                        sockets += socket to binding
+                    } catch (_: java.io.IOException) { socket?.close() }
+                }
+                // 全部接口共享总预算，不为每块网卡分别等待一轮；不扫描子网主机。
+                val deadline = System.nanoTime() + timeoutMs.coerceIn(100, 5000) * 1_000_000L
+                val responseBuffer = ByteArray(2048)
+                while (sockets.isNotEmpty() && System.nanoTime() < deadline) {
+                    for ((socket, binding) in sockets) {
+                        if (System.nanoTime() >= deadline) break
+                        try {
+                            val response = DatagramPacket(responseBuffer, responseBuffer.size)
+                            socket.receive(response)
+                            if (!LanDiscovery.sameSubnet(binding, response.address)) continue
+                            val json = JSONObject(String(response.data, response.offset, response.length, Charsets.UTF_8))
+                            if (json.optString("service") != "xtool-collaboration-v1") continue
+                            val discoveredHost = LanDiscovery.responseHost(response.address, json.optString("host")) ?: continue
+                            val serverId = json.optString("serverId")
+                            if (discoveredHost.isBlank() || serverId.isBlank()) continue
+                            found[serverId] = DiscoveredServer(
+                                host = discoveredHost,
+                                tailscaleHost = json.optString("tailscaleHost"),
+                                serverId = serverId,
+                                serverName = json.optString("serverName", "X-Tool 电脑"),
+                                autoReconnectAllowed = json.optBoolean("autoReconnectAllowed", true)
+                            )
+                        } catch (_: java.net.SocketTimeoutException) {
+                            // 在总等待时间内继续接收其它网卡或电脑的响应。
+                        } catch (_: Exception) {
+                            // 无效发现报文不打断其他接口。
+                        }
                     }
                 }
-            }
+            } finally { sockets.forEach { (socket, _) -> socket.close() } }
             return found.values.toList()
         }
 
@@ -303,6 +466,7 @@ class CollabApi(private val host: String) {
 data class PairResult(
     val token: String? = null,
     val host: String = "",
+    val tailscaleHost: String = "",
     val serverId: String = "",
     val serverName: String = "",
     val error: String? = null
@@ -310,8 +474,29 @@ data class PairResult(
 
 data class RemoteFile(val id: String, val name: String, val size: Long, val at: String)
 
+data class RemoteFileRoot(val id: String, val name: String, val token: String)
+
+data class RemoteFileEntry(
+    val name: String,
+    val isDirectory: Boolean,
+    val size: Long,
+    val modifiedAt: String,
+    val token: String,
+    val extension: String
+)
+
+data class RemoteFilePage(
+    val currentName: String,
+    val parentToken: String,
+    val nextOffset: Int,
+    val entries: List<RemoteFileEntry>
+)
+
+class RemoteFileApiException(message: String) : java.io.IOException(message)
+
 data class DiscoveredServer(
     val host: String,
+    val tailscaleHost: String,
     val serverId: String,
     val serverName: String,
     val autoReconnectAllowed: Boolean

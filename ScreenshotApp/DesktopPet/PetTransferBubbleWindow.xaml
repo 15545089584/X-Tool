@@ -100,6 +100,22 @@
                     <TextBlock x:Name="CopyCodeText" Text="复制验证码" FontSize="14" FontWeight="SemiBold"
                                Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                 </Button>
+                <StackPanel x:Name="MailActions" Grid.Row="4" Orientation="Horizontal" Visibility="Collapsed" Margin="0,12,0,0">
+                    <StackPanel.Resources>
+                        <Style TargetType="Button">
+                            <Setter Property="Padding" Value="20,10"/><Setter Property="Margin" Value="0,0,10,0"/>
+                            <Setter Property="Background" Value="#4D7CFE"/><Setter Property="Foreground" Value="White"/>
+                            <Setter Property="Cursor" Value="Hand"/>
+                            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+                                <Border Background="{TemplateBinding Background}" CornerRadius="10" Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}"/>
+                                </Border>
+                            </ControlTemplate></Setter.Value></Setter>
+                        </Style>
+                    </StackPanel.Resources>
+                    <Button Click="MailOpen_Click"><TextBlock Text="查看邮件" Foreground="White"/></Button>
+                    <Button x:Name="MailReadButton" Content="标为已读" Click="MailRead_Click" Background="#E8EFFB" Foreground="#34547D"/>
+                </StackPanel>
                 <Grid x:Name="DetailRow" Grid.Row="3" Margin="1,8,1,0">
                     <TextBlock x:Name="TransferredText" FontSize="9.5" Foreground="#7A8EA1" Text="0 B / 0 B" />
                     <TextBlock x:Name="SpeedText" HorizontalAlignment="Right" FontSize="9.5" Foreground="#7A8EA1" Text="准备中" />

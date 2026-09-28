@@ -30,6 +30,7 @@ public partial class CollaborationView : UserControl
         DataContext = this;
         _service.TransferProgressChanged += Service_TransferProgressChanged;
         _service.DeviceStateChanged += Service_DeviceStateChanged;
+        _service.RemoteFiles.Changed += Service_RemoteFilesChanged;
         _statusTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _statusTimer.Tick += (_, _) => RefreshStatus();
         Loaded += CollaborationView_Loaded;
@@ -80,17 +81,24 @@ public partial class CollaborationView : UserControl
             HeaderStatusDot.Fill = new SolidColorBrush(Color.FromRgb(224, 91, 103));
             ConnectionLineText.Text = "当前不可连接";
             LocalIpText.Text = "地址不可用";
+            TailscaleIpText.Text = "Tailscale 未连接";
             DeviceIpText.Text = "未连接";
             return;
         }
 
         var count = _service.SessionCount;
         var connectedDevice = _service.ConnectedDevices.FirstOrDefault();
-        EndpointText.Text = $"{Environment.MachineName} · 文件端口 {_service.Port} · 自动发现端口 {_service.Port + 1}";
+        var remoteFileStatus = _service.RemoteFiles.Enabled
+            ? $"远程文件 {_service.RemoteFiles.Roots.Count} 个目录"
+            : "远程文件已关闭";
+        EndpointText.Text = $"{Environment.MachineName} · 端口 {_service.Port} · {remoteFileStatus}";
         LocalIpText.Text = _service.LocalIpAddress ?? "地址待确认";
+        TailscaleIpText.Text = string.IsNullOrWhiteSpace(_service.TailscaleIpAddress)
+            ? "Tailscale 未连接"
+            : $"TS {_service.TailscaleIpAddress}";
         HeaderStatusDot.Fill = new SolidColorBrush(count > 0 ? Color.FromRgb(31, 184, 143) : Color.FromRgb(77, 124, 254));
-        HeaderStatusText.Text = count > 0 ? $"已连接 {count} 台设备" : "等待同一局域网设备";
-        ConnectionLineText.Text = count > 0 ? "安全会话已连接" : _autoReconnectEnabled ? "已开启自动重连" : "等待扫码连接";
+        HeaderStatusText.Text = count > 0 ? $"已连接 {count} 台设备" : "等待局域网或 Tailscale 设备";
+        ConnectionLineText.Text = count > 0 ? "可信会话已连接" : _autoReconnectEnabled ? "已开启地址回退与自动重连" : "等待扫码连接";
         DeviceNameText.Text = connectedDevice?.DeviceName ?? "Vivo X300 PRO";
         DeviceIpText.Text = connectedDevice?.IpAddress ?? "等待连接";
         DeviceHintText.Text = count > 0
@@ -259,6 +267,8 @@ public partial class CollaborationView : UserControl
 
     private void Service_DeviceStateChanged() => _ = Dispatcher.InvokeAsync(RefreshStatus);
 
+    private void Service_RemoteFilesChanged() => _ = Dispatcher.InvokeAsync(RefreshStatus);
+
     private void ClearCompleted_Click(object sender, RoutedEventArgs e)
     {
         foreach (var row in Transfers.Where(row => row.IsFinished).ToArray())
@@ -306,6 +316,16 @@ public partial class CollaborationView : UserControl
     }
 
     private void OpenConnectionSettings_Click(object sender, RoutedEventArgs e) => ConnectionSettingsRequested?.Invoke();
+
+    private void OpenRemoteFiles_Click(object sender, RoutedEventArgs e)
+    {
+        var window = new RemoteFileAccessWindow(_service.RemoteFiles)
+        {
+            Owner = Window.GetWindow(this)
+        };
+        window.ShowDialog();
+        RefreshStatus();
+    }
 }
 
 public sealed class TransferRow : INotifyPropertyChanged

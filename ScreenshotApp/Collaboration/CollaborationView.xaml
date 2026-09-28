@@ -61,13 +61,14 @@
         <Grid>
             <StackPanel>
                 <TextBlock FontSize="31" FontWeight="SemiBold" Foreground="#17283A" Text="协作中心" />
-                <TextBlock Margin="0,6,0,0" FontSize="12" Foreground="{StaticResource SecondaryText}" Text="让电脑与已信任手机在同一局域网内自动相遇，双向传递图片与文件。" />
+                <TextBlock Margin="0,6,0,0" FontSize="12" Foreground="{StaticResource SecondaryText}" Text="通过局域网或 Tailscale 连接已信任手机，双向传输并按授权远程读取文件。" />
             </StackPanel>
             <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal">
                 <Border MinHeight="42" Padding="16,0" Background="#AEEAFFF7" BorderBrush="#83CFE4D7" BorderThickness="1" CornerRadius="12">
                     <StackPanel VerticalAlignment="Center" Orientation="Horizontal"><Ellipse x:Name="HeaderStatusDot" Width="8" Height="8" Margin="0,0,9,0" VerticalAlignment="Center" Fill="#7E94A8" /><TextBlock x:Name="HeaderStatusText" VerticalAlignment="Center" FontSize="12" Foreground="#557088" Text="正在启动" /></StackPanel>
                 </Border>
                 <Button Margin="10,0,0,0" Style="{StaticResource SecondaryButton}" Content="手机通知" Click="OpenPhoneNotifications_Click" />
+                <Button Margin="10,0,0,0" MinWidth="118" Style="{StaticResource SecondaryButton}" Content="远程文件" Click="OpenRemoteFiles_Click" />
                 <Button Margin="10,0,0,0" Style="{StaticResource SecondaryButton}" Content="连接设置" Click="OpenConnectionSettings_Click" />
             </StackPanel>
         </Grid>
@@ -79,7 +80,7 @@
                     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="12" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                     <Grid>
                         <StackPanel>
-                            <TextBlock FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource PrimaryText}" Text="局域网连接" />
+                            <TextBlock FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource PrimaryText}" Text="可信设备连接" />
                             <TextBlock x:Name="EndpointText" Margin="0,5,0,0" FontSize="11" Foreground="{StaticResource SecondaryText}" Text="正在读取本机地址…" />
                         </StackPanel>
                         <Button MinWidth="128" HorizontalAlignment="Right" VerticalAlignment="Top" Style="{StaticResource SecondaryButton}" Content="刷新配对码" Click="RefreshPairing_Click" />
@@ -87,7 +88,7 @@
                     <Grid Grid.Row="2" Margin="18,0,12,0" HorizontalAlignment="Stretch">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="178" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="178" /></Grid.ColumnDefinitions>
                         <Border Padding="12,10" Background="#A8F4F8FF" BorderBrush="#8BCDE2F3" BorderThickness="1" CornerRadius="16">
-                            <StackPanel VerticalAlignment="Center"><Border Width="40" Height="40" HorizontalAlignment="Center" Background="#DCE9F0FF" CornerRadius="13"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="21" Foreground="#4D7CFE" Text="&#xE770;" /></Border><TextBlock Margin="0,7,0,0" HorizontalAlignment="Center" FontSize="13" FontWeight="SemiBold" Foreground="#35536E" Text="此电脑" /><TextBlock x:Name="LocalIpText" Margin="0,3,0,0" HorizontalAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="#4D7CFE" Text="--" /><TextBlock HorizontalAlignment="Center" FontSize="9" Foreground="#7890A6" Text="文件端口 18120" /></StackPanel>
+                            <StackPanel VerticalAlignment="Center"><Border Width="40" Height="40" HorizontalAlignment="Center" Background="#DCE9F0FF" CornerRadius="13"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe Fluent Icons" FontSize="21" Foreground="#4D7CFE" Text="&#xE770;" /></Border><TextBlock Margin="0,7,0,0" HorizontalAlignment="Center" FontSize="13" FontWeight="SemiBold" Foreground="#35536E" Text="此电脑" /><TextBlock x:Name="LocalIpText" Margin="0,3,0,0" HorizontalAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="#4D7CFE" Text="--" /><TextBlock x:Name="TailscaleIpText" HorizontalAlignment="Center" FontSize="9" Foreground="#20A883" Text="Tailscale 未连接" /></StackPanel>
                         </Border>
                         <Border Grid.Column="1" Height="2" Margin="0,0,0,0" VerticalAlignment="Center" Background="#91A8C8E8" CornerRadius="1" />
                         <Border Grid.Column="2" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="13,7" Background="#F4FFFFFF" BorderBrush="#A8CDE2F4" BorderThickness="1" CornerRadius="12">

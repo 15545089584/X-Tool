@@ -128,7 +128,9 @@ internal static class VerticalOverlapDetector
 
         // 慢速手动滚动经常一次只移动一行（十几到二十像素）。下限过大时，
         // 真实位移会被排除，算法反而可能在重复段落中命中一个很远的假位置。
-        var minimumShift = Math.Max(3, height / 250);
+        // 触控板和平滑滚轮在高频采样时可能只移动 1～2 像素。
+        // 从 3 像素起搜会跳过真实候选，并可能在周期性列表里命中远处假接缝。
+        var minimumShift = 1;
         // PageDown 一类操作通常会移动接近一整页。保留至少约 10% 的重叠区域，
         // 既允许较快滚动，也避免在完全没有共同内容时盲目拼接。
         var maximumShift = Math.Min(height - 48, (int)Math.Round(height * 0.90));
@@ -250,11 +252,22 @@ internal static class VerticalOverlapDetector
                                                scoreGap > Math.Max(8.0, best.Evaluation.Score * 0.35);
         var isIsolatedSparseCandidate = best.Evaluation.Score < 0.55 ||
                                         scoreGap > Math.Max(12.0, best.Evaluation.Score * 0.50);
+        // 越接近整屏跳转，可用于证明连续性的重叠内容越少。此时必须要求
+        // 更充分的边缘和稳定网格，避免广告、轮播图或重复列表制造远距离假低点。
+        var isVeryLargeShift = best.Shift > height * 0.72;
+        var hasStrongLargeShiftEvidence = !isVeryLargeShift ||
+                                          (height - best.Shift >= Math.Max(96, height / 5) &&
+                                           best.Evaluation.MatchedEdgeRatio >= 0.72 &&
+                                           best.Evaluation.StableCellCount >= 4 &&
+                                           best.Evaluation.StableRowCount >= 2 &&
+                                           (best.Evaluation.Score < 18.0 ||
+                                            scoreGap > Math.Max(4.0, best.Evaluation.Score * 0.12)));
         // IDEA/浏览器平滑滚动会以亚像素位置重新栅格化文字。真实帧中即使
         // 61% 的边缘逐点一致，剩余抗锯齿边缘仍可能把均值抬到 20～30。
         // 可靠性以“多数边缘一致 + 候选唯一”为主，分数上限只负责拦截
         // 极端异常；无重叠画面仍会因边缘一致率低而被拒绝。
         var reliable = hasEnoughEdgeEvidence &&
+                       hasStrongLargeShiftEvidence &&
                        ((best.Evaluation.Score < 42.0 &&
                          hasConsistentEdges &&
                          isDistinctCandidate) ||

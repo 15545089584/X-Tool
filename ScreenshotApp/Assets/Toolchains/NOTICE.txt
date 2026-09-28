@@ -1,5 +1,12 @@
 开发工具图标来源
 
-本目录中的工具品牌图标来自 Simple Icons 项目提供的品牌图形，通过其 CDN 获取后栅格化为 64×64 PNG，用于 X-Tool 的开发环境识别界面。
+除下列官方素材外，本目录中的工具品牌图标来自 Simple Icons 项目提供的品牌图形，通过其 CDN 获取后栅格化为 64×64 PNG，用于 X-Tool 的开发环境识别界面。
 来源：https://simpleicons.org/
 许可：Simple Icons 图形以 CC0 1.0 贡献到公有领域；各品牌名称与商标仍归其各自权利人所有。
+
+2026-09-12 官方图标更新（保留原始 SVG，等比例栅格化为 128×128 PNG，不重绘或改色）：
+.NET：https://github.com/dotnet/brand/blob/main/logo/dotnet-logo.svg
+品牌使用说明：https://github.com/dotnet/brand
+JMeter：https://jmeter.apache.org/images/jmeter_square.svg
+Conda：https://docs.conda.io/en/latest/_static/conda_logo.svg
+以上图标仅用于标识对应工具，商标及品牌权利归各项目权利人所有。

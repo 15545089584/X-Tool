@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Media.Imaging;
 using System.IO;
+using System.Collections.Specialized;
 using Forms = System.Windows.Forms;
 
 namespace ScreenshotApp.ClipboardUi;
@@ -60,6 +61,26 @@ internal static class ClipboardService
         {
             ImageRecordRequested?.Invoke(image);
         }
+    }
+
+    /// <summary>把一个或多个文件路径放入系统剪贴板，供资源管理器及聊天软件直接粘贴。</summary>
+    internal static void SetFiles(IEnumerable<string> filePaths)
+    {
+        var files = new StringCollection();
+        foreach (var filePath in filePaths.Where(File.Exists).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            files.Add(filePath);
+        }
+
+        if (files.Count == 0)
+        {
+            throw new FileNotFoundException("没有可复制的暂存文件。");
+        }
+
+        var data = new Forms.DataObject();
+        data.SetFileDropList(files);
+        data.SetData(InternalFormat, true);
+        SetDataObjectWithShortRetry(data);
     }
 
     private static void SetDataObjectWithShortRetry(Forms.DataObject data)

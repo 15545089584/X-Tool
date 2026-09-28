@@ -46,6 +46,7 @@ public partial class SmartDeviceDetailDialog : UserControl
 
     private SmartDeviceViewModel? _subscribedDevice;
     private bool _fanSpinActive;
+    private bool _isDraggingAirflowDirection;
 
     private void Device_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
@@ -53,9 +54,15 @@ public partial class SmartDeviceDetailDialog : UserControl
         {
             Dispatcher.BeginInvoke(UpdateFanSpinState);
         }
+
+        if (e.PropertyName is nameof(SmartDeviceViewModel.CurrentAirflowDirectionText) or
+            nameof(SmartDeviceViewModel.AirflowDirectionLevels))
+        {
+            Dispatcher.BeginInvoke(UpdateAirflowDirectionBar);
+        }
     }
 
-    /// <summary>风扇机头旋转随开关状态启停（代码后置驱动，避免 XAML 触发器在开合场景失效）。</summary>
+    /// <summary>风扇叶片旋转随开关状态启停，护网与外环保持静止。</summary>
     private void UpdateFanSpinState()
     {
         var spinning = Device is { IsFan: true, IsOn: true };
@@ -63,7 +70,7 @@ public partial class SmartDeviceDetailDialog : UserControl
         _fanSpinActive = spinning;
         if (spinning)
         {
-            FanHeadRotate.BeginAnimation(RotateTransform.AngleProperty,
+            FanBladeRotate.BeginAnimation(RotateTransform.AngleProperty,
                 new System.Windows.Media.Animation.DoubleAnimation(0, 360, TimeSpan.FromSeconds(1.6))
                 {
                     RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever
@@ -71,7 +78,7 @@ public partial class SmartDeviceDetailDialog : UserControl
         }
         else
         {
-            FanHeadRotate.BeginAnimation(RotateTransform.AngleProperty, null);
+            FanBladeRotate.BeginAnimation(RotateTransform.AngleProperty, null);
         }
     }
 
@@ -345,6 +352,80 @@ public partial class SmartDeviceDetailDialog : UserControl
         UpdateBrightnessFill();
         UpdateColorTempIndicator();
         UpdateFanModeBar();
+        UpdateAirflowDirectionBar();
+    }
+
+    private void AirflowDirectionBar_SizeChanged(object sender, SizeChangedEventArgs e) =>
+        UpdateAirflowDirectionBar();
+
+    private void AirflowDirectionBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (Device is not { CanInteract: true, HasAirflowDirectionLevels: true } device ||
+            device.AirflowDirectionControl is not { IsAvailable: true }) return;
+        _isDraggingAirflowDirection = true;
+        AirflowDirectionBar.CaptureMouse();
+        PreviewAirflowDirectionFromPointer(e.GetPosition(AirflowDirectionBar).Y);
+    }
+
+    private void AirflowDirectionBar_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (!_isDraggingAirflowDirection) return;
+        PreviewAirflowDirectionFromPointer(e.GetPosition(AirflowDirectionBar).Y);
+    }
+
+    private void AirflowDirectionBar_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!_isDraggingAirflowDirection) return;
+        _isDraggingAirflowDirection = false;
+        AirflowDirectionBar.ReleaseMouseCapture();
+        CommitAirflowDirectionFromBar();
+    }
+
+    private SmartAirflowDirectionLevel? AirflowDirectionLevelFromPointer(double y)
+    {
+        var height = AirflowDirectionBar.ActualHeight;
+        if (height <= 0 || Device is not { } device) return null;
+        var levels = device.AirflowDirectionLevels;
+        if (levels.Count == 0) return null;
+        var ratio = Math.Clamp(y / height, 0, 0.999999);
+        var index = Math.Clamp((int)Math.Floor(ratio * levels.Count), 0, levels.Count - 1);
+        return levels[index];
+    }
+
+    private void PreviewAirflowDirectionFromPointer(double y)
+    {
+        var level = AirflowDirectionLevelFromPointer(y);
+        if (level is null) return;
+        AirflowDirectionFill.Height = level.Percent / 100d * AirflowDirectionBar.ActualHeight;
+        AirflowDirectionFillLabel.SetCurrentValue(TextBlock.TextProperty, level.Name);
+    }
+
+    private void CommitAirflowDirectionFromBar()
+    {
+        var height = AirflowDirectionBar.ActualHeight;
+        if (height <= 0 || Device is not { CanInteract: true } device ||
+            device.AirflowDirectionControl is not { IsAvailable: true } control) return;
+        var levels = device.AirflowDirectionLevels;
+        if (levels.Count == 0) return;
+        var percent = Math.Clamp(AirflowDirectionFill.Height / height * 100d, 0, 100);
+        var level = levels.OrderBy(candidate => Math.Abs(candidate.Percent - percent)).First();
+        if (string.Equals(level.Value, control.SelectedValue, StringComparison.Ordinal)) return;
+        RaiseForEntity(control.EntityId, SmartHomeControlAction.SelectOption, textValue: level.Value);
+    }
+
+    private void UpdateAirflowDirectionBar()
+    {
+        if (AirflowDirectionBar.ActualHeight <= 0 || Device is not { } device) return;
+        var current = device.AirflowDirectionLevels.FirstOrDefault(level => level.IsCurrent);
+        if (current is null)
+        {
+            AirflowDirectionFill.Height = 0;
+            AirflowDirectionFillLabel.SetCurrentValue(TextBlock.TextProperty, string.Empty);
+            return;
+        }
+
+        AirflowDirectionFill.Height = current.Percent / 100d * AirflowDirectionBar.ActualHeight;
+        AirflowDirectionFillLabel.SetCurrentValue(TextBlock.TextProperty, current.Name);
     }
 
     private void FanModeBar_SizeChanged(object sender, SizeChangedEventArgs e) => UpdateFanModeBar();
@@ -496,7 +577,7 @@ public partial class SmartDeviceDetailDialog : UserControl
 
     private void AuxiliarySelectComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!IsLoaded || sender is not ComboBox
+        if (!IsLoaded || sender is not Selector
             {
                 DataContext: SmartSelectControl control,
                 SelectedValue: string value

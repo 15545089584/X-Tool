@@ -66,6 +66,7 @@ public partial class SettingsWindow : Window
 
         StartWithWindowsCheckBox.IsChecked = AutoStartService.IsEnabled();
         StickerTopmostCheckBox.IsChecked = preferences.StickerTopmost;
+        ScreenshotAutoAddToPetShelfCheckBox.IsChecked = preferences.ScreenshotAutoAddToPetShelf;
         VoiceInputEnabledCheckBox.IsChecked = preferences.VoiceInputEnabled;
         VoiceInputPasteAutomaticallyCheckBox.IsChecked = preferences.VoiceInputPasteAutomatically;
         VoiceInputModelStatusText.Text = voiceInputModelStatus;
@@ -178,6 +179,16 @@ public partial class SettingsWindow : Window
         _preferences.StartWithWindows = enabled;
         _preferences.Save();
         SetFooterStatus(enabled ? "已开启开机自启动" : "已关闭开机自启动");
+    }
+
+    private void ScreenshotAutoAddToPetShelfCheckBox_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_initialized) return;
+        _preferences.ScreenshotAutoAddToPetShelf = ScreenshotAutoAddToPetShelfCheckBox.IsChecked == true;
+        _preferences.Save();
+        SetFooterStatus(_preferences.ScreenshotAutoAddToPetShelf
+            ? "已开启截图自动暂存，成功后提醒；退出 X-Tool 后清空暂存副本"
+            : "已关闭截图自动暂存，已有暂存文件不受影响");
     }
 
     private void StickerTopmostCheckBox_Click(object sender, RoutedEventArgs e)

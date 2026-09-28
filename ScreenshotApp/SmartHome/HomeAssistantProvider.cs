@@ -27,15 +27,17 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
     private readonly Dictionary<string, string> _deviceNameOverrides = new(StringComparer.Ordinal);
     private PeriodicTimer? _statePollTimer;
     private CancellationTokenSource? _statePollSource;
+    private Task? _statePollTask;
+    private bool _snapshotReady;
 
     public HomeAssistantProvider(Uri serverUri, string token)
     {
         _serverUri = serverUri;
         _token = token;
-        _httpClient = new HttpClient
+        _httpClient = new HttpClient(HomeAssistantConnectionPolicy.CreateHttpHandler(serverUri))
         {
             BaseAddress = new Uri(serverUri.ToString().TrimEnd('/') + "/"),
-            Timeout = TimeSpan.FromSeconds(15)
+            Timeout = HomeAssistantConnectionPolicy.RequestTimeout
         };
         _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
         _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
@@ -61,18 +63,26 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
         _temperatureUnit = await LoadTemperatureUnitAsync(cancellationToken).ConfigureAwait(false);
 
         var socket = new HomeAssistantWebSocketClient();
+        // 在握手前取得所有权，握手失败时也必须释放套接字。
+        _webSocket = socket;
         socket.EventReceived += WebSocket_EventReceived;
         socket.Disconnected += exception => Disconnected?.Invoke(exception);
         await socket.ConnectAsync(_serverUri, _token, cancellationToken).ConfigureAwait(false);
-        _webSocket = socket;
 
-        _areas = await TryLoadRegistryAsync(socket, "config/area_registry/list", cancellationToken).ConfigureAwait(false);
-        _devices = await TryLoadRegistryAsync(socket, "config/device_registry/list", cancellationToken).ConfigureAwait(false);
-        _entities = await TryLoadRegistryAsync(socket, "config/entity_registry/list", cancellationToken).ConfigureAwait(false);
+        // 归属数据是设备聚合的必要条件；失败不能当成空列表，否则每个实体都会变成一台设备。
+        var registries = await Task.WhenAll(
+            LoadRegistryAsync(socket, "config/area_registry/list", cancellationToken),
+            LoadRegistryAsync(socket, "config/device_registry/list", cancellationToken),
+            LoadRegistryAsync(socket, "config/entity_registry/list", cancellationToken)).ConfigureAwait(false);
         var stateArray = await socket.SendCommandAsync("get_states", null, cancellationToken).ConfigureAwait(false);
+        if (stateArray.ValueKind != JsonValueKind.Array)
+            throw new InvalidOperationException("Home Assistant 实体状态数据不完整，正在等待重新加载。");
 
         lock (_snapshotSync)
         {
+            _areas = registries[0];
+            _devices = registries[1];
+            _entities = registries[2];
             _states.Clear();
             if (stateArray.ValueKind == JsonValueKind.Array)
             {
@@ -82,13 +92,18 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
                     if (!string.IsNullOrWhiteSpace(entityId)) _states[entityId] = state.Clone();
                 }
             }
-            CurrentSnapshot = BuildSnapshot();
         }
 
         await socket.SendCommandAsync("subscribe_events", new Dictionary<string, object?>
         {
             ["event_type"] = "state_changed"
         }, cancellationToken).ConfigureAwait(false);
+
+        lock (_snapshotSync)
+        {
+            _snapshotReady = true;
+            CurrentSnapshot = BuildSnapshot();
+        }
 
         // WebSocket 事件之外再加 20 秒 REST 轮询兜底：WS 事件中断时设备状态仍能自动刷新。
         StartStatePolling();
@@ -101,7 +116,7 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
         StopStatePollingCore();
         _statePollSource = new CancellationTokenSource();
         _statePollTimer = new PeriodicTimer(TimeSpan.FromSeconds(20));
-        _ = PollStatesAsync(_statePollTimer, _statePollSource.Token);
+        _statePollTask = PollStatesAsync(_statePollTimer, _statePollSource.Token);
     }
 
     private async Task PollStatesAsync(PeriodicTimer timer, CancellationToken cancellationToken)
@@ -115,6 +130,7 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
                     using var response = await _httpClient.GetAsync("api/states", cancellationToken).ConfigureAwait(false);
                     if (!response.IsSuccessStatusCode) continue;
                     using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
+                    if (document.RootElement.ValueKind != JsonValueKind.Array) continue;
                     SmartHomeSnapshot? snapshot = null;
                     lock (_snapshotSync)
                     {
@@ -390,6 +406,7 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
             SmartHomeSnapshot snapshot;
             lock (_snapshotSync)
             {
+                if (!_snapshotReady) return;
                 if (!data.TryGetProperty("new_state", out var newState) || newState.ValueKind == JsonValueKind.Null)
                 {
                     _states.Remove(entityId);
@@ -564,18 +581,23 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
         };
     }
 
-    private static async Task<JsonElement> TryLoadRegistryAsync(
+    private static async Task<JsonElement> LoadRegistryAsync(
         HomeAssistantWebSocketClient socket,
         string command,
         CancellationToken cancellationToken)
     {
         try
         {
-            return await socket.SendCommandAsync(command, null, cancellationToken).ConfigureAwait(false);
+            var result = await socket.SendCommandAsync(command, null, cancellationToken,
+                TimeSpan.FromSeconds(60)).ConfigureAwait(false);
+            if (result.ValueKind != JsonValueKind.Array)
+                throw new InvalidOperationException("归属数据格式不是列表。");
+            return result;
         }
-        catch
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (Exception exception)
         {
-            return JsonDocument.Parse("[]").RootElement.Clone();
+            throw new InvalidOperationException($"Home Assistant 设备归属数据未完整加载（{command}），暂不更新设备列表。", exception);
         }
     }
 
@@ -870,12 +892,21 @@ public sealed class HomeAssistantProvider : ISmartHomeProvider
     public async ValueTask DisposeAsync()
     {
         StopStatePollingCore();
-        if (_webSocket is not null)
+        try
         {
-            _webSocket.EventReceived -= WebSocket_EventReceived;
-            await _webSocket.DisposeAsync().ConfigureAwait(false);
+            if (_webSocket is not null)
+            {
+                _webSocket.EventReceived -= WebSocket_EventReceived;
+                await _webSocket.DisposeAsync().ConfigureAwait(false);
+                _webSocket = null;
+            }
+            if (_statePollTask is not null)
+            {
+                try { await _statePollTask.ConfigureAwait(false); }
+                catch (OperationCanceledException) { }
+            }
         }
-        _httpClient.Dispose();
+        finally { _httpClient.Dispose(); }
     }
 
     private sealed record DeviceRegistryItem(

@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
@@ -5,26 +7,39 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using ScreenshotApp.Capture;
 using ScreenshotApp.Collaboration;
+using ScreenshotApp.Archives;
 
 namespace ScreenshotApp.DesktopPet;
 
-/// <summary>显示在桌面宠物头顶的非激活、鼠标穿透彩虹传输气泡。</summary>
+/// <summary>显示在桌面宠物头顶的非激活彩虹传输气泡；接收完成时可临时点击打开文件。</summary>
 public partial class PetTransferBubbleWindow : Window
 {
     internal const double PreferredWidth = 320;
     private double _messageWidth = PreferredWidth;
+
+    private string? _openTransferId;
     private Action? _customClickAction;
     private string? _verificationCode;
+    private Action? _mailReadAction;
     private bool _isMouseTransparent = true;
+    private readonly AlarmTopmostPulse _topmostPulse;
 
     internal PetTransferBubbleWindow()
     {
         InitializeComponent();
+        _topmostPulse = new AlarmTopmostPulse(RefreshTopmost, TimeSpan.FromMilliseconds(350));
         SourceInitialized += (_, _) => ConfigureNativeWindow();
+        IsVisibleChanged += (_, _) =>
+        {
+            if (IsVisible) _topmostPulse.Start();
+            else _topmostPulse.Stop();
+        };
+        Closed += (_, _) => _topmostPulse.Dispose();
     }
 
     internal void ShowTransfer(CollaborationTransferProgress progress, double speedBytesPerSecond)
     {
+        ConfigureOpenTarget(null);
         var isSending = progress.Direction.Equals("Send", StringComparison.OrdinalIgnoreCase);
         StatusIconText.Text = isSending ? "\uE724" : "\uE896";
         StatusIconText.Foreground = new SolidColorBrush(Color.FromRgb(77, 124, 254));
@@ -56,6 +71,9 @@ public partial class PetTransferBubbleWindow : Window
     internal void ShowCompletion(CollaborationTransferProgress progress)
     {
         var isSending = progress.Direction.Equals("Send", StringComparison.OrdinalIgnoreCase);
+        var canOpenReceivedFile = !isSending &&
+                                  CollaborationService.Instance.TryGetTransferOpenPath(progress.TransferId, out _);
+        ConfigureOpenTarget(canOpenReceivedFile ? progress.TransferId : null);
         StatusIconText.Text = "\uE73E";
         StatusIconText.Foreground = new SolidColorBrush(Color.FromRgb(53, 172, 113));
         TitleText.Text = isSending ? "已传到手机" : "已收到手机文件";
@@ -66,12 +84,13 @@ public partial class PetTransferBubbleWindow : Window
         TransferProgressBar.Visibility = Visibility.Visible;
         DetailRow.Visibility = Visibility.Visible;
         TransferredText.Text = FormatSize(Math.Max(progress.TotalBytes, progress.TransferredBytes));
-        SpeedText.Text = "传输完成";
+        SpeedText.Text = canOpenReceivedFile ? "单击打开" : "传输完成";
         ShowWithoutActivation();
     }
 
     internal void ShowFailure(CollaborationTransferProgress progress)
     {
+        ConfigureOpenTarget(null);
         StatusIconText.Text = "\uE711";
         StatusIconText.Foreground = new SolidColorBrush(Color.FromRgb(220, 86, 100));
         TitleText.Text = "文件传输失败";
@@ -82,6 +101,180 @@ public partial class PetTransferBubbleWindow : Window
         DetailRow.Visibility = Visibility.Visible;
         TransferredText.Text = progress.Message;
         SpeedText.Text = string.Empty;
+        ShowWithoutActivation();
+    }
+
+    internal void ShowArchiveProgress(
+        PetArchiveDropAction action,
+        string sourceName,
+        ArchiveProgressInfo? progress = null)
+    {
+        ConfigureOpenTarget(null);
+        var isExtracting = action == PetArchiveDropAction.Extract;
+        StatusIconText.Text = isExtracting ? "\uE7C5" : "\uE7B8";
+        StatusIconText.Foreground = new SolidColorBrush(Color.FromRgb(214, 132, 31));
+        TitleText.Text = progress is null
+            ? isExtracting ? "正在准备解压" : "正在准备压缩"
+            : isExtracting ? "正在解压文件" : "正在压缩文件";
+        FileNameText.Text = string.IsNullOrWhiteSpace(progress?.CurrentEntry)
+            ? sourceName
+            : progress.CurrentEntry;
+        var percentage = Math.Clamp(progress?.Percent ?? 0, 0, 100);
+        PercentageText.Text = progress is null ? "准备" : $"{percentage:0.0}%";
+        PercentageText.Foreground = new SolidColorBrush(Color.FromRgb(214, 132, 31));
+        TransferProgressBar.Value = percentage;
+        TransferProgressBar.Visibility = Visibility.Visible;
+        DetailRow.Visibility = Visibility.Visible;
+        TransferredText.Text = progress is null || progress.TotalBytes <= 0
+            ? "正在扫描文件与计算大小"
+            : $"{FormatSize(progress.ProcessedBytes)} / {FormatSize(progress.TotalBytes)}";
+        SpeedText.Text = "本地处理";
+        ShowWithoutActivation();
+    }
+
+    internal void ShowArchiveCompletion(
+        PetArchiveDropAction action,
+        string resultName,
+        string resultPath,
+        long processedBytes)
+    {
+        ConfigureCustomAction(() => OpenLocalPath(resultPath), "单击打开结果位置");
+        var isExtracting = action == PetArchiveDropAction.Extract;
+        StatusIconText.Text = "\uE73E";
+        StatusIconText.Foreground = new SolidColorBrush(Color.FromRgb(53, 172, 113));
+        TitleText.Text = isExtracting ? "解压完成" : "压缩完成";
+        FileNameText.Text = resultName;
+        PercentageText.Text = "完成";
+        PercentageText.Foreground = new SolidColorBrush(Color.FromRgb(53, 154, 105));
+        TransferProgressBar.Value = 100;
+        TransferProgressBar.Visibility = Visibility.Visible;
+        DetailRow.Visibility = Visibility.Visible;
+        TransferredText.Text = processedBytes > 0 ? FormatSize(processedBytes) : "本地任务已完成";
+        SpeedText.Text = "单击打开位置";
+        ShowWithoutActivation();
+    }
+
+    internal void ShowArchiveFailure(PetArchiveDropAction action, string sourceName, string message)
+    {
+        ConfigureOpenTarget(null);
+        StatusIconText.Text = "\uE711";
+        StatusIconText.Foreground = new SolidColorBrush(Color.FromRgb(220, 86, 100));
+        TitleText.Text = action == PetArchiveDropAction.Extract ? "解压失败" : "压缩失败";
+        FileNameText.Text = sourceName;
+        PercentageText.Text = "失败";
+        PercentageText.Foreground = new SolidColorBrush(Color.FromRgb(210, 77, 91));
+        TransferProgressBar.Visibility = Visibility.Collapsed;
+        DetailRow.Visibility = Visibility.Visible;
+        TransferredText.Text = message;
+        SpeedText.Text = string.Empty;
+        ShowWithoutActivation();
+    }
+
+    internal void ShowShelfMessage(string title, string detail, string actionText, Action clickAction)
+    {
+        ConfigureCustomAction(clickAction, "单击打开文件暂存区");
+        StatusIconText.Text = "\uE8B7";
+        StatusIconText.Foreground = new SolidColorBrush(Color.FromRgb(104, 87, 216));
+        TitleText.Text = title;
+        FileNameText.Text = detail;
+        PercentageText.Text = "暂存";
+        PercentageText.Foreground = new SolidColorBrush(Color.FromRgb(104, 87, 216));
+        TransferProgressBar.Visibility = Visibility.Collapsed;
+        DetailRow.Visibility = Visibility.Visible;
+        TransferredText.Text = "仅本次运行保留";
+        SpeedText.Text = actionText;
+        ShowWithoutActivation();
+    }
+
+    internal void ShowPhoneMessage(string title, string detail, Action clickAction, string? avatar = null, bool preview = false, PhoneVerificationCode? verificationCode = null)
+    {
+        _messageWidth = 440;
+        TitleText.FontSize = 18;
+        FileNameText.FontSize = 16; FileNameText.MaxWidth = 380;
+        PercentageText.FontSize = 14; TransferredText.FontSize = 12; SpeedText.FontSize = 12;
+        StatusIconColumn.Width = new GridLength(52);
+        StatusIconBorder.BorderThickness = new Thickness(0);
+        StatusIconBorder.Width = StatusIconBorder.Height = 44; StatusIconBorder.CornerRadius = new CornerRadius(22);
+        StatusIconText.FontSize = 22;
+        AvatarImage.Source = ScreenshotApp.Collaboration.PhoneNotificationImage.Decode(avatar);
+        AvatarImage.Visibility = AvatarImage.Source is null ? Visibility.Collapsed : Visibility.Visible;
+        StatusIconText.Visibility = AvatarImage.Source is null ? Visibility.Visible : Visibility.Collapsed;
+        ConfigureCustomAction(clickAction, "打开手机通知");
+        StatusIconText.Text = "\uE8F2";
+        StatusIconText.Foreground = new SolidColorBrush(Color.FromRgb(77, 124, 254));
+        TitleText.Text = title;
+        FileNameText.Text = detail;
+        FileNameText.TextWrapping = TextWrapping.Wrap;
+        FileNameText.MaxHeight = 140;
+        PercentageText.Text = "消息";
+        TransferProgressBar.Visibility = Visibility.Collapsed;
+        DetailRow.Visibility = Visibility.Visible;
+        TransferredText.Text = "来自你的手机";
+        SpeedText.Text = "单击查看";
+        FileNameText.FontFamily = TitleText.FontFamily;
+        if (verificationCode is not null)
+        {
+            _verificationCode = verificationCode.Code;
+            TitleText.Text = verificationCode.Sender;
+            FileNameText.Text = verificationCode.Code;
+            FileNameText.FontFamily = new FontFamily("Consolas");
+            FileNameText.FontSize = 34;
+            PercentageText.Text = "验证码";
+            DetailRow.Visibility = Visibility.Collapsed;
+            CopyCodeButton.Visibility = Visibility.Visible;
+            CopyCodeText.Text = "复制验证码";
+        }
+        if (!preview) ShowWithoutActivation();
+        else { MinWidth = MaxWidth = Width = _messageWidth; }
+    }
+
+    internal void ShowMailMessage(string title, string detail, Action open, Action? markRead, string? logo = null)
+    {
+        ShowPhoneMessage(title, detail, open, preview: true);
+        if (logo is not null)
+        {
+            AvatarImage.Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(logo));
+            AvatarImage.Visibility = Visibility.Visible;
+            StatusIconText.Visibility = Visibility.Collapsed;
+            StatusIconBorder.Background = Brushes.Transparent;
+        }
+        BubbleCard.ToolTip = "打开邮箱中心";
+        PercentageText.Text = "邮箱";
+        TransferredText.Text = "直接接收邮箱邮件";
+        _mailReadAction = markRead;
+        MailActions.Visibility = Visibility.Visible;
+        MailReadButton.Visibility = markRead is null ? Visibility.Collapsed : Visibility.Visible;
+        ShowWithoutActivation();
+    }
+    private void MailOpen_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true; _customClickAction?.Invoke();
+    }
+    private void MailRead_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true; _mailReadAction?.Invoke();
+    }
+
+    internal void ShowAlarmMessage(PetAlarmTrigger trigger, Action? dismissAction = null)
+    {
+        if (trigger.IsDue && dismissAction is not null)
+        {
+            ConfigureCustomAction(dismissAction, "单击结束本次闹钟提醒");
+        }
+        else
+        {
+            ConfigureOpenTarget(null);
+        }
+        StatusIconText.Text = "\uE823";
+        StatusIconText.Foreground = new SolidColorBrush(Color.FromRgb(77, 124, 254));
+        TitleText.Text = trigger.Title;
+        FileNameText.Text = trigger.Detail;
+        PercentageText.Text = trigger.IsDue ? "到点" : "提前";
+        PercentageText.Foreground = new SolidColorBrush(Color.FromRgb(104, 87, 216));
+        TransferProgressBar.Visibility = Visibility.Collapsed;
+        DetailRow.Visibility = Visibility.Visible;
+        TransferredText.Text = "静默消息提醒";
+        SpeedText.Text = trigger.IsDue ? "单击结束提醒" : "约 5 秒后关闭";
         ShowWithoutActivation();
     }
 
@@ -144,51 +337,21 @@ public partial class PetTransferBubbleWindow : Window
         NativeMethods.KeepWindowTopmostWithoutActivating(handle);
     }
 
-    internal void ShowPhoneMessage(string title, string detail, Action clickAction, string? avatar = null, bool preview = false, PhoneVerificationCode? verificationCode = null)
+    private void ConfigureOpenTarget(string? transferId)
     {
-        _messageWidth = 440;
-        TitleText.FontSize = 18;
-        FileNameText.FontSize = 16; FileNameText.MaxWidth = 380;
-        PercentageText.FontSize = 14; TransferredText.FontSize = 12; SpeedText.FontSize = 12;
-        StatusIconColumn.Width = new GridLength(52);
-        StatusIconBorder.BorderThickness = new Thickness(0);
-        StatusIconBorder.Width = StatusIconBorder.Height = 44; StatusIconBorder.CornerRadius = new CornerRadius(22);
-        StatusIconText.FontSize = 22;
-        AvatarImage.Source = ScreenshotApp.Collaboration.PhoneNotificationImage.Decode(avatar);
-        AvatarImage.Visibility = AvatarImage.Source is null ? Visibility.Collapsed : Visibility.Visible;
-        StatusIconText.Visibility = AvatarImage.Source is null ? Visibility.Visible : Visibility.Collapsed;
-        ConfigureCustomAction(clickAction, "打开手机通知");
-        StatusIconText.Text = "\uE8F2";
-        StatusIconText.Foreground = new SolidColorBrush(Color.FromRgb(77, 124, 254));
-        TitleText.Text = title;
-        FileNameText.Text = detail;
-        FileNameText.TextWrapping = TextWrapping.Wrap;
-        FileNameText.MaxHeight = 140;
-        PercentageText.Text = "消息";
-        TransferProgressBar.Visibility = Visibility.Collapsed;
-        DetailRow.Visibility = Visibility.Visible;
-        TransferredText.Text = "来自你的手机";
-        SpeedText.Text = "单击查看";
-        FileNameText.FontFamily = TitleText.FontFamily;
-        if (verificationCode is not null)
-        {
-            _verificationCode = verificationCode.Code;
-            TitleText.Text = verificationCode.Sender;
-            FileNameText.Text = verificationCode.Code;
-            FileNameText.FontFamily = new FontFamily("Consolas");
-            FileNameText.FontSize = 34;
-            PercentageText.Text = "验证码";
-            DetailRow.Visibility = Visibility.Collapsed;
-            CopyCodeButton.Visibility = Visibility.Visible;
-            CopyCodeText.Text = "复制验证码";
-        }
-        if (!preview) ShowWithoutActivation();
-        else { MinWidth = MaxWidth = Width = _messageWidth; }
+        ResetVerificationCode();
+        _openTransferId = transferId;
+        _customClickAction = null;
+        _isMouseTransparent = string.IsNullOrWhiteSpace(transferId);
+        BubbleCard.Cursor = _isMouseTransparent ? Cursors.Arrow : Cursors.Hand;
+        BubbleCard.ToolTip = _isMouseTransparent ? null : "单击打开接收到的文件";
+        ConfigureNativeWindow();
     }
 
     private void ConfigureCustomAction(Action clickAction, string toolTip)
     {
         ResetVerificationCode();
+        _openTransferId = null;
         _customClickAction = clickAction;
         _isMouseTransparent = false;
         BubbleCard.Cursor = Cursors.Hand;
@@ -199,6 +362,8 @@ public partial class PetTransferBubbleWindow : Window
     internal void ResetVerificationCode()
     {
         _verificationCode = null;
+        _mailReadAction = null;
+        MailActions.Visibility = Visibility.Collapsed;
         CopyCodeButton.Visibility = Visibility.Collapsed;
     }
 
@@ -241,6 +406,59 @@ public partial class PetTransferBubbleWindow : Window
             return;
         }
 
+        var transferId = _openTransferId;
+        if (string.IsNullOrWhiteSpace(transferId))
+        {
+            return;
+        }
+
+        e.Handled = true;
+        if (!CollaborationService.Instance.TryGetTransferOpenPath(transferId, out var path))
+        {
+            SpeedText.Text = "文件已移动或删除";
+            ConfigureOpenTarget(null);
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+        }
+        catch
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"")
+                {
+                    UseShellExecute = true
+                });
+            }
+            catch
+            {
+                SpeedText.Text = "无法打开文件";
+            }
+        }
+    }
+
+    private static void OpenLocalPath(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                var startInfo = new ProcessStartInfo("explorer.exe") { UseShellExecute = false };
+                startInfo.ArgumentList.Add($"/select,{path}");
+                Process.Start(startInfo);
+            }
+            else if (Directory.Exists(path))
+            {
+                Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+            }
+        }
+        catch
+        {
+            // 结果可能已被移动或删除；完成气泡无需因此影响主任务状态。
+        }
     }
 
     private static string FormatSize(long bytes) => bytes switch
