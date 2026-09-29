@@ -33,6 +33,7 @@ internal sealed class PhoneScreenshotWindow : Window
         AllowsTransparency = true; Background = Brushes.Transparent;
         ShowInTaskbar = false; ShowActivated = false; Topmost = true;
         FontFamily = new FontFamily("Microsoft YaHei UI");
+        Resources = new ResourceDictionary { Source = new Uri("/XTool;component/DesktopPet/PetBubbleStyles.xaml", UriKind.Relative) };
         var stack = new StackPanel();
         var heading = new DockPanel { Margin = new Thickness(0, 0, 0, 12) };
         var close = MakeButton("×", false);
@@ -104,12 +105,12 @@ internal sealed class PhoneScreenshotWindow : Window
             finally { _busy = false; copy.IsEnabled = save.IsEnabled = true; }
         };
         stack.Children.Add(actions);
-        var card = new Border { Background = ColorBrush("#F4F9FF"), BorderBrush = ColorBrush("#C4D9F4"), BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(20), Padding = new Thickness(18), Child = stack };
+        var card = new Border { Background = (Brush)FindResource("PetBubbleBackground"), BorderBrush = (Brush)FindResource("PetBubbleBorder"), BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(18), Padding = new Thickness(18), Child = stack };
         var outer = new StackPanel { Margin = new Thickness(8) };
         outer.Children.Add(card);
         outer.Children.Add(new System.Windows.Shapes.Polygon { Points = new PointCollection { new(0, 0), new(18, 0), new(9, 11) },
-            Fill = ColorBrush("#C4D9F4"), HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, -1, 32, 0) });
+            Fill = (Brush)FindResource("PetBubbleBackground"), HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, -1, 32, 0) });
         Content = outer;
         SourceInitialized += (_, _) =>
         {
@@ -145,13 +146,13 @@ internal sealed class PhoneScreenshotWindow : Window
     }
 
     private static SolidColorBrush ColorBrush(string hex) => (SolidColorBrush)new BrushConverter().ConvertFromString(hex)!;
-    private static Button MakeButton(string label, bool primary)
+    private Button MakeButton(string label, bool primary)
     {
         // 直接给文字设置前景色，避免应用级 TextBlock 样式覆盖按钮继承颜色。
         var text = new TextBlock { Text = label, Foreground = primary ? Brushes.White : ColorBrush("#355875"),
             FontSize = 14, VerticalAlignment = VerticalAlignment.Center };
         var button = new Button { Content = text, Height = 40, FontSize = 14, Cursor = Cursors.Hand,
-            Background = ColorBrush(primary ? "#4D77FF" : "#E8F0FC"), Foreground = primary ? Brushes.White : ColorBrush("#355875"),
+            Background = primary ? (Brush)FindResource("MailGradient") : ColorBrush("#CFFFFFFF"), Foreground = primary ? Brushes.White : ColorBrush("#355875"),
             BorderThickness = new Thickness(0), Padding = new Thickness(12, 5, 12, 5) };
         var border = new FrameworkElementFactory(typeof(Border));
         border.SetValue(Border.CornerRadiusProperty, new CornerRadius(11));

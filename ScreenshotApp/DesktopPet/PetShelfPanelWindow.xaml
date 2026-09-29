@@ -10,6 +10,8 @@
         WindowStartupLocation="Manual"
         Deactivated="Window_Deactivated">
     <Window.Resources>
+      <ResourceDictionary>
+        <ResourceDictionary.MergedDictionaries><ResourceDictionary Source="PetBubbleStyles.xaml"/></ResourceDictionary.MergedDictionaries>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
         <Style x:Key="ShelfSelectionCheckBoxStyle" TargetType="CheckBox">
             <Setter Property="Width" Value="18" />
@@ -110,7 +112,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Thumb">
-                        <Border x:Name="ThumbBody" Margin="1" Background="#BBCBDF" CornerRadius="3" />
+                        <Border x:Name="ThumbBody" Margin="1" Background="#CAD5E5" CornerRadius="3" />
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="ThumbBody" Property="Background" Value="#6F91D8" />
@@ -124,16 +126,16 @@
             </Setter>
         </Style>
         <Style x:Key="ShelfScrollBarStyle" TargetType="ScrollBar">
-            <Setter Property="Width" Value="8" />
+            <Setter Property="Width" Value="7" />
             <Setter Property="MinWidth" Value="0" />
-            <Setter Property="MaxWidth" Value="8" />
+            <Setter Property="MaxWidth" Value="7" />
             <Setter Property="Margin" Value="5,2,1,2" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ScrollBar">
                         <Grid>
-                            <Border Margin="1" Background="#EDF1F7" CornerRadius="3" />
+                            <Border Margin="1" Background="Transparent" CornerRadius="3" />
                             <Track x:Name="PART_Track" IsDirectionReversed="True" Focusable="False">
                                 <Track.DecreaseRepeatButton>
                                     <RepeatButton Command="{x:Static ScrollBar.PageUpCommand}"
@@ -196,7 +198,7 @@
                 <SolidColorBrush x:Key="ShelfButtonPressed" Color="#315ACB" />
             </Style.Resources>
             <Setter Property="Foreground" Value="White" />
-            <Setter Property="Background" Value="#4D7CFE" />
+            <Setter Property="Background" Value="{StaticResource MailGradient}" />
             <Setter Property="BorderBrush" Value="#4D7CFE" />
         </Style>
         <Style x:Key="ShelfScrollViewerStyle" TargetType="ScrollViewer">
@@ -221,21 +223,15 @@
                 </Setter.Value>
             </Setter>
         </Style>
+      </ResourceDictionary>
     </Window.Resources>
 
     <Border x:Name="PanelRoot"
             Margin="12"
             Padding="18,18,18,14"
-            BorderBrush="#D4DFED"
+            BorderBrush="{StaticResource PetBubbleBorder}"
             BorderThickness="1"
-            CornerRadius="22">
-        <Border.Background>
-            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                <GradientStop Offset="0" Color="#FFFFFF" />
-                <GradientStop Offset="0.58" Color="#F7F9FD" />
-                <GradientStop Offset="1" Color="#F0F5FC" />
-            </LinearGradientBrush>
-        </Border.Background>
+            CornerRadius="18" Background="{StaticResource PetBubbleBackground}">
         <Border.Effect>
             <DropShadowEffect Color="#5065809C" BlurRadius="30" ShadowDepth="7" Direction="270" Opacity="0.32" />
         </Border.Effect>

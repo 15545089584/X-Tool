@@ -20,7 +20,7 @@ internal sealed class PetInjectionWindow : Window
         AllowsTransparency = true; Background = Brushes.Transparent; Topmost = true;
         ShowInTaskbar = false; ShowActivated = editing;
         FontFamily = new FontFamily("Microsoft YaHei UI"); Foreground = new SolidColorBrush(Color.FromRgb(48, 74, 99));
-        Resources = new ResourceDictionary { Source = new Uri("/XTool;component/Mail/MailStyles.xaml", UriKind.Relative) };
+        Resources = new ResourceDictionary { Source = new Uri("/XTool;component/DesktopPet/PetBubbleStyles.xaml", UriKind.Relative) };
         Foreground = (Brush)FindResource("MailInk");
         Progress.Foreground = (Brush)FindResource("MailGradient");
         Progress.Background = new SolidColorBrush(Color.FromRgb(221, 229, 240));
@@ -35,11 +35,7 @@ internal sealed class PetInjectionWindow : Window
         indicator.SetValue(Border.BackgroundProperty, Progress.Foreground);
         track.AppendChild(indicator);
         Progress.Template = new ControlTemplate(typeof(ProgressBar)) { VisualTree = track };
-        var background = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 1) };
-        background.GradientStops.Add(new GradientStop(Color.FromRgb(234, 246, 255), 0));
-        background.GradientStops.Add(new GradientStop(Color.FromRgb(241, 237, 255), 0.55));
-        background.GradientStops.Add(new GradientStop(Color.FromRgb(255, 237, 246), 0.8));
-        background.GradientStops.Add(new GradientStop(Color.FromRgb(239, 243, 255), 1));
+        var background = (Brush)FindResource("PetBubbleBackground");
         var grid = new Grid();
         Content = new Border { Background = background, BorderBrush = new SolidColorBrush(Color.FromRgb(221, 229, 240)), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(18), Padding = new Thickness(18), Child = grid };
         if (!editing)
@@ -71,7 +67,7 @@ internal sealed class PetInjectionWindow : Window
     }
     private Button Button(string text, bool primary)
     {
-        var button = new Button { Content = text, Height = 34, Padding = new Thickness(12, 0, 12, 0), FocusVisualStyle = null,
+        var button = new Button { Content = new TextBlock { Text = text, Foreground = primary ? Brushes.White : (Brush)FindResource("MailInk") }, Height = 34, Padding = new Thickness(12, 0, 12, 0), FocusVisualStyle = null,
             Style = (Style)FindResource(primary ? "MailPrimary" : typeof(Button)) };
         if (!primary) button.Background = new SolidColorBrush(Color.FromArgb(207, 255, 255, 255));
         return button;

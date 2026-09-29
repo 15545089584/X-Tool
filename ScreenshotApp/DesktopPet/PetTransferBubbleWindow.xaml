@@ -8,17 +8,11 @@
         ShowInTaskbar="False" ShowActivated="False" Topmost="True"
         WindowStartupLocation="Manual">
     <Window.Resources>
-        <LinearGradientBrush x:Key="RainbowBorderBrush" StartPoint="0,0.25" EndPoint="1,0.75">
-            <GradientStop Color="#D87C7CFF" Offset="0" />
-            <GradientStop Color="#C850D7FF" Offset="0.2" />
-            <GradientStop Color="#C870EDA3" Offset="0.4" />
-            <GradientStop Color="#D8F2E965" Offset="0.6" />
-            <GradientStop Color="#D8FF8E82" Offset="0.8" />
-            <GradientStop Color="#D8CE7EFF" Offset="1" />
-        </LinearGradientBrush>
+      <ResourceDictionary>
+        <ResourceDictionary.MergedDictionaries><ResourceDictionary Source="PetBubbleStyles.xaml"/></ResourceDictionary.MergedDictionaries>
         <Style x:Key="RainbowProgressBarStyle" TargetType="ProgressBar">
-            <Setter Property="Foreground" Value="#4D7CFE" />
-            <Setter Property="Background" Value="#3D9CB3C8" />
+            <Setter Property="Foreground" Value="{StaticResource MailGradient}" />
+            <Setter Property="Background" Value="#DDE5F0" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ProgressBar">
@@ -34,6 +28,7 @@
                 </Setter.Value>
             </Setter>
         </Style>
+      </ResourceDictionary>
     </Window.Resources>
 
     <Grid Margin="10,10,10,0">
@@ -43,10 +38,10 @@
         </Grid.RowDefinitions>
         <Border x:Name="BubbleCard"
                 Padding="17,14,17,13"
-                Background="#F2F4FAFF"
-                BorderBrush="{StaticResource RainbowBorderBrush}"
-                BorderThickness="2.5"
-                CornerRadius="21"
+                Background="{StaticResource PetBubbleBackground}"
+                BorderBrush="{StaticResource PetBubbleBorder}"
+                BorderThickness="1"
+                CornerRadius="18"
                 MouseLeftButtonUp="BubbleCard_MouseLeftButtonUp">
             <Border.Effect>
                 <DropShadowEffect Color="#52627B9A" BlurRadius="25" ShadowDepth="5" Direction="270" Opacity="0.34" />
@@ -80,7 +75,7 @@
                 <ProgressBar x:Name="TransferProgressBar" Grid.Row="2" Margin="1,10,1,0" Height="8"
                              Minimum="0" Maximum="100" Value="0" Style="{StaticResource RainbowProgressBarStyle}" />
                 <Button x:Name="CopyCodeButton" Grid.Row="4" Margin="1,12,1,0" Height="38"
-                        Visibility="Collapsed" Cursor="Hand" Background="#4D7CFE" Foreground="White"
+                        Visibility="Collapsed" Cursor="Hand" Background="{StaticResource MailGradient}" Foreground="White"
                         BorderThickness="0" Click="CopyCodeButton_Click" ToolTip="只复制验证码">
                     <Button.Template>
                         <ControlTemplate TargetType="Button">
@@ -104,7 +99,7 @@
                     <StackPanel.Resources>
                         <Style TargetType="Button">
                             <Setter Property="Padding" Value="20,10"/><Setter Property="Margin" Value="0,0,10,0"/>
-                            <Setter Property="Background" Value="#4D7CFE"/><Setter Property="Foreground" Value="White"/>
+                            <Setter Property="Background" Value="{StaticResource MailGradient}"/><Setter Property="Foreground" Value="White"/>
                             <Setter Property="Cursor" Value="Hand"/>
                             <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
                                 <Border Background="{TemplateBinding Background}" CornerRadius="10" Padding="{TemplateBinding Padding}">
@@ -124,6 +119,6 @@
         </Border>
         <Polygon x:Name="TailArrow" Grid.Row="1" HorizontalAlignment="Left" VerticalAlignment="Top"
                  Points="0,0 18,0 9,11"
-                 Fill="#F2F4FAFF" Stroke="{StaticResource RainbowBorderBrush}" StrokeThickness="1.5" />
+                 Fill="{StaticResource PetBubbleBackground}" Stroke="{StaticResource PetBubbleBorder}" StrokeThickness="1" />
     </Grid>
 </Window>

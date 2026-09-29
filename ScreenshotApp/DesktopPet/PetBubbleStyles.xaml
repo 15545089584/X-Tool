@@ -1,0 +1,9 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ResourceDictionary.MergedDictionaries><ResourceDictionary Source="/XTool;component/Mail/MailStyles.xaml"/></ResourceDictionary.MergedDictionaries>
+    <LinearGradientBrush x:Key="PetBubbleBackground" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#EAF6FF"/><GradientStop Color="#F1EDFF" Offset="0.55"/><GradientStop Color="#FFEDF6" Offset="0.8"/><GradientStop Color="#EFF3FF" Offset="1"/>
+    </LinearGradientBrush>
+    <SolidColorBrush x:Key="PetBubbleBorder" Color="#DDE5F0"/>
+    <!-- 按钮内容继承按钮前景色，不被邮箱普通文本的深色隐式样式覆盖。 -->
+    <Style TargetType="TextBlock"><Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Control}, FallbackValue=#152C48}"/></Style>
+</ResourceDictionary>
