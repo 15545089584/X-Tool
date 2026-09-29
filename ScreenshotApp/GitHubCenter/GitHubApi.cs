@@ -15,6 +15,10 @@ public sealed record GitHubActivity(string Title, string Status, string Url)
     public string Label => $"{Title}\n{Status}";
 }
 public sealed record GitHubOverview(List<GitHubActivity> PullRequests, List<GitHubActivity> Runs, string PullStatus, string RunStatus);
+public sealed record RemoteCommit(string Sha, string Message, string Author, string Date, string Url)
+{
+    public string Label => $"{Message.Split('\n')[0]}\n{Author} · {Date} · {Sha[..Math.Min(7, Sha.Length)]}";
+}
 
 public sealed class GitHubApi : IDisposable
 {
@@ -68,6 +72,25 @@ public sealed class GitHubApi : IDisposable
         if (page < 1) throw new ArgumentOutOfRangeException(nameof(page));
         using var json = await GetAsync($"user/repos?sort=updated&per_page=100&page={page}", token, ct);
         return json.RootElement.EnumerateArray().Select(e => new RemoteRepository(Text(e, "full_name"), Text(e, "html_url"), Text(e, "clone_url"), e.GetProperty("private").GetBoolean())).ToList();
+    }
+    public async Task<List<RemoteCommit>> CommitsAsync(string slug, string? token, int page, CancellationToken ct)
+    {
+        if (page < 1) throw new ArgumentOutOfRangeException(nameof(page));
+        if (GitRepositoryService.GitHubSlug("https://github.com/" + slug) != slug) throw new InvalidOperationException("GitHub 仓库地址无效。");
+        try
+        {
+            using var json = await GetAsync($"repos/{slug}/commits?per_page=30&page={page}", token, ct);
+            return json.RootElement.EnumerateArray().Select(e =>
+            {
+                var commit = e.GetProperty("commit");
+                var author = commit.GetProperty("author");
+                string date = Text(author, "date");
+                if (DateTimeOffset.TryParse(date, out var time)) date = time.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
+                return new RemoteCommit(Text(e, "sha"), Text(commit, "message"), Text(author, "name"), date, Text(e, "html_url"));
+            }).ToList();
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
+        { throw new InvalidOperationException("仓库尚无提交，或当前状态无法读取提交记录。", ex); }
     }
     public async Task<GitHubOverview> OverviewAsync(string slug, string? token, CancellationToken ct)
     {

@@ -14,7 +14,7 @@ public partial class GitHubCenterWindow : Window
     private static GitHubCenterWindow? _instance;
     private readonly GitRepositoryService _git = new();
     private readonly GitHubStore _store;
-    private readonly GitHubApi _api = new();
+    private readonly GitHubApi _api;
     private GitHubPreferences _preferences = new();
     private GitHubCredential? _credential;
     private GitState? _state;
@@ -27,6 +27,10 @@ public partial class GitHubCenterWindow : Window
     private int _remotePage;
     private bool _more;
     private readonly List<RemoteRepository> _remoteRepositories = [];
+    private readonly bool _discoverOnLoad;
+    private CancellationTokenSource? _commitRequest;
+    private readonly List<RemoteCommit> _remoteCommits = [];
+    private int _commitPage;
 
     public static void Open()
     {
@@ -34,13 +38,15 @@ public partial class GitHubCenterWindow : Window
         _instance = new(); _instance.Show();
     }
     public GitHubCenterWindow() : this(new GitHubStore()) { }
-    public GitHubCenterWindow(GitHubStore store)
+    public GitHubCenterWindow(GitHubStore store, bool discoverOnLoad = true, System.Net.Http.HttpMessageHandler? apiHandler = null)
     {
+        _api = new GitHubApi(apiHandler);
+        _discoverOnLoad = discoverOnLoad;
         _store = store;
         InitializeComponent();
         Loaded += LoadedAsync;
         Closing += OnClosing;
-        Closed += (_, _) => { _preview?.Cancel(); _api.Dispose(); if (ReferenceEquals(_instance, this)) _instance = null; };
+        Closed += (_, _) => { _preview?.Cancel(); _commitRequest?.Cancel(); _api.Dispose(); if (ReferenceEquals(_instance, this)) _instance = null; };
     }
     private async void LoadedAsync(object sender, RoutedEventArgs e)
     {
@@ -59,7 +65,63 @@ public partial class GitHubCenterWindow : Window
             if (entry is not null) { _binding = true; Repositories.SelectedItem = entry; _binding = false; await RefreshRepositoryAsync(entry, ct); }
             await LoadRemoteCacheAsync(ct);
         });
+        if (_discoverOnLoad && _preferencesLoaded) await ScanAsync(RepositoryDiscovery.DefaultRoots());
     }
+    private async Task ScanAsync(IEnumerable<string> roots)
+    {
+        string? result = null;
+        await WorkAsync("扫描本地仓库", async ct =>
+        {
+            var scan = await Task.Run(() => RepositoryDiscovery.Scan(roots, ct), ct);
+            int added = 0;
+            foreach (string path in scan.Paths)
+                if (!_preferences.Repositories.Any(r => string.Equals(r.Path, path, StringComparison.OrdinalIgnoreCase)))
+                { _preferences.Repositories.Add(new RepositoryEntry { Path = path, Summary = "自动发现 · 未检查" }); added++; }
+            BindRepositories(); await SaveAsync();
+            result = $"扫描完成 · 新增 {added} 个仓库 · 跳过 {scan.Skipped} 个目录" + (scan.Limited ? " · 已达扫描范围限制，可选择更小的文件夹继续扫描" : "");
+        });
+        if (result is not null) StatusText.Text = result;
+    }
+    private async void ScanFolder_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFolderDialog { Title = "扫描文件夹中的 Git 仓库" };
+        if (dialog.ShowDialog(this) == true) await ScanAsync([dialog.FolderName]);
+    }
+
+    private async void RemoteRepository_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        _commitRequest?.Cancel(); _remoteCommits.Clear(); RemoteCommits.ItemsSource = null; RemoteCommitDetail.Clear();
+        _commitPage = 0; MoreCommits.IsEnabled = false;
+        if (RemoteRepositories.SelectedItem is RemoteRepository repo) await ReadCommitsAsync(repo, 1);
+        else RemoteCommitStatus.Text = "选择仓库查看默认分支提交";
+    }
+    private async Task ReadCommitsAsync(RemoteRepository repo, int page)
+    {
+        _commitRequest?.Cancel();
+        using var cts = new CancellationTokenSource(); _commitRequest = cts;
+        MoreCommits.IsEnabled = false; RemoteCommitStatus.Text = repo.Name + " · 正在读取默认分支提交…";
+        try
+        {
+            var commits = await _api.CommitsAsync(repo.Name, _credential?.Token, page, cts.Token);
+            if (cts.IsCancellationRequested || !ReferenceEquals(_commitRequest, cts)) return;
+            foreach (var commit in commits) if (!_remoteCommits.Any(c => c.Sha == commit.Sha)) _remoteCommits.Add(commit);
+            _commitPage = page; RemoteCommits.ItemsSource = _remoteCommits.ToArray(); MoreCommits.IsEnabled = commits.Count == 30;
+            RemoteCommitStatus.Text = $"{repo.Name} · 默认分支 · {_remoteCommits.Count} 条提交" + (commits.Count < 30 ? " · 已到底" : "");
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            if (ReferenceEquals(_commitRequest, cts))
+            { RemoteCommitStatus.Text = GitRepositoryService.Sanitize(ex.Message) + " 私有仓库请检查 Contents 只读权限。"; MoreCommits.IsEnabled = page > 1; }
+        }
+        finally { if (ReferenceEquals(_commitRequest, cts)) _commitRequest = null; }
+    }
+    private async void MoreCommits_Click(object sender, RoutedEventArgs e)
+    { if (RemoteRepositories.SelectedItem is RemoteRepository repo) await ReadCommitsAsync(repo, _commitPage + 1); }
+    private void RemoteCommit_Changed(object sender, SelectionChangedEventArgs e)
+    { RemoteCommitDetail.Text = RemoteCommits.SelectedItem is RemoteCommit c ? $"{c.Sha}\n{c.Author} · {c.Date}\n\n{c.Message}" : ""; }
+    private void CommitWeb_Click(object sender, RoutedEventArgs e)
+    { if (RemoteCommits.SelectedItem is RemoteCommit c) OpenWeb(c.Url); }
     private RepositoryEntry? Selected => Repositories.SelectedItem as RepositoryEntry;
     private string Remote => RemotePicker.SelectedItem as string ?? throw new InvalidOperationException("请选择远程仓库。");
     private GitState State => _state ?? throw new InvalidOperationException("请先添加或选择本地仓库。");

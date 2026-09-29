@@ -155,6 +155,10 @@ Check(store.CacheSize() == 0 && File.Exists(Path.Combine(repo, "local.txt")) && 
 store.Disconnect(); Check(store.LoadCredential() is null, "断开账户删除本模块凭据");
 var handler = new FakeHandler();
 using var api = new GitHubApi(handler);
+var commits = await api.CommitsAsync("tester/repo", "test-token", 2, ct);
+Check(commits.Single().Message == "测试提交\n正文" && handler.LastUrl!.Contains("page=2"), "远程提交正文与分页解析");
+await Reject(() => api.CommitsAsync("../bad", "test-token", 1, ct), "拒绝无效提交仓库地址");
+handler.Reset();
 await Reject(() => api.LoginAsync("ghs_installation_example", ct), "安装令牌在联网前明确拒绝");
 await Reject(() => api.LoginAsync("-----BEGIN PRIVATE KEY-----", ct), "私钥不发送给 API");
 Check(handler.LastUrl is null, "错误凭据类型不触发 HTTP 请求");
@@ -201,12 +205,23 @@ await Reject(() => git.PreparePushAsync(detached, "origin", ct), "分离 HEAD �
 var binary = Path.Combine(cancellationRepo, "binary.bin"); await File.WriteAllBytesAsync(binary, [0, 1, 2, 3]);
 var withBinary = await git.StatusAsync(cancellationRepo, ct);
 Check((await git.DiffAsync(withBinary, withBinary.Changes.Single(c => c.Path == "binary.bin"), ct)).Contains("二进制"), "二进制预览保护");
+var scan = RepositoryDiscovery.Scan([root, root], ct);
+Check(scan.Paths.Contains(repo) && scan.Paths.Contains(worktree), "扫描识别普通仓库与 worktree");
+Check(scan.Paths.Distinct(StringComparer.OrdinalIgnoreCase).Count() == scan.Paths.Count, "扫描重叠路径去重");
+Check(RepositoryDiscovery.Scan([root], ct, 1).Limited, "扫描目录数量限制");
+using (var cancelledScan = new CancellationTokenSource())
+{
+    cancelledScan.Cancel();
+    try { RepositoryDiscovery.Scan([root], cancelledScan.Token); throw new Exception("扫描未取消"); }
+    catch (OperationCanceledException) { Check(true, "扫描可取消"); }
+}
 Console.WriteLine($"\n全部 {count} 项通过。未使用真实账户，未向网络推送。测试文件保留于：{root}");
 
 sealed class FakeHandler : HttpMessageHandler
 {
     public string? LastUrl { get; private set; }
     public string? LastAuth { get; private set; }
+    public void Reset() { LastUrl = null; LastAuth = null; }
     public HttpStatusCode Status { get; set; } = HttpStatusCode.OK;
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
@@ -215,6 +230,7 @@ sealed class FakeHandler : HttpMessageHandler
         string json = request.RequestUri.AbsolutePath switch
         {
             "/user" => "{\"login\":\"tester\"}",
+            "/repos/tester/repo/commits" => "[{\"sha\":\"1234567890\",\"html_url\":\"https://github.com/tester/repo/commit/1234567890\",\"commit\":{\"message\":\"测试提交\\n正文\",\"author\":{\"name\":\"Tester\",\"date\":\"2026-09-29T00:00:00Z\"}}}]",
             "/user/repos" => "[{\"full_name\":\"tester/repo\",\"html_url\":\"https://github.com/tester/repo\",\"clone_url\":\"https://github.com/tester/repo.git\",\"private\":true}]",
             "/repos/tester/repo/pulls" => "[{\"number\":1,\"title\":\"测试 PR\",\"head\":{\"ref\":\"topic\"},\"base\":{\"ref\":\"main\"},\"draft\":false,\"html_url\":\"https://github.com/tester/repo/pull/1\"}]",
             _ => "{\"workflow_runs\":[{\"display_title\":\"CI\",\"name\":\"Build\",\"head_branch\":\"main\",\"status\":\"completed\",\"conclusion\":\"success\",\"html_url\":\"https://github.com/tester/repo/actions/runs/1\"}]}"

@@ -21,7 +21,7 @@ internal static class Program
         var globalButton = new Style(typeof(Button)); globalButton.Setters.Add(new Setter(Control.ForegroundProperty, Brushes.Black));
         app.Resources[typeof(Button)] = globalButton;
         var globalText = new Style(typeof(TextBlock)); globalText.Setters.Add(new Setter(TextBlock.ForegroundProperty, Brushes.Black)); app.Resources[typeof(TextBlock)] = globalText;
-        var window = new GitHubCenterWindow(new GitHubStore(Path.Combine(Root, "store")));
+        var window = new GitHubCenterWindow(new GitHubStore(Path.Combine(Root, "store")), discoverOnLoad: false, apiHandler: new CommitHandler());
         window.Show();
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
         var started = DateTime.UtcNow;
@@ -104,6 +104,23 @@ internal static class Program
         Save(window, "overview.png");
         tabs.SelectedIndex = 3; window.UpdateLayout();
         Check(!((Button)window.FindName("LoadMoreButton")).IsEnabled, "未连接账户不提供虚假分页");
+        var remote = (ListBox)window.FindName("RemoteRepositories");
+        remote.ItemsSource = new[] { new RemoteRepository("example/xtool", "https://github.com/example/xtool", "https://github.com/example/xtool.git", false) };
+        remote.SelectedIndex = 0;
+        for (int i = 0; i < 100 && ((ListBox)window.FindName("RemoteCommits")).Items.Count == 0; i++) await Task.Delay(20);
+        var remoteCommits = (ListBox)window.FindName("RemoteCommits");
+        Check(remoteCommits.Items.Count == 1, "选择远程仓库直接加载提交");
+        remoteCommits.SelectedIndex = 0;
+        Check(((TextBox)window.FindName("RemoteCommitDetail")).Text.Contains("详细说明"), "远程提交显示完整消息");
+        Check(!((Button)window.FindName("MoreCommits")).IsEnabled, "远程提交末页禁用更多");
+        Save(window, "remote-history.png");
+        remote.SelectedIndex = -1;
+        Check(remoteCommits.Items.Count == 0, "取消仓库选择清理旧提交");
+        string discovered = Path.Combine(Root, "新发现仓库"); Directory.CreateDirectory(Path.Combine(discovered, ".git"));
+        await (Task)typeof(GitHubCenterWindow).GetMethod("ScanAsync", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(window, [new[] { Root }])!;
+        var savedRepositories = new GitHubStore(Path.Combine(Root, "store")).LoadPreferences().Repositories;
+        Check(savedRepositories.Any(r => r.Path == discovered && !r.Trusted), "发现仓库持久保存但不自动信任");
+        Check(((ListBox)window.FindName("Repositories")).Items.Count == 2, "扫描结果直接显示在本地列表");
         tabs.SelectedIndex = 0; window.Width = 1260; window.Height = 800;
         var search = (TextBox)window.FindName("RepositorySearch"); search.Text = "不存在的仓库";
         Check(!((WrapPanel)window.FindName("GitToolbar")).IsEnabled && changes.Items.Count == 0, "搜索无结果清理旧仓库操作状态");
@@ -178,5 +195,14 @@ internal static class Program
         var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
         string directory = Path.GetFullPath("artifacts/github-center-validation"); Directory.CreateDirectory(directory);
         using var stream = File.Create(Path.Combine(directory, name)); encoder.Save(stream);
+    }
+}
+
+internal sealed class CommitHandler : System.Net.Http.HttpMessageHandler
+{
+    protected override Task<System.Net.Http.HttpResponseMessage> SendAsync(System.Net.Http.HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        const string json = "[{\"sha\":\"1234567890\",\"html_url\":\"https://github.com/example/xtool/commit/1234567890\",\"commit\":{\"message\":\"增加仓库自动发现\\n详细说明\",\"author\":{\"name\":\"UI Test\",\"date\":\"2026-09-30T00:00:00Z\"}}}]";
+        return Task.FromResult(new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new System.Net.Http.StringContent(json) });
     }
 }
