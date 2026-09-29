@@ -30,7 +30,6 @@ public partial class PetCommandWheelWindow : Window
     private double _sectorSweepAngle;
     private int _selectedSectorIndex = -1;
     private TextBlock? _shelfCountText;
-    private TextBlock? _alarmCountText;
     private bool _isTransitioning;
 
     internal PetCommandWheelWindow(Rect petBounds, Rect workingArea, int shelfItemCount, int alarmCount)
@@ -50,7 +49,7 @@ public partial class PetCommandWheelWindow : Window
 
     internal event Action? ShelfRequested;
 
-    internal event Action? AlarmRequested;
+    internal event Action? GitHubRequested;
     internal event Action? InjectionRequested;
     internal event Action? MailRequested;
 
@@ -73,16 +72,6 @@ public partial class PetCommandWheelWindow : Window
         _shelfCountText.Visibility = count > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    internal void UpdateAlarmCount(int count)
-    {
-        if (_alarmCountText is null)
-        {
-            return;
-        }
-
-        _alarmCountText.Text = count > 99 ? "99+" : count.ToString();
-        _alarmCountText.Visibility = count > 0 ? Visibility.Visible : Visibility.Collapsed;
-    }
 
     internal Rect CalculatePanelBounds(double panelWidth, double panelHeight)
     {
@@ -379,8 +368,13 @@ public partial class PetCommandWheelWindow : Window
         }
         else if (isAlarm)
         {
-            _alarmCountText = CreateCountBadge(alarmCount);
-            iconContainer.Children.Add(_alarmCountText);
+            iconContainer.Children.Clear();
+            iconContainer.Children.Add(new MahApps.Metro.IconPacks.PackIconMaterial
+            {
+                Kind = MahApps.Metro.IconPacks.PackIconMaterialKind.SourceRepository,
+                Width = 23, Height = 23,
+                Foreground = new SolidColorBrush(Color.FromRgb(104, 87, 216))
+            });
         }
 
         var text = new TextBlock
@@ -389,7 +383,7 @@ public partial class PetCommandWheelWindow : Window
             FontSize = enabled ? 11.5 : 9.5,
             FontWeight = enabled ? FontWeights.SemiBold : FontWeights.Medium,
             Foreground = new SolidColorBrush(enabled ? Color.FromRgb(71, 65, 139) : Color.FromRgb(117, 139, 158)),
-            Text = isShelf ? "文件暂存区" : isAlarm ? "静默闹钟" : isInjection ? "注入" : "邮箱中心",
+            Text = isShelf ? "文件暂存区" : isAlarm ? "GitHub\n仓库中心" : isInjection ? "注入" : "邮箱中心",
             HorizontalAlignment = HorizontalAlignment.Center,
             TextAlignment = TextAlignment.Center
         };
@@ -408,7 +402,7 @@ public partial class PetCommandWheelWindow : Window
         });
         ToolTipService.SetToolTip(content, isShelf
             ? "打开本次运行的文件暂存区"
-            : isAlarm ? "设置无声音的桌宠消息闹钟" : isInjection ? "模拟键盘写入文本" : "查看多个邮箱的新邮件");
+            : isAlarm ? "打开 GitHub 仓库中心" : isInjection ? "模拟键盘写入文本" : "查看多个邮箱的新邮件");
         return content;
     }
 
@@ -469,7 +463,7 @@ public partial class PetCommandWheelWindow : Window
         if (selectedIndex == AlarmSectorIndex)
         {
             SetSelectedSector(selectedIndex);
-            AlarmRequested?.Invoke();
+            GitHubRequested?.Invoke();
             e.Handled = true;
             return;
         }

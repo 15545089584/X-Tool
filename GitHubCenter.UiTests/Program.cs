@@ -20,6 +20,7 @@ internal static class Program
         // 模拟主程序的全局按钮颜色，避免独立窗口测试遗漏样式继承污染。
         var globalButton = new Style(typeof(Button)); globalButton.Setters.Add(new Setter(Control.ForegroundProperty, Brushes.Black));
         app.Resources[typeof(Button)] = globalButton;
+        var globalText = new Style(typeof(TextBlock)); globalText.Setters.Add(new Setter(TextBlock.ForegroundProperty, Brushes.Black)); app.Resources[typeof(TextBlock)] = globalText;
         var window = new GitHubCenterWindow(new GitHubStore(Path.Combine(Root, "store")));
         window.Show();
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
@@ -107,6 +108,7 @@ internal static class Program
         var search = (TextBox)window.FindName("RepositorySearch"); search.Text = "不存在的仓库";
         Check(!((WrapPanel)window.FindName("GitToolbar")).IsEnabled && changes.Items.Count == 0, "搜索无结果清理旧仓库操作状态");
         Check(!((StackPanel)window.FindName("RepositoryActions")).IsEnabled, "空仓库禁用右上操作");
+        Check(((StackPanel)window.FindName("RepositoryEmptyState")).Visibility == Visibility.Visible && ((WrapPanel)window.FindName("GitToolbar")).Visibility == Visibility.Collapsed, "空状态不展示无效下拉框与操作区");
         Check(((Button)window.FindName("AccountButton")).Foreground is SolidColorBrush { Color: var accountInk } && accountInk == Color.FromRgb(64, 91, 126), "账户按钮不继承全局黑色样式");
         Check(((Button)window.FindName("ConnectionHelpButton")).IsEnabled, "空仓库仍可打开绑定帮助");
         Check(((Grid)window.FindName("RepositoryWorkspace")).Margin.Left == 16 && ((Border)window.FindName("SidebarDivider")).BorderThickness.Right == 1, "侧栏独立分界与内容留白");
@@ -120,7 +122,27 @@ internal static class Program
         var primary = (Button)typeof(GitHubCenterWindow).GetMethod("DialogButton", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, ["连接", true])!;
         panel.Children.Add(primary); dialog.Show(); dialog.UpdateLayout();
         Check(primary.Foreground is SolidColorBrush { Color: var color } && color == Colors.White, "主按钮白色文字");
+        Check(primary.Content is TextBlock { Foreground: SolidColorBrush { Color: var actualColor } } && actualColor == Colors.White, "主按钮实际文字不受全局 TextBlock 黑色污染");
+        Check(dialog.WindowStyle == WindowStyle.None && dialog.AllowsTransparency && dialog.Content is Border { CornerRadius.TopLeft: 14 }, "弹窗使用自绘圆角边框而非系统标题栏");
         Save(dialog, "dialog.png"); dialog.Close();
+        Exception? dialogError = null;
+        _ = window.Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(() =>
+        {
+            var input = Application.Current.Windows.OfType<Window>().Single(w => w.Title == "连接 GitHub" && w != window);
+            try
+            {
+                input.UpdateLayout();
+                var password = Descendants(input).OfType<PasswordBox>().Single();
+                Check(password.ActualHeight == 44, "真实连接弹窗密码框高度稳定");
+                var connect = Descendants(input).OfType<Button>().Single(b => b.Content is TextBlock { Text: "连接" });
+                Check(connect.Content is TextBlock { Foreground: SolidColorBrush { Color: var foreground } } && foreground == Colors.White, "真实连接按钮白字");
+                Save(input, "connect-dialog.png");
+            }
+            catch (Exception ex) { dialogError = ex; }
+            finally { input.Close(); }
+        }));
+        typeof(GitHubCenterWindow).GetMethod("Input", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(window, ["连接 GitHub", "Personal Access Token", "", true]);
+        if (dialogError is not null) throw dialogError;
         var help = new GitHubConnectionHelp { Owner = window }; help.Show(); help.UpdateLayout();
         var helpTabs = (TabControl)help.FindName("HelpTabs");
         Check(helpTabs.Items.Count == 3, "帮助包含 PAT、App 与排查页");
@@ -131,11 +153,28 @@ internal static class Program
         helpTabs.SelectedIndex = 1; help.Width = 600; help.Height = 500; help.UpdateLayout(); Save(help, "help-app.png");
         Check(help.ActualWidth == 600 && help.ActualHeight == 500, "帮助最小窗口布局");
         help.Close();
+        var wheelType = typeof(ScreenshotApp.DesktopPet.DesktopPetWindow).Assembly.GetType("ScreenshotApp.DesktopPet.PetCommandWheelWindow")!;
+        var wheel = (Window)Activator.CreateInstance(wheelType, BindingFlags.Instance | BindingFlags.NonPublic, null, [new Rect(700, 650, 150, 150), new Rect(0, 0, 1280, 900), 0, 5], null)!;
+        var sector = (FrameworkElement)wheelType.GetMethod("CreateSectorContent", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(wheel, [2, 0, 5])!;
+        var labels = Descendants(sector).OfType<TextBlock>().Select(t => t.Text).ToList();
+        Check(labels.Contains("GitHub\n仓库中心") && !labels.Contains("静默闹钟") && !labels.Contains("5"), "轮盘仓库入口替换闹钟且无闹钟角标");
+        Check(wheelType.GetEvent("GitHubRequested", BindingFlags.Instance | BindingFlags.NonPublic) is not null, "轮盘提供仓库中心事件");
+        wheel.Show(); await Task.Delay(600); wheel.UpdateLayout(); Save(wheel, "github-wheel.png"); wheel.Close();
+    }
+    private static IEnumerable<DependencyObject> Descendants(DependencyObject parent)
+    {
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++) { var child = VisualTreeHelper.GetChild(parent, i); yield return child; foreach (var nested in Descendants(child)) yield return nested; }
     }
     private static void Save(Window window, string name)
     {
         window.UpdateLayout(); var view = (FrameworkElement)window.Content;
         var bitmap = new RenderTargetBitmap((int)view.ActualWidth, (int)view.ActualHeight, 96, 96, PixelFormats.Pbgra32); bitmap.Render(view);
+        if (name == "github-wheel.png")
+        {
+            var pixels = new byte[bitmap.PixelWidth * bitmap.PixelHeight * 4];
+            bitmap.CopyPixels(pixels, bitmap.PixelWidth * 4, 0);
+            Check(Enumerable.Range(0, pixels.Length / 4).Count(i => pixels[i * 4 + 3] > 0) > 1000, "轮盘动画结束后画面非空");
+        }
         var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
         string directory = Path.GetFullPath("artifacts/github-center-validation"); Directory.CreateDirectory(directory);
         using var stream = File.Create(Path.Combine(directory, name)); encoder.Save(stream);

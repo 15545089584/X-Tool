@@ -145,7 +145,6 @@ public partial class DesktopPetWindow : Window
         _player.StateChanged += Player_StateChanged;
         _collaborationService.TransferProgressChanged += CollaborationService_TransferProgressChanged;
         _shelfService.ItemsChanged += ShelfService_ItemsChanged;
-        _alarmService.ItemsChanged += AlarmService_ItemsChanged;
         Loaded += DesktopPetWindow_Loaded;
         IsVisibleChanged += DesktopPetWindow_IsVisibleChanged;
         LocationChanged += (_, _) => UpdateTransferBubblePosition();
@@ -270,7 +269,6 @@ public partial class DesktopPetWindow : Window
         _player.StateChanged -= Player_StateChanged;
         _collaborationService.TransferProgressChanged -= CollaborationService_TransferProgressChanged;
         _shelfService.ItemsChanged -= ShelfService_ItemsChanged;
-        _alarmService.ItemsChanged -= AlarmService_ItemsChanged;
         _player.Dispose();
         if (_ownsShelfService)
         {
@@ -544,7 +542,7 @@ public partial class DesktopPetWindow : Window
                 _shelfService.Items.Count,
                 _alarmService.Items.Count);
             wheel.ShelfRequested += ShowShelfPanel;
-            wheel.AlarmRequested += ShowAlarmPanel;
+            wheel.GitHubRequested += () => { CloseCommandExperience(); ScreenshotApp.GitHubCenter.GitHubCenterWindow.Open(); };
             wheel.InjectionRequested += ShowInjectionEditor;
             wheel.MailRequested += () => { CloseCommandExperience(); ScreenshotApp.Mail.MailWindow.Open(); };
             wheel.DismissRequested += CloseCommandExperience;
@@ -695,18 +693,6 @@ public partial class DesktopPetWindow : Window
         panel?.Close();
         alarmPanel?.Close();
         wheel?.Close();
-    }
-
-    private void AlarmService_ItemsChanged()
-    {
-        if (Dispatcher.CheckAccess())
-        {
-            _commandWheel?.UpdateAlarmCount(_alarmService.Items.Count);
-        }
-        else
-        {
-            Dispatcher.BeginInvoke(() => _commandWheel?.UpdateAlarmCount(_alarmService.Items.Count));
-        }
     }
 
     private void ShelfService_ItemsChanged()

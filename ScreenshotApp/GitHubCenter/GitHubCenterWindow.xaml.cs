@@ -103,6 +103,10 @@ public partial class GitHubCenterWindow : Window
     {
         GitToolbar.IsEnabled = _state is not null;
         RepositoryActions.IsEnabled = _state is not null;
+        RepositoryActions.Visibility = GitToolbar.Visibility = _state is null ? Visibility.Collapsed : Visibility.Visible;
+        RepositoryEmptyState.Visibility = _state is null && Views.SelectedIndex < 3 ? Visibility.Visible : Visibility.Collapsed;
+        for (int index = 0; index < 3; index++)
+            if (((TabItem)Views.Items[index]).Content is UIElement content) content.Visibility = _state is null ? Visibility.Collapsed : Visibility.Visible;
         StageButton.IsEnabled = Changes.SelectedItem is GitChange { Staged: false, Conflict: false };
         UnstageButton.IsEnabled = Changes.SelectedItem is GitChange { Staged: true, Conflict: false };
         CommitButton.IsEnabled = _state?.Changes.Any(c => c.Staged) == true && !_state.Changes.Any(c => c.Conflict);
@@ -336,6 +340,7 @@ public partial class GitHubCenterWindow : Window
     private async void View_Changed(object sender, SelectionChangedEventArgs e)
     {
         if (e.Source != Views || !_ready || _operation is not null) return;
+        UpdateButtons();
         if (Views.SelectedIndex == 2) await WorkAsync("读取状态缓存", LoadOverviewCacheAsync);
     }
     private async void Remote_Changed(object sender, SelectionChangedEventArgs e)
@@ -413,26 +418,42 @@ public partial class GitHubCenterWindow : Window
     });
     private Window Dialog(string title, out StackPanel panel)
     {
-        panel = new StackPanel { Margin = new Thickness(24) };
-        panel.Children.Add(new TextBlock { Text = title, FontSize = 20, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 0, 0, 18) });
-        var dialog = new Window { Title = title, Owner = this, Width = 620, SizeToContent = SizeToContent.Height, MaxHeight = Math.Max(500, ActualHeight - 40), WindowStartupLocation = WindowStartupLocation.CenterOwner, ResizeMode = ResizeMode.NoResize, FontFamily = FontFamily, Foreground = Foreground, Background = new SolidColorBrush(Color.FromRgb(239, 242, 255)), Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto } };
-        dialog.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/XTool;component/Mail/MailStyles.xaml", UriKind.Relative) });
+        panel = new StackPanel { Margin = new Thickness(24, 8, 24, 24) };
+        var dialog = new Window { Title = title, Owner = this, Width = 600, SizeToContent = SizeToContent.Height, MaxHeight = Math.Max(420, Math.Min(SystemParameters.WorkArea.Height - 40, ActualHeight - 30)), WindowStartupLocation = WindowStartupLocation.CenterOwner, ResizeMode = ResizeMode.NoResize, WindowStyle = WindowStyle.None, AllowsTransparency = true, ShowInTaskbar = false, FontFamily = FontFamily, Foreground = Foreground, Background = Brushes.Transparent };
+        dialog.Resources.MergedDictionaries.Add(Resources);
+        var layout = new Grid();
+        layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(58) });
+        layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        var header = new Grid { Margin = new Thickness(24, 0, 12, 0), Background = Brushes.Transparent };
+        header.Children.Add(new TextBlock { Text = title, FontSize = 20, FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(Color.FromRgb(21, 44, 72)), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 48, 0) });
+        var close = new Button { Style = (Style)FindResource("GitIconButton"), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center, ToolTip = "关闭", Content = new MahApps.Metro.IconPacks.PackIconMaterial { Kind = MahApps.Metro.IconPacks.PackIconMaterialKind.Close, Width = 18, Height = 18 } };
+        close.Click += (_, _) => dialog.Close(); header.Children.Add(close);
+        header.MouseLeftButtonDown += (_, e) => { if (e.OriginalSource is not Button && e.LeftButton == MouseButtonState.Pressed) { try { dialog.DragMove(); } catch (InvalidOperationException) { } } };
+        layout.Children.Add(header);
+        var scroll = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+        Grid.SetRow(scroll, 1); layout.Children.Add(scroll);
+        var background = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 1) };
+        background.GradientStops.Add(new GradientStop(Color.FromRgb(234, 246, 255), 0));
+        background.GradientStops.Add(new GradientStop(Color.FromRgb(241, 237, 255), 0.6));
+        background.GradientStops.Add(new GradientStop(Color.FromRgb(255, 237, 246), 1));
+        dialog.Content = new Border { Background = background, CornerRadius = new CornerRadius(14), BorderBrush = new SolidColorBrush(Color.FromRgb(221, 229, 240)), BorderThickness = new Thickness(1), Child = layout };
         return dialog;
     }
-    private Button DialogButton(string text, bool primary) => new() { Content = text, Style = (Style)FindResource(primary ? "GitPrimary" : "GitButton"), HorizontalAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(0, 12, 0, 0), IsDefault = primary };
+    private Button DialogButton(string text, bool primary) => new() { Content = new TextBlock { Text = text, Foreground = primary ? Brushes.White : new SolidColorBrush(Color.FromRgb(64, 91, 126)), HorizontalAlignment = HorizontalAlignment.Center }, Style = (Style)FindResource(primary ? "GitPrimary" : "GitButton"), HorizontalAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(0, 12, 0, 0), IsDefault = primary };
     private string? Input(string title, string label, string value, bool secret = false)
     {
         var dialog = Dialog(title, out var panel);
         panel.Children.Add(new TextBlock { Text = label, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 10) });
-        var text = new TextBox { Text = value }; var password = new PasswordBox();
+        var text = new TextBox { Text = value }; var password = new PasswordBox { Style = (Style)FindResource("GitPassword"), Height = 44 };
         panel.Children.Add(secret ? password : text);
         if (secret)
         {
             var help = DialogButton("创建细粒度令牌", false); help.Click += (_, _) => OpenWeb("https://github.com/settings/personal-access-tokens/new"); panel.Children.Add(help);
             var instructions = DialogButton("查看绑定步骤与权限说明", false); instructions.Click += (_, _) => new GitHubConnectionHelp { Owner = dialog }.ShowDialog(); panel.Children.Add(instructions);
         }
-        var ok = DialogButton(secret ? "连接" : "确定", true); ok.Click += (_, _) => dialog.DialogResult = true; panel.Children.Add(ok);
-        var cancel = DialogButton("取消", false); cancel.IsCancel = true; panel.Children.Add(cancel);
+        var ok = DialogButton(secret ? "连接" : "确定", true); ok.Click += (_, _) => dialog.DialogResult = true;
+        var cancel = DialogButton("取消", false); cancel.IsCancel = true;
+        AddDialogActions(panel, cancel, ok);
         dialog.Loaded += (_, _) => { if (secret) password.Focus(); else { text.Focus(); text.SelectAll(); } };
         bool accepted = dialog.ShowDialog() == true;
         string result = secret ? password.Password : text.Text;
@@ -442,9 +463,16 @@ public partial class GitHubCenterWindow : Window
     {
         var dialog = Dialog(title, out var panel);
         panel.Children.Add(new TextBox { Text = content, IsReadOnly = true, TextWrapping = TextWrapping.Wrap, MaxHeight = 340, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
-        var ok = DialogButton("确认", true); ok.Click += (_, _) => dialog.DialogResult = true; panel.Children.Add(ok);
-        var cancel = DialogButton("取消", false); cancel.IsCancel = true; panel.Children.Add(cancel);
+        var ok = DialogButton("确认", true); ok.Click += (_, _) => dialog.DialogResult = true;
+        var cancel = DialogButton("取消", false); cancel.IsCancel = true;
+        AddDialogActions(panel, cancel, ok);
         return dialog.ShowDialog() == true;
+    }
+    private static void AddDialogActions(StackPanel panel, Button cancel, Button accept)
+    {
+        var actions = new Grid(); actions.ColumnDefinitions.Add(new ColumnDefinition()); actions.ColumnDefinitions.Add(new ColumnDefinition());
+        cancel.Margin = new Thickness(0, 18, 6, 0); accept.Margin = new Thickness(6, 18, 0, 0);
+        actions.Children.Add(cancel); Grid.SetColumn(accept, 1); actions.Children.Add(accept); panel.Children.Add(actions);
     }
     private void OnClosing(object? sender, CancelEventArgs e)
     {

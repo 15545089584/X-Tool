@@ -210,7 +210,7 @@
                     <TextBlock x:Name="ScanStateText" HorizontalAlignment="Right" FontSize="12" Foreground="#58738D" Text="尚未扫描" />
                     <TextBlock x:Name="ScanDetailText" Margin="0,4,0,0" HorizontalAlignment="Right" FontSize="10" Foreground="#8795A4" Text="进入页面后自动开始" />
                 </StackPanel>
-                <Button Style="{StaticResource DeveloperSmallButtonStyle}" Content="GitHub 仓库中心" Click="GitHubCenter_Click" Margin="0,0,12,0" />
+                <Button Style="{StaticResource DeveloperSmallButtonStyle}" Content="GitHub 仓库中心" Click="GitHubCenter_Click" Margin="0,0,12,0" Width="148" Height="42" FontSize="13" />
                 <Button x:Name="ScanButton" Style="{StaticResource DeveloperPrimaryButtonStyle}" Content="重新扫描" Click="ScanButton_Click" />
             </StackPanel>
         </Grid>
