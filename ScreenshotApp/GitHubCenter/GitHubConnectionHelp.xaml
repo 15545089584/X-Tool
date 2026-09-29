@@ -1,0 +1,50 @@
+<Window x:Class="ScreenshotApp.GitHubCenter.GitHubConnectionHelp"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:icons="http://metro.mahapps.com/winfx/xaml/iconpacks" xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+ Title="GitHub 账户绑定帮助" Width="740" Height="680" MinWidth="600" MinHeight="500" WindowStartupLocation="CenterOwner"
+ WindowStyle="None" AllowsTransparency="True" Background="Transparent" Foreground="#233C59" FontFamily="Microsoft YaHei UI" ShowInTaskbar="False">
+ <shell:WindowChrome.WindowChrome><shell:WindowChrome CaptionHeight="50" ResizeBorderThickness="5" GlassFrameThickness="0" UseAeroCaptionButtons="False"/></shell:WindowChrome.WindowChrome>
+ <Window.Resources><ResourceDictionary>
+  <ResourceDictionary.MergedDictionaries><ResourceDictionary Source="/XTool;component/Mail/MailStyles.xaml"/></ResourceDictionary.MergedDictionaries>
+  <Style x:Key="Paragraph" TargetType="TextBlock"><Setter Property="Foreground" Value="#405B7E"/><Setter Property="FontSize" Value="14"/><Setter Property="TextWrapping" Value="Wrap"/><Setter Property="LineHeight" Value="24"/><Setter Property="Margin" Value="0,0,0,14"/></Style>
+  <Style x:Key="Heading" TargetType="TextBlock" BasedOn="{StaticResource Paragraph}"><Setter Property="Foreground" Value="#152C48"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Margin" Value="0,8,0,8"/></Style>
+  <Style TargetType="TabItem"><Setter Property="Padding" Value="14,10"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TabItem"><Border x:Name="Surface" Padding="{TemplateBinding Padding}" BorderBrush="Transparent" BorderThickness="0,0,0,2"><ContentPresenter ContentSource="Header"/></Border><ControlTemplate.Triggers><Trigger Property="IsSelected" Value="True"><Setter TargetName="Surface" Property="BorderBrush" Value="#326AF5"/></Trigger><Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="Surface" Property="Background" Value="White"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
+ </ResourceDictionary></Window.Resources>
+ <Border CornerRadius="14" BorderBrush="#DDE5F0" BorderThickness="1"><Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#EAF6FF"/><GradientStop Color="#F1EDFF" Offset="0.6"/><GradientStop Color="#FFEDF6" Offset="1"/></LinearGradientBrush></Border.Background>
+ <Grid><Grid.RowDefinitions><RowDefinition Height="50"/><RowDefinition Height="*"/><RowDefinition Height="64"/></Grid.RowDefinitions>
+  <Grid Margin="22,0,8,0"><TextBlock Text="GitHub 账户绑定帮助" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/><Button HorizontalAlignment="Right" Style="{StaticResource CaptionButton}" Click="Close_Click" ToolTip="关闭帮助" shell:WindowChrome.IsHitTestVisibleInChrome="True"><icons:PackIconMaterial Kind="Close" Width="18" Height="18"/></Button></Grid>
+  <TabControl x:Name="HelpTabs" Grid.Row="1" Margin="22,6,22,0" Background="Transparent" BorderThickness="0">
+   <TabItem Header="细粒度 PAT · 推荐"><ScrollViewer x:Name="PatScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel Margin="2,18,14,0">
+    <TextBlock Style="{StaticResource Heading}" Text="1. 打开令牌创建页面"/>
+    <TextBlock Style="{StaticResource Paragraph}" Text="GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token。"/>
+    <Button Click="Link_Click" Tag="https://github.com/settings/personal-access-tokens/new" HorizontalAlignment="Left" Margin="0,0,0,16" Content="打开 GitHub 创建页面"/>
+    <TextBlock Style="{StaticResource Heading}" Text="2. 选择范围和有效期"/>
+    <TextBlock Style="{StaticResource Paragraph}" Text="名称可填 X-Tool。设置有效期；Resource owner 选择仓库所属账户或组织。Repository access 选择 Only select repositories，再勾选需要管理的仓库。组织可能要求管理员审批。"/>
+    <TextBlock Style="{StaticResource Heading}" Text="3. 只读功能所需的仓库权限"/>
+    <TextBlock Style="{StaticResource Paragraph}" Text="Metadata：Read-only（通常自动包含）。&#10;Pull requests：Read-only，用于 PR 列表。&#10;Actions：Read-only，用于构建记录。&#10;不需要为这些只读功能授予管理、删除或全部写入权限。"/>
+    <TextBlock Style="{StaticResource Heading}" Text="4. 回到 X-Tool 连接"/>
+    <TextBlock Style="{StaticResource Paragraph}" Text="点击 Generate token 后复制令牌，回到“连接 GitHub”粘贴并点击“连接”。成功后进入“GitHub 仓库”读取列表。令牌按当前 Windows 用户加密保存在本机，不要将它发送到聊天或写入代码。"/>
+    <TextBlock Style="{StaticResource Heading}" Text="账户绑定与代码推送是分开的"/>
+    <TextBlock Style="{StaticResource Paragraph}" Text="这里的 PAT 用于读取 GitHub API。克隆和推送沿用系统 Git Credential Manager 或 SSH 凭据，不会自动使用本框中的 PAT。未配置 Git 凭据时，API 连接成功也可能无法推送。"/>
+    <Button Click="Link_Click" Tag="https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens" HorizontalAlignment="Left" Content="GitHub 官方 PAT 文档" Margin="0,0,0,16"/>
+   </StackPanel></ScrollViewer></TabItem>
+   <TabItem Header="GitHub App"><ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel Margin="2,18,14,0">
+    <TextBlock Style="{StaticResource Heading}" Text="当前版本尚未接入 GitHub App 授权"/>
+    <TextBlock Style="{StaticResource Paragraph}" Text="请使用前一页的细粒度 PAT 绑定。现有连接框不能用 GitHub App 安装令牌代替 PAT，也没有 App 安装选择、授权回调或自动续期功能。"/>
+    <TextBlock Style="{StaticResource Heading}" Text="GitHub App 的接入方式"/>
+    <TextBlock Style="{StaticResource Paragraph}" Text="开发者先注册 App、配置权限，再由账户或组织安装到指定仓库。安装认证使用 App 的 JWT 换取安装访问令牌；安装令牌通常一小时过期，需要续期。用户授权令牌是另一种流程，不等同于安装令牌。"/>
+    <TextBlock Style="{StaticResource Heading}" Text="不要把 App 私钥当成令牌"/>
+    <TextBlock Style="{StaticResource Paragraph}" Text="App 私钥、Client secret 和 JWT 都不要粘贴到 X-Tool 的 PAT 框。此页用于说明区别，并不表示当前版本已经支持 App 绑定。"/>
+    <Button Click="Link_Click" Tag="https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/authenticating-as-a-github-app-installation" HorizontalAlignment="Left" Content="GitHub App 安装认证文档" Margin="0,0,0,14"/>
+    <Button Click="Link_Click" Tag="https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/authenticating-with-a-github-app-on-behalf-of-a-user" HorizontalAlignment="Left" Content="GitHub App 用户授权文档"/>
+   </StackPanel></ScrollViewer></TabItem>
+   <TabItem Header="连接排查"><ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel Margin="2,18,14,0">
+    <TextBlock Style="{StaticResource Heading}" Text="授权失败或令牌过期"/><TextBlock Style="{StaticResource Paragraph}" Text="检查是否完整复制令牌、是否过期或已撤销。重新创建后断开旧账户，再连接；不需要将令牌交给他人排查。"/>
+    <TextBlock Style="{StaticResource Heading}" Text="仓库、PR 或构建看不到"/><TextBlock Style="{StaticResource Paragraph}" Text="检查 Resource owner、选中的仓库及对应只读权限；组织令牌处于 pending 时需等待审批。私有仓库不存在和没有访问权限可能都返回 404。"/>
+    <TextBlock Style="{StaticResource Heading}" Text="请求受限"/><TextBlock Style="{StaticResource Paragraph}" Text="停止反复刷新，等待 GitHub 请求额度恢复。不要通过扩大令牌权限解决限流。"/>
+    <TextBlock Style="{StaticResource Heading}" Text="API 连接成功，但克隆或推送失败"/><TextBlock Style="{StaticResource Paragraph}" Text="先在系统 Git 工具中配置 HTTPS 凭据或 SSH。还需检查远程地址、分支保护和自己的写权限。X-Tool 不会绕过保护规则，也不会把令牌拼进仓库地址。"/>
+   </StackPanel></ScrollViewer></TabItem>
+  </TabControl>
+  <DockPanel Grid.Row="2" Margin="24,10,24,14"><Button DockPanel.Dock="Right" Content="关闭" Click="Close_Click" IsCancel="True" Padding="24,8"/><TextBlock Text="参考 GitHub 官方文档 · 2026-09-29" VerticalAlignment="Center" Foreground="#71829E" FontSize="12"/></DockPanel>
+ </Grid></Border>
+</Window>

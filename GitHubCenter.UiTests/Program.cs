@@ -17,6 +17,9 @@ internal static class Program
         Directory.CreateDirectory(Root);
         PrepareAsync().GetAwaiter().GetResult();
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        // 模拟主程序的全局按钮颜色，避免独立窗口测试遗漏样式继承污染。
+        var globalButton = new Style(typeof(Button)); globalButton.Setters.Add(new Setter(Control.ForegroundProperty, Brushes.Black));
+        app.Resources[typeof(Button)] = globalButton;
         var window = new GitHubCenterWindow(new GitHubStore(Path.Combine(Root, "store")));
         window.Show();
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
@@ -103,6 +106,10 @@ internal static class Program
         tabs.SelectedIndex = 0; window.Width = 1260; window.Height = 800;
         var search = (TextBox)window.FindName("RepositorySearch"); search.Text = "不存在的仓库";
         Check(!((WrapPanel)window.FindName("GitToolbar")).IsEnabled && changes.Items.Count == 0, "搜索无结果清理旧仓库操作状态");
+        Check(!((StackPanel)window.FindName("RepositoryActions")).IsEnabled, "空仓库禁用右上操作");
+        Check(((Button)window.FindName("AccountButton")).Foreground is SolidColorBrush { Color: var accountInk } && accountInk == Color.FromRgb(64, 91, 126), "账户按钮不继承全局黑色样式");
+        Check(((Button)window.FindName("ConnectionHelpButton")).IsEnabled, "空仓库仍可打开绑定帮助");
+        Check(((Grid)window.FindName("RepositoryWorkspace")).Margin.Left == 16 && ((Border)window.FindName("SidebarDivider")).BorderThickness.Right == 1, "侧栏独立分界与内容留白");
         Save(window, "empty.png");
         search.Clear(); ((ListBox)window.FindName("Repositories")).SelectedIndex = 0; await IdleAsync(window);
         // 仅构造对话框验证模板，不填写凭据或触发外部操作。
@@ -114,6 +121,16 @@ internal static class Program
         panel.Children.Add(primary); dialog.Show(); dialog.UpdateLayout();
         Check(primary.Foreground is SolidColorBrush { Color: var color } && color == Colors.White, "主按钮白色文字");
         Save(dialog, "dialog.png"); dialog.Close();
+        var help = new GitHubConnectionHelp { Owner = window }; help.Show(); help.UpdateLayout();
+        var helpTabs = (TabControl)help.FindName("HelpTabs");
+        Check(helpTabs.Items.Count == 3, "帮助包含 PAT、App 与排查页");
+        Save(help, "help-pat.png");
+        var patScroll = (ScrollViewer)help.FindName("PatScroll"); patScroll.ScrollToBottom(); help.UpdateLayout();
+        Check(patScroll.VerticalOffset > 0, "PAT 长教程可滚动");
+        Save(help, "help-pat-bottom.png");
+        helpTabs.SelectedIndex = 1; help.Width = 600; help.Height = 500; help.UpdateLayout(); Save(help, "help-app.png");
+        Check(help.ActualWidth == 600 && help.ActualHeight == 500, "帮助最小窗口布局");
+        help.Close();
     }
     private static void Save(Window window, string name)
     {

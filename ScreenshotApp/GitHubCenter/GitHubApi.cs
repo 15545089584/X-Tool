@@ -58,6 +58,8 @@ public sealed class GitHubApi : IDisposable
     public async Task<string> LoginAsync(string token, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(token)) throw new InvalidOperationException("请输入 Personal Access Token。");
+        if (token.TrimStart().StartsWith("ghs_", StringComparison.Ordinal) || token.Contains("-----BEGIN", StringComparison.Ordinal) || token.Trim().Count(c => c == '.') == 2)
+            throw new InvalidOperationException("当前版本请使用细粒度 PAT，不支持 App 安装令牌、JWT 或私钥。请点击问号查看绑定帮助。");
         using var json = await GetAsync("user", token.Trim(), ct);
         return json.RootElement.GetProperty("login").GetString() ?? throw new InvalidDataException("GitHub 账户响应无效。");
     }

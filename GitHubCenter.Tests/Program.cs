@@ -155,6 +155,9 @@ Check(store.CacheSize() == 0 && File.Exists(Path.Combine(repo, "local.txt")) && 
 store.Disconnect(); Check(store.LoadCredential() is null, "断开账户删除本模块凭据");
 var handler = new FakeHandler();
 using var api = new GitHubApi(handler);
+await Reject(() => api.LoginAsync("ghs_installation_example", ct), "安装令牌在联网前明确拒绝");
+await Reject(() => api.LoginAsync("-----BEGIN PRIVATE KEY-----", ct), "私钥不发送给 API");
+Check(handler.LastUrl is null, "错误凭据类型不触发 HTTP 请求");
 Check(await api.LoginAsync("test-token", ct) == "tester", "API 账户读取");
 Check(handler.LastAuth == "Bearer test-token", "令牌仅放入授权头");
 Check((await api.RepositoriesAsync("test-token", 2, ct)).Single().Name == "tester/repo" && handler.LastUrl!.Contains("page=2"), "仓库分页解析");

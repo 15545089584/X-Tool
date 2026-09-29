@@ -63,7 +63,16 @@ public partial class GitHubCenterWindow : Window
     private RepositoryEntry? Selected => Repositories.SelectedItem as RepositoryEntry;
     private string Remote => RemotePicker.SelectedItem as string ?? throw new InvalidOperationException("请选择远程仓库。");
     private GitState State => _state ?? throw new InvalidOperationException("请先添加或选择本地仓库。");
-    private void UpdateAccount() => AccountButton.Content = _credential is null ? "连接 GitHub 账户" : "GitHub · " + _credential.Login;
+    private void UpdateAccount()
+    {
+        AccountLabel.Text = _credential?.Login ?? "连接 GitHub";
+        AccountButton.ToolTip = _credential is null ? "连接 GitHub 账户" : "管理 GitHub 账户：" + _credential.Login;
+    }
+    private void ConnectionHelp_Click(object sender, RoutedEventArgs e) => new GitHubConnectionHelp { Owner = this }.ShowDialog();
+    private void RepositoryMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { ContextMenu: { } menu } button) { menu.PlacementTarget = button; menu.IsOpen = true; }
+    }
     private void BindRepositories()
     {
         _binding = true;
@@ -93,6 +102,7 @@ public partial class GitHubCenterWindow : Window
     private void UpdateButtons()
     {
         GitToolbar.IsEnabled = _state is not null;
+        RepositoryActions.IsEnabled = _state is not null;
         StageButton.IsEnabled = Changes.SelectedItem is GitChange { Staged: false, Conflict: false };
         UnstageButton.IsEnabled = Changes.SelectedItem is GitChange { Staged: true, Conflict: false };
         CommitButton.IsEnabled = _state?.Changes.Any(c => c.Staged) == true && !_state.Changes.Any(c => c.Conflict);
@@ -419,6 +429,7 @@ public partial class GitHubCenterWindow : Window
         if (secret)
         {
             var help = DialogButton("创建细粒度令牌", false); help.Click += (_, _) => OpenWeb("https://github.com/settings/personal-access-tokens/new"); panel.Children.Add(help);
+            var instructions = DialogButton("查看绑定步骤与权限说明", false); instructions.Click += (_, _) => new GitHubConnectionHelp { Owner = dialog }.ShowDialog(); panel.Children.Add(instructions);
         }
         var ok = DialogButton(secret ? "连接" : "确定", true); ok.Click += (_, _) => dialog.DialogResult = true; panel.Children.Add(ok);
         var cancel = DialogButton("取消", false); cancel.IsCancel = true; panel.Children.Add(cancel);
