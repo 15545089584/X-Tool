@@ -1,5 +1,15 @@
 # X-Tool 邮箱开发接续交接
 
+## 最新增量：安装目录缓存与运行入口切换（2026-09-29）
+
+- 当前运行 `ScreenshotApp/bin/install-mail-cache/Release/XTool.exe`；用户明确要求关闭旧版，已关闭仓库下旧 XTool 实例，启动新版并核对进程路径。
+- 桌面 X-Tool.lnk、任务栏固定 X-Tool.lnk、HKCU Run/X-Tool 已更新并读回核对为新版。
+- 默认邮件正文/附件缓存改到 `AppContext.BaseDirectory/MailCache`，不存在自动创建。账号凭据和摘要数据库仍保留原用户目录，避免账户丢失。
+- 启动后台复制旧缓存，保留原件，不覆盖新目录已有邮件。用户目录 cache-location.txt 记录上次缓存位置，下次更换构建目录时也复制新增副本。目录不可写时显示错误，不提权、不删除旧文件。
+- 真实迁移确认：450 个邮件缓存文件，约 16.28 MiB。当前路径 `D:/Claude Code/X-Tool/ScreenshotApp/bin/install-mail-cache/Release/MailCache`。
+- 注入倒计时数字框改为 34 DIP 高、8 DIP 圆角、自定义浅色输入模板及蓝色焦点细边框，范围和保存逻辑不变。
+- Release 零警告零错误；71 项邮箱回归、迁移/换目录复制/保留原件测试、设置页圆角模板及布局检查通过。
+
 ## 最新增量：本地缓存与设置入口（2026-09-29）
 
 - 当前新构建 `ScreenshotApp/bin/mail-storage-settings/Release/XTool.exe`；未强制重启用户实例。包含此前宠物注入与气泡主题改动。

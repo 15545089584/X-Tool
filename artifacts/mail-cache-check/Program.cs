@@ -34,6 +34,7 @@ internal static class Program
         settingsType.GetMethod("SelectCategoryForValidation", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(settings, ["DesktopPet"]);
         var settingsView = (FrameworkElement)settings.Content;
         settingsView.Measure(new Size(1040,760)); settingsView.Arrange(new Rect(0,0,1040,760)); settingsView.UpdateLayout();
+        if (delay.Template.FindName("Surface",delay) is not Border { CornerRadius.TopLeft: 8 } || delay.ActualHeight != 34) throw new Exception("秒数输入框未使用圆角模板");
         var settingsImage = new RenderTargetBitmap(1040,760,96,96,PixelFormats.Pbgra32); settingsImage.Render(settingsView);
         var settingsEncoder = new PngBitmapEncoder(); settingsEncoder.Frames.Add(BitmapFrame.Create(settingsImage));
         using (var screenshot = File.Create("artifacts/mail-cache-check/countdown-settings.png")) settingsEncoder.Save(screenshot);

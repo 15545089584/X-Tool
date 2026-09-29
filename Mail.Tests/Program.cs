@@ -218,6 +218,17 @@ using (var stopped = new CancellationTokenSource())
     try { disk.Write(diskRow with { Uid = 888 }, diskMessage, stopped.Token); throw new Exception("取消后不应写入"); }
     catch (OperationCanceledException) { Check(!disk.Contains(diskRow with { Uid = 888 }), "取消写入不产生已完成缓存"); }
 }
+var installedRoot = Path.Combine(root, "installed", "MailCache");
+var relocated = new MailDiskCache(installedRoot, diskRoot);
+relocated.ImportLegacy();
+Check(File.Exists(relocated.MessagePath(diskRow)) && File.Exists(disk.MessagePath(diskRow)), "安装目录自动创建并复制旧缓存，保留原文件");
+using (var movedMessage = relocated.Read(diskRow, CancellationToken.None))
+    Check(movedMessage?.Subject == "离线邮件", "迁移后仍能解密读取完整邮件");
+var newerRow = diskRow with { Uid = 989 };
+relocated.Write(newerRow, diskMessage, CancellationToken.None);
+var nextInstall = new MailDiskCache(Path.Combine(root, "next-install", "MailCache"), diskRoot);
+nextInstall.ImportLegacy();
+Check(nextInstall.Contains(newerRow) && File.Exists(relocated.MessagePath(newerRow)), "切换软件目录时从上次缓存目录复制新增邮件");
 Console.WriteLine($"通过 {passed} 项；合成测试证据：{root}");
 
 public class MailFolderDouble : DispatchProxy

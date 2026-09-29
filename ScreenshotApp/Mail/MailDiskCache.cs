@@ -8,18 +8,55 @@ namespace ScreenshotApp.Mail;
 public sealed record MailStorageUsage(string Path, long Bytes, long AccountBytes, int Messages, string Error);
 
 /// <summary>完整 MIME 仅以当前 Windows 用户可解密的形式落盘，不自动淘汰。</summary>
-public sealed class MailDiskCache(string root)
+public sealed class MailDiskCache(string root, string? legacyRoot = null)
 {
     public string Root { get; } = Path.GetFullPath(root);
     private string AccountPath(string id) => Path.Combine(Root, "messages", Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(id))));
     internal string MessagePath(MailRow row) => Path.Combine(AccountPath(row.AccountId), $"{row.Validity}-{row.Uid}.bin");
-    public bool Contains(MailRow row) => File.Exists(MessagePath(row));
+    private string? LegacyPath(MailRow row) => legacyRoot is null ? null : Path.Combine(legacyRoot, Path.GetRelativePath(Root, MessagePath(row)));
+    public bool Contains(MailRow row) => File.Exists(MessagePath(row)) || File.Exists(LegacyPath(row));
+
+    public void ImportLegacy()
+    {
+        Directory.CreateDirectory(Root);
+        if (legacyRoot is null) return;
+        var roots = new List<string> { legacyRoot };
+        var locator = Path.Combine(legacyRoot, "cache-location.txt");
+        if (File.Exists(locator))
+        {
+            var previous = File.ReadAllText(locator, Encoding.UTF8).Trim();
+            if (Path.IsPathFullyQualified(previous) && Path.GetFileName(previous).Equals("MailCache", StringComparison.OrdinalIgnoreCase)
+                && !Path.GetFullPath(previous).Equals(Root, StringComparison.OrdinalIgnoreCase)) roots.Insert(0, previous);
+        }
+        foreach (var previousRoot in roots)
+        {
+            if (!Directory.Exists(Path.Combine(previousRoot, "messages"))) continue;
+            foreach (var source in Directory.EnumerateFiles(Path.Combine(previousRoot, "messages"), "*.bin", SearchOption.AllDirectories))
+            {
+                var target = Path.Combine(Root, Path.GetRelativePath(previousRoot, source));
+                if (File.Exists(target)) continue;
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                var temporary = target + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                try
+                {
+                    File.Copy(source, temporary);
+                    if (!File.Exists(target)) File.Move(temporary, target);
+                }
+                finally { if (File.Exists(temporary)) File.Delete(temporary); }
+            }
+        }
+        // 只记录上次缓存位置，后续切换版本目录时复制已有副本，不删除旧目录。
+        Directory.CreateDirectory(legacyRoot);
+        File.WriteAllText(locator + ".tmp", Root, new UTF8Encoding(false));
+        File.Move(locator + ".tmp", locator, true);
+    }
 
     public MimeMessage? Read(MailRow row, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
         var path = MessagePath(row);
-        if (!File.Exists(path)) return null;
+        if (!File.Exists(path)) path = LegacyPath(row);
+        if (path is null || !File.Exists(path)) return null;
         byte[]? plain = null;
         try
         {

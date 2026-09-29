@@ -211,6 +211,17 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <Style x:Key="InjectionSecondsBox" TargetType="TextBox">
+            <Setter Property="Height" Value="34"/><Setter Property="FontSize" Value="14"/>
+            <Setter Property="Foreground" Value="#304A63"/><Setter Property="Background" Value="#F8FBFF"/>
+            <Setter Property="BorderBrush" Value="#D4E2F2"/><Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TextBox">
+                <Border x:Name="Surface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="8,4">
+                    <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center"/>
+                </Border>
+                <ControlTemplate.Triggers><Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="Surface" Property="BorderBrush" Value="#5E89FF"/></Trigger></ControlTemplate.Triggers>
+            </ControlTemplate></Setter.Value></Setter>
+        </Style>
     </Window.Resources>
 
     <Border Margin="14" Background="#FFF4F9FD" BorderBrush="#B6DCECF8" BorderThickness="1" CornerRadius="24">
@@ -325,7 +336,7 @@
                                     <StackPanel Margin="0,2,8,0">
                                         <Border Style="{StaticResource SettingCardStyle}" Padding="22,18">
                                             <StackPanel>
-                                                <Grid><TextBlock Text="注入倒计时" FontSize="15" Foreground="#304A63" VerticalAlignment="Center"/><StackPanel Orientation="Horizontal" HorizontalAlignment="Right"><TextBox x:Name="InjectionDelayInput" Width="58" Text="5" MaxLength="2" TextAlignment="Center" ToolTip="1–30 秒，默认 5 秒" TextChanged="InjectionDelayInput_Changed" LostKeyboardFocus="InjectionDelayInput_LostFocus"/><TextBlock x:Name="InjectionDelayText" Margin="8,0,0,0" VerticalAlignment="Center" Text="秒" Foreground="#4D7CFE"/></StackPanel></Grid>
+                                                <Grid><TextBlock Text="注入倒计时" FontSize="15" Foreground="#304A63" VerticalAlignment="Center"/><StackPanel Orientation="Horizontal" HorizontalAlignment="Right"><TextBox x:Name="InjectionDelayInput" Style="{StaticResource InjectionSecondsBox}" Width="64" Text="5" MaxLength="2" TextAlignment="Center" ToolTip="1–30 秒，默认 5 秒" TextChanged="InjectionDelayInput_Changed" LostKeyboardFocus="InjectionDelayInput_LostFocus"/><TextBlock x:Name="InjectionDelayText" Margin="8,0,0,0" VerticalAlignment="Center" Text="秒" Foreground="#4D7CFE"/></StackPanel></Grid>
                                                 <Slider x:Name="InjectionDelaySlider" Margin="0,16,0,0" Minimum="1" Maximum="30" TickFrequency="1" IsSnapToTickEnabled="True" Value="5" ValueChanged="InjectionDelay_Changed" Style="{StaticResource PetScaleSliderStyle}"/>
                                             </StackPanel>
                                         </Border>

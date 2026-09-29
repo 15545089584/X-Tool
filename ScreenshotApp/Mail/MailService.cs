@@ -16,6 +16,8 @@ public sealed class MailService : IDisposable
     private readonly object _gate = new();
     private readonly string _path;
     private readonly MailDiskCache _diskCache;
+    private Task _cacheMigration = Task.CompletedTask;
+    private string _migrationError = "";
     private readonly SemaphoreSlim _prefetchDownloads = new(1);
     private readonly Dictionary<string, string> _cacheErrors = new();
     private MailDatabase _db = new([], [], new());
@@ -45,7 +47,9 @@ public sealed class MailService : IDisposable
         // 必须在 MailKit/MimeKit 首次解析字符集前注册，不能依赖其他工具的初始化顺序。
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
         _path = Path.Combine(storage ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "X-Tool", "Mail"), "mail.bin");
-        _diskCache = new MailDiskCache(Path.GetDirectoryName(_path)!);
+        _diskCache = storage is null
+            ? new MailDiskCache(Path.Combine(AppContext.BaseDirectory, "MailCache"), Path.GetDirectoryName(_path)!)
+            : new MailDiskCache(storage);
     }
     public void Start()
     {
@@ -53,6 +57,11 @@ public sealed class MailService : IDisposable
         {
             if (_started || _disposed) return;
             _started = true;
+            _cacheMigration = Task.Run(() =>
+            {
+                try { _diskCache.ImportLegacy(); }
+                catch { lock (_gate) _migrationError = "旧缓存复制未完成，请检查程序目录权限和空间；旧文件仍保留。"; }
+            });
             try
             {
                 if (File.Exists(_path))
@@ -281,6 +290,7 @@ public sealed class MailService : IDisposable
     {
         try
         {
+            await _cacheMigration.WaitAsync(token);
             await _prefetchDownloads.WaitAsync(token);
             try
             {
@@ -341,7 +351,7 @@ public sealed class MailService : IDisposable
     public Task<MailStorageUsage> StorageUsageAsync(string accountId, CancellationToken token) => Task.Run(() =>
     {
         var usage = _diskCache.Measure(accountId, token);
-        lock (_gate) return usage with { Error = string.Join("\n", new[] { usage.Error, _cacheErrors.GetValueOrDefault(accountId, "") }.Where(s => s.Length > 0)) };
+        lock (_gate) return usage with { Error = string.Join("\n", new[] { usage.Error, _migrationError, _cacheErrors.GetValueOrDefault(accountId, "") }.Where(s => s.Length > 0)) };
     }, token);
 
     public async Task<MimeMessage> LoadMessage(MailRow row, CancellationToken token)
