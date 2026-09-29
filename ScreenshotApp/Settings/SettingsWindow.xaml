@@ -323,6 +323,12 @@
 
                                 <ScrollViewer x:Name="DesktopPetSettingsPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                                     <StackPanel Margin="0,2,8,0">
+                                        <Border Style="{StaticResource SettingCardStyle}" Padding="22,18">
+                                            <StackPanel>
+                                                <Grid><TextBlock Text="注入倒计时" FontSize="15" Foreground="#304A63"/><TextBlock x:Name="InjectionDelayText" HorizontalAlignment="Right" Text="5 秒" Foreground="#4D7CFE"/></Grid>
+                                                <Slider x:Name="InjectionDelaySlider" Margin="0,16,0,0" Minimum="1" Maximum="30" TickFrequency="1" IsSnapToTickEnabled="True" Value="5" ValueChanged="InjectionDelay_Changed" Style="{StaticResource PetScaleSliderStyle}"/>
+                                            </StackPanel>
+                                        </Border>
                                         <Border Style="{StaticResource SettingCardStyle}"><Grid Height="82" Margin="20,0"><StackPanel VerticalAlignment="Center"><TextBlock FontSize="15" Foreground="#304A63" Text="显示桌面宠物" /><TextBlock Margin="0,5,0,0" FontSize="11" Foreground="#74899E" Text="控制桌面宠物是否显示；关闭后下次启动仍保持隐藏" /></StackPanel><CheckBox x:Name="DesktopPetVisibleCheckBox" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource SettingToggleStyle}" Click="DesktopPetVisibleCheckBox_Click" /></Grid></Border>
                                         <Border Style="{StaticResource SettingCardStyle}"><Grid Height="92" Margin="20,0"><StackPanel VerticalAlignment="Center"><TextBlock FontSize="15" Foreground="#304A63" Text="宠物接管文件通知" /><TextBlock Margin="0,5,64,0" FontSize="11" Foreground="#74899E" TextWrapping="Wrap" Text="宠物显示时用头顶彩虹气泡替代文件传输系统通知；隐藏宠物后自动恢复 Windows 通知" /></StackPanel><CheckBox x:Name="DesktopPetTransferNotificationsCheckBox" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource SettingToggleStyle}" Click="DesktopPetTransferNotificationsCheckBox_Click" /></Grid></Border>
                                         <Border Style="{StaticResource SettingCardStyle}" Padding="22,20">

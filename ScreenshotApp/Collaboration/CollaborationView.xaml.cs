@@ -42,6 +42,7 @@ public partial class CollaborationView : UserControl
     public event Action? ConnectionSettingsRequested;
 
     private void OpenPhoneNotifications_Click(object sender, RoutedEventArgs e) => PhoneNotificationsWindow.Open(Window.GetWindow(this));
+    private void OpenPhoneCalendar_Click(object sender, RoutedEventArgs e) => ScreenshotApp.PhoneCalendar.PhoneCalendarWindow.Open();
 
     public void Configure(bool autoReconnectEnabled)
     {

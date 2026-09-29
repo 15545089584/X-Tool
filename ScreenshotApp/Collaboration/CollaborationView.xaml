@@ -59,18 +59,20 @@
         </Grid.RowDefinitions>
 
         <Grid>
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
             <StackPanel>
                 <TextBlock FontSize="31" FontWeight="SemiBold" Foreground="#17283A" Text="协作中心" />
                 <TextBlock Margin="0,6,0,0" FontSize="12" Foreground="{StaticResource SecondaryText}" Text="通过局域网或 Tailscale 连接已信任手机，双向传输并按授权远程读取文件。" />
             </StackPanel>
-            <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal">
+            <WrapPanel Grid.Row="1" HorizontalAlignment="Right" Margin="0,14,0,0" VerticalAlignment="Center" Orientation="Horizontal">
                 <Border MinHeight="42" Padding="16,0" Background="#AEEAFFF7" BorderBrush="#83CFE4D7" BorderThickness="1" CornerRadius="12">
                     <StackPanel VerticalAlignment="Center" Orientation="Horizontal"><Ellipse x:Name="HeaderStatusDot" Width="8" Height="8" Margin="0,0,9,0" VerticalAlignment="Center" Fill="#7E94A8" /><TextBlock x:Name="HeaderStatusText" VerticalAlignment="Center" FontSize="12" Foreground="#557088" Text="正在启动" /></StackPanel>
                 </Border>
                 <Button Margin="10,0,0,0" Style="{StaticResource SecondaryButton}" Content="手机通知" Click="OpenPhoneNotifications_Click" />
+                <Button Margin="10,0,0,0" Style="{StaticResource SecondaryButton}" Content="手机日程" Click="OpenPhoneCalendar_Click" />
                 <Button Margin="10,0,0,0" MinWidth="118" Style="{StaticResource SecondaryButton}" Content="远程文件" Click="OpenRemoteFiles_Click" />
                 <Button Margin="10,0,0,0" Style="{StaticResource SecondaryButton}" Content="连接设置" Click="OpenConnectionSettings_Click" />
-            </StackPanel>
+            </WrapPanel>
         </Grid>
 
         <Border Grid.Row="2" Style="{StaticResource GlassCard}" Padding="22">

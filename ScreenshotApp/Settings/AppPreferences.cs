@@ -49,6 +49,7 @@ public sealed class AppPreferences
 
     /// <summary>桌面宠物相对于 288 DIP 基准尺寸的缩放百分比。</summary>
     public int DesktopPetScalePercent { get; set; } = 100;
+    public int PetInjectionDelaySeconds { get; set; } = 5;
 
     /// <summary>是否显示桌面宠物；关闭后下次启动仍保持隐藏。</summary>
     private bool _desktopPetVisible = true;

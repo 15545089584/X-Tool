@@ -249,6 +249,7 @@ public partial class DesktopPetWindow : Window
         }
 
         _closed = true;
+        CancelInjection();
         _actionWheel?.Close();
         _actionWheel = null;
         CloseCommandExperience();
@@ -321,6 +322,7 @@ public partial class DesktopPetWindow : Window
         else
         {
             DismissPhoneNotification();
+            CancelInjection();
             _player.Pause();
             if (!_activeDueAlarm)
             {
@@ -543,7 +545,7 @@ public partial class DesktopPetWindow : Window
                 _alarmService.Items.Count);
             wheel.ShelfRequested += ShowShelfPanel;
             wheel.AlarmRequested += ShowAlarmPanel;
-            wheel.CalendarRequested += () => { CloseCommandExperience(); ScreenshotApp.PhoneCalendar.PhoneCalendarWindow.Open(); };
+            wheel.InjectionRequested += ShowInjectionEditor;
             wheel.MailRequested += () => { CloseCommandExperience(); ScreenshotApp.Mail.MailWindow.Open(); };
             wheel.DismissRequested += CloseCommandExperience;
             wheel.Closed += (_, _) =>
@@ -1398,6 +1400,8 @@ public partial class DesktopPetWindow : Window
     private void UpdateTransferBubblePosition()
     {
         if (!IsVisible || !IsLoaded) return;
+        if (_injectionEditor is { IsVisible: true } editor) PositionInjection(editor);
+        if (_injectionProgress is { IsVisible: true } injection) PositionInjection(injection);
         if (_transferBubble is { IsVisible: true } transfer) PositionNotificationBubble(transfer, 0);
         if (_phoneBubble is { IsVisible: true } phone)
             PositionNotificationBubble(phone, _transferBubble is { IsVisible: true } ? _transferBubble.ActualHeight + 10 : 0);
@@ -1454,7 +1458,7 @@ public partial class DesktopPetWindow : Window
         {
             // 图片气泡存在时保持状态 5，避免其他完成计时器抢先复位。
             if (_closed) return;
-            await _player.SwitchStateAsync(_phoneImageReminderCount > 0 ? "state-05" : stateId);
+            await _player.SwitchStateAsync(_injectionState ?? (_phoneImageReminderCount > 0 ? "state-05" : stateId));
         }
         catch (OperationCanceledException)
         {

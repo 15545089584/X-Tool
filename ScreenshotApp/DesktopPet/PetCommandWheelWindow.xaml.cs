@@ -16,7 +16,7 @@ public partial class PetCommandWheelWindow : Window
     private const int SectorCount = 4;
     private const int ShelfSectorIndex = 1;
     private const int AlarmSectorIndex = 2;
-    private const int CalendarSectorIndex = 0;
+    private const int InjectionSectorIndex = 0;
     private const int MailSectorIndex = 3;
     private readonly List<CommandSectorVisual> _sectors = [];
     private readonly Rect _workingArea;
@@ -51,7 +51,7 @@ public partial class PetCommandWheelWindow : Window
     internal event Action? ShelfRequested;
 
     internal event Action? AlarmRequested;
-    internal event Action? CalendarRequested;
+    internal event Action? InjectionRequested;
     internal event Action? MailRequested;
 
     internal event Action? DismissRequested;
@@ -308,7 +308,7 @@ public partial class PetCommandWheelWindow : Window
         {
             var startAngle = _fanStartAngle + index * _sectorSweepAngle + 1.2;
             var endAngle = _fanStartAngle + (index + 1) * _sectorSweepAngle - 1.2;
-            var enabled = index is ShelfSectorIndex or AlarmSectorIndex or CalendarSectorIndex or MailSectorIndex;
+            var enabled = index is ShelfSectorIndex or AlarmSectorIndex or InjectionSectorIndex or MailSectorIndex;
             var path = new ShapePath
             {
                 Data = CreateSectorGeometry(_wheelCenter, _innerRadius, _outerRadius, startAngle, endAngle),
@@ -337,8 +337,8 @@ public partial class PetCommandWheelWindow : Window
     {
         var isShelf = sectorIndex == ShelfSectorIndex;
         var isAlarm = sectorIndex == AlarmSectorIndex;
-        var isCalendar = sectorIndex == CalendarSectorIndex;
-        var enabled = isShelf || isAlarm || isCalendar || sectorIndex == MailSectorIndex;
+        var isInjection = sectorIndex == InjectionSectorIndex;
+        var enabled = isShelf || isAlarm || isInjection || sectorIndex == MailSectorIndex;
         var iconContainer = new Grid { HorizontalAlignment = HorizontalAlignment.Center };
         iconContainer.Children.Add(new TextBlock
         {
@@ -346,7 +346,7 @@ public partial class PetCommandWheelWindow : Window
             FontSize = enabled ? 23 : 16,
             FontWeight = FontWeights.SemiBold,
             Foreground = new SolidColorBrush(enabled ? Color.FromRgb(104, 87, 216) : Color.FromRgb(126, 148, 168)),
-            Text = isShelf ? "\uE8B7" : isAlarm ? "\uE823" : isCalendar ? "\uE787" : "\uE715",
+            Text = isShelf ? "\uE8B7" : isAlarm ? "\uE823" : isInjection ? "\uE765" : "\uE715",
             HorizontalAlignment = HorizontalAlignment.Center,
             Effect = new DropShadowEffect
             {
@@ -389,7 +389,7 @@ public partial class PetCommandWheelWindow : Window
             FontSize = enabled ? 11.5 : 9.5,
             FontWeight = enabled ? FontWeights.SemiBold : FontWeights.Medium,
             Foreground = new SolidColorBrush(enabled ? Color.FromRgb(71, 65, 139) : Color.FromRgb(117, 139, 158)),
-            Text = isShelf ? "文件暂存区" : isAlarm ? "静默闹钟" : isCalendar ? "手机日程" : "邮箱中心",
+            Text = isShelf ? "文件暂存区" : isAlarm ? "静默闹钟" : isInjection ? "注入" : "邮箱中心",
             HorizontalAlignment = HorizontalAlignment.Center,
             TextAlignment = TextAlignment.Center
         };
@@ -408,7 +408,7 @@ public partial class PetCommandWheelWindow : Window
         });
         ToolTipService.SetToolTip(content, isShelf
             ? "打开本次运行的文件暂存区"
-            : isAlarm ? "设置无声音的桌宠消息闹钟" : isCalendar ? "查看已同步的手机日程" : "查看多个邮箱的新邮件");
+            : isAlarm ? "设置无声音的桌宠消息闹钟" : isInjection ? "模拟键盘写入文本" : "查看多个邮箱的新邮件");
         return content;
     }
 
@@ -452,9 +452,9 @@ public partial class PetCommandWheelWindow : Window
             e.Handled = true;
             return;
         }
-        if (selectedIndex == CalendarSectorIndex)
+        if (selectedIndex == InjectionSectorIndex)
         {
-            CalendarRequested?.Invoke();
+            InjectionRequested?.Invoke();
             e.Handled = true;
             return;
         }

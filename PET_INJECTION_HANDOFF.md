@@ -1,0 +1,14 @@
+# 宠物注入交接（2026-09-29）
+
+- 轮盘原手机日程位置改为“注入”；日程保留在协作中心顶部独立入口。顶部操作区改为第二行可换行布局。
+- 编辑气泡 430 × 340 DIP，支持输入和粘贴，底部关闭/注入按钮。空内容禁用注入，最多 100000 个 UTF-16 字符，不持久化正文、不更改剪贴板。
+- 编辑、倒计时和进度气泡采用邮箱中心同款四段浅色渐变，直接复用 MailStyles 的字体色、渐变按钮、圆角输入框及 7 DIP 细圆角滚动条。保留用户要求的较大圆角外框和扁条按钮。
+- 点击注入关闭编辑框，切换 state-06，头顶无激活且鼠标穿透的气泡倒计时。默认 5 秒，设置 → 桌面宠物可调整 1–30 秒。
+- 倒计时结束取得前台窗口及原生焦点 HWND，后台逐字符 Unicode SendInput，每字符约 10ms。沿用参考 Python 的 Shift+Enter 换行；Tab 转四空格，其他控制字符跳过，避免 Tab 意外切换输入框。
+- 写入进度显示在宠物上方；完成切换 state-05，3 秒后恢复默认状态（存在其他宠物活动时沿用现有状态恢复规则）。Esc、隐藏/关闭宠物取消；切换 HWND 焦点、鼠标点击、Tab 或修饰键操作停止。
+- 不自动夺回焦点、不提权、不回退到粘贴。SendInput 被拒绝会显示错误。某些应用会静默忽略输入；发送完成不等于读取并核实了目标内容。浏览器多个 DOM 元素可能共用原生 HWND，鼠标/Tab 检测补充保护，但无法保证识别网页脚本自动改变 DOM 焦点。换行在部分目标里仍可能触发其自定义行为。
+- 参考文件：`D:/Claude Code/写入工具文件夹/type_txt_to_focus.py`，未执行参考脚本、未读取 input.txt、未修改参考目录。
+- 构建：`dotnet build ScreenshotApp/ScreenshotApp.csproj -c Release --no-restore -p:OutputPath=bin/pet-injection/Release/ -v:minimal`。
+- 测试：`dotnet run --project PetInjection.Tests -c Release`（8 项，不向用户窗口发送按键）；`dotnet run --project artifacts/pet-injection-check -c Release`（编辑/长文本/空输入/进度/轮盘/协作中心布局）。实机禁止粘贴输入框的端到端兼容性待用户试用。
+- 新构建 `ScreenshotApp/bin/pet-injection/Release/XTool.exe`。开发结束时旧运行版为 mail-persistent-cache，存在 18122 手机连接，因此没有重启、没有切换快捷方式或自启动入口。
+- 本次只提交宠物注入及日程入口相关源码/测试/本文件；邮箱持久化缓存的上一轮未提交改动保留原样，不混入本次提交。不推送。

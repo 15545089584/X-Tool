@@ -74,6 +74,8 @@ public partial class SettingsWindow : Window
         DesktopPetTransferNotificationsCheckBox.IsChecked = preferences.DesktopPetTakesOverTransferNotifications;
         CollaborationAutoReconnectCheckBox.IsChecked = preferences.CollaborationAutoReconnect;
         DesktopPetScaleSlider.Value = Math.Clamp(preferences.DesktopPetScalePercent, 60, 160);
+        InjectionDelaySlider.Value = Math.Clamp(preferences.PetInjectionDelaySeconds, 1, 30);
+        InjectionDelayText.Text = $"{InjectionDelaySlider.Value:0} 秒";
         UpdateDesktopPetScaleText((int)Math.Round(DesktopPetScaleSlider.Value));
         UpdateShortcutButtons();
         UpdateStorageLocationText();
@@ -201,6 +203,14 @@ public partial class SettingsWindow : Window
         _preferences.StickerTopmost = StickerTopmostCheckBox.IsChecked == true;
         _preferences.Save();
         SetFooterStatus(_preferences.StickerTopmost ? "新建贴图将默认置顶" : "已关闭贴图默认置顶");
+    }
+
+    private void InjectionDelay_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (!_initialized) return;
+        _preferences.PetInjectionDelaySeconds = (int)Math.Round(InjectionDelaySlider.Value);
+        InjectionDelayText.Text = $"{_preferences.PetInjectionDelaySeconds} 秒";
+        _preferences.Save();
     }
 
     private void DesktopPetScaleSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
