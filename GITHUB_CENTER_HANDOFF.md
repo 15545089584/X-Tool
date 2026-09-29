@@ -2,7 +2,15 @@
 
 日期：2026-09-29。实际仓库：`D:\Claude Code\X-Tool`。
 
-## 最新增量：本地扫描与远程提交（2026-09-30）
+## 最新增量：仓库身份与扫描验证（2026-09-30）
+
+- 核对用户截图：`C:\Users\MRSW\Documents\ChatGPT\X-Tool` 确有甘特图成果等十个未跟踪文件，和 `D:\Claude Code\X-Tool` 是不同路径，不能按名称合并。未移动、删除或提交这些文件。
+- 左侧仓库显示名称、完整路径和状态，按可用性、名称、路径排序；历史提交标题与作者日期分行呈现。
+- 自动扫描候选及已登记目录用 `git rev-parse --show-toplevel` 验证根目录，拒绝空 .git 目录及父仓库误识别。旧失效记录保留但标记不可用，选择时不再弹出 Git 原始错误。
+- 清空/切换仓库时取消旧差异请求，避免旧结果回填。
+- 构建：`ScreenshotApp/bin/github-center-identity/Release/XTool.exe`。Release 零警告零错误，64 项核心测试和 55 项 WPF 检查通过，未退出旧实例或更改快捷方式。
+
+## 上一增量：本地扫描与远程提交（2026-09-30）
 
 - 新构建：`ScreenshotApp/bin/github-center-discovery/Release/XTool.exe`；polish 版本正在运行导致原目录构建复制失败，改用独立目录，未结束用户进程。
 - 仓库中心打开后异步扫描用户 Documents/Desktop/source/repos/Projects 和固定磁盘根目录下 Claude Code/Code/Projects/Repos/Git；左侧文件夹搜索按钮可扫描指定目录。

@@ -14,6 +14,7 @@ public sealed class RepositoryEntry
     public DateTimeOffset? LastChecked { get; set; }
     public DateTimeOffset? LastFetched { get; set; }
     public bool Trusted { get; set; }
+    public bool Unavailable { get; set; }
     [JsonIgnore] public string Label => $"{Name}\n{Summary}\n{(LastChecked is { } date ? $"上次检查 {date.LocalDateTime:MM-dd HH:mm}" : "未检查")}";
 }
 public sealed class GitHubPreferences

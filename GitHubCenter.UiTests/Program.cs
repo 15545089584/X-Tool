@@ -116,7 +116,9 @@ internal static class Program
         Save(window, "remote-history.png");
         remote.SelectedIndex = -1;
         Check(remoteCommits.Items.Count == 0, "取消仓库选择清理旧提交");
-        string discovered = Path.Combine(Root, "新发现仓库"); Directory.CreateDirectory(Path.Combine(discovered, ".git"));
+        string discovered = Path.Combine(Root, "新发现仓库"); Directory.CreateDirectory(discovered);
+        await new GitRepositoryService().RunAsync(discovered, CancellationToken.None, "init", "--initial-branch=main");
+        Directory.CreateDirectory(Path.Combine(Root, "无效仓库", ".git"));
         await (Task)typeof(GitHubCenterWindow).GetMethod("ScanAsync", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(window, [new[] { Root }])!;
         var savedRepositories = new GitHubStore(Path.Combine(Root, "store")).LoadPreferences().Repositories;
         Check(savedRepositories.Any(r => r.Path == discovered && !r.Trusted), "发现仓库持久保存但不自动信任");

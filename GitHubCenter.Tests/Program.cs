@@ -206,6 +206,11 @@ var binary = Path.Combine(cancellationRepo, "binary.bin"); await File.WriteAllBy
 var withBinary = await git.StatusAsync(cancellationRepo, ct);
 Check((await git.DiffAsync(withBinary, withBinary.Changes.Single(c => c.Path == "binary.bin"), ct)).Contains("二进制"), "二进制预览保护");
 var scan = RepositoryDiscovery.Scan([root, root], ct);
+string invalidRepository = Path.Combine(root, "无效仓库"); Directory.CreateDirectory(Path.Combine(invalidRepository, ".git"));
+Check(!await RepositoryDiscovery.IsRepositoryRootAsync(invalidRepository, ct), "空 .git 目录不算有效仓库");
+Check(await RepositoryDiscovery.IsRepositoryRootAsync(repo, ct) && await RepositoryDiscovery.IsRepositoryRootAsync(worktree, ct), "验证普通仓库及 worktree 根目录");
+string childDirectory = Path.Combine(repo, "子目录"); Directory.CreateDirectory(childDirectory);
+Check(!await RepositoryDiscovery.IsRepositoryRootAsync(childDirectory, ct), "不将父仓库状态误认作子目录仓库");
 Check(scan.Paths.Contains(repo) && scan.Paths.Contains(worktree), "扫描识别普通仓库与 worktree");
 Check(scan.Paths.Distinct(StringComparer.OrdinalIgnoreCase).Count() == scan.Paths.Count, "扫描重叠路径去重");
 Check(RepositoryDiscovery.Scan([root], ct, 1).Limited, "扫描目录数量限制");

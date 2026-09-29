@@ -6,6 +6,16 @@ public sealed record RepositoryScan(List<string> Paths, bool Limited, int Skippe
 
 public static class RepositoryDiscovery
 {
+    public static async Task<bool> IsRepositoryRootAsync(string path, CancellationToken ct)
+    {
+        try
+        {
+            string root = (await new GitRepositoryService().RunAsync(path, ct, "rev-parse", "--show-toplevel")).TrimEnd('\r', '\n');
+            return string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(root)), Path.TrimEndingDirectorySeparator(Path.GetFullPath(path)), StringComparison.OrdinalIgnoreCase);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException) { return false; }
+    }
     public static IEnumerable<string> DefaultRoots()
     {
         string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);

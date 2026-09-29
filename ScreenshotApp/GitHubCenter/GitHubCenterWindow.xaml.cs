@@ -74,11 +74,20 @@ public partial class GitHubCenterWindow : Window
         {
             var scan = await Task.Run(() => RepositoryDiscovery.Scan(roots, ct), ct);
             int added = 0;
+            int invalid = 0;
             foreach (string path in scan.Paths)
+            {
+                if (!await RepositoryDiscovery.IsRepositoryRootAsync(path, ct)) { invalid++; continue; }
                 if (!_preferences.Repositories.Any(r => string.Equals(r.Path, path, StringComparison.OrdinalIgnoreCase)))
                 { _preferences.Repositories.Add(new RepositoryEntry { Path = path, Summary = "自动发现 · 未检查" }); added++; }
+            }
+            foreach (var entry in _preferences.Repositories)
+            {
+                entry.Unavailable = !await RepositoryDiscovery.IsRepositoryRootAsync(entry.Path, ct);
+                if (entry.Unavailable) entry.Summary = "不可用 · 路径失效或 Git 元数据无效";
+            }
             BindRepositories(); await SaveAsync();
-            result = $"扫描完成 · 新增 {added} 个仓库 · 跳过 {scan.Skipped} 个目录" + (scan.Limited ? " · 已达扫描范围限制，可选择更小的文件夹继续扫描" : "");
+            result = $"扫描完成 · 新增 {added} 个仓库 · 排除 {invalid} 个无效候选 · 跳过 {scan.Skipped} 个目录" + (scan.Limited ? " · 已达扫描范围限制，可选择更小的文件夹继续扫描" : "");
         });
         if (result is not null) StatusText.Text = result;
     }
@@ -139,7 +148,7 @@ public partial class GitHubCenterWindow : Window
     {
         _binding = true;
         var selected = Selected;
-        Repositories.ItemsSource = _preferences.Repositories.Where(r => (r.Name + r.Path).Contains(RepositorySearch.Text, StringComparison.OrdinalIgnoreCase)).ToList();
+        Repositories.ItemsSource = _preferences.Repositories.Where(r => (r.Name + r.Path).Contains(RepositorySearch.Text, StringComparison.OrdinalIgnoreCase)).OrderBy(r => r.Unavailable).ThenBy(r => r.Name, StringComparer.OrdinalIgnoreCase).ThenBy(r => r.Path, StringComparer.OrdinalIgnoreCase).ToList();
         Repositories.SelectedItem = selected;
         _binding = false;
     }
@@ -180,6 +189,13 @@ public partial class GitHubCenterWindow : Window
         RepositoryTitle.Text = entry.Name; RepositoryPath.Text = entry.Path;
         try
         {
+            if (!await RepositoryDiscovery.IsRepositoryRootAsync(entry.Path, ct))
+            {
+                entry.Unavailable = true; entry.Summary = "不可用 · 路径失效或 Git 元数据无效";
+                RepositoryPath.Text = entry.Path + " · 不是有效的 Git 仓库根目录";
+                BindRepositories(); await SaveAsync(); return;
+            }
+            entry.Unavailable = false;
             var state = await _git.StatusAsync(entry.Path, ct);
             var branches = await _git.BranchesAsync(state.Root, ct);
             var remotes = await _git.RemotesAsync(state.Root, ct);
@@ -200,6 +216,7 @@ public partial class GitHubCenterWindow : Window
     }
     private void ClearRepository()
     {
+        _preview?.Cancel();
         if (_state is { } previous) _drafts[previous.Root] = CommitMessage.Text;
         _state = null; Changes.ItemsSource = null; History.ItemsSource = null; BranchPicker.ItemsSource = null; RemotePicker.ItemsSource = null;
         PullRequests.ItemsSource = null; Runs.ItemsSource = null; OverviewTime.Text = "尚未读取"; PullStatus.Text = "开放的 PR"; RunStatus.Text = "最近构建";
