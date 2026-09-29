@@ -15,6 +15,9 @@ public sealed class MailService : IDisposable
     public static MailService Instance { get; } = new();
     private readonly object _gate = new();
     private readonly string _path;
+    private readonly MailDiskCache _diskCache;
+    private readonly SemaphoreSlim _prefetchDownloads = new(1);
+    private readonly Dictionary<string, string> _cacheErrors = new();
     private MailDatabase _db = new([], [], new());
     private readonly Dictionary<string, Worker> _workers = new();
     private readonly Dictionary<string, string> _statuses = new();
@@ -33,6 +36,7 @@ public sealed class MailService : IDisposable
         public readonly CancellationTokenSource Stop = new();
         public CancellationTokenSource? Wake;
         public Task? Task;
+        public Task? CacheTask;
         public readonly object Gate = new();
         public void Signal() { lock (Gate) { Wake?.Cancel(); } }
     }
@@ -41,6 +45,7 @@ public sealed class MailService : IDisposable
         // 必须在 MailKit/MimeKit 首次解析字符集前注册，不能依赖其他工具的初始化顺序。
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
         _path = Path.Combine(storage ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "X-Tool", "Mail"), "mail.bin");
+        _diskCache = new MailDiskCache(Path.GetDirectoryName(_path)!);
     }
     public void Start()
     {
@@ -106,9 +111,10 @@ public sealed class MailService : IDisposable
         {
             var checkpoints = new Dictionary<string, MailCheckpoint>(_db.Checkpoints); checkpoints.Remove(id);
             Commit(new(_db.Accounts.Where(a => a.Id != id).ToArray(), _db.Rows.Where(r => r.AccountId != id).ToArray(), checkpoints));
-            if (_workers.Remove(id, out var worker)) { worker.Stop.Cancel(); worker.Signal(); _ = worker.Task!.ContinueWith(_ => worker.Stop.Dispose()); }
+            if (_workers.Remove(id, out var worker)) { worker.Stop.Cancel(); worker.Signal(); _ = Task.WhenAll(worker.Task!, worker.CacheTask ?? Task.CompletedTask).ContinueWith(_ => worker.Stop.Dispose()); }
             _statuses.Remove(id);
             _inboxCounts.Remove(id);
+            _cacheErrors.Remove(id);
         }
     }
     public void Preferences(string id, bool alerts, bool preview, bool quiet, int start, int end, bool? useSystemProxy = null, string? remark = null)
@@ -264,14 +270,90 @@ public sealed class MailService : IDisposable
             _inboxCounts[a.Id] = allUids.Count;
         }
         if (fresh.Length > 0) Arrived?.Invoke(new(a.Id, fresh));
+        lock (_gate)
+        {
+            if (!_disposed && _workers.TryGetValue(a.Id, out var worker) && worker.CacheTask is not { IsCompleted: false })
+                worker.CacheTask = Task.Run(() => CacheReceived(a.Id, worker.Stop.Token));
+        }
     }
+    // 预取使用独立连接且全局串行，不占用交互阅读连接，也不阻塞 IDLE 收信。
+    private async Task CacheReceived(string accountId, CancellationToken token)
+    {
+        try
+        {
+            await _prefetchDownloads.WaitAsync(token);
+            try
+            {
+                var account = Account(accountId);
+                MailRow[] rows;
+                lock (_gate) rows = _db.Rows.Where(r => r.AccountId == accountId && r.Size is > 0 and <= 20971520)
+                    .OrderByDescending(r => r.Date).ToArray();
+                rows = rows.Where(r => !_diskCache.Contains(r)).ToArray();
+                if (rows.Length == 0) return;
+                using var client = await Connect(account, token);
+                var folder = client.Inbox;
+                await folder.OpenAsync(FolderAccess.ReadOnly, token);
+                await CacheFolder(account, folder, rows, token);
+            }
+            finally { _prefetchDownloads.Release(); }
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        catch
+        {
+            lock (_gate) if (_db.Accounts.Any(a => a.Id == accountId))
+                _cacheErrors[accountId] = "部分邮件尚未缓存，将在后续同步时重试。";
+        }
+    }
+    private async Task CacheFolder(MailAccount account, IMailFolder folder, MailRow[] rows, CancellationToken token)
+    {
+        foreach (var row in rows)
+        {
+            token.ThrowIfCancellationRequested();
+            if (row.Size is 0 or > 20971520 || folder.UidValidity != row.Validity) continue;
+            if (Account(account.Id).UseSystemProxy != account.UseSystemProxy) return;
+            if (_diskCache.Contains(row)) continue;
+            try
+            {
+                using var message = await folder.GetMessageAsync(new UniqueId(row.Uid), token);
+                if (!SaveMessage(row, message, token)) return;
+            }
+            catch (MessageNotFoundException) { /* 邮件在同步之后被移走，继续缓存其他邮件。 */ }
+        }
+    }
+    private bool SaveMessage(MailRow row, MimeMessage message, CancellationToken token)
+    {
+        try
+        {
+            token.ThrowIfCancellationRequested();
+            Account(row.AccountId);
+            _diskCache.Write(row, message, token);
+            lock (_gate) _cacheErrors.Remove(row.AccountId);
+            return true;
+        }
+        catch (OperationCanceledException) { throw; }
+        catch
+        {
+            lock (_gate) if (_db.Accounts.Any(a => a.Id == row.AccountId))
+                _cacheErrors[row.AccountId] = "邮件缓存写入失败，请检查磁盘空间和目录权限；在线阅读仍可使用。";
+            return false;
+        }
+    }
+    public Task<MailStorageUsage> StorageUsageAsync(string accountId, CancellationToken token) => Task.Run(() =>
+    {
+        var usage = _diskCache.Measure(accountId, token);
+        lock (_gate) return usage with { Error = string.Join("\n", new[] { usage.Error, _cacheErrors.GetValueOrDefault(accountId, "") }.Where(s => s.Length > 0)) };
+    }, token);
+
     public async Task<MimeMessage> LoadMessage(MailRow row, CancellationToken token)
     {
+        Account(row.AccountId);
+        var local = await Task.Run(() => _diskCache.Read(row, token), token);
+        if (local is not null) { Account(row.AccountId); return local; }
         await _downloads.WaitAsync(token);
         try
         {
             var a = Account(row.AccountId);
-            // 仅在内存保留近期正文；同一账号连续阅读复用连接，避免反复 TLS 和登录。
+            // 内存仍有界；磁盘副本不随内存淘汰。同一账号连续阅读复用连接。
             if (_bodyCache.TryGetValue(row.Key, out var cached) && DateTime.UtcNow - cached.Used < TimeSpan.FromMinutes(10))
             { _bodyCache[row.Key] = (cached.Message, DateTime.UtcNow, cached.Size); return cached.Message; }
             if (_readerClient is not { IsConnected: true, IsAuthenticated: true } || _readerAccount != a.Id || _readerProxy != a.UseSystemProxy)
@@ -286,6 +368,7 @@ public sealed class MailService : IDisposable
             if (sizes.Count == 0) throw new InvalidOperationException("邮件已移走或删除，请刷新。");
             if (sizes[0].Size is not uint size || size > 20971520) throw new InvalidOperationException("邮件超过 20 MB 或大小未知，请使用邮箱网页查看。");
             var message = await folder.GetMessageAsync(new UniqueId(row.Uid), token);
+            await Task.Run(() => SaveMessage(row, message, token), token);
             _bodyCache[row.Key] = (message, DateTime.UtcNow, size);
             while (_bodyCache.Count > 12 || _bodyCache.Values.Sum(x => (long)x.Size) > 32 * 1024 * 1024)
                 _bodyCache.Remove(_bodyCache.MinBy(x => x.Value.Used).Key);
@@ -383,7 +466,7 @@ public sealed class MailService : IDisposable
         lock (_gate)
         {
             _disposed = true;
-            foreach (var worker in _workers.Values) { worker.Stop.Cancel(); worker.Signal(); _ = worker.Task!.ContinueWith(_ => worker.Stop.Dispose()); }
+            foreach (var worker in _workers.Values) { worker.Stop.Cancel(); worker.Signal(); _ = Task.WhenAll(worker.Task!, worker.CacheTask ?? Task.CompletedTask).ContinueWith(_ => worker.Stop.Dispose()); }
             _workers.Clear();
         }
         _ = Task.Run(async () => { await _downloads.WaitAsync(); try { _readerClient?.Dispose(); _readerClient = null; _bodyCache.Clear(); } finally { _downloads.Release(); } });

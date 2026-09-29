@@ -75,7 +75,7 @@ public partial class SettingsWindow : Window
         CollaborationAutoReconnectCheckBox.IsChecked = preferences.CollaborationAutoReconnect;
         DesktopPetScaleSlider.Value = Math.Clamp(preferences.DesktopPetScalePercent, 60, 160);
         InjectionDelaySlider.Value = Math.Clamp(preferences.PetInjectionDelaySeconds, 1, 30);
-        InjectionDelayText.Text = $"{InjectionDelaySlider.Value:0} 秒";
+        InjectionDelayInput.Text = $"{InjectionDelaySlider.Value:0}";
         UpdateDesktopPetScaleText((int)Math.Round(DesktopPetScaleSlider.Value));
         UpdateShortcutButtons();
         UpdateStorageLocationText();
@@ -152,7 +152,7 @@ public partial class SettingsWindow : Window
         {
             "Screenshot" => ("截图设置", "管理截图完成后的行为、贴图和内容存储位置", (FrameworkElement)ScreenshotSettingsPanel),
             "Shortcut" => ("快捷键设置", "直接查看并修改 X-Tool 的全部全局快捷键", ShortcutSettingsPanel),
-            "DesktopPet" => ("桌面宠物设置", "调整桌面宠物的显示尺寸", DesktopPetSettingsPanel),
+            "DesktopPet" => ("桌面宠物设置", "显示、尺寸与注入倒计时", DesktopPetSettingsPanel),
             "ReadWrite" => ("读写设置", "管理本地语音输入与识别结果写入行为", ReadWriteSettingsPanel),
             "NetworkTraffic" => ("网络流量自动获取", "管理 ETW 辅助任务的授权和自动连接", NetworkTrafficSettingsPanel),
             "Connection" => ("连接", "管理手机自动重连、局域网发现与文件收发位置", ConnectionSettingsPanel),
@@ -205,11 +205,21 @@ public partial class SettingsWindow : Window
         SetFooterStatus(_preferences.StickerTopmost ? "新建贴图将默认置顶" : "已关闭贴图默认置顶");
     }
 
+    private void InjectionDelayInput_Changed(object sender, TextChangedEventArgs e)
+    {
+        if (!_initialized) return;
+        if (int.TryParse(InjectionDelayInput.Text, out var seconds) && seconds is >= 1 and <= 30)
+            InjectionDelaySlider.Value = seconds;
+    }
+    private void InjectionDelayInput_LostFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (_initialized) InjectionDelayInput.Text = $"{InjectionDelaySlider.Value:0}";
+    }
     private void InjectionDelay_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (!_initialized) return;
         _preferences.PetInjectionDelaySeconds = (int)Math.Round(InjectionDelaySlider.Value);
-        InjectionDelayText.Text = $"{_preferences.PetInjectionDelaySeconds} 秒";
+        InjectionDelayInput.Text = $"{_preferences.PetInjectionDelaySeconds}";
         _preferences.Save();
     }
 

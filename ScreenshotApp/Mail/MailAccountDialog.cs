@@ -148,6 +148,7 @@ public sealed class MailAccountDialog : Window
         Label(panel, "连接方式");
         var connection = new ComboBox { Style = (Style)FindResource("MailTimePicker"), ItemsSource = new[] { "直连（默认）", "系统代理" }, SelectedIndex = account.UseSystemProxy ? 1 : 0 };
         panel.Children.Add(connection);
+        BuildStorage(panel, account.Id);
         var save = ActionButton("保存设置"); panel.Children.Add(save);
         save.Click += (_, _) =>
         {
@@ -158,9 +159,61 @@ public sealed class MailAccountDialog : Window
         panel.Children.Add(remove);
         remove.Click += (_, _) =>
         {
-            if (MessageBox.Show(this, "从本机移除账户及其摘要缓存？邮箱服务器上的邮件不会删除。", "移除邮箱", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+            if (MessageBox.Show(this, "从本机移除账户及其摘要？已下载的加密邮件文件将保留在存储目录，但不再显示。邮箱服务器上的邮件不会删除。", "移除邮箱", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
             try { MailService.Instance.Remove(account.Id); Close(); }
             catch (Exception ex) { _status.Text = MailService.FriendlyError(ex); }
         };
     }
+    private void BuildStorage(StackPanel panel, string accountId)
+    {
+        panel.Children.Add(new Border { Height = 1, Background = new SolidColorBrush(Color.FromRgb(217, 228, 243)), Margin = new Thickness(0, 22, 0, 4) });
+        Label(panel, "本地邮件存储");
+        var location = new TextBox { IsReadOnly = true, TextWrapping = TextWrapping.Wrap, FontSize = 12, BorderThickness = new Thickness(0), Background = Brushes.Transparent, Padding = new Thickness(0), Text = "正在读取…" };
+        var pathRow = new DockPanel { LastChildFill = true };
+        var openFolder = new Button { Width = 34, Height = 34, Padding = new Thickness(0), Margin = new Thickness(8, 0, 0, 0),
+            ToolTip = "打开邮箱缓存文件夹", IsEnabled = false, Content = new TextBlock { Text = "\uE8B7", FontFamily = new FontFamily("Segoe Fluent Icons"), Foreground = new SolidColorBrush(Color.FromRgb(37, 99, 235)), FontSize = 17 } };
+        System.Windows.Automation.AutomationProperties.SetName(openFolder, "打开邮箱缓存文件夹");
+        DockPanel.SetDock(openFolder, Dock.Right); pathRow.Children.Add(openFolder); pathRow.Children.Add(location);
+        panel.Children.Add(pathRow);
+        var usage = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0), LineHeight = 21 };
+        panel.Children.Add(usage);
+        var warning = new TextBlock { FontSize = 11, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(177, 75, 51)), Margin = new Thickness(0, 4, 0, 0) };
+        panel.Children.Add(warning);
+        string? storagePath = null;
+        openFolder.Click += (_, _) =>
+        {
+            if (storagePath is null) return;
+            try
+            {
+                System.IO.Directory.CreateDirectory(storagePath);
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(storagePath) { UseShellExecute = true });
+            }
+            catch { warning.Text = "无法打开缓存文件夹，请检查目录权限。"; }
+        };
+        bool reading = false;
+        async Task Update()
+        {
+            if (reading || _cancel.IsCancellationRequested) return;
+            reading = true;
+            try
+            {
+                var result = await MailService.Instance.StorageUsageAsync(accountId, _cancel.Token);
+                if (_cancel.IsCancellationRequested) return;
+                location.Text = result.Path;
+                storagePath = result.Path;
+                openFolder.IsEnabled = true;
+                usage.Text = $"所有邮箱占用 {FormatBytes(result.Bytes)}\n此账户缓存 {result.Messages:N0} 封 · {FormatBytes(result.AccountBytes)}\n完整邮件 · 当前 Windows 用户加密 · 不自动清理\n单封上限 20 MiB · 自动缓存当前同步范围";
+                warning.Text = result.Error;
+            }
+            catch (OperationCanceledException) { }
+            catch { if (!_cancel.IsCancellationRequested) warning.Text = "暂时无法读取存储信息。"; }
+            finally { reading = false; }
+        }
+        var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+        timer.Tick += async (_, _) => await Update();
+        Loaded += async (_, _) => { timer.Start(); await Update(); };
+        Closed += (_, _) => timer.Stop();
+    }
+    private static string FormatBytes(long bytes) => bytes >= 1024L * 1024 * 1024 ? $"{bytes / (1024d * 1024 * 1024):N2} GiB"
+        : bytes >= 1024 * 1024 ? $"{bytes / (1024d * 1024):N2} MiB" : $"{bytes / 1024d:N1} KiB";
 }
