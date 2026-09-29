@@ -1,4 +1,6 @@
-# 当前交接入口（2026-09-28）
+# 当前交接入口（2026-09-29）
+
+- GitHub 仓库中心第一版：开发工具页顶部新增独立窗口入口，支持本地仓库、差异/暂存/提交、分支/历史、获取/快进拉取/明确推送，GitHub PAT 与只读 PR/构建缓存。详情见 [GITHUB_CENTER_HANDOFF.md](GITHUB_CENTER_HANDOFF.md)。新构建 `ScreenshotApp/bin/github-center/Release/XTool.exe`；未关闭旧版、未切换快捷方式、未连接真实账户或网络推送。后续阶段仍是规划，不自动展开。
 
 - 当前最新运行版 `ScreenshotApp/bin/mail-translation-responsive/Release/XTool.exe`：限制本地翻译 CPU 线程/并发并关闭空转，邮件预处理全后台；修正翻译图标双重焦点描边，加入品牌与短操作文案保护。52 项核心回归及真实模型/WPF 验证通过，实际鼠标手感待用户确认。企业邮界面已观察到 31 封。DeepSeek 仅查价，未接入云服务。详情见 MAIL_HANDOFF.md 最新增量，下方路径为历史记录。
 

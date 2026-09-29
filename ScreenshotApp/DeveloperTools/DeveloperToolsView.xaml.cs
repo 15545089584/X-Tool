@@ -11,6 +11,8 @@ namespace ScreenshotApp.DeveloperTools;
 
 public partial class DeveloperToolsView : UserControl
 {
+    private void GitHubCenter_Click(object sender, RoutedEventArgs e) => GitHubCenter.GitHubCenterWindow.Open();
+
     private readonly DeveloperEnvironmentScanner _scanner = new();
     private readonly ManagedToolchainService _managedToolchainService = new();
     private readonly ObservableCollection<ManagedToolchainRelease> _managedReleases = new();
