@@ -105,6 +105,21 @@ internal static class Program
         var history = (ListBox)window.FindName("History"); Check(history.Items.Count == 1, "历史页加载提交");
         history.SelectedIndex = 0; await Task.Delay(400);
         Check(((TextBox)window.FindName("CommitDiff")).Text.Contains("添加项目说明"), "历史页显示详情");
+        var originalHistory = history.Items.Cast<GitCommit>().ToArray();
+        Check(originalHistory[0].DisplayTime.Length == 19, "时间线显示日期及秒级时间");
+        history.ItemsSource = Enumerable.Range(0, 18).Select(i => originalHistory[0] with { Subject = i % 2 == 0 ? "优化仓库工作台的时间线展示与提交详情交互" : "新增本地仓库自动扫描", Date = DateTimeOffset.Now.AddHours(-i).ToString("O") }).ToArray();
+        history.SelectedIndex = 1; await Task.Delay(400);
+        foreach (var size in new[] { new Size(1260, 800), new Size(1040, 680) })
+        {
+            window.Width = size.Width; window.Height = size.Height; window.UpdateLayout();
+            var detail = (TextBox)window.FindName("CommitDiff");
+            var historyBounds = history.TransformToAncestor(window).TransformBounds(new Rect(history.RenderSize));
+            var detailBounds = detail.TransformToAncestor(window).TransformBounds(new Rect(detail.RenderSize));
+            Check(historyBounds.Right < detailBounds.Left && detail.ActualWidth >= 330, "时间线与详情左右布局且无重叠");
+            Check(Descendants(history).OfType<System.Windows.Shapes.Ellipse>().Any(), "时间线渲染提交节点");
+            Save(window, $"timeline-{size.Width}.png");
+        }
+        history.ItemsSource = originalHistory;
         tabs.SelectedIndex = 2; await IdleAsync(window);
         Check(((ListBox)window.FindName("PullRequests")).Items.Count == 1 && ((TextBlock)window.FindName("OverviewTime")).Text.Contains("缓存"), "离线 PR 与构建缓存显示时间");
         Save(window, "overview.png");

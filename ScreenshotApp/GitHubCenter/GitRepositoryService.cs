@@ -16,6 +16,8 @@ public sealed record GitChange(string Path, string OriginalPath, string Code, bo
 }
 public sealed record GitCommit(string Id, string Author, string Date, string Subject)
 {
+    public string DisplayTime => DateTimeOffset.TryParse(Date, out var time) ? time.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss") : Date;
+    public string ShortId => Id[..Math.Min(8, Id.Length)];
     public string Label => $"{Id[..Math.Min(8, Id.Length)]}  {Subject}  · {Author} · {Date}";
 }
 public sealed record GitState(string Root, string Branch, string Head, string Upstream, string Divergence,
@@ -225,7 +227,7 @@ public sealed class GitRepositoryService
     public async Task<IReadOnlyList<GitCommit>> HistoryAsync(GitState state, CancellationToken ct)
     {
         if (state.Head == "(initial)") return [];
-        string raw = await RunAsync(state.Root, ct, "log", "-n", "100", "--format=%H%x00%an%x00%as%x00%s%x00");
+        string raw = await RunAsync(state.Root, ct, "log", "-n", "100", "--format=%H%x00%an%x00%aI%x00%s%x00");
         var fields = raw.Split('\0');
         var result = new List<GitCommit>();
         for (int i = 0; i + 3 < fields.Length; i += 4) result.Add(new(fields[i].Trim(), fields[i + 1], fields[i + 2], fields[i + 3]));

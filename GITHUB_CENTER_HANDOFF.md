@@ -2,7 +2,14 @@
 
 日期：2026-09-29。实际仓库：`D:\Claude Code\X-Tool`。
 
-## 最新增量：提交入口与列表可读性（2026-09-30）
+## 最新增量：左右提交时间线（2026-09-30）
+
+- 构建：`ScreenshotApp/bin/github-center-timeline/Release/XTool.exe`，未关闭旧实例或更改快捷方式。
+- 本地提交历史改为左侧点线时间线、右侧提交详情；分隔线可拖动，两侧保留最小可读宽度。渐变配色沿用原主题。
+- 节点显示完整本地时间（精确到秒）、可换行的提交标题、作者和短 SHA；选中节点与标题高亮。Git log 使用带时区的 `%aI` 读取作者日期，本地显示转换到当前系统时区。
+- Release 零警告零错误，65 项核心测试、66 项 WPF 检查通过；验证 1260×800 和 1040×680 布局无重叠，截图为 `artifacts/github-center-validation/timeline-*.png`（合成多节点测试数据）。
+
+## 上一增量：提交入口与列表可读性（2026-09-30）
 
 - 构建：`ScreenshotApp/bin/github-center-readability/Release/XTool.exe`，未关闭用户实例或更新快捷方式。
 - 默认打开“提交历史”，原“改动”更名“未提交改动”；历史读取仍来自 Git subject，未跟踪文件不存在提交标题，不改写或隐藏用户文件。

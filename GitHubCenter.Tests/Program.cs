@@ -57,6 +57,7 @@ await git.StageAsync(state, state.Changes.Single(c => c.Path == "中文 文档.t
 state = await Commit(repo, "初始提交");
 Check(state.Head.Length == 40 && state.Changes.Count == 1, "初始提交仅包含暂存文件");
 Check((await git.HistoryAsync(state, ct)).Single().Subject == "初始提交", "UTF-8 提交历史");
+Check((await git.HistoryAsync(state, ct)).Single().DisplayTime.Length == 19, "提交时间保留时分秒");
 await Reject(() => git.SwitchAsync(state, "topic", true, ct), "脏工作区拒绝切换");
 await File.WriteAllTextAsync(Path.Combine(repo, "中文 文档.txt"), "新的第一行\n第二行\n", Encoding.UTF8);
 state = await git.StatusAsync(repo, ct);
