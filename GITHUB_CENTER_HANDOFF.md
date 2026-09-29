@@ -2,7 +2,15 @@
 
 日期：2026-09-29。实际仓库：`D:\Claude Code\X-Tool`。
 
-## 最新增量：仓库身份与扫描验证（2026-09-30）
+## 最新增量：提交入口与列表可读性（2026-09-30）
+
+- 构建：`ScreenshotApp/bin/github-center-readability/Release/XTool.exe`，未关闭用户实例或更新快捷方式。
+- 默认打开“提交历史”，原“改动”更名“未提交改动”；历史读取仍来自 Git subject，未跟踪文件不存在提交标题，不改写或隐藏用户文件。
+- 改动行固定内容高度，按文件名、目录和状态拆分，长路径截断并可悬停查看。计数栏不再重复长分支名。
+- 模块自有 ScrollViewer/ListBox 模板，显式取消 Windows 滚动条最小宽高，7 DIP 滚动条和像素滚动，裁剪越界内容。问号按钮移除额外边框；禁用按钮采用浅灰底和可读文字。
+- Release 零警告零错误；WPF 61 项检查涵盖实际标题渲染、长列表滚动、实际滚动条宽度和禁用文字；截图在 `artifacts/github-center-validation/commit-titles.png`、`long-file-list.png`。
+
+## 上一增量：仓库身份与扫描验证（2026-09-30）
 
 - 核对用户截图：`C:\Users\MRSW\Documents\ChatGPT\X-Tool` 确有甘特图成果等十个未跟踪文件，和 `D:\Claude Code\X-Tool` 是不同路径，不能按名称合并。未移动、删除或提交这些文件。
 - 左侧仓库显示名称、完整路径和状态，按可用性、名称、路径排序；历史提交标题与作者日期分行呈现。

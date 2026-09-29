@@ -9,6 +9,9 @@ namespace ScreenshotApp.GitHubCenter;
 
 public sealed record GitChange(string Path, string OriginalPath, string Code, bool Staged, bool Conflict)
 {
+    public string FileName => System.IO.Path.GetFileName(Path);
+    public string DirectoryName => System.IO.Path.GetDirectoryName(Path)?.Replace('\\', '/') ?? "";
+    public string StatusLabel => Conflict ? "冲突" : Staged ? "已暂存" : Code == "?" ? "未跟踪" : "未暂存";
     public string Label => $"{(Conflict ? "冲突" : Staged ? "已暂存" : "未暂存")}  {Code}  {Path}";
 }
 public sealed record GitCommit(string Id, string Author, string Date, string Subject)

@@ -203,7 +203,8 @@ public partial class GitHubCenterWindow : Window
             _state = state; entry.Summary = state.Summary; entry.LastChecked = DateTimeOffset.Now;
             CommitMessage.Text = _drafts.GetValueOrDefault(state.Root, "");
             _preferences.SelectedPath = entry.Path;
-            Changes.ItemsSource = state.Changes; ChangesSummary.Text = state.Summary;
+            Changes.ItemsSource = state.Changes;
+            ChangesSummary.Text = $"{state.Changes.Select(c => c.Path).Distinct().Count()} 个文件 · {state.Changes.Count(c => c.Staged)} 项已暂存";
             BranchPicker.ItemsSource = branches; BranchPicker.SelectedItem = state.Branch;
             RemotePicker.ItemsSource = remotes; RemotePicker.SelectedItem = remotes.Contains("origin") ? "origin" : remotes.FirstOrDefault();
             History.ItemsSource = history;

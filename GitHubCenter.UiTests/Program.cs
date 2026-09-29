@@ -69,6 +69,12 @@ internal static class Program
     }
     private static async Task ValidateAsync(GitHubCenterWindow window)
     {
+        var initialTabs = (TabControl)window.FindName("Views");
+        Check(initialTabs.SelectedIndex == 1 && ((TabItem)initialTabs.Items[1]).Header.ToString() == "提交历史", "默认展示提交历史而不是未提交文件");
+        window.UpdateLayout();
+        Check(Descendants((ListBox)window.FindName("History")).OfType<TextBlock>().Any(t => t.Text == "添加项目说明"), "实际历史列表呈现提交标题");
+        Save(window, "commit-titles.png");
+        initialTabs.SelectedIndex = 0;
         var changes = (ListBox)window.FindName("Changes");
         var tabs = (TabControl)window.FindName("Views");
         Check(changes.Items.Count == 2, "启动恢复本地仓库");
@@ -172,6 +178,19 @@ internal static class Program
         helpTabs.SelectedIndex = 1; help.Width = 600; help.Height = 500; help.UpdateLayout(); Save(help, "help-app.png");
         Check(help.ActualWidth == 600 && help.ActualHeight == 500, "帮助最小窗口布局");
         help.Close();
+        ((TabControl)window.FindName("Views")).SelectedIndex = 0;
+        changes.ItemsSource = Enumerable.Range(0, 100).Select(i => new GitChange($"ScreenshotApp/bin-startup-validation/很长的构建目录/Microsoft.Diagnostics.Component{i}.dll", "", "?", false, false)).ToArray();
+        window.UpdateLayout();
+        var changeScroll = Descendants(changes).OfType<ScrollViewer>().First();
+        changeScroll.ScrollToVerticalOffset(125); window.UpdateLayout();
+        Check(changeScroll.VerticalOffset > 0, "长文件列表支持像素滚动");
+        var visibleBar = Descendants(changeScroll).OfType<System.Windows.Controls.Primitives.ScrollBar>().First(b => b.Orientation == Orientation.Vertical);
+        Check(visibleBar.Width == 7 && visibleBar.ActualWidth <= 8, $"列表使用七 DIP 细滚动条（实际 {visibleBar.ActualWidth:0.##}）");
+        Check(Descendants(changes).OfType<TextBlock>().Any(t => t.Text == "未跟踪"), "未跟踪文件状态不显示为提交名称");
+        var commitButton = (Button)window.FindName("CommitButton");
+        commitButton.IsEnabled = false; window.UpdateLayout();
+        Check(!commitButton.IsEnabled && commitButton.Foreground is SolidColorBrush { Color: var disabledInk } && disabledInk == Color.FromRgb(122, 137, 156), "禁用提交按钮保留可读文字");
+        Save(window, "long-file-list.png");
         var wheelType = typeof(ScreenshotApp.DesktopPet.DesktopPetWindow).Assembly.GetType("ScreenshotApp.DesktopPet.PetCommandWheelWindow")!;
         var wheel = (Window)Activator.CreateInstance(wheelType, BindingFlags.Instance | BindingFlags.NonPublic, null, [new Rect(700, 650, 150, 150), new Rect(0, 0, 1280, 900), 0, 5], null)!;
         var sector = (FrameworkElement)wheelType.GetMethod("CreateSectorContent", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(wheel, [2, 0, 5])!;
