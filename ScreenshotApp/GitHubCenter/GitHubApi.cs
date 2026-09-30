@@ -17,6 +17,10 @@ public sealed record GitHubActivity(string Title, string Status, string Url)
 public sealed record GitHubOverview(List<GitHubActivity> PullRequests, List<GitHubActivity> Runs, string PullStatus, string RunStatus);
 public sealed record RemoteCommit(string Sha, string Message, string Author, string Date, string Url)
 {
+    public string Subject => Message.Split('\n')[0];
+    public string DisplayTime => Date;
+    public string Id => Sha;
+    public string ShortId => Sha[..Math.Min(8, Sha.Length)];
     public string Label => $"{Message.Split('\n')[0]}\n{Author} · {Date} · {Sha[..Math.Min(7, Sha.Length)]}";
 }
 
@@ -85,7 +89,7 @@ public sealed class GitHubApi : IDisposable
                 var commit = e.GetProperty("commit");
                 var author = commit.GetProperty("author");
                 string date = Text(author, "date");
-                if (DateTimeOffset.TryParse(date, out var time)) date = time.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
+                if (DateTimeOffset.TryParse(date, out var time)) date = time.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss");
                 return new RemoteCommit(Text(e, "sha"), Text(commit, "message"), Text(author, "name"), date, Text(e, "html_url"));
             }).ToList();
         }

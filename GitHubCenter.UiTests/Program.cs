@@ -123,7 +123,7 @@ internal static class Program
         tabs.SelectedIndex = 2; await IdleAsync(window);
         Check(((ListBox)window.FindName("PullRequests")).Items.Count == 1 && ((TextBlock)window.FindName("OverviewTime")).Text.Contains("缓存"), "离线 PR 与构建缓存显示时间");
         Save(window, "overview.png");
-        tabs.SelectedIndex = 3; window.UpdateLayout();
+        ((RadioButton)window.FindName("RemoteMode")).IsChecked = true; window.UpdateLayout();
         Check(!((Button)window.FindName("LoadMoreButton")).IsEnabled, "未连接账户不提供虚假分页");
         var remote = (ListBox)window.FindName("RemoteRepositories");
         remote.ItemsSource = new[] { new RemoteRepository("example/xtool", "https://github.com/example/xtool", "https://github.com/example/xtool.git", false) };
@@ -131,6 +131,12 @@ internal static class Program
         for (int i = 0; i < 100 && ((ListBox)window.FindName("RemoteCommits")).Items.Count == 0; i++) await Task.Delay(20);
         var remoteCommits = (ListBox)window.FindName("RemoteCommits");
         Check(remoteCommits.Items.Count == 1, "选择远程仓库直接加载提交");
+        window.UpdateLayout();
+        Check(remote.Visibility == Visibility.Visible && ((ListBox)window.FindName("Repositories")).Visibility == Visibility.Collapsed, "远程与本地列表共用侧栏切换");
+        Check(((WrapPanel)window.FindName("GitToolbar")).Visibility == Visibility.Collapsed, "远程模式隐藏本地操作");
+        Check(Descendants(remoteCommits).OfType<System.Windows.Shapes.Ellipse>().Any(), "远程提交复用点线时间线");
+        var remoteDetail = (TextBox)window.FindName("RemoteCommitDetail");
+        Check(remoteCommits.TransformToAncestor(window).TransformBounds(new Rect(remoteCommits.RenderSize)).Right < remoteDetail.TransformToAncestor(window).TransformBounds(new Rect(remoteDetail.RenderSize)).Left, "远程时间线在左详情在右");
         remoteCommits.SelectedIndex = 0;
         Check(((TextBox)window.FindName("RemoteCommitDetail")).Text.Contains("详细说明"), "远程提交显示完整消息");
         Check(!((Button)window.FindName("MoreCommits")).IsEnabled, "远程提交末页禁用更多");
@@ -144,6 +150,8 @@ internal static class Program
         var savedRepositories = new GitHubStore(Path.Combine(Root, "store")).LoadPreferences().Repositories;
         Check(savedRepositories.Any(r => r.Path == discovered && !r.Trusted), "发现仓库持久保存但不自动信任");
         Check(((ListBox)window.FindName("Repositories")).Items.Count == 2, "扫描结果直接显示在本地列表");
+        ((RadioButton)window.FindName("LocalMode")).IsChecked = true;
+        Check(((TextBlock)window.FindName("RepositoryTitle")).Text == "X-Tool 示例仓库", "切回本地恢复正确仓库标题");
         tabs.SelectedIndex = 0; window.Width = 1260; window.Height = 800;
         var search = (TextBox)window.FindName("RepositorySearch"); search.Text = "不存在的仓库";
         Check(!((WrapPanel)window.FindName("GitToolbar")).IsEnabled && changes.Items.Count == 0, "搜索无结果清理旧仓库操作状态");

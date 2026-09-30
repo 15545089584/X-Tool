@@ -31,6 +31,35 @@ public partial class GitHubCenterWindow : Window
     private CancellationTokenSource? _commitRequest;
     private readonly List<RemoteCommit> _remoteCommits = [];
     private int _commitPage;
+    private bool IsRemoteMode => RemoteMode.IsChecked == true;
+    private async void Source_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!_ready) return;
+        _preview?.Cancel();
+        _binding = true; RepositorySearch.Clear(); _binding = false;
+        if (IsRemoteMode) BindRemoteRepositories(); else BindRepositories();
+        Views.SelectedIndex = IsRemoteMode ? 3 : 1;
+        UpdateSource();
+        if (IsRemoteMode && _credential is not null && _remoteRepositories.Count == 0)
+            await WorkAsync("读取远程仓库", ct => ReadRemotesAsync(1, ct));
+    }
+    private void UpdateSource()
+    {
+        bool remote = IsRemoteMode;
+        Repositories.Visibility = LocalSidebarHeader.Visibility = LocalSidebarFooter.Visibility = remote ? Visibility.Collapsed : Visibility.Visible;
+        RemoteRepositories.Visibility = RemoteSidebarHeader.Visibility = RemoteSidebarFooter.Visibility = remote ? Visibility.Visible : Visibility.Collapsed;
+        for (int i = 0; i < 3; i++) ((TabItem)Views.Items[i]).Visibility = remote ? Visibility.Collapsed : Visibility.Visible;
+        ((TabItem)Views.Items[3]).Visibility = remote ? Visibility.Visible : Visibility.Collapsed;
+        RepositoryTitle.Text = remote ? (RemoteRepositories.SelectedItem as RemoteRepository)?.Name ?? "GitHub 仓库" : Selected?.Name ?? "仓库工作台";
+        RepositoryPath.Text = remote ? (RemoteRepositories.SelectedItem as RemoteRepository)?.Url ?? "尚未选择 GitHub 仓库" : Selected?.Path ?? "尚未选择本地仓库";
+        UpdateButtons();
+    }
+    private void BindRemoteRepositories()
+    {
+        var selected = RemoteRepositories.SelectedItem as RemoteRepository;
+        RemoteRepositories.ItemsSource = _remoteRepositories.Where(r => r.Name.Contains(RepositorySearch.Text, StringComparison.OrdinalIgnoreCase)).ToArray();
+        RemoteRepositories.SelectedItem = selected;
+    }
 
     public static void Open()
     {
@@ -101,6 +130,7 @@ public partial class GitHubCenterWindow : Window
     {
         _commitRequest?.Cancel(); _remoteCommits.Clear(); RemoteCommits.ItemsSource = null; RemoteCommitDetail.Clear();
         _commitPage = 0; MoreCommits.IsEnabled = false;
+        if (_ready && IsRemoteMode) UpdateSource();
         if (RemoteRepositories.SelectedItem is RemoteRepository repo) await ReadCommitsAsync(repo, 1);
         else RemoteCommitStatus.Text = "选择仓库查看默认分支提交";
     }
@@ -174,8 +204,8 @@ public partial class GitHubCenterWindow : Window
     {
         GitToolbar.IsEnabled = _state is not null;
         RepositoryActions.IsEnabled = _state is not null;
-        RepositoryActions.Visibility = GitToolbar.Visibility = _state is null ? Visibility.Collapsed : Visibility.Visible;
-        RepositoryEmptyState.Visibility = _state is null && Views.SelectedIndex < 3 ? Visibility.Visible : Visibility.Collapsed;
+        RepositoryActions.Visibility = GitToolbar.Visibility = _state is null || IsRemoteMode ? Visibility.Collapsed : Visibility.Visible;
+        RepositoryEmptyState.Visibility = _state is null && !IsRemoteMode && Views.SelectedIndex < 3 ? Visibility.Visible : Visibility.Collapsed;
         for (int index = 0; index < 3; index++)
             if (((TabItem)Views.Items[index]).Content is UIElement content) content.Visibility = _state is null ? Visibility.Collapsed : Visibility.Visible;
         StageButton.IsEnabled = Changes.SelectedItem is GitChange { Staged: false, Conflict: false };
@@ -232,6 +262,7 @@ public partial class GitHubCenterWindow : Window
     private void Search_Changed(object sender, TextChangedEventArgs e)
     {
         if (!_ready || _binding) return;
+        if (IsRemoteMode) { BindRemoteRepositories(); return; }
         BindRepositories();
         if (Selected is null) { ClearRepository(); RepositoryTitle.Text = "仓库工作台"; RepositoryPath.Text = "尚未选择本地仓库"; UpdateButtons(); }
     }
@@ -244,6 +275,7 @@ public partial class GitHubCenterWindow : Window
     private async Task AddRepositoryAsync(string path, CancellationToken ct)
     {
         var state = await _git.StatusAsync(path, ct);
+        LocalMode.IsChecked = true;
         var entry = _preferences.Repositories.FirstOrDefault(r => string.Equals(r.Path, state.Root, StringComparison.OrdinalIgnoreCase));
         if (entry is null) { entry = new() { Path = state.Root }; _preferences.Repositories.Add(entry); }
         _binding = true; RepositorySearch.Clear(); _binding = false;
@@ -367,7 +399,7 @@ public partial class GitHubCenterWindow : Window
             await Task.Run(() => _store.SaveCredential(credential), ct);
             _credential = credential; UpdateAccount();
             await ReadRemotesAsync(1, ct);
-            Views.SelectedIndex = 3;
+            RemoteMode.IsChecked = true;
         });
     }
     private string AccountKey => _credential?.Login ?? "public";
@@ -377,7 +409,7 @@ public partial class GitHubCenterWindow : Window
         var cached = await Task.Run(() => _store.LoadCache<List<RemoteRepository>>(AccountKey + ":repos"), ct);
         if (cached is null) return;
         _remoteRepositories.Clear(); _remoteRepositories.AddRange(cached.Value);
-        RemoteRepositories.ItemsSource = _remoteRepositories.ToArray();
+        BindRemoteRepositories();
         RemoteStatus.Text = $"缓存 · {cached.SavedAt.LocalDateTime:MM-dd HH:mm} · {_remoteRepositories.Count} 个仓库";
     }
     private async Task ReadRemotesAsync(int page, CancellationToken ct)
@@ -387,7 +419,7 @@ public partial class GitHubCenterWindow : Window
         if (page == 1) _remoteRepositories.Clear();
         foreach (var entry in entries) if (!_remoteRepositories.Any(r => r.Name == entry.Name)) _remoteRepositories.Add(entry);
         _remotePage = page; _more = entries.Count == 100;
-        RemoteRepositories.ItemsSource = _remoteRepositories.ToArray();
+        BindRemoteRepositories();
         RemoteStatus.Text = $"已读取 {_remoteRepositories.Count} 个 · {DateTime.Now:HH:mm} · {(_more ? "可继续加载" : "列表结束")}";
         await Task.Run(() => _store.SaveCache(AccountKey + ":repos", _remoteRepositories), ct);
     }
